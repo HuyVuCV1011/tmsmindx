@@ -242,16 +242,16 @@ export default function Page1() {
   }, [selectedMonth, selectedYear]);
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="space-y-4">
+    <div className="max-w-4xl mx-auto px-2 sm:px-4">
+      <div className="space-y-3 sm:space-y-4">
         {/* Header */}
-        <div className="border-b border-gray-900 pb-3">
-          <h1 className="text-2xl font-bold text-gray-900">Tìm kiếm giáo viên</h1>
+        <div className="border-b border-gray-900 pb-2 sm:pb-3">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Tìm kiếm giáo viên</h1>
           <p className="text-xs text-gray-600 mt-1">Nhập mã giáo viên để xem thông tin chi tiết</p>
         </div>
 
         {/* Search Box */}
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <div className="flex-1 relative">
             <input
               type="text"
@@ -301,17 +301,17 @@ export default function Page1() {
         {teacher && (
           <div className="border border-gray-900 rounded-lg overflow-hidden">
             {/* Header Card */}
-            <div className="bg-gray-900 text-white p-4">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-white text-gray-900 flex items-center justify-center font-bold text-lg">
+            <div className="bg-gray-900 text-white p-3 sm:p-4">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white text-gray-900 flex items-center justify-center font-bold text-base sm:text-lg shrink-0">
                   {teacher.name.split(" ").pop()?.charAt(0)}
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold">{teacher.name}</h2>
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-base sm:text-lg font-bold truncate">{teacher.name}</h2>
                   <p className="text-xs opacity-90">{teacher.code}</p>
                 </div>
-                <div className="ml-auto">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                <div className="shrink-0">
+                  <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${
                     teacher.status === "Active" 
                       ? "bg-green-500 text-white" 
                       : "bg-gray-500 text-white"
@@ -323,8 +323,8 @@ export default function Page1() {
             </div>
 
             {/* Info Grid */}
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
                 {teacher.emailMindx && teacher.emailMindx !== "N/A" && (
                   <InfoItem icon={<Mail className="h-4 w-4" />} label="Email MindX" value={teacher.emailMindx} />
                 )}
@@ -375,8 +375,8 @@ export default function Page1() {
 
         {/* Score Summary */}
         {teacher && (expertiseData.length > 0 || experienceData.length > 0) && (
-          <div className="border border-gray-900 rounded-lg p-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div className="border border-gray-900 rounded-lg p-3 sm:p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 items-end">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Tháng</label>
                 <select
@@ -422,15 +422,15 @@ export default function Page1() {
 
         {/* Monthly Metrics */}
         {teacher && (expertiseData.length > 0 || experienceData.length > 0) && (
-          <div className="border border-gray-900 rounded-lg overflow-hidden mt-4">
-            <div className="bg-gray-900 text-white p-3 flex items-center justify-between">
+          <div className="border border-gray-900 rounded-lg overflow-hidden mt-3 sm:mt-4">
+            <div className="bg-gray-900 text-white p-2 sm:p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <h3 className="text-sm font-bold">Các chỉ số theo tháng</h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <label className="text-xs">Năm:</label>
                 <select
                   value={selectedTableYear}
                   onChange={(e) => setSelectedTableYear(e.target.value)}
-                  className="px-2 py-1 text-xs bg-white text-gray-900 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-white"
+                  className="px-2 py-1 text-xs bg-white text-gray-900 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-white flex-1 sm:flex-initial"
                 >
                   <option value="2024">2024</option>
                   <option value="2025">2025</option>
@@ -438,39 +438,39 @@ export default function Page1() {
                 </select>
               </div>
             </div>
-            <div className="p-4 overflow-x-auto">
+            <div className="p-2 sm:p-4 overflow-x-auto -mx-2 sm:mx-0">
               {(() => {
                 const months = Array.from({ length: 12 }, (_, i) => `${i + 1}/${selectedTableYear}`);
 
                 return (
-                  <table className="w-full text-xs">
+                  <table className="w-full text-[10px] sm:text-xs min-w-[600px]">
                     <thead>
                       <tr className="border-b border-gray-900">
-                        <th className="text-left py-2 px-2 font-bold text-gray-900 min-w-37.5">Chỉ tiêu</th>
+                        <th className="text-left py-1.5 sm:py-2 px-1.5 sm:px-2 font-bold text-gray-900 min-w-[100px] sticky left-0 bg-white z-10">Chỉ tiêu</th>
                         {months.map((month) => (
-                          <th key={month} className={`text-center py-2 px-2 min-w-17.5 ${
+                          <th key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 min-w-[50px] sm:min-w-[60px] ${
                             highlightedMonths.includes(month) ? "bg-blue-50" : ""
                           }`}>
-                            <div className="font-medium text-gray-700">{month}</div>
+                            <div className="font-medium text-gray-700 whitespace-nowrap">T{month.split('/')[0]}</div>
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       <tr className="border-b border-gray-200">
-                        <td className="py-2 px-2">
-                          <div className="font-medium text-gray-900">Điểm đánh giá Chuyên môn Chuyên sâu</div>
+                        <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 sticky left-0 bg-white z-10">
+                          <div className="font-medium text-gray-900 text-[10px] sm:text-xs">CM Chuyên sâu</div>
                         </td>
                         {months.map((month) => {
                           const score = getScoreForMonth(expertiseData, month);
                           const scoreValue = score === "N/A" ? 0 : parseFloat(score);
                           return (
-                            <td key={month} className={`text-center py-2 px-2 ${
+                            <td key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 ${
                               highlightedMonths.includes(month) ? "bg-blue-50" : ""
                             }`}>
                               <span 
                                 onClick={() => score !== "N/A" && openModal(month, "expertise")}
-                                className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                                className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${
                                   score === "N/A"
                                     ? "bg-gray-200 text-gray-700" 
                                     : scoreValue >= 4 
@@ -484,19 +484,19 @@ export default function Page1() {
                         })}
                       </tr>
                       <tr className="border-b border-gray-200">
-                        <td className="py-2 px-2">
-                          <div className="font-medium text-gray-900">Điểm đánh giá Kỹ năng - Quy trình trải nghiệm</div>
+                        <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 sticky left-0 bg-white z-10">
+                          <div className="font-medium text-gray-900 text-[10px] sm:text-xs">KN - QT Trải nghiệm</div>
                         </td>
                         {months.map((month) => {
                           const score = getScoreForMonth(experienceData, month);
                           const scoreValue = score === "N/A" ? 0 : parseFloat(score);
                           return (
-                            <td key={month} className={`text-center py-2 px-2 ${
+                            <td key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 ${
                               highlightedMonths.includes(month) ? "bg-blue-50" : ""
                             }`}>
                               <span 
                                 onClick={() => score !== "N/A" && openModal(month, "experience")}
-                                className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                                className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${
                                   score === "N/A"
                                     ? "bg-gray-200 text-gray-700" 
                                     : scoreValue >= 4 
@@ -513,17 +513,17 @@ export default function Page1() {
                   </table>
                 );
               })()}
-              <div className="mt-3 flex gap-4 text-xs text-gray-600">
+              <div className="mt-2 sm:mt-3 flex flex-col sm:flex-row gap-1.5 sm:gap-4 text-[10px] sm:text-xs text-gray-600">
                 <div className="flex items-center gap-1">
-                  <span className="inline-block w-4 h-4 bg-green-100 border border-green-200 rounded"></span>
+                  <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-green-100 border border-green-200 rounded flex-shrink-0"></span>
                   <span>≥ 4.0 điểm</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="inline-block w-4 h-4 bg-yellow-100 border border-yellow-200 rounded"></span>
+                  <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-yellow-100 border border-yellow-200 rounded flex-shrink-0"></span>
                   <span>3.0 - 3.9 điểm</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="inline-block w-4 h-4 bg-gray-200 border border-gray-300 rounded"></span>
+                  <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-gray-200 border border-gray-300 rounded flex-shrink-0"></span>
                   <span>N/A (Chưa có dữ liệu)</span>
                 </div>
               </div>
@@ -534,52 +534,52 @@ export default function Page1() {
         {/* Modal - Chi tiết bài test */}
         {modalOpen && modalMonth && modalType && (
           <div 
-            className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 flex items-center justify-center z-50 p-2 sm:p-4"
             onClick={() => setModalOpen(false)}
           >
             <div 
-              className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden border border-gray-200"
+              className="bg-white rounded-xl shadow-2xl w-full sm:max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden border border-gray-200"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className={`${modalType === "expertise" ? "bg-gradient-to-r from-blue-600 to-blue-800" : "bg-gradient-to-r from-purple-600 to-purple-800"} text-white px-6 py-5 flex items-center justify-between`}>
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold">
-                    Chi tiết bài test tháng {modalMonth}
+              <div className={`${modalType === "expertise" ? "bg-gradient-to-r from-blue-600 to-blue-800" : "bg-gradient-to-r from-purple-600 to-purple-800"} text-white px-3 sm:px-6 py-3 sm:py-5 flex items-center justify-between gap-2`}>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base sm:text-xl font-bold truncate">
+                    Test T{modalMonth}
                   </h3>
-                  <div className="flex items-center gap-4 mt-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-1 sm:mt-2">
+                    <span className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold w-fit ${
                       modalType === "expertise" ? "bg-blue-500" : "bg-purple-500"
                     }`}>
-                      {modalType === "expertise" ? "Chuyên môn Chuyên sâu" : "Kỹ năng & Trải nghiệm"}
+                      {modalType === "expertise" ? "Chuyên môn" : "Kỹ năng"}
                     </span>
-                    <p className={`text-sm ${modalType === "expertise" ? "text-blue-100" : "text-purple-100"}`}>
-                      <span className="font-semibold">{modalRecords.length}</span> bài test • 
-                      <span className="font-semibold"> {modalRecords.filter(r => r.isCountedInAverage).length}</span> được tính điểm
+                    <p className={`text-xs sm:text-sm ${modalType === "expertise" ? "text-blue-100" : "text-purple-100"}`}>
+                      <span className="font-semibold">{modalRecords.length}</span> bài • 
+                      <span className="font-semibold"> {modalRecords.filter(r => r.isCountedInAverage).length}</span> tính điểm
                     </p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setModalOpen(false)}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-all ml-4"
+                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 sm:p-2 transition-all flex-shrink-0"
                   title="Đóng"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
 
-              <div className="overflow-y-auto max-h-[calc(90vh-220px)] bg-gray-50">
-                <table className="w-full text-sm bg-white">
+              <div className="overflow-y-auto max-h-[calc(95vh-150px)] sm:max-h-[calc(90vh-220px)] bg-gray-50 overflow-x-auto">
+                <table className="w-full text-xs sm:text-sm bg-white min-w-[600px]">
                   <thead className="bg-gradient-to-b from-gray-100 to-gray-50 border-b-2 border-gray-300 sticky top-0 z-10">
                     <tr>
-                      <th className="text-left py-4 px-4 font-bold text-gray-700 w-16">STT</th>
-                      <th className="text-left py-4 px-4 font-bold text-gray-700">{modalType === "expertise" ? "Bộ môn" : "Khối giảng dạy"}</th>
-                      {modalType === "expertise" && <th className="text-left py-4 px-4 font-bold text-gray-700">Đề thi</th>}
-                      <th className="text-center py-4 px-4 font-bold text-gray-700 w-24">Câu đúng</th>
-                      <th className="text-center py-4 px-4 font-bold text-gray-700 w-24">Điểm</th>
-                      <th className="text-left py-4 px-4 font-bold text-gray-700">Email giải trình</th>
-                      <th className="text-center py-4 px-4 font-bold text-gray-700 w-32">Tính điểm</th>
+                      <th className="text-left py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700 w-10 sm:w-16">STT</th>
+                      <th className="text-left py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700">{modalType === "expertise" ? "Bộ môn" : "Khối"}</th>
+                      {modalType === "expertise" && <th className="text-left py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700">Đề</th>}
+                      <th className="text-center py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700 w-16 sm:w-24">Cđ</th>
+                      <th className="text-center py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700 w-16 sm:w-24">Điểm</th>
+                      <th className="text-left py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700">Email</th>
+                      <th className="text-center py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700 w-20 sm:w-32">Tính</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -587,12 +587,12 @@ export default function Page1() {
                       <tr key={index} className={`border-b border-gray-200 transition-colors ${
                         !record.isCountedInAverage ? "bg-red-50" : "hover:bg-blue-50"
                       }`}>
-                        <td className="py-4 px-4 text-gray-500 font-medium text-center">{index + 1}</td>
-                        <td className="py-4 px-4 font-semibold text-gray-900">{modalType === "expertise" ? record.subject : record.teachingLevel}</td>
-                        {modalType === "expertise" && <td className="py-4 px-4 text-gray-600">{record.exam}</td>}
-                        <td className="text-center py-4 px-4 font-medium text-gray-700">{record.correct}</td>
-                        <td className="text-center py-4 px-4">
-                          <span className={`inline-block px-3 py-1.5 rounded-lg font-bold text-base ${
+                        <td className="py-2 sm:py-4 px-2 sm:px-4 text-gray-500 font-medium text-center">{index + 1}</td>
+                        <td className="py-2 sm:py-4 px-2 sm:px-4 font-semibold text-gray-900">{modalType === "expertise" ? record.subject : record.teachingLevel}</td>
+                        {modalType === "expertise" && <td className="py-2 sm:py-4 px-2 sm:px-4 text-gray-600">{record.exam}</td>}
+                        <td className="text-center py-2 sm:py-4 px-2 sm:px-4 font-medium text-gray-700">{record.correct}</td>
+                        <td className="text-center py-2 sm:py-4 px-2 sm:px-4">
+                          <span className={`inline-block px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold text-xs sm:text-base whitespace-nowrap ${
                             parseFloat(record.score.replace(",", ".")) >= 4 
                               ? "bg-green-100 text-green-700" 
                               : parseFloat(record.score.replace(",", ".")) >= 3 
@@ -602,33 +602,33 @@ export default function Page1() {
                             {record.score}
                           </span>
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-2 sm:py-4 px-2 sm:px-4">
                           {record.emailExplanation ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-50 text-orange-700 rounded-md text-xs font-medium">
-                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-orange-50 text-orange-700 rounded-md text-[10px] sm:text-xs font-medium truncate max-w-[150px] sm:max-w-full">
+                              <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
                                 <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
                               </svg>
-                              {record.emailExplanation}
+                              <span className="truncate">{record.emailExplanation}</span>
                             </span>
                           ) : (
-                            <span className="text-gray-400 text-sm">-</span>
+                            <span className="text-gray-400 text-xs sm:text-sm">-</span>
                           )}
                         </td>
-                        <td className="text-center py-4 px-4">
+                        <td className="text-center py-2 sm:py-4 px-2 sm:px-4">
                           {record.isCountedInAverage ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-100 text-green-800 rounded-lg text-xs font-semibold">
-                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <span className="inline-flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-3 py-1 sm:py-1.5 bg-green-100 text-green-800 rounded-lg text-[10px] sm:text-xs font-semibold whitespace-nowrap">
+                              <svg className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                               </svg>
-                              Tính
+                              <span className="hidden sm:inline">Tính</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-800 rounded-lg text-xs font-semibold">
-                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <span className="inline-flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-3 py-1 sm:py-1.5 bg-red-100 text-red-800 rounded-lg text-[10px] sm:text-xs font-semibold whitespace-nowrap">
+                              <svg className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                               </svg>
-                              Không tính
+                              <span className="hidden sm:inline">Không</span>
                             </span>
                           )}
                         </td>
@@ -638,19 +638,19 @@ export default function Page1() {
                 </table>
               </div>
 
-              <div className="px-6 py-4 bg-gradient-to-b from-gray-50 to-gray-100 border-t border-gray-200">
-                <div className="flex items-start gap-6 text-xs text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+              <div className="px-3 sm:px-6 py-3 sm:py-4 bg-gradient-to-b from-gray-50 to-gray-100 border-t border-gray-200">
+                <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-6 text-[10px] sm:text-xs text-gray-600">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <span><strong>Tính điểm:</strong> Bài test được đưa vào tính trung bình</span>
+                    <span><strong>Tính:</strong> Đưa vào TB</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                     </svg>
-                    <span><strong>Không tính:</strong> Điểm 0 + đã email giải trình</span>
+                    <span><strong>Không:</strong> Điểm 0 + email GT</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 bg-red-50 border border-red-200 rounded"></div>

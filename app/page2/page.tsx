@@ -82,22 +82,22 @@ const CalendarCell = memo(({
                   'bg-blue-50';
 
   return (
-    <td className={`border border-gray-300 p-2 align-top ${bgColor}`}>
+    <td className={`border border-gray-300 p-1.5 sm:p-2 align-top ${bgColor}`}>
       {count === 0 ? (
-        <div className="text-center text-gray-400 text-xs py-2">Không có</div>
+        <div className="text-center text-gray-400 text-[10px] sm:text-xs py-1 sm:py-2">Không có</div>
       ) : (
-        <div className="space-y-1">
-          <div className="text-xs font-semibold text-gray-700 mb-2">
-            {count} giáo viên
+        <div className="space-y-0.5 sm:space-y-1">
+          <div className="text-[10px] sm:text-xs font-semibold text-gray-700 mb-1 sm:mb-2">
+            {count} GV
           </div>
           {teachers.map((teacher, idx) => (
             <button
               key={`${teacher.email}-${idx}`}
               onClick={() => onTeacherClick(teacher, day, timeSlot)}
-              className="w-full text-left px-2 py-1 text-xs bg-white hover:bg-blue-100 border border-gray-200 rounded transition-colors duration-150 hover:shadow-sm"
+              className="w-full text-left px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs bg-white hover:bg-blue-100 border border-gray-200 rounded transition-colors duration-150 hover:shadow-sm"
             >
               <div className="font-medium text-gray-900 truncate">{teacher.name}</div>
-              <div className="text-gray-600 text-[10px] truncate">{teacher.mainBranch}</div>
+              <div className="text-gray-600 text-[9px] sm:text-[10px] truncate">{teacher.mainBranch}</div>
             </button>
           ))}
         </div>
@@ -233,39 +233,41 @@ export default function Page2() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 p-3 sm:p-6">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Calendar className="w-8 h-8 text-blue-600" />
-          <h1 className="text-3xl font-bold text-gray-900">Lịch Rảnh Giáo Viên</h1>
+      <div className="mb-4 sm:mb-6">
+        <div className="flex items-center gap-2 sm:gap-3 mb-2">
+          <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Lịch Rảnh Giáo Viên</h1>
         </div>
-        <p className="text-gray-600">Xem số lượng giáo viên rảnh theo khung giờ và chương trình</p>
+        <p className="text-sm sm:text-base text-gray-600">Xem số lượng giáo viên rảnh theo khung giờ và chương trình</p>
       </div>
 
       {/* Date Range Filter */}
-      <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-        <div className="flex items-center gap-4">
-          <Calendar className="w-5 h-5 text-gray-600" />
-          <span className="text-gray-700 font-medium">Khoảng thời gian:</span>
+      <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 mb-3 sm:mb-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-gray-600" />
+            <span className="text-sm sm:text-base text-gray-700 font-medium">Khoảng thời gian:</span>
+          </div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
             <label className="text-sm text-gray-600">Từ ngày:</label>
             <input
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
               max={toDate}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
             <label className="text-sm text-gray-600">Đến ngày:</label>
             <input
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
               min={fromDate}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <button
@@ -275,7 +277,7 @@ export default function Page2() {
               setFromDate(newFromDate);
               setToDate(newToDate);
             }}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+            className="w-full sm:w-auto px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
           >
             10 ngày gần nhất
           </button>
@@ -283,17 +285,19 @@ export default function Page2() {
       </div>
 
       {/* Region and Program Filters */}
-      <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+      <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 mb-4 sm:mb-6">
         {/* Region Filter */}
-        <div className="flex items-center gap-4 pb-4 border-b border-gray-200">
-          <Filter className="w-5 h-5 text-gray-600" />
-          <span className="text-gray-700 font-medium min-w-24">Khu vực:</span>
-          <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <Filter className="w-5 h-5 text-gray-600" />
+            <span className="text-sm sm:text-base text-gray-700 font-medium">Khu vực:</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {REGION_OPTIONS.map(region => (
               <button
                 key={region}
                 onClick={() => setSelectedRegion(region)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   selectedRegion === region
                     ? 'bg-purple-600 text-white shadow-md'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -304,17 +308,19 @@ export default function Page2() {
             ))}
           </div>
           {selectedRegion !== 'Tất cả' && (
-            <div className="ml-4 text-xs text-gray-600 bg-purple-50 px-3 py-1 rounded-full">
+            <div className="text-xs text-gray-600 bg-purple-50 px-3 py-1 rounded-full">
               {REGIONS[selectedRegion as keyof typeof REGIONS].join(', ')}
             </div>
           )}
         </div>
         
         {/* Program Filter */}
-        <div className="flex items-center gap-4 pt-4">
-          <Filter className="w-5 h-5 text-gray-600" />
-          <span className="text-gray-700 font-medium min-w-24">Chương trình:</span>
-          <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 pt-3 sm:pt-4">
+          <div className="flex items-center gap-2">
+            <Filter className="w-5 h-5 text-gray-600" />
+            <span className="text-sm sm:text-base text-gray-700 font-medium">Chương trình:</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {PROGRAMS.map(program => {
               const isSelected = selectedPrograms.includes(program);
               return (
@@ -327,7 +333,7 @@ export default function Page2() {
                       setSelectedPrograms([...selectedPrograms, program]);
                     }
                   }}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                  className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                     isSelected
                       ? 'bg-blue-600 text-white shadow-md'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -346,12 +352,12 @@ export default function Page2() {
               </button>
             )}
           </div>
-          <span className="ml-auto text-sm text-gray-600">
+          <div className="w-full sm:w-auto text-sm text-gray-600 sm:ml-auto">
             Tổng: <span className="font-bold text-gray-900">{filteredTeachers.length}</span> giáo viên
             {selectedPrograms.length > 0 && (
-              <span className="text-blue-600 ml-2">({selectedPrograms.join(', ')})</span>
+              <span className="text-blue-600 ml-2 block sm:inline">({selectedPrograms.join(', ')})</span>
             )}
-          </span>
+          </div>
         </div>
       </div>
 
@@ -364,16 +370,16 @@ export default function Page2() {
       ) : (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
+            <table className="w-full border-collapse text-sm sm:text-base">
               <thead>
                 <tr className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
-                  <th className="border border-blue-700 p-3 text-left sticky left-0 bg-blue-700 z-10">
+                  <th className="border border-blue-700 p-2 sm:p-3 text-left sticky left-0 bg-blue-700 z-10 text-xs sm:text-sm">
                     Khung giờ
                   </th>
                   {DAYS.map(day => (
-                    <th key={day.key} className="border border-blue-700 p-3 text-center min-w-32">
-                      <div className="font-bold">{day.label}</div>
-                      <div className="text-xs font-normal opacity-90">({day.short})</div>
+                    <th key={day.key} className="border border-blue-700 p-2 sm:p-3 text-center min-w-24 sm:min-w-32">
+                      <div className="font-bold text-xs sm:text-sm">{day.label}</div>
+                      <div className="text-[10px] sm:text-xs font-normal opacity-90">({day.short})</div>
                     </th>
                   ))}
                 </tr>
@@ -381,10 +387,10 @@ export default function Page2() {
               <tbody>
                 {TIME_SLOTS.map(slot => (
                   <tr key={slot}>
-                    <td className="border border-gray-300 p-3 font-semibold bg-gray-50 sticky left-0 z-10">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-blue-600"></div>
-                        {slot}
+                    <td className="border border-gray-300 p-2 sm:p-3 font-semibold bg-gray-50 sticky left-0 z-10 text-xs sm:text-sm">
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-600"></div>
+                        <span className="whitespace-nowrap">{slot}</span>
                       </div>
                     </td>
                     {DAYS.map(day => (
@@ -406,24 +412,24 @@ export default function Page2() {
       )}
 
       {/* Legend */}
-      <div className="mt-6 bg-white rounded-lg shadow-md p-4">
-        <h3 className="font-semibold text-gray-900 mb-3">Chú thích màu sắc:</h3>
-        <div className="flex flex-wrap gap-4">
+      <div className="mt-6 bg-white rounded-lg shadow-md p-3 sm:p-4">
+        <h3 className="font-semibold text-gray-900 mb-2 sm:mb-3 text-sm sm:text-base">Chú thích màu sắc:</h3>
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gray-100 border border-gray-300 rounded"></div>
-            <span className="text-sm text-gray-700">Không có giáo viên rảnh</span>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gray-100 border border-gray-300 rounded flex-shrink-0"></div>
+            <span className="text-xs sm:text-sm text-gray-700">Không có GV</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-yellow-100 border border-gray-300 rounded"></div>
-            <span className="text-sm text-gray-700">1-2 giáo viên</span>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-yellow-100 border border-gray-300 rounded flex-shrink-0"></div>
+            <span className="text-xs sm:text-sm text-gray-700">1-2 GV</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-green-100 border border-gray-300 rounded"></div>
-            <span className="text-sm text-gray-700">3-5 giáo viên</span>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-green-100 border border-gray-300 rounded flex-shrink-0"></div>
+            <span className="text-xs sm:text-sm text-gray-700">3-5 GV</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-100 border border-gray-300 rounded"></div>
-            <span className="text-sm text-gray-700">6+ giáo viên</span>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-blue-100 border border-gray-300 rounded flex-shrink-0"></div>
+            <span className="text-xs sm:text-sm text-gray-700">6+ GV</span>
           </div>
         </div>
       </div>
@@ -431,50 +437,50 @@ export default function Page2() {
       {/* Modal - Teacher Detail */}
       {modalOpen && modalData && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
           onClick={() => setModalOpen(false)}
         >
           <div 
-            className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+            className="bg-white rounded-lg shadow-2xl w-full sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white px-6 py-5 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <User className="w-6 h-6" />
-                <div>
-                  <h3 className="text-xl font-bold">{modalData.teacher.name}</h3>
-                  <p className="text-sm opacity-90">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white px-3 sm:px-6 py-3 sm:py-5 flex items-center justify-between">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <User className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-xl font-bold truncate">{modalData.teacher.name}</h3>
+                  <p className="text-xs sm:text-sm opacity-90 truncate">
                     {modalData.day} - {modalData.timeSlot}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setModalOpen(false)}
-                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                className="p-1.5 sm:p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors flex-shrink-0"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="overflow-auto max-h-[calc(90vh-140px)] p-6">
-              <div className="space-y-4">
+            <div className="overflow-auto max-h-[calc(95vh-100px)] sm:max-h-[calc(90vh-140px)] p-3 sm:p-6">
+              <div className="space-y-3 sm:space-y-4">
                 {/* Basic Info */}
-                <div className="border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-gray-900 mb-3">Thông tin cơ bản</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
+                <div className="border border-gray-200 rounded-lg p-3 sm:p-4">
+                  <h4 className="font-semibold text-gray-900 mb-2 sm:mb-3 text-sm sm:text-base">Thông tin cơ bản</h4>
+                  <div className="space-y-2 text-xs sm:text-sm">
+                    <div className="flex justify-between gap-2">
                       <span className="text-gray-600">Email:</span>
-                      <span className="font-medium text-gray-900">{modalData.teacher.email}</span>
+                      <span className="font-medium text-gray-900 text-right truncate">{modalData.teacher.email}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Chi nhánh chính:</span>
-                      <span className="font-medium text-gray-900">{modalData.teacher.mainBranch}</span>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-600 flex-shrink-0">Chi nhánh chính:</span>
+                      <span className="font-medium text-gray-900 text-right">{modalData.teacher.mainBranch}</span>
                     </div>
                     {modalData.teacher.branches && modalData.teacher.branches !== modalData.teacher.mainBranch && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Có thể làm việc:</span>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-gray-600 flex-shrink-0">Có thể làm việc:</span>
                         <span className="font-medium text-gray-900 text-right">{modalData.teacher.branches}</span>
                       </div>
                     )}
@@ -482,36 +488,36 @@ export default function Page2() {
                 </div>
 
                 {/* Subjects */}
-                <div className="border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-gray-900 mb-3">Môn dạy</h4>
-                  <div className="flex flex-wrap gap-2">
+                <div className="border border-gray-200 rounded-lg p-3 sm:p-4">
+                  <h4 className="font-semibold text-gray-900 mb-2 sm:mb-3 text-sm sm:text-base">Môn dạy</h4>
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
                     {modalData.teacher.subjects.split(',').map((subject, idx) => (
                       <span
                         key={idx}
-                        className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium"
+                        className="px-2 sm:px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs sm:text-sm font-medium"
                       >
                         {subject.trim()}
                       </span>
                     ))}
                   </div>
                   {modalData.teacher.mainSubject && (
-                    <div className="mt-3 text-xs text-gray-600">
+                    <div className="mt-2 sm:mt-3 text-[10px] sm:text-xs text-gray-600">
                       Môn chính: <span className="font-semibold text-gray-900">{modalData.teacher.mainSubject}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Weekly Schedule */}
-                <div className="border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-gray-900 mb-3">Lịch rảnh trong tuần</h4>
-                  <div className="grid grid-cols-7 gap-1">
+                <div className="border border-gray-200 rounded-lg p-3 sm:p-4">
+                  <h4 className="font-semibold text-gray-900 mb-2 sm:mb-3 text-sm sm:text-base">Lịch rảnh trong tuần</h4>
+                  <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
                     {DAYS.map(day => {
                       const availability = modalData.teacher[day.key];
                       const isBusy = !availability || availability === 'Bận';
                       return (
                         <div key={day.key} className="text-center">
-                          <div className="text-xs font-semibold text-gray-700 mb-1">{day.short}</div>
-                          <div className={`text-[10px] p-1 rounded ${isBusy ? 'bg-gray-100 text-gray-400' : 'bg-green-100 text-green-800'}`}>
+                          <div className="text-[10px] sm:text-xs font-semibold text-gray-700 mb-0.5 sm:mb-1">{day.short}</div>
+                          <div className={`text-[9px] sm:text-[10px] p-0.5 sm:p-1 rounded leading-tight ${isBusy ? 'bg-gray-100 text-gray-400' : 'bg-green-100 text-green-800'}`}>
                             {isBusy ? 'Bận' : availability}
                           </div>
                         </div>
@@ -522,19 +528,19 @@ export default function Page2() {
 
                 {/* Notes */}
                 {modalData.teacher.notes && (
-                  <div className="border border-gray-200 rounded-lg p-4 bg-yellow-50">
-                    <h4 className="font-semibold text-gray-900 mb-2">Ghi chú</h4>
-                    <p className="text-sm text-gray-700 italic">{modalData.teacher.notes}</p>
+                  <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-yellow-50">
+                    <h4 className="font-semibold text-gray-900 mb-1.5 sm:mb-2 text-sm sm:text-base">Ghi chú</h4>
+                    <p className="text-xs sm:text-sm text-gray-700 italic">{modalData.teacher.notes}</p>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 bg-gradient-to-b from-gray-50 to-gray-100 border-t border-gray-200">
+            <div className="px-3 sm:px-6 py-3 sm:py-4 bg-gradient-to-b from-gray-50 to-gray-100 border-t border-gray-200">
               <button
                 onClick={() => setModalOpen(false)}
-                className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                className="w-full py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base font-medium rounded-lg transition-colors"
               >
                 Đóng
               </button>
