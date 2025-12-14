@@ -159,7 +159,7 @@ export default function Page1() {
 
   const openModal = useCallback((month: string, type: "expertise" | "experience") => {
     const data = type === "expertise" ? expertiseData : experienceData;
-    const monthData = data.find(d => d.month === month);
+    const monthData = data.find((d: MonthlyAverage) => d.month === month);
     
     if (monthData && monthData.records.length > 0) {
       setModalMonth(month);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 interface TestRecord {
   area: string;
@@ -30,7 +30,7 @@ interface MonthlyAverage {
   records: TestRecord[];
 }
 
-export default function RawDataExperiencePage() {
+function RawDataExperienceContent() {
   const searchParams = useSearchParams();
   const [searchCode, setSearchCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -334,5 +334,20 @@ export default function RawDataExperiencePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function RawDataExperiencePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Đang tải...</p>
+        </div>
+      </div>
+    }>
+      <RawDataExperienceContent />
+    </Suspense>
   );
 }
