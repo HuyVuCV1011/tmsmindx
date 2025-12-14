@@ -1,0 +1,14 @@
+export default function Dashboard() {
+  return (
+    <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
+      <div className="text-center space-y-3 p-4 rounded-lg border border-gray-900 bg-white">
+        <h1 className="text-2xl font-bold text-gray-900">
+          Dashboard
+        </h1>
+        <p className="text-gray-600 text-sm font-medium">
+          Chọn một màn hình từ sidebar bên trái
+        </p>
+      </div>
+    </div>
+  );
+}
