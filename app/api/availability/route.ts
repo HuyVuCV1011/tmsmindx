@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const fromDateStr = searchParams.get('fromDate');
     const toDateStr = searchParams.get('toDate');
+    const teacherName = searchParams.get('teacherName');
     
     // Mặc định: 10 ngày gần nhất
     const toDate = toDateStr ? new Date(toDateStr) : new Date();
@@ -77,7 +78,6 @@ export async function GET(request: NextRequest) {
     const dataLines = lines.slice(1);
     
     const teachers: TeacherAvailability[] = [];
-    const uniqueTeachers = new Map<string, TeacherAvailability>();
 
     for (const line of dataLines) {
       // Parse CSV với xử lý dấu ngoặc kép
@@ -128,15 +128,23 @@ export async function GET(request: NextRequest) {
         notes: columns[14] || '',
       };
 
-      // Chỉ giữ bản ghi mới nhất của mỗi giáo viên (theo email)
-      const existingTeacher = uniqueTeachers.get(teacher.email);
-      if (!existingTeacher || teacher.timestamp > existingTeacher.timestamp) {
-        uniqueTeachers.set(teacher.email, teacher);
+      // Filter by teacher name if provided
+      if (teacherName) {
+        const normalizedRecordName = teacher.name?.toLowerCase().trim();
+        const normalizedFilterName = teacherName.toLowerCase().trim();
+        
+        // Skip if name doesn't match
+        if (!normalizedRecordName.includes(normalizedFilterName) && 
+            !normalizedFilterName.includes(normalizedRecordName)) {
+          continue;
+        }
       }
+
+      // Add ALL records (not just latest) for performance analysis
+      teachers.push(teacher);
     }
 
-    // Chuyển Map thành array
-    const finalTeachers = Array.from(uniqueTeachers.values());
+    const finalTeachers = teachers;
 
     return NextResponse.json({
       teachers: finalTeachers,
