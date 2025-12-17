@@ -1114,18 +1114,18 @@ export default function Page1() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* By Day */}
                 <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-white">
-                  <h4 className="text-sm font-bold text-gray-900 mb-3">Phân bố theo ngày</h4>
-                  <div className="flex items-end justify-between gap-2 h-48">
+                  <h4 className="text-sm font-bold text-gray-900 mb-6">Phân bố theo ngày</h4>
+                  <div className="flex items-end justify-between gap-2 h-56">
                     {availabilityStats.DAYS.map(day => {
                       const count = availabilityStats.dayCount[day.key] || 0;
                       const maxDay = Math.max(...availabilityStats.DAYS.map(d => availabilityStats.dayCount[d.key] || 0), 1);
-                      // Calculate height in pixels for better control (192px max = h-48)
-                      const maxHeight = 192; // 48 * 4 = 192px
+                      // Calculate height in pixels for better control (224px max = h-56)
+                      const maxHeight = 224; // 56 * 4 = 224px
                       const heightPx = count > 0 ? Math.max(24, (count / maxDay) * maxHeight) : 8;
                       
                       return (
                         <div key={day.key} className="flex-1 flex flex-col items-center gap-2 group">
-                          <div className="relative w-full flex flex-col justify-end h-48">
+                          <div className="relative w-full flex flex-col justify-end h-56">
                             <div 
                               className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${
                                 count === 0 ? 'bg-gray-200' : 'bg-gradient-to-t from-blue-600 to-blue-400 hover:from-blue-700 hover:to-blue-500'
@@ -1159,20 +1159,20 @@ export default function Page1() {
 
                 {/* By Time Slot */}
                 <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-white">
-                  <h4 className="text-sm font-bold text-gray-900 mb-3">Phân bố theo khung giờ</h4>
-                  <div className="flex items-end justify-around gap-4 h-48">
+                  <h4 className="text-sm font-bold text-gray-900 mb-6">Phân bố theo khung giờ</h4>
+                  <div className="flex items-end justify-around gap-4 h-56">
                     {availabilityStats.TIME_SLOTS.map((slot, idx) => {
                       const count = availabilityStats.timeSlotCount[slot] || 0;
                       const maxSlot = Math.max(...availabilityStats.TIME_SLOTS.map(s => availabilityStats.timeSlotCount[s] || 0), 1);
-                      // Calculate height in pixels for better control (192px max = h-48)
-                      const maxHeight = 192;
+                      // Calculate height in pixels for better control (224px max = h-56)
+                      const maxHeight = 224;
                       const heightPx = count > 0 ? Math.max(24, (count / maxSlot) * maxHeight) : 8;
                       const colors = ['from-amber-500 to-amber-400', 'from-blue-500 to-blue-400', 'from-indigo-600 to-indigo-500'];
                       const textColors = ['text-amber-600', 'text-blue-600', 'text-indigo-600'];
                       
                       return (
                         <div key={slot} className="flex-1 flex flex-col items-center gap-2 max-w-32 group">
-                          <div className="relative w-full flex flex-col justify-end h-48">
+                          <div className="relative w-full flex flex-col justify-end h-56">
                             <div 
                               className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${
                                 count === 0 ? 'bg-gray-200' : `bg-gradient-to-t ${colors[idx]}`
