@@ -109,6 +109,7 @@ export default function Page1() {
   const [modalType, setModalType] = useState<"expertise" | "experience" | null>(null);
   const [modalRecords, setModalRecords] = useState<TestRecord[]>([]);
   const [availabilityPeriod, setAvailabilityPeriod] = useState<"week" | "month" | "year">("month");
+  const [notFoundModalOpen, setNotFoundModalOpen] = useState(false);
   
   // Load last searched code from localStorage
   useEffect(() => {
@@ -119,12 +120,13 @@ export default function Page1() {
   }, []);
 
   // SWR với auto caching và revalidation
-  const { data: teacherData, isLoading: isLoadingTeacher } = useSWR(
+  const { data: teacherData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
     submitCode ? `/api/teachers?code=${submitCode}` : null,
     fetcher,
     { 
       revalidateOnFocus: false,
-      dedupingInterval: 60000 // Dedupe requests trong 60s
+      dedupingInterval: 60000, // Dedupe requests trong 60s
+      shouldRetryOnError: false // Don't retry on 404
     }
   );
 
@@ -226,14 +228,29 @@ export default function Page1() {
 
   // Handle teacher data errors
   useEffect(() => {
-    if (teacherData && teacherData.error) {
+    if (teacherError) {
+      // API returned error (404, 500, etc)
+      setNotFoundModalOpen(true);
+    } else if (teacherData && teacherData.error) {
+      // API returned error in response body
       setError(teacherData.error);
+      setNotFoundModalOpen(true);
     } else if (submitCode && !isLoadingTeacher && teacherData && !teacher) {
-      setError("Không tìm thấy giáo viên với mã này");
+      // API returned but no teacher found
+      setNotFoundModalOpen(true);
     } else if (teacher) {
       setError("");
     }
-  }, [teacherData, teacher, submitCode, isLoadingTeacher]);
+  }, [teacherData, teacher, submitCode, isLoadingTeacher, teacherError]);
+
+  // Handle not found modal confirm
+  const handleNotFoundConfirm = useCallback(() => {
+    setNotFoundModalOpen(false);
+    setSearchCode("");
+    setSubmitCode("");
+    setError("");
+    localStorage.removeItem('lastSearchCode');
+  }, []);
 
   // Debounce search for better performance
   useEffect(() => {
@@ -536,11 +553,6 @@ export default function Page1() {
               className="w-full px-3 py-2 text-sm border border-gray-900 rounded focus:outline-none focus:ring-2 focus:ring-gray-900"
               autoFocus
             />
-            {isLoadingTeacher && (
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-900"></div>
-              </div>
-            )}
           </div>
           <button
             onClick={handleSearch}
@@ -577,25 +589,41 @@ export default function Page1() {
           </div>
         )}
 
-        {/* Loading Teacher */}
+        {/* Teacher Info Skeleton */}
         {isLoadingTeacher && submitCode && (
-          <div className="border border-gray-300 rounded-lg p-6 sm:p-8 bg-white">
-            <div className="flex flex-col items-center gap-4">
-              <div className="relative">
-                <div className="h-12 w-12 rounded-full border-4 border-gray-200"></div>
-                <div className="absolute top-0 h-12 w-12 animate-spin rounded-full border-4 border-gray-900 border-t-transparent"></div>
+          <div className="border border-gray-900 rounded-lg overflow-hidden">
+            {/* Header Skeleton */}
+            <div className="bg-gray-900 text-white p-3 sm:p-4">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gray-700 animate-pulse"></div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="h-5 bg-gray-700 rounded w-40 animate-pulse"></div>
+                  <div className="h-3 bg-gray-700 rounded w-24 animate-pulse"></div>
+                </div>
+                <div className="h-6 w-16 bg-gray-700 rounded-full animate-pulse"></div>
               </div>
-              <div className="text-center">
-                <h3 className="text-sm sm:text-base font-semibold text-gray-900">Đang tải thông tin giáo viên...</h3>
-                <p className="text-xs sm:text-sm text-gray-600 mt-1">Bước 1/3: Tìm kiếm dữ liệu giáo viên</p>
+            </div>
+
+            {/* Info Grid Skeleton */}
+            <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className="flex items-start gap-2 p-2 bg-gray-50 rounded">
+                    <div className="w-4 h-4 bg-gray-300 rounded animate-pulse mt-0.5"></div>
+                    <div className="flex-1 space-y-1">
+                      <div className="h-3 bg-gray-300 rounded w-20 animate-pulse"></div>
+                      <div className="h-4 bg-gray-200 rounded w-full animate-pulse"></div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         )}
 
         {/* Teacher Info */}
-        {teacher && (
-          <div className="border border-gray-900 rounded-lg overflow-hidden animate-fadeIn">
+        {teacher && !isLoadingTeacher && (
+          <div className="border border-gray-900 rounded-lg overflow-hidden animate-fadeIn" style={{ animationDelay: '0.1s' }}>
             {/* Header Card */}
             <div className="bg-gray-900 text-white p-3 sm:p-4">
               <div className="flex items-center gap-2 sm:gap-3">
@@ -656,12 +684,18 @@ export default function Page1() {
                     <span className="ml-2 font-medium">{teacher.branchIn}</span>
                   </div>
                   <div className="text-xs">
-                    <span className="text-gray-600">Program đầu vào:</span>
-                    <span className="ml-2 font-medium">{teacher.programIn}</span>
+                    <span className="text-gray-600">Trạng thái hoạt động:</span>
+                    <span className={`ml-2 font-medium ${
+                      teacher.status === "Active" ? "text-green-600" : "text-gray-600"
+                    }`}>{teacher.status}</span>
                   </div>
                   <div className="text-xs">
                     <span className="text-gray-600">Onboard bởi:</span>
                     <span className="ml-2 font-medium">{teacher.onboardBy}</span>
+                  </div>
+                  <div className="text-xs">
+                    <span className="text-gray-600">Program đầu vào:</span>
+                    <span className="ml-2 font-medium">{teacher.programIn}</span>
                   </div>
                 </div>
               </div>
@@ -669,27 +703,23 @@ export default function Page1() {
           </div>
         )}
 
-
-
-        {/* Loading Scores */}
-        {teacher && (isLoadingExpertise || isLoadingExperience) && (
-          <div className="border border-gray-300 rounded-lg p-6 sm:p-8 bg-white">
-            <div className="flex flex-col items-center gap-4">
-              <div className="relative">
-                <div className="h-12 w-12 rounded-full border-4 border-gray-200"></div>
-                <div className="absolute top-0 h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-              </div>
-              <div className="text-center">
-                <h3 className="text-sm sm:text-base font-semibold text-gray-900">Đang tải Điểm Đánh Giá...</h3>
-                <p className="text-xs sm:text-sm text-gray-600 mt-1">Bước 2/3 - Lấy dữ liệu chuyên môn & kỹ năng (song song)</p>
-              </div>
+        {/* Score Summary Skeleton */}
+        {teacher && !scoresLoaded && (
+          <div className="border border-gray-900 rounded-lg p-3 sm:p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 items-end">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i}>
+                  <div className="h-3 bg-gray-200 rounded w-16 mb-1 animate-pulse"></div>
+                  <div className="h-10 bg-gray-300 rounded animate-pulse"></div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
         {/* Score Summary */}
         {teacher && scoresLoaded && (expertiseData.length > 0 || experienceData.length > 0) && (
-          <div className="border border-gray-900 rounded-lg p-3 sm:p-4 animate-fadeIn">
+          <div className="border border-gray-900 rounded-lg p-3 sm:p-4 animate-fadeIn" style={{ animationDelay: '0.2s' }}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 items-end">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Tháng</label>
@@ -735,8 +765,8 @@ export default function Page1() {
         )}
 
         {/* Monthly Metrics */}
-        {teacher && scoresLoaded && (expertiseData.length > 0 || experienceData.length > 0) && (
-          <div className="border border-gray-900 rounded-lg overflow-hidden mt-3 sm:mt-4 animate-fadeIn">
+        {teacher && (
+          <div className="border border-gray-900 rounded-lg overflow-hidden mt-3 sm:mt-4 animate-fadeIn" style={{ animationDelay: '0.3s' }}>
             <div className="bg-gray-900 text-white p-2 sm:p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <h3 className="text-sm font-bold">Các chỉ số theo tháng</h3>
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -753,6 +783,36 @@ export default function Page1() {
               </div>
             </div>
             <div className="p-2 sm:p-4 overflow-x-auto -mx-2 sm:mx-0">
+              {!scoresLoaded ? (
+                /* Loading Skeleton */
+                <div className="space-y-3">
+                  <div className="animate-pulse">
+                    <div className="flex gap-2 mb-3">
+                      <div className="h-8 bg-gray-200 rounded w-24"></div>
+                      {Array.from({ length: 12 }).map((_, i) => (
+                        <div key={i} className="h-8 bg-gray-200 rounded flex-1 min-w-[50px]"></div>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      {[1, 2].map((row) => (
+                        <div key={row} className="flex gap-2">
+                          <div className="h-10 bg-gray-300 rounded w-24"></div>
+                          {Array.from({ length: 12 }).map((_, i) => (
+                            <div key={i} className="h-10 bg-gray-100 rounded flex-1 min-w-[50px]"></div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (expertiseData.length === 0 && experienceData.length === 0) ? (
+                /* No Data Message */
+                <div className="text-center py-8 text-gray-500">
+                  <p className="text-sm">Chưa có dữ liệu điểm số</p>
+                </div>
+              ) : (
+                /* Actual Table */
+                <>
               {(() => {
                 const months = Array.from({ length: 12 }, (_, i) => `${i + 1}/${selectedTableYear}`);
 
@@ -827,27 +887,31 @@ export default function Page1() {
                   </table>
                 );
               })()}
-              <div className="mt-2 sm:mt-3 flex flex-col sm:flex-row gap-1.5 sm:gap-4 text-[10px] sm:text-xs text-gray-600">
-                <div className="flex items-center gap-1">
-                  <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-green-100 border border-green-200 rounded flex-shrink-0"></span>
-                  <span>≥ 4.0 điểm</span>
+              {scoresLoaded && (
+                <div className="mt-2 sm:mt-3 flex flex-col sm:flex-row gap-1.5 sm:gap-4 text-[10px] sm:text-xs text-gray-600">
+                  <div className="flex items-center gap-1">
+                    <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-green-100 border border-green-200 rounded flex-shrink-0"></span>
+                    <span>≥ 4.0 điểm</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-yellow-100 border border-yellow-200 rounded flex-shrink-0"></span>
+                    <span>3.0 - 3.9 điểm</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-gray-200 border border-gray-300 rounded flex-shrink-0"></span>
+                    <span>N/A (Chưa có dữ liệu)</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-yellow-100 border border-yellow-200 rounded flex-shrink-0"></span>
-                  <span>3.0 - 3.9 điểm</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-gray-200 border border-gray-300 rounded flex-shrink-0"></span>
-                  <span>N/A (Chưa có dữ liệu)</span>
-                </div>
-              </div>
+              )}
+              </>
+              )}
             </div>
           </div>
         )}
 
         {/* Availability Performance Analysis - Show skeleton while loading */}
         {teacher && (
-          <div className="border border-gray-900 rounded-lg overflow-hidden mt-3 sm:mt-4 animate-fadeIn">
+          <div className="border border-gray-900 rounded-lg overflow-hidden mt-3 sm:mt-4 animate-fadeIn" style={{ animationDelay: '0.4s' }}>
             {/* Header */}
             <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-3 sm:p-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -913,13 +977,6 @@ export default function Page1() {
                     <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50">
                       <div className="h-4 bg-gray-300 rounded w-32 mb-3 animate-pulse"></div>
                       <div className="h-48 bg-gray-200 rounded animate-pulse"></div>
-                    </div>
-                  </div>
-                  
-                  <div className="text-center text-sm text-gray-500 py-4">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                      Đang tải dữ liệu hiệu suất làm việc...
                     </div>
                   </div>
                 </>
@@ -1062,15 +1119,20 @@ export default function Page1() {
                     {availabilityStats.DAYS.map(day => {
                       const count = availabilityStats.dayCount[day.key] || 0;
                       const maxDay = Math.max(...availabilityStats.DAYS.map(d => availabilityStats.dayCount[d.key] || 0), 1);
-                      const heightPercent = (count / maxDay) * 100;
-                      const displayHeight = Math.max(heightPercent, 8);
+                      // Calculate height in pixels for better control (192px max = h-48)
+                      const maxHeight = 192; // 48 * 4 = 192px
+                      const heightPx = count > 0 ? Math.max(24, (count / maxDay) * maxHeight) : 8;
                       
                       return (
                         <div key={day.key} className="flex-1 flex flex-col items-center gap-2 group">
-                          <div className="relative w-full flex flex-col justify-end" style={{ height: '100%' }}>
+                          <div className="relative w-full flex flex-col justify-end h-48">
                             <div 
-                              className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t transition-all duration-300 hover:from-blue-700 hover:to-blue-500 hover:scale-105 relative cursor-pointer shadow-md"
-                              style={{ height: `${displayHeight}%`, minHeight: '20px' }}
+                              className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${
+                                count === 0 ? 'bg-gray-200' : 'bg-gradient-to-t from-blue-600 to-blue-400 hover:from-blue-700 hover:to-blue-500'
+                              }`}
+                              style={{ 
+                                height: `${heightPx}px`
+                              }}
                             >
                               {/* Count inside bar */}
                               {count > 0 && (
@@ -1102,17 +1164,22 @@ export default function Page1() {
                     {availabilityStats.TIME_SLOTS.map((slot, idx) => {
                       const count = availabilityStats.timeSlotCount[slot] || 0;
                       const maxSlot = Math.max(...availabilityStats.TIME_SLOTS.map(s => availabilityStats.timeSlotCount[s] || 0), 1);
-                      const heightPercent = (count / maxSlot) * 100;
-                      const displayHeight = Math.max(heightPercent, 8);
+                      // Calculate height in pixels for better control (192px max = h-48)
+                      const maxHeight = 192;
+                      const heightPx = count > 0 ? Math.max(24, (count / maxSlot) * maxHeight) : 8;
                       const colors = ['from-amber-500 to-amber-400', 'from-blue-500 to-blue-400', 'from-indigo-600 to-indigo-500'];
                       const textColors = ['text-amber-600', 'text-blue-600', 'text-indigo-600'];
                       
                       return (
                         <div key={slot} className="flex-1 flex flex-col items-center gap-2 max-w-32 group">
-                          <div className="relative w-full flex flex-col justify-end" style={{ height: '100%' }}>
+                          <div className="relative w-full flex flex-col justify-end h-48">
                             <div 
-                              className={`w-full bg-gradient-to-t ${colors[idx]} rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md`}
-                              style={{ height: `${displayHeight}%`, minHeight: '20px' }}
+                              className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${
+                                count === 0 ? 'bg-gray-200' : `bg-gradient-to-t ${colors[idx]}`
+                              }`}
+                              style={{ 
+                                height: `${heightPx}px`
+                              }}
                             >
                               {/* Count inside bar */}
                               {count > 0 && (
@@ -1285,6 +1352,33 @@ export default function Page1() {
                     <span><strong>Nền đỏ:</strong> Bài test không được tính</span>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Not Found Modal */}
+        {notFoundModalOpen && (
+          <div className="fixed inset-0 backdrop-blur-xs bg-white/30 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full animate-fadeIn">
+              <div className="p-6">
+                <div className="flex items-center justify-center w-16 h-16 mx-auto bg-red-100 rounded-full mb-4">
+                  <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 text-center mb-2">
+                  Không tìm thấy giáo viên
+                </h3>
+                <p className="text-sm text-gray-600 text-center mb-6">
+                  Không tìm thấy giáo viên với mã <strong className="text-gray-900">{searchCode}</strong>. Vui lòng kiểm tra lại mã giáo viên.
+                </p>
+                <button
+                  onClick={handleNotFoundConfirm}
+                  className="w-full px-4 py-3 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
+                >
+                  OK
+                </button>
               </div>
             </div>
           </div>
