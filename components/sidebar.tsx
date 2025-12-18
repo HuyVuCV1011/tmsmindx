@@ -12,7 +12,7 @@ export function Sidebar() {
   const menuItems = [
     { href: "/dashboard", label: "Dashboard", icon: Home },
     { href: "/page1", label: "Thông tin GV", icon: LayoutDashboard },
-    { href: "/page2", label: "Lịch Rảnh GV", icon: FileText },
+    // { href: "/page2", label: "Lịch Rảnh GV", icon: FileText },
     { href: "/page3", label: "Màn hình 3", icon: Users },
     { href: "/page4", label: "Màn hình 4", icon: Settings },
     { href: "/page5", label: "Màn hình 5", icon: FileText },
