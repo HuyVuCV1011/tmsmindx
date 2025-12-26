@@ -4,9 +4,11 @@ import { cn } from "@/lib/utils";
 import { FileText, Home, LayoutDashboard, Menu, Settings, Users, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import AuthModal from "./AuthModal";
 
 export function Sidebar() {
   const [isOpen, setIsOpen] = useState(true);
+  const [authOpen, setAuthOpen] = useState(false);
   const pathname = usePathname();
 
   const menuItems = [
@@ -72,6 +74,16 @@ export function Sidebar() {
                   </li>
                 );
               })}
+              {/* Login Button */}
+              <li>
+                <button
+                  className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs font-medium border border-gray-900 bg-white hover:bg-gray-900 hover:text-white transition-all mt-4"
+                  onClick={() => setAuthOpen(true)}
+                >
+                  <span role="img" aria-label="login">🔑</span>
+                  <span>Đăng nhập</span>
+                </button>
+              </li>
             </ul>
           </nav>
         </div>
@@ -84,6 +96,9 @@ export function Sidebar() {
           onClick={() => setIsOpen(false)}
         />
       )}
+
+      {/* Auth Modal Layer */}
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </>
   );
 }
