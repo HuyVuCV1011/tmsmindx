@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 
 export default function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [role, setRole] = useState<'teacher' | 'manager'>('teacher');
@@ -12,7 +12,7 @@ export default function AuthModal({ open, onClose }: { open: boolean; onClose: (
         {/* Left side: Banner */}
         <div className="hidden md:flex flex-col justify-between items-start bg-[#a1001f] w-1/2 h-full p-8 text-white relative">
           <div>
-            <img src="../public/logo_white.svg" alt="logo" className="h-10 mb-10" />
+            <img src="../logo_white.svg" alt="logo" className="h-20 mb-8" />
             <h2 className="text-2xl font-bold mb-4 leading-tight">Nuturing Global<br />Pioneer in tech</h2>
             <p className="text-sm opacity-90 mb-8">Access your dashboard to manage classes, track student performance, and coordinate with the Teaching Management System.</p>
           </div>

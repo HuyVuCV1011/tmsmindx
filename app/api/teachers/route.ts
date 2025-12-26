@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SHEET_ID = "1_sHOkQC_10z288bocQWVxPAZNYl9d8jO4sG0UfPMw-g";
-const GID_PROFILE = "2024010042"; // Teacher profile sheet
-const GID_EXPERTISE = "1572906341"; // Data Total [Chuyên sâu] 2025
-const GID_EXPERIENCE = "1628626585"; // Data Total [Trải nghiệm] 2025
+const TEACHER_PROFILE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_PROFILE_CSV_URL || "";
+const TEACHER_EXPERTISE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERTISE_CSV_URL || "";
+const TEACHER_EXPERIENCE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERIENCE_CSV_URL || "";
+
+// In-memory cache
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+const cache = {
+  teachers: null as CacheEntry<Teacher[]> | null,
+  expertiseRaw: null as CacheEntry<string> | null,
+  experienceRaw: null as CacheEntry<string> | null,
+};
+
+const CACHE_TTL = 5 * 60 * 1000; // 5 phút
+
+function isCacheValid<T>(entry: CacheEntry<T> | null): boolean {
+  if (!entry) return false;
+  return Date.now() - entry.timestamp < CACHE_TTL;
+}
 
 interface Teacher {
   stt: string;
@@ -27,12 +45,18 @@ interface Teacher {
   };
 }
 
-// Fetch data từ Google Sheets
+// Fetch data từ Google Sheets với caching
 async function fetchTeachersFromSheet(): Promise<Teacher[]> {
+  // Kiểm tra cache
+  if (isCacheValid(cache.teachers)) {
+    console.log("📦 Using cached teachers data");
+    return cache.teachers!.data;
+  }
+
   try {
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID_PROFILE}`;
-    const response = await fetch(csvUrl, { 
-      next: { revalidate: 300 } // Cache 5 phút
+    console.log("🔄 Fetching fresh teachers data from Google Sheets...");
+    const response = await fetch(TEACHER_PROFILE_CSV_URL, { 
+      cache: 'no-store' // Không dùng Next.js cache vì đã có memory cache
     });
     
     if (!response.ok) {
@@ -68,56 +92,74 @@ async function fetchTeachersFromSheet(): Promise<Teacher[]> {
       };
     });
 
-    return teachers.filter(t => t.code); // Chỉ lấy những dòng có code
+    const filteredTeachers = teachers.filter(t => t.code);
+    
+    // Lưu vào cache
+    cache.teachers = {
+      data: filteredTeachers,
+      timestamp: Date.now()
+    };
+    
+    console.log(`✅ Cached ${filteredTeachers.length} teachers`);
+    return filteredTeachers;
   } catch (error) {
     console.error("Error fetching from Google Sheets:", error);
+    // Nếu có cache cũ, dùng nó dù đã hết hạn
+    if (cache.teachers) {
+      console.log("⚠️ Using stale cache due to fetch error");
+      return cache.teachers.data;
+    }
     return [];
   }
 }
 
-// Fetch expertise scores (Chuyên sâu)
+// Fetch expertise scores (Chuyên sâu) với caching
 // Formula: =IFERROR(AVERAGEIFS($AH:$AH, $Z:$Z, $B$3, $AK:$AK, F$10), "3T")
-// $AH:$AH (col 34, index 33) = Điểm
-// $Z:$Z (col 26, index 25) = Mã LMS
-// $AK:$AK (col 37, index 36) = Date
 async function fetchExpertiseScores(teacherCode: string): Promise<{ [key: string]: string }> {
   try {
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID_EXPERTISE}`;
-    console.log("Fetching expertise from:", csvUrl);
-    const response = await fetch(csvUrl, { 
-      next: { revalidate: 300 }
-    });
+    let csvText: string;
     
-    if (!response.ok) {
-      console.error("Expertise fetch failed. Status:", response.status, "URL:", csvUrl);
-      throw new Error(`Cannot fetch expertise data. Status: ${response.status}`);
+    // Kiểm tra cache
+    if (isCacheValid(cache.expertiseRaw)) {
+      console.log("📦 Using cached expertise data");
+      csvText = cache.expertiseRaw!.data;
+    } else {
+      console.log("🔄 Fetching fresh expertise data from Google Sheets...");
+      const response = await fetch(TEACHER_EXPERTISE_CSV_URL, { 
+        cache: 'no-store'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Cannot fetch expertise data. Status: ${response.status}`);
+      }
+
+      csvText = await response.text();
+      
+      // Lưu vào cache
+      cache.expertiseRaw = {
+        data: csvText,
+        timestamp: Date.now()
+      };
+      console.log("✅ Cached expertise data");
     }
 
-    const csvText = await response.text();
+    // Parse CSV và tính toán scores
     const lines = csvText.split("\n");
     const dataLines = lines.slice(1).filter(line => line.trim());
     
     const scores: { [key: string]: number[] } = {};
-    let debugCount = 0;
+    const searchCode = teacherCode.toLowerCase();
     
     for (const line of dataLines) {
       const columns = parseCSVLine(line);
       
-      // Based on AVERAGEIFS formula:
-      // Column Z (index 25) = Mã LMS
-      // Column AH (index 33) = Điểm
-      // Column AK (index 36) = Date
       const code = columns[25]?.trim().toLowerCase();
+      if (code !== searchCode) continue; // Skip early nếu không match
+      
       const scoreStr = columns[33]?.replace(",", ".").trim();
       const dateStr = columns[36]?.trim();
       
-      // Debug first few matches
-      if (code === teacherCode.toLowerCase() && debugCount < 3) {
-        console.log(`[Expertise Debug ${debugCount}] Code: ${code}, Score: ${scoreStr}, Date: ${dateStr}`);
-        debugCount++;
-      }
-      
-      if (code === teacherCode.toLowerCase() && dateStr && scoreStr) {
+      if (dateStr && scoreStr) {
         const score = parseFloat(scoreStr);
         if (!isNaN(score)) {
           if (!scores[dateStr]) {
@@ -128,19 +170,17 @@ async function fetchExpertiseScores(teacherCode: string): Promise<{ [key: string
       }
     }
     
-    console.log(`[Expertise Summary] Found ${Object.keys(scores).length} months with data for ${teacherCode}:`, scores);
-    
     // Calculate average for each month and normalize date format
     const result: { [key: string]: string } = {};
     for (const [month, scoreArray] of Object.entries(scores)) {
       if (scoreArray.length > 0) {
         const avg = scoreArray.reduce((a, b) => a + b, 0) / scoreArray.length;
-        // Normalize date format: remove leading zeros (02/2025 -> 2/2025)
         const normalizedMonth = month.replace(/^0(\d)\//, '$1/');
         result[normalizedMonth] = avg.toFixed(1);
       }
     }
     
+    console.log(`✅ Found expertise scores for ${teacherCode}:`, Object.keys(result).length, "months");
     return result;
   } catch (error) {
     console.error("Error fetching expertise scores:", error);
@@ -148,42 +188,53 @@ async function fetchExpertiseScores(teacherCode: string): Promise<{ [key: string
   }
 }
 
-// Fetch experience scores (Trải nghiệm)
+// Fetch experience scores (Trải nghiệm) với caching
 // Formula: =IFERROR(AVERAGEIFS($M:$M, $E:$E, $B$3, $P:$P, F$10), "3T")
-// $M:$M (col 13, index 12) = Điểm
-// $E:$E (col 5, index 4) = Mã LMS
-// $P:$P (col 16, index 15) = Date
 async function fetchExperienceScores(teacherCode: string): Promise<{ [key: string]: string }> {
   try {
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID_EXPERIENCE}`;
-    console.log("Fetching experience from:", csvUrl);
-    const response = await fetch(csvUrl, { 
-      next: { revalidate: 300 }
-    });
+    let csvText: string;
     
-    if (!response.ok) {
-      console.error("Experience fetch failed. Status:", response.status, "URL:", csvUrl);
-      throw new Error(`Cannot fetch experience data. Status: ${response.status}`);
+    // Kiểm tra cache
+    if (isCacheValid(cache.experienceRaw)) {
+      console.log("📦 Using cached experience data");
+      csvText = cache.experienceRaw!.data;
+    } else {
+      console.log("🔄 Fetching fresh experience data from Google Sheets...");
+      const response = await fetch(TEACHER_EXPERIENCE_CSV_URL, { 
+        cache: 'no-store'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Cannot fetch experience data. Status: ${response.status}`);
+      }
+
+      csvText = await response.text();
+      
+      // Lưu vào cache
+      cache.experienceRaw = {
+        data: csvText,
+        timestamp: Date.now()
+      };
+      console.log("✅ Cached experience data");
     }
 
-    const csvText = await response.text();
+    // Parse CSV và tính toán scores
     const lines = csvText.split("\n");
     const dataLines = lines.slice(1).filter(line => line.trim());
     
     const scores: { [key: string]: number[] } = {};
+    const searchCode = teacherCode.toLowerCase();
     
     for (const line of dataLines) {
       const columns = parseCSVLine(line);
       
-      // Based on AVERAGEIFS formula:
-      // Column E (index 4) = Mã LMS
-      // Column M (index 12) = Điểm
-      // Column P (index 15) = Date
       const code = columns[4]?.trim().toLowerCase();
+      if (code !== searchCode) continue; // Skip early nếu không match
+      
       const scoreStr = columns[12]?.replace(",", ".").trim();
       const dateStr = columns[15]?.trim();
       
-      if (code === teacherCode.toLowerCase() && dateStr && scoreStr) {
+      if (dateStr && scoreStr) {
         const score = parseFloat(scoreStr);
         if (!isNaN(score)) {
           if (!scores[dateStr]) {
@@ -203,6 +254,7 @@ async function fetchExperienceScores(teacherCode: string): Promise<{ [key: strin
       }
     }
     
+    console.log(`✅ Found experience scores for ${teacherCode}:`, Object.keys(result).length, "months");
     return result;
   } catch (error) {
     console.error("Error fetching experience scores:", error);

@@ -1,24 +1,33 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { FileText, Home, LayoutDashboard, Menu, Settings, Users, X } from "lucide-react";
+import { FileText, Home, LayoutDashboard, LogOut, Menu, Settings, Users, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import AuthModal from "./AuthModal";
+import { useAuth } from "@/lib/auth-context";
 
 export function Sidebar() {
   const [isOpen, setIsOpen] = useState(true);
-  const [authOpen, setAuthOpen] = useState(false);
+  const { user, logout } = useAuth();
   const pathname = usePathname();
 
-  const menuItems = [
-    { href: "/dashboard", label: "Dashboard", icon: Home },
-    { href: "/page1", label: "Thông tin GV", icon: LayoutDashboard },
-    // { href: "/page2", label: "Lịch Rảnh GV", icon: FileText },
-    { href: "/page3", label: "Màn hình 3", icon: Users },
-    { href: "/page4", label: "Màn hình 4", icon: Settings },
-    { href: "/page5", label: "Màn hình 5", icon: FileText },
+  // Determine menu items based on current path (admin or user)
+  const isUserArea = pathname.startsWith('/user');
+  
+  const adminMenuItems = [
+    { href: "/admin/dashboard", label: "Dashboard", icon: Home },
+    { href: "/admin/page1", label: "Thông tin GV", icon: LayoutDashboard },
+    { href: "/admin/page2", label: "Màn hình 2", icon: Users },
+    { href: "/admin/page3", label: "Màn hình 3", icon: Users },
+    { href: "/admin/page4", label: "Màn hình 4", icon: Settings },
+    { href: "/admin/page5", label: "Màn hình 5", icon: FileText },
   ];
+
+  const userMenuItems = [
+    { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
+  ];
+
+  const menuItems = isUserArea ? userMenuItems : adminMenuItems;
 
   return (
     <>
@@ -74,18 +83,28 @@ export function Sidebar() {
                   </li>
                 );
               })}
-              {/* Login Button */}
-              <li>
-                <button
-                  className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs font-medium border border-gray-900 bg-white hover:bg-gray-900 hover:text-white transition-all mt-4"
-                  onClick={() => setAuthOpen(true)}
-                >
-                  <span role="img" aria-label="login">🔑</span>
-                  <span>Đăng nhập</span>
-                </button>
-              </li>
             </ul>
           </nav>
+
+          {/* User Info and Logout */}
+          {user && (
+            <div className="border-t border-gray-900 p-2">
+              <div className="mb-2 px-2">
+                <p className="text-xs font-semibold text-gray-900 truncate">{user.displayName}</p>
+                <p className="text-xs text-gray-600 truncate">{user.email}</p>
+                <span className="inline-block mt-1 px-2 py-0.5 bg-[#a1001f] text-white text-xs rounded-full">
+                  {user.role === 'teacher' ? 'Teacher' : 'Manager'}
+                </span>
+              </div>
+              <button
+                className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs font-medium border border-gray-900 bg-white hover:bg-gray-900 hover:text-white transition-all"
+                onClick={logout}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -96,9 +115,6 @@ export function Sidebar() {
           onClick={() => setIsOpen(false)}
         />
       )}
-
-      {/* Auth Modal Layer */}
-      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </>
   );
 }

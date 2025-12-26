@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const SPREADSHEET_ID = '1M8vSkfiUSjfUUwKcaDuWn_T1zwBP353CToMD51VpHBQ';
-const GID_RELEASE = '1187387271'; // Release sheet GID from URL
-
-const COURSE_LINKS_SHEET_ID = '1XpgxQRsy9PcyARCYV8ghPq1vaXmlTK_wnQ92wmXk9Vk';
-const COURSE_LINKS_GID = '0'; // Default sheet
+const TRAINING_RELEASE_CSV_URL = process.env.NEXT_PUBLIC_TRAINING_RELEASE_CSV_URL || '';
+const COURSE_LINKS_CSV_URL = process.env.NEXT_PUBLIC_TRAINING_COURSE_LINKS_CSV_URL || '';
 
 // Fetch course links for lessons
 async function fetchCourseLinksMappingAsync(): Promise<Record<string, string>> {
   try {
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${COURSE_LINKS_SHEET_ID}/export?format=csv&gid=${COURSE_LINKS_GID}`;
-    const response = await fetch(csvUrl, { next: { revalidate: 300 } });
+    const response = await fetch(COURSE_LINKS_CSV_URL, { next: { revalidate: 300 } });
     
     if (!response.ok) {
       console.error('[Training API] Failed to fetch course links');
@@ -94,10 +90,9 @@ export async function GET(request: NextRequest) {
     const courseLinks = await fetchCourseLinksMappingAsync();
 
     // Fetch CSV directly from Google Sheets (no API key needed)
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${GID_RELEASE}`;
-    console.log('[Training API] Fetching from:', csvUrl);
+    console.log('[Training API] Fetching from:', TRAINING_RELEASE_CSV_URL);
 
-    const response = await fetch(csvUrl, {
+    const response = await fetch(TRAINING_RELEASE_CSV_URL, {
       next: { revalidate: 300 } // Cache for 5 minutes
     });
 

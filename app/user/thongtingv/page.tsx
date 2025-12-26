@@ -3,6 +3,7 @@
 import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
+import { useAuth } from "@/lib/auth-context";
 
 interface TeacherAvailability {
   timestamp: string;
@@ -116,9 +117,17 @@ const fetcher = async (url: string) => {
   return res.json();
 };
 
+// Function to extract teacher code from email
+function extractCodeFromEmail(email: string): string {
+  const match = email.match(/^([^@]+)@/);
+  return match ? match[1] : '';
+}
+
 export default function Page1() {
+  const { user } = useAuth();
   const [searchCode, setSearchCode] = useState("");
   const [submitCode, setSubmitCode] = useState("");
+  const [hasAutoSearched, setHasAutoSearched] = useState(false);
   const [error, setError] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("12");
   const [selectedYear, setSelectedYear] = useState("2025");
@@ -141,19 +150,26 @@ export default function Page1() {
   const [notFoundModalOpen, setNotFoundModalOpen] = useState(false);
   const [registrationCheckModalOpen, setRegistrationCheckModalOpen] = useState(false);
   
-  // Load last searched code from localStorage
+  // Auto-search based on logged-in user's email - ONLY ONCE
   useEffect(() => {
-    const lastCode = localStorage.getItem('lastSearchCode');
-    if (lastCode) {
-      setSearchCode(lastCode);
+    if (user && user.email && !hasAutoSearched && !submitCode) {
+      const code = extractCodeFromEmail(user.email);
+      if (code) {
+        console.log('🔍 Auto-searching for teacher code:', code, 'from email:', user.email);
+        setSearchCode(code);
+        setSubmitCode(code);
+        setHasAutoSearched(true);
+      }
     }
     
     // Check if user has already given feedback
-    const feedbackGiven = localStorage.getItem('userHasFeedback');
-    if (feedbackGiven === 'true') {
-      setHasFeedback(true);
+    if (!hasAutoSearched) {
+      const feedbackGiven = localStorage.getItem('userHasFeedback');
+      if (feedbackGiven === 'true') {
+        setHasFeedback(true);
+      }
     }
-  }, []);
+  }, [user, hasAutoSearched, submitCode]);
 
   // SWR với auto caching và revalidation
   const { data: teacherData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
@@ -161,7 +177,8 @@ export default function Page1() {
     fetcher,
     { 
       revalidateOnFocus: false,
-      dedupingInterval: 60000, // Dedupe requests trong 60s
+      revalidateOnReconnect: false,
+      dedupingInterval: 120000, // Dedupe requests trong 2 phút
       shouldRetryOnError: false // Don't retry on 404
     }
   );
@@ -174,7 +191,9 @@ export default function Page1() {
     fetcher,
     { 
       revalidateOnFocus: false,
-      dedupingInterval: 60000
+      revalidateOnReconnect: false,
+      dedupingInterval: 120000,
+      shouldRetryOnError: false
     }
   );
 
@@ -183,7 +202,9 @@ export default function Page1() {
     fetcher,
     { 
       revalidateOnFocus: false,
-      dedupingInterval: 60000
+      revalidateOnReconnect: false,
+      dedupingInterval: 120000,
+      shouldRetryOnError: false
     }
   );
 
@@ -247,7 +268,8 @@ export default function Page1() {
     fetcher,
     { 
       revalidateOnFocus: false,
-      dedupingInterval: 60000,
+      revalidateOnReconnect: false,
+      dedupingInterval: 120000,
       shouldRetryOnError: false
     }
   );
@@ -259,7 +281,9 @@ export default function Page1() {
     fetcher,
     { 
       revalidateOnFocus: false,
-      dedupingInterval: 60000
+      revalidateOnReconnect: false,
+      dedupingInterval: 120000,
+      shouldRetryOnError: false
     }
   );
 
@@ -695,31 +719,18 @@ export default function Page1() {
       <div className="space-y-3 sm:space-y-4">
         {/* Header */}
         <div className="border-b border-gray-900 pb-2 sm:pb-3">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Tìm kiếm giáo viên</h1>
-          <p className="text-xs text-gray-600 mt-1">Nhập mã giáo viên để xem thông tin chi tiết</p>
-        </div>
-
-        {/* Search Box */}
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={searchCode}
-              onChange={(e) => setSearchCode(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleSearch()}
-              placeholder="Nhập mã giáo viên (ví dụ: datpt1, tramhlb)"
-              className="w-full px-3 py-2 text-sm border border-gray-900 rounded focus:outline-none focus:ring-2 focus:ring-gray-900"
-              autoFocus
-            />
-          </div>
-          <button
-            onClick={handleSearch}
-            disabled={isLoadingTeacher}
-            className="px-4 py-2 bg-gray-900 text-white rounded text-sm font-medium hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 min-w-[100px]"
-          >
-            <Search className="h-4 w-4" />
-            {isLoadingTeacher ? "Đang tìm..." : "Tìm"}
-          </button>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Thông tin của tôi</h1>
+          <p className="text-xs text-gray-600 mt-1">
+            {isLoadingTeacher ? (
+              <span className="inline-flex items-center gap-2">
+                <svg className="animate-spin h-3 w-3 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Đang tải thông tin của bạn...
+              </span>
+            ) : user?.displayName ? `Xin chào ${user.displayName}` : 'Đang tải thông tin của bạn...'}
+          </p>
         </div>
 
         {/* Error Message */}
@@ -1128,16 +1139,16 @@ export default function Page1() {
                       <div>
                         <div className="text-sm font-medium text-gray-700">Điểm trung bình</div>
                         <div className="text-2xl font-bold text-purple-600 mt-1">
-                          {trainingData.averageScore.toFixed(2)}
+                          {trainingData.averageScore?.toFixed(2) || '0.00'}
                         </div>
                       </div>
                       <div className="text-right text-xs text-gray-600">
-                        <div>Hoàn thành: {trainingData.lessons.filter((l: any) => l.score > 0).length}/10</div>
+                        <div>Hoàn thành: {trainingData.lessons?.filter((l: any) => l.score > 0).length || 0}/10</div>
                         <div className="mt-1">
                           <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
                             <div 
                               className="h-full bg-purple-600 rounded-full transition-all"
-                              style={{ width: `${(trainingData.lessons.filter((l: any) => l.score > 0).length / 10) * 100}%` }}
+                              style={{ width: `${((trainingData.lessons?.filter((l: any) => l.score > 0).length || 0) / 10) * 100}%` }}
                             />
                           </div>
                         </div>
@@ -1147,7 +1158,7 @@ export default function Page1() {
 
                   {/* Lessons Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {trainingData.lessons.map((lesson: any, idx: number) => {
+                    {(trainingData.lessons || []).map((lesson: any, idx: number) => {
                       const score = lesson.score || 0;
                       const hasScore = score > 0;
                       const isPerfect = score >= 10;
@@ -1199,7 +1210,7 @@ export default function Page1() {
                             </div>
                             <div className="text-right flex-shrink-0">
                               <div className={`text-xl font-bold ${scoreColor}`}>
-                                {hasScore ? score.toFixed(1) : '—'}
+                                {hasScore ? score?.toFixed(1) || '—' : '—'}
                               </div>
                               <div className="text-[10px] text-gray-500">
                                 {hasScore ? '/10' : 'Chưa học'}
@@ -1577,7 +1588,7 @@ export default function Page1() {
                   </strong></p>
                   <p>• Khung giờ ưa thích: <strong className="text-blue-700">{availabilityStats.mostAvailableTime}</strong></p>
                   <p>• Tổng cộng đã đăng ký <strong className="text-blue-700">{availabilityStats.totalSlots} slots</strong> trong {availabilityStats.totalRegistrations} lần đăng ký</p>
-                  <p>• Trung bình: <strong className="text-blue-700">{(availabilityStats.totalSlots / availabilityStats.totalRegistrations).toFixed(1)} slots/lần</strong></p>
+                  <p>• Trung bình: <strong className="text-blue-700">{availabilityStats.totalRegistrations > 0 ? (availabilityStats.totalSlots / availabilityStats.totalRegistrations).toFixed(1) : '0'} slots/lần</strong></p>
                 </div>
               </div>
               </>
@@ -1745,7 +1756,7 @@ export default function Page1() {
                   </div>
                   <div className="relative" style={{ height: '300px', overflow: 'auto' }}>
                     <iframe
-                      src="https://docs.google.com/spreadsheets/d/1Cg45SOg5g9W_AqLnmW10dWoIV7R_kQ7QP6VHltXDyNI/edit?gid=678464926&rm=minimal&widget=true&headers=false"
+                      src={process.env.NEXT_PUBLIC_TEST_SCHEDULE_URL}
                       className="w-full border-0"
                       style={{ height: '600px', transform: 'scale(0.5)', transformOrigin: 'top left', width: '200%' }}
                       title="Lịch kiểm tra"
@@ -1755,7 +1766,7 @@ export default function Page1() {
 
                 <div className="grid grid-cols-2 gap-2">
                   <a
-                    href="https://docs.google.com/forms/d/e/1FAIpQLSeLOGUqWDEyHcBEQIeV3ViFsxirgz824s55qC9yCQErAvCDOQ/viewform?usp=send_form"
+                    href={process.env.NEXT_PUBLIC_TEST_REGISTER_FORM_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-3 py-2 bg-gray-900 hover:bg-black text-white rounded text-sm font-medium text-center"
@@ -1764,7 +1775,7 @@ export default function Page1() {
                   </a>
 
                   <a
-                    href="https://docs.google.com/forms/d/e/1FAIpQLScJQVETL6pk_ApLNkEPMgZntb4ydvOM7wXBi9wJfDxksWw9qg/closedform"
+                    href={process.env.NEXT_PUBLIC_TEST_REGISTER_ADDITIONAL_FORM_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-3 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded text-sm font-medium text-center"

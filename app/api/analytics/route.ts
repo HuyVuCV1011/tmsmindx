@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Google Apps Script Web App URL for analytics
-const ANALYTICS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzBeBPXoW5zWdZein4ZbYBgA5WEFzXcMxIbRVyRpRWO573SSSKSVcEpGnwVONAOP1qk2g/exec';
+const ANALYTICS_SCRIPT_URL = process.env.NEXT_PUBLIC_ANALYTICS_SCRIPT_URL || '';
 
 export async function POST(request: NextRequest) {
   try {

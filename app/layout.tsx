@@ -1,6 +1,8 @@
-import { Sidebar } from "@/components/sidebar";
+import { AuthProvider } from "@/lib/auth-context";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Metadata } from "next";
 import { Exo } from "next/font/google";
+import { Toaster } from 'react-hot-toast';
 import "./globals.css";
 
 const exo = Exo({
@@ -22,14 +24,35 @@ export default function RootLayout({
   return (
     <html lang="vi">
       <body className={`${exo.variable} font-exo bg-white text-gray-900`}>
-        <div className="relative min-h-screen bg-white">
-          <Sidebar />
-          <main className="transition-all duration-300 ease-in-out lg:pl-48">
-            <div className="p-4 pt-12 lg:pt-4">
-              {children}
-            </div>
-          </main>
-        </div>
+        <ErrorBoundary>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </ErrorBoundary>
+        <Toaster 
+          position="top-center"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+              borderRadius: '8px',
+              padding: '12px 20px',
+            },
+            success: {
+              iconTheme: {
+                primary: '#10b981',
+                secondary: '#fff',
+              },
+            },
+            error: {
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
       </body>
     </html>
   );

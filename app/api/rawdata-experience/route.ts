@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SHEET_ID = "1U2od4wWLYPJGTZacWRBlAnDF12SAbDFhDfGlBYw3DzI";
-const GID = "897083404";
+const CSV_URL = process.env.NEXT_PUBLIC_RAWDATA_EXPERIENCE_CSV_URL || "";
 
 interface TestRecord {
   area: string;
@@ -39,8 +38,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
-    const response = await fetch(url);
+    const response = await fetch(CSV_URL);
     const csvText = await response.text();
 
     const lines = csvText.split("\n");

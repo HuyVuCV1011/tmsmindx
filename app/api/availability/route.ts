@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Google Sheet ID cho dữ liệu lịch rảnh
-const SHEET_ID = '1q2ZzqAmoFGRLiVW_cRlv16paZ2j6J6XaOGth3XtFkl0';
-const GID = '17348996';
+// Google Sheet CSV URL cho dữ liệu lịch rảnh
+const CSV_URL = process.env.NEXT_PUBLIC_AVAILABILITY_CSV_URL || '';
 
 export interface TeacherAvailability {
   timestamp: string;
@@ -54,9 +53,7 @@ export async function GET(request: NextRequest) {
     // Set to start of day for fromDate
     fromDate.setHours(0, 0, 0, 0);
     
-    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
-    
-    const response = await fetch(url, {
+    const response = await fetch(CSV_URL, {
       next: { revalidate: 60 }, // Cache 60 giây
     });
 
