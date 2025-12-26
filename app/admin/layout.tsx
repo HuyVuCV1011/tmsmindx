@@ -15,11 +15,22 @@ export default function DashboardLayout({
   const hasRedirected = useRef(false);
 
   useEffect(() => {
-    // Redirect to login if not authenticated - only redirect once
-    if (!isLoading && !user && !hasRedirected.current) {
+    if (isLoading) return;
+    
+    // Redirect to login if not authenticated
+    if (!user && !hasRedirected.current) {
       hasRedirected.current = true;
       router.replace('/login');
+      return;
     }
+    
+    // Redirect to user area if not admin
+    if (user && !user.isAdmin && !hasRedirected.current) {
+      hasRedirected.current = true;
+      router.replace('/user/thongtingv');
+      return;
+    }
+    
     // Reset redirect flag when user logs in
     if (user) {
       hasRedirected.current = false;
@@ -38,8 +49,8 @@ export default function DashboardLayout({
     );
   }
 
-  // Don't render if not authenticated
-  if (!user) {
+  // Don't render if not authenticated or not admin
+  if (!user || !user.isAdmin) {
     return null;
   }
 

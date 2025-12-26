@@ -5,25 +5,25 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { logger } from "@/lib/logger";
 
-export default function Home() {
+export default function DashboardRedirect() {
   const router = useRouter();
   const { user, token, isLoading } = useAuth();
 
   useEffect(() => {
     if (isLoading) {
-      logger.info('Root: Waiting for auth context to load...');
+      logger.info('Dashboard: Waiting for auth context to load...');
       return;
     }
 
     // Chưa đăng nhập → redirect đến login
     if (!token || !user) {
-      logger.info('Root: No auth found, redirecting to login');
+      logger.info('Dashboard: No auth found, redirecting to login');
       router.replace('/login');
       return;
     }
 
-    // Đã đăng nhập → kiểm tra quyền và redirect
-    logger.info('Root: User authenticated, checking admin status', { 
+    // Đã đăng nhập → kiểm tra quyền
+    logger.info('Dashboard: User authenticated, checking admin status', { 
       email: user.email, 
       role: user.role,
       isAdmin: user.isAdmin 
@@ -31,10 +31,10 @@ export default function Home() {
 
     // Ưu tiên admin dashboard nếu là admin
     if (user.isAdmin) {
-      logger.success('Root: Redirecting to admin dashboard');
+      logger.success('Dashboard: Redirecting to admin dashboard');
       router.replace('/admin/dashboard');
     } else {
-      logger.success('Root: Redirecting to user portal');
+      logger.success('Dashboard: Redirecting to user portal');
       router.replace('/user/thongtingv');
     }
   }, [user, token, isLoading, router]);

@@ -62,7 +62,13 @@ export default function LoginPage() {
       }
 
       // Cập nhật auth context với user và token mới
-      const userData = {
+      const userData: {
+        email: string;
+        displayName: string;
+        role: 'teacher' | 'manager';
+        localId: string;
+        isAdmin?: boolean;
+      } = {
         email: data.email,
         displayName: data.displayName,
         role: role,
@@ -83,6 +89,9 @@ export default function LoginPage() {
           const adminData = await adminCheckResponse.json();
           
           logger.apiResponse('/api/check-admin', adminCheckResponse.status, adminData);
+          
+          // Lưu admin status vào user data
+          userData.isAdmin = adminData.isAdmin;
           
           if (adminData.isAdmin) {
             finalRedirectPath = '/admin/dashboard';
@@ -105,14 +114,16 @@ export default function LoginPage() {
         }
       } else {
         // Teacher role - go to user area
+        userData.isAdmin = false;
         toast.success(`Chào mừng ${userData.displayName}!`, {
           icon: '👋',
         });
       }
       
+      // Lưu user data với isAdmin flag vào localStorage
       updateUser(userData, data.idToken);
       
-      logger.info('Redirecting to', { path: finalRedirectPath });
+      logger.info('Redirecting to', { path: finalRedirectPath, isAdmin: userData.isAdmin });
       
       setTimeout(() => {
         router.replace(finalRedirectPath);

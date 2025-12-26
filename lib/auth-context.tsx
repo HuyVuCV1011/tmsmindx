@@ -10,6 +10,7 @@ interface User {
   displayName: string;
   role: 'teacher' | 'manager';
   localId: string;
+  isAdmin?: boolean;
 }
 
 interface AuthContextType {
