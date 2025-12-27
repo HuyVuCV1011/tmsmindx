@@ -76,7 +76,14 @@ export default function LoginPage() {
       };
       
       logger.success('Login successful', { email: userData.email, role: userData.role });
-      
+      // Store refresh token for silent refresh on token expiry
+      try {
+        if (data.refreshToken) {
+          localStorage.setItem('refreshToken', data.refreshToken);
+        }
+      } catch (e) {
+        logger.warn('Unable to persist refreshToken', { error: (e as Error).message });
+      }      
       // Nếu chọn Manager, kiểm tra xem có phải admin không
       let finalRedirectPath = '/user/thongtingv'; // Default là user area
       
