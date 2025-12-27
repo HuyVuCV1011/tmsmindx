@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
+  'https://tmsmindx.vercel.app',
   process.env.NEXT_PUBLIC_APP_URL || '',
 ].filter(Boolean);
 
@@ -37,28 +38,37 @@ export function validateInternalRequest(request: NextRequest): {
     };
   }
 
-  // 2. Kiểm tra origin
+  // 2. Kiểm tra origin - Allow same-origin requests
   const origin = request.headers.get('origin');
   const referer = request.headers.get('referer');
+  const host = request.headers.get('host');
+  
+  // Cho phép request từ cùng host (same-origin)
+  const isSameOrigin = origin && host && (
+    origin === `https://${host}` || 
+    origin === `http://${host}`
+  );
   
   // Nếu có origin, kiểm tra origin
-  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+  if (origin && !isSameOrigin && !ALLOWED_ORIGINS.includes(origin)) {
+    console.warn('[API Protection] Invalid origin:', origin, 'Expected:', ALLOWED_ORIGINS);
     return {
       isValid: false,
-      error: 'Forbidden: Invalid origin'
+      error: `Forbidden: Invalid origin ${origin}`
     };
   }
 
   // Nếu có referer, kiểm tra referer
-  if (referer) {
+  if (referer && !isSameOrigin) {
     const isValidReferer = ALLOWED_ORIGINS.some(allowedOrigin => 
       referer.startsWith(allowedOrigin)
-    );
+    ) || (host && referer.includes(host));
     
     if (!isValidReferer) {
+      console.warn('[API Protection] Invalid referer:', referer, 'Expected origins:', ALLOWED_ORIGINS);
       return {
         isValid: false,
-        error: 'Forbidden: Invalid referer'
+        error: `Forbidden: Invalid referer ${referer}`
       };
     }
   }
