@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import toast from 'react-hot-toast';
 import { logger } from '@/lib/logger';
 import { Eye, EyeOff } from 'lucide-react';
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import toast from 'react-hot-toast';
 
 export default function LoginPage() {
   const router = useRouter();

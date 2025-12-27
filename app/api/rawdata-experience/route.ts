@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withApiProtection } from "@/lib/api-protection";
 
 const CSV_URL = process.env.NEXT_PUBLIC_RAWDATA_EXPERIENCE_CSV_URL || "";
 
@@ -29,13 +30,15 @@ interface MonthlyAverage {
   records: TestRecord[];
 }
 
-export async function GET(request: NextRequest) {
+export const GET = withApiProtection(async (request: NextRequest) => {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
 
   if (!code) {
     return NextResponse.json({ error: "Mã giáo viên là bắt buộc" }, { status: 400 });
   }
+
+  // Token verification not needed for rawdata - only teacher info API needs it
 
   try {
     const response = await fetch(CSV_URL);
@@ -163,4 +166,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

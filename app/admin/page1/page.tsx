@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/lib/auth-context";
 import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
@@ -103,13 +104,17 @@ const InfoItem = memo(({ icon, label, value }: { icon: React.ReactNode; label: s
 });
 InfoItem.displayName = 'InfoItem';
 
+// API Secret Key for internal requests
+const API_SECRET_KEY = process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025';
+
 // Fetcher function with caching and compression
 const fetcher = async (url: string) => {
   const res = await fetch(url, { 
     next: { revalidate: 60 }, // Cache 60s
     headers: { 
       'Accept-Encoding': 'gzip, deflate, br',
-      'Cache-Control': 'max-age=60'
+      'Cache-Control': 'max-age=60',
+      'x-api-key': API_SECRET_KEY
     }
   });
   if (!res.ok) throw new Error('Failed to fetch');
@@ -155,10 +160,30 @@ export default function Page1() {
     }
   }, []);
 
+  const { user } = useAuth();
+
+  // Custom fetcher với Authorization header
+  const secureFetcher = useCallback(async (url: string) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'x-api-key': API_SECRET_KEY
+      }
+    });
+    if (!response.ok) {
+      const error: any = new Error('An error occurred while fetching the data.');
+      error.info = await response.json();
+      error.status = response.status;
+      throw error;
+    }
+    return response.json();
+  }, []);
+
   // SWR với auto caching và revalidation
   const { data: teacherData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
-    submitCode ? `/api/teachers?code=${submitCode}` : null,
-    fetcher,
+    submitCode && user ? `/api/teachers?code=${submitCode}` : null,
+    secureFetcher,
     { 
       revalidateOnFocus: false,
       dedupingInterval: 60000, // Dedupe requests trong 60s
@@ -170,8 +195,8 @@ export default function Page1() {
 
   // Only load scores after teacher is loaded
   const { data: expertiseDataRes, isLoading: isLoadingExpertise } = useSWR(
-    teacher ? `/api/rawdata?code=${submitCode}` : null,
-    fetcher,
+    teacher && user ? `/api/rawdata?code=${submitCode}` : null,
+    secureFetcher,
     { 
       revalidateOnFocus: false,
       dedupingInterval: 60000
@@ -179,8 +204,8 @@ export default function Page1() {
   );
 
   const { data: experienceDataRes, isLoading: isLoadingExperience } = useSWR(
-    teacher ? `/api/rawdata-experience?code=${submitCode}` : null,
-    fetcher,
+    teacher && user ? `/api/rawdata-experience?code=${submitCode}` : null,
+    secureFetcher,
     { 
       revalidateOnFocus: false,
       dedupingInterval: 60000
@@ -243,8 +268,8 @@ export default function Page1() {
 
   // Load training data AFTER teacher is loaded
   const { data: trainingData, isLoading: isLoadingTraining } = useSWR(
-    teacher ? `/api/training?code=${submitCode}` : null,
-    fetcher,
+    teacher && user ? `/api/training?code=${submitCode}` : null,
+    secureFetcher,
     { 
       revalidateOnFocus: false,
       dedupingInterval: 60000,
@@ -419,7 +444,10 @@ export default function Page1() {
     try {
       const response = await fetch('/api/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-api-key': API_SECRET_KEY
+        },
         body: JSON.stringify({
           rating: feedbackRating,
           comment: feedbackComment.trim(),

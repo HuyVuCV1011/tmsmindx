@@ -1,5 +1,5 @@
-import { AuthProvider } from "@/lib/auth-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AuthProvider } from "@/lib/auth-context";
 import type { Metadata } from "next";
 import { Exo } from "next/font/google";
 import { Toaster } from 'react-hot-toast';
