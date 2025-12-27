@@ -391,6 +391,14 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     }
   }
 
+  // Ensure teacher is defined before continuing
+  if (!teacher) {
+    return NextResponse.json(
+      { error: "Không tìm thấy giáo viên" },
+      { status: 404 }
+    );
+  }
+
   // 🔒 BẢO MẬT: Kiểm tra quyền truy cập bằng EMAIL TỪ TOKEN
   // Admin: xem tất cả
   // User: chỉ xem được của chính mình
