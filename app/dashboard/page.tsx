@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { logger } from "@/lib/logger";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function DashboardRedirect() {
   const router = useRouter();

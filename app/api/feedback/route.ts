@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withApiProtection } from '@/lib/api-protection';
 
 // Google Apps Script Web App URL for feedback (same as analytics)
 const FEEDBACK_SCRIPT_URL = process.env.NEXT_PUBLIC_FEEDBACK_SCRIPT_URL || '';
 
-export async function POST(request: NextRequest) {
+export const POST = withApiProtection(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { rating, comment, feature, timestamp, userCode } = body;
@@ -49,4 +50,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

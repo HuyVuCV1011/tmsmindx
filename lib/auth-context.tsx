@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import toast from 'react-hot-toast';
 import { logger } from '@/lib/logger';
+import { usePathname, useRouter } from 'next/navigation';
+import { createContext, useContext, useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 
 interface User {
   email: string;

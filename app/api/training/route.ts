@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withApiProtection } from '@/lib/api-protection';
 
 const TRAINING_RELEASE_CSV_URL = process.env.NEXT_PUBLIC_TRAINING_RELEASE_CSV_URL || '';
 const COURSE_LINKS_CSV_URL = process.env.NEXT_PUBLIC_TRAINING_COURSE_LINKS_CSV_URL || '';
@@ -75,7 +76,7 @@ async function fetchCourseLinksMappingAsync(): Promise<Record<string, string>> {
   }
 }
 
-export async function GET(request: NextRequest) {
+export const GET = withApiProtection(async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const teacherCode = searchParams.get('code');
@@ -85,6 +86,8 @@ export async function GET(request: NextRequest) {
     if (!teacherCode) {
       return NextResponse.json({ error: 'Teacher code is required' }, { status: 400 });
     }
+
+    // Token verification not needed for training - only teacher info API needs it
 
     // Fetch course links mapping
     const courseLinks = await fetchCourseLinksMappingAsync();
@@ -280,4 +283,4 @@ export async function GET(request: NextRequest) {
       { status: 200 } // Return 200 to avoid SWR retry
     );
   }
-}
+});

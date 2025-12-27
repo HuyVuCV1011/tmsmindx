@@ -1,10 +1,10 @@
 "use client";
 
+import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { FileText, Home, LayoutDashboard, LogOut, Menu, Settings, Users, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { useAuth } from "@/lib/auth-context";
 
 export function Sidebar() {
   const [isOpen, setIsOpen] = useState(true);

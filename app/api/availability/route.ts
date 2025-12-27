@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withApiProtection } from '@/lib/api-protection';
 
 // Google Sheet CSV URL cho dữ liệu lịch rảnh
 const CSV_URL = process.env.NEXT_PUBLIC_AVAILABILITY_CSV_URL || '';
@@ -37,7 +38,7 @@ function parseTimestamp(timestamp: string): Date | null {
   }
 }
 
-export async function GET(request: NextRequest) {
+export const GET = withApiProtection(async (request: NextRequest) => {
   try {
     const searchParams = request.nextUrl.searchParams;
     const fromDateStr = searchParams.get('fromDate');
@@ -157,4 +158,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
