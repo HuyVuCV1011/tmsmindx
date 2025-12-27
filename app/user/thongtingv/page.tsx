@@ -151,6 +151,29 @@ export default function Page1() {
   const [feedbackSuccessModalOpen, setFeedbackSuccessModalOpen] = useState(false);
   const [hasFeedback, setHasFeedback] = useState(false);
   const [isFirstTimeFeedback, setIsFirstTimeFeedback] = useState(false);
+  const [feedbackEnabled, setFeedbackEnabled] = useState(true); // can be turned off by user
+
+  const disableFeedback = () => {
+    try {
+      localStorage.setItem('feedbackDisabled', 'true');
+      setFeedbackEnabled(false);
+      setFeedbackModalOpen(false);
+    } catch (e) {
+      console.warn('Unable to persist feedbackDisabled flag', e);
+      setFeedbackEnabled(false);
+      setFeedbackModalOpen(false);
+    }
+  };
+
+  const enableFeedback = () => {
+    try {
+      localStorage.removeItem('feedbackDisabled');
+      setFeedbackEnabled(true);
+    } catch (e) {
+      console.warn('Unable to remove feedbackDisabled flag', e);
+      setFeedbackEnabled(true);
+    }
+  };
   const [availabilityPeriod, setAvailabilityPeriod] = useState<"week" | "month" | "year">("month");
   const [notFoundModalOpen, setNotFoundModalOpen] = useState(false);
   const [registrationCheckModalOpen, setRegistrationCheckModalOpen] = useState(false);
@@ -215,6 +238,11 @@ export default function Page1() {
       if (feedbackGiven === 'true') {
         setHasFeedback(true);
       }
+
+      const disabled = localStorage.getItem('feedbackDisabled');
+      if (disabled === 'true') {
+        setFeedbackEnabled(false);
+      }
     }
   }, [user, hasAutoSearched, submitCode, secureFetcher]);
 
@@ -261,15 +289,18 @@ export default function Page1() {
 
   // Show feedback modal 30 seconds after successful teacher search
   useEffect(() => {
-    if (submitCode && teacherData && !hasFeedback && !feedbackModalOpen) {
+    // Auto-show disabled by default; enable by setting NEXT_PUBLIC_FEEDBACK_AUTO_SHOW=true
+    const autoShowEnabled = process.env.NEXT_PUBLIC_FEEDBACK_AUTO_SHOW === 'true';
+
+    if (autoShowEnabled && submitCode && teacherData && !hasFeedback && !feedbackModalOpen && feedbackEnabled) {
       const timer = setTimeout(() => {
         setFeedbackModalOpen(true);
-        setIsFirstTimeFeedback(true); // Mark as mandatory first-time feedback
+        setIsFirstTimeFeedback(false); // Disabled mandatory behavior
       }, 30000);
       
       return () => clearTimeout(timer);
     }
-  }, [submitCode, teacherData, hasFeedback, feedbackModalOpen]);
+  }, [submitCode, teacherData, hasFeedback, feedbackModalOpen, feedbackEnabled]);
 
   // If code-based lookup fails on first auto-search, try resolving teacher by the logged-in email (work OR personal)
   useEffect(() => {
@@ -442,8 +473,7 @@ export default function Page1() {
       if (e.key === 'Escape') {
         if (feedbackSuccessModalOpen) {
           setFeedbackSuccessModalOpen(false);
-        } else if (feedbackModalOpen && !isFirstTimeFeedback) {
-          // Only allow ESC if it's not first-time mandatory feedback
+        } else if (feedbackModalOpen) {
           setFeedbackModalOpen(false);
           setFeedbackRating(0);
           setFeedbackComment("");
@@ -1887,27 +1917,58 @@ export default function Page1() {
         )}
 
         {/* Floating Feedback Button */}
-        <button
-          onClick={() => {
-            setFeedbackModalOpen(true);
-            setIsFirstTimeFeedback(false); // Manual click is not mandatory
-          }}
-          disabled={feedbackModalOpen}
-          className="fixed bottom-6 right-6 w-14 h-14 bg-gray-900 hover:bg-gray-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center z-40 group disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Gửi phản hồi"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-          </svg>
-        </button>
+        {feedbackEnabled && (
+          <div className="fixed bottom-6 right-6 z-40">
+            <button
+              onClick={() => {
+                setFeedbackModalOpen(true);
+                setIsFirstTimeFeedback(false); // Manual click is not mandatory
+              }}
+              disabled={feedbackModalOpen}
+              className="w-14 h-14 bg-gray-900 hover:bg-gray-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center group disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Gửi phản hồi"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+              </svg>
+            </button>
+
+            {/* Small disable control */}
+            <button
+              onClick={(e) => { e.stopPropagation(); disableFeedback(); }}
+              title="Tắt nút phản hồi"
+              className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center shadow"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        {/* If feedback is disabled, show small pill to re-enable it */}
+        {!feedbackEnabled && (
+          <div className="fixed bottom-6 right-6 z-40">
+            <button
+              onClick={() => enableFeedback()}
+              className="px-3 py-2 rounded-full bg-gray-100 text-gray-700 shadow flex items-center gap-2"
+              title="Bật lại nút phản hồi"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h4l3-7 4 18 3-7h4" />
+              </svg>
+              <span className="text-xs">Bật phản hồi</span>
+            </button>
+          </div>
+        )}
 
         {/* Feedback Modal */}
         {feedbackModalOpen && (
           <div 
             className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
             onClick={(e) => {
-              // Prevent closing modal by clicking outside if it's first-time mandatory
-              if (!isFirstTimeFeedback && e.target === e.currentTarget) {
+              // Allow closing modal by clicking outside
+              if (e.target === e.currentTarget) {
                 setFeedbackModalOpen(false);
                 setFeedbackRating(0);
                 setFeedbackComment("");
@@ -1918,7 +1979,6 @@ export default function Page1() {
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
               <div className="bg-gray-900 text-white px-4 py-3 rounded-t-lg flex items-center justify-between">
                 <h3 className="font-semibold">{isFirstTimeFeedback ? 'Góp ý để cải thiện hệ thống' : 'Gửi phản hồi'}</h3>
-                {!isFirstTimeFeedback && (
                   <button
                     onClick={() => {
                       setFeedbackModalOpen(false);
@@ -1932,7 +1992,6 @@ export default function Page1() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
-                )}
               </div>
               
               <div className="p-5 space-y-5">
