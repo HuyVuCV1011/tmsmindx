@@ -3,7 +3,7 @@
 import { useAuth } from "@/lib/auth-context";
 import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 
 interface TeacherAvailability {
   timestamp: string;
@@ -380,19 +380,55 @@ export default function Page1() {
 
   // Handle teacher data errors
   useEffect(() => {
-    if (teacherError) {
-      // API returned error (404, 500, etc)
-      setNotFoundModalOpen(true);
-    } else if (teacherData && teacherData.error) {
-      // API returned error in response body
-      setError(teacherData.error);
-      setNotFoundModalOpen(true);
-    } else if (submitCode && !isLoadingTeacher && teacherData && !teacher) {
-      // API returned but no teacher found
-      setNotFoundModalOpen(true);
-    } else if (teacher) {
-      setError("");
-    }
+    (async () => {
+      if (teacherError) {
+        const status = (teacherError as any)?.status;
+        if (status === 401) {
+          const refreshToken = localStorage.getItem('refreshToken');
+          if (refreshToken) {
+            try {
+              const FIREBASE_API_KEY = 'AIzaSyAh2Au-mk5ci-hN83RUBqj1fsAmCMdvJx4';
+              const refreshRes = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `grant_type=refresh_token&refresh_token=${refreshToken}`
+              });
+
+              if (refreshRes.ok) {
+                const refreshData = await refreshRes.json();
+                const newIdToken = refreshData.id_token;
+                const newRefreshToken = refreshData.refresh_token;
+                if (newIdToken) {
+                  localStorage.setItem('token', newIdToken);
+                  if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
+                  await mutate(`/api/teachers?code=${submitCode}`);
+                  return;
+                }
+              }
+            } catch (e) {
+              console.warn('Silent refresh failed', e);
+            }
+          }
+
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          localStorage.removeItem('refreshToken');
+          window.location.href = '/login';
+          return;
+        }
+
+        setNotFoundModalOpen(true);
+      } else if (teacherData && teacherData.error) {
+        // API returned error in response body
+        setError(teacherData.error);
+        setNotFoundModalOpen(true);
+      } else if (submitCode && !isLoadingTeacher && teacherData && !teacher) {
+        // API returned but no teacher found
+        setNotFoundModalOpen(true);
+      } else if (teacher) {
+        setError("");
+      }
+    })();
   }, [teacherData, teacher, submitCode, isLoadingTeacher, teacherError]);
 
   // Handle not found modal confirm
