@@ -240,13 +240,13 @@ export default function Page1() {
   const experienceData = experienceDataRes?.monthlyData || [];
   const scoresLoaded = !isLoadingExpertise && !isLoadingExperience;
 
-  // Show feedback modal 30 seconds after successful teacher search
+  // Show feedback modal 1 minute after successful teacher search
   useEffect(() => {
     if (submitCode && teacherData && !hasFeedback && !feedbackModalOpen) {
       const timer = setTimeout(() => {
         setFeedbackModalOpen(true);
         setIsFirstTimeFeedback(true); // Mark as mandatory first-time feedback
-      }, 30000);
+      }, 60000); // 60 seconds = 1 minute
       
       return () => clearTimeout(timer);
     }
