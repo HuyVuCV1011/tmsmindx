@@ -162,19 +162,43 @@ export default function Page1() {
 
   const { user } = useAuth();
 
-  // Custom fetcher với Authorization header
+  // Custom fetcher với Authorization header và API key
   const secureFetcher = useCallback(async (url: string) => {
     const token = localStorage.getItem('token');
+    const headers: HeadersInit = {
+      'x-api-key': API_SECRET_KEY
+    };
+    
+    // Debug: Log token status
+    console.log('🔐 Fetching with token:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN');
+    
+    // Thêm Authorization token nếu có
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'x-api-key': API_SECRET_KEY
-      }
+      headers
     });
+    
+    console.log('📡 API Response:', url, 'Status:', response.status);
+    
+    // Nếu 401 Unauthorized, có nghĩa token không hợp lệ hoặc đã hết hạn
+    if (response.status === 401) {
+      console.error('❌ Token không hợp lệ hoặc đã hết hạn. Đang chuyển về trang đăng nhập...');
+      // Xóa token và user data cũ
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      // Chuyển về trang login
+      window.location.href = '/login';
+      throw new Error('Token đã hết hạn. Vui lòng đăng nhập lại.');
+    }
+    
     if (!response.ok) {
       const error: any = new Error('An error occurred while fetching the data.');
       error.info = await response.json();
       error.status = response.status;
+      console.error('❌ API Error:', error.info);
       throw error;
     }
     return response.json();
