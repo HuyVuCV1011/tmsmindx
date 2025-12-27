@@ -132,6 +132,7 @@ export default function Page1() {
   const [searchCode, setSearchCode] = useState("");
   const [submitCode, setSubmitCode] = useState("");
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
+  const [isResolvingCode, setIsResolvingCode] = useState(false); // true while resolving code via sheet
   const [error, setError] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("12");
   const [selectedYear, setSelectedYear] = useState("2025");
@@ -175,13 +176,37 @@ export default function Page1() {
   // Auto-search based on logged-in user's email - ONLY ONCE
   useEffect(() => {
     if (user && user.email && !hasAutoSearched && !submitCode) {
-      const code = extractCodeFromEmail(user.email);
-      if (code) {
-        console.log('🔍 Auto-searching for teacher code:', code, 'from email:', user.email);
-        setSearchCode(code);
-        setSubmitCode(code);
-        setHasAutoSearched(true);
-      }
+      // Mark we've attempted auto-search so we don't repeat
+      setHasAutoSearched(true);
+      setIsResolvingCode(true);
+
+      // First try resolving teacher by exact email (work OR personal)
+      (async () => {
+        try {
+          console.log('🔍 Attempting teacher lookup by email first:', user.email);
+          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+          if (res?.teacher?.code) {
+            console.log('✅ Found teacher by email:', res.teacher.code);
+            setSearchCode(res.teacher.code);
+            setSubmitCode(res.teacher.code);
+            setIsResolvingCode(false);
+            return;
+          }
+        } catch (err) {
+          // ignore and fallback to code extraction
+          console.warn('Email-based lookup failed, falling back to code extraction');
+        }
+
+        // Fallback: try extracting code from the email local-part
+        const code = extractCodeFromEmail(user.email);
+        if (code) {
+          console.log('🔁 Fallback: Auto-searching for teacher code from email prefix:', code);
+          setSearchCode(code);
+          setSubmitCode(code);
+        }
+
+        setIsResolvingCode(false);
+      })();
     }
     
     // Check if user has already given feedback
@@ -191,7 +216,7 @@ export default function Page1() {
         setHasFeedback(true);
       }
     }
-  }, [user, hasAutoSearched, submitCode]);
+  }, [user, hasAutoSearched, submitCode, secureFetcher]);
 
   // SWR với auto caching và revalidation - GỬI TOKEN QUA HEADER
   const { data: teacherData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
@@ -245,6 +270,27 @@ export default function Page1() {
       return () => clearTimeout(timer);
     }
   }, [submitCode, teacherData, hasFeedback, feedbackModalOpen]);
+
+  // If code-based lookup fails on first auto-search, try resolving teacher by the logged-in email (work OR personal)
+  useEffect(() => {
+    if (teacherError && hasAutoSearched && user?.email) {
+      (async () => {
+        try {
+          setIsResolvingCode(true);
+          console.log('🔁 Teacher lookup by code failed; trying lookup by email:', user.email);
+          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+          if (res?.teacher?.code) {
+            console.log('✅ Resolved teacher code by email:', res.teacher.code);
+            setSubmitCode(res.teacher.code);
+          }
+        } catch (err) {
+          console.warn('Lookup by email failed', err);
+        } finally {
+          setIsResolvingCode(false);
+        }
+      })();
+    }
+  }, [teacherError, hasAutoSearched, user?.email, secureFetcher]);
 
   // Prevent body scroll when feedback modal is open
   useEffect(() => {
@@ -746,7 +792,7 @@ export default function Page1() {
         <div className="border-b border-gray-900 pb-2 sm:pb-3">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Thông tin của tôi</h1>
           <p className="text-xs text-gray-600 mt-1">
-            {isLoadingTeacher ? (
+            { (isLoadingTeacher || isResolvingCode) ? (
               <span className="inline-flex items-center gap-2">
                 <svg className="animate-spin h-3 w-3 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -784,7 +830,7 @@ export default function Page1() {
         )}
 
         {/* Teacher Info Skeleton */}
-        {isLoadingTeacher && submitCode && (
+        {(isResolvingCode || (isLoadingTeacher && submitCode)) && (
           <div className="border border-gray-900 rounded-lg overflow-hidden">
             {/* Header Skeleton */}
             <div className="bg-gray-900 text-white p-3 sm:p-4">
