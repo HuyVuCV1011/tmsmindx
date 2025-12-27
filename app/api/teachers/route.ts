@@ -289,14 +289,15 @@ function parseCSVLine(line: string): string[] {
 export const GET = withApiProtection(async (request: NextRequest) => {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
+  const emailParam = searchParams.get("email");
   
   // 🔒 LẤY TOKEN TỪ HEADER ĐỂ VERIFY
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
 
-  if (!code) {
+  if (!code && !emailParam) {
     return NextResponse.json(
-      { error: "Vui lòng cung cấp mã giáo viên" },
+      { error: "Vui lòng cung cấp mã giáo viên hoặc email" },
       { status: 400 }
     );
   }
@@ -354,23 +355,40 @@ export const GET = withApiProtection(async (request: NextRequest) => {
   // Fetch teachers từ Google Sheets
   const teachers = await fetchTeachersFromSheet();
 
-  // Tìm kiếm không phân biệt hoa thường và loại bỏ khoảng trắng
-  const searchCode = code.trim().toLowerCase();
-  const teacher = teachers.find(
-    (t) => t.code.toLowerCase().trim() === searchCode
-  );
+  // Tìm học theo code hoặc email (fallback)
+  let teacher: Teacher | undefined;
 
-  if (!teacher) {
-    // Trả về danh sách mã có sẵn để debug
-    const availableCodes = teachers.slice(0, 10).map(t => t.code).join(", ");
-    return NextResponse.json(
-      { 
-        error: `Không tìm thấy giáo viên với mã "${code}". Một số mã có sẵn: ${availableCodes}...`,
-        totalTeachers: teachers.length,
-        sampleCodes: teachers.slice(0, 20).map(t => ({ code: t.code, name: t.name }))
-      },
-      { status: 404 }
+  if (code) {
+    const searchCode = code.trim().toLowerCase();
+    teacher = teachers.find(
+      (t) => t.code.toLowerCase().trim() === searchCode
     );
+
+    if (!teacher) {
+      // Trả về danh sách mã có sẵn để debug
+      const availableCodes = teachers.slice(0, 10).map(t => t.code).join(", ");
+      return NextResponse.json(
+        { 
+          error: `Không tìm thấy giáo viên với mã "${code}". Một số mã có sẵn: ${availableCodes}...`,
+          totalTeachers: teachers.length,
+          sampleCodes: teachers.slice(0, 20).map(t => ({ code: t.code, name: t.name }))
+        },
+        { status: 404 }
+      );
+    }
+  } else if (emailParam) {
+    const normalizedEmail = emailParam.trim().toLowerCase();
+    teacher = teachers.find(t =>
+      (t.emailMindx || '').toLowerCase().trim() === normalizedEmail ||
+      (t.emailPersonal || '').toLowerCase().trim() === normalizedEmail
+    );
+
+    if (!teacher) {
+      return NextResponse.json(
+        { error: `Không tìm thấy giáo viên với email "${emailParam}"` },
+        { status: 404 }
+      );
+    }
   }
 
   // 🔒 BẢO MẬT: Kiểm tra quyền truy cập bằng EMAIL TỪ TOKEN
