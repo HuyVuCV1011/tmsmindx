@@ -173,6 +173,10 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       return score > 10 ? 0 : score;
     };
 
+    // Note: New Lesson 11 added (Đào tạo nâng cao). If course links sheet does not include a mapping for this topic,
+    // we fall back to the provided Edpuzzle URL below so content remains accessible.
+
+
     // Helper to find course link by matching lesson name with topic
     const findCourseLink = (lessonName: string): string | undefined => {
       // Remove "Lesson X: " prefix
@@ -262,6 +266,11 @@ export const GET = withApiProtection(async (request: NextRequest) => {
           name: 'Lesson 10: Hướng Dẫn Sử Dụng AI4Student cho Giáo Viên',
           score: parseScore(columns[20]),
           link: findCourseLink('Lesson 10: Hướng Dẫn Sử Dụng AI4Student cho Giáo Viên'),
+        },
+        {
+          name: 'Lesson 11: Quản lý, tổ chức lớp học hiệu quả',
+          score: parseScore(columns[21]),
+          link: findCourseLink('Lesson 11: Quản lý, tổ chức lớp học hiệu quả') || 'https://edpuzzle.com/assignments/69413f5155116db4176ec7e3/watch',
         },
       ],
     };
