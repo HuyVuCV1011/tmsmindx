@@ -23,10 +23,12 @@ export function Sidebar() {
     { href: "/admin/page5", label: "Màn hình 5", icon: FileText },
   ];
 
-  const userMenuItems = [
-    { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
-  ];
 
+  // Thêm Trang chủ GV nếu là teacher
+  let userMenuItems = [
+    { href: "/user/home", label: "Trang chủ", icon: Home },
+    { href: "/user/thongtingv", label: "Thông tin của tôi", icon: LayoutDashboard },
+  ];
   const menuItems = isUserArea ? userMenuItems : adminMenuItems;
 
   return (
