@@ -168,7 +168,7 @@ export default function LoginPage() {
             <h2 className="text-xl font-bold text-center text-[#a1001f]">MindX Technology School</h2>
             <div className="text-lg font-semibold text-gray-900 text-center mt-2 mb-1">Welcome to Portal</div>
             <div className="text-sm text-gray-500 text-center mb-2">Please select your role and login to continue.</div>
-            <div className="text-sm text-gray-500 text-center mb-3">đăng nhập bằng tài khoản<a href="https://lms.mindx.edu.vn/" target="_blank" rel="noreferrer" className="text-[#a1001f] font-medium hover:underline">https://lms.mindx.edu.vn/</a></div>
+            <div className="text-sm text-gray-500 text-center mb-3">Đăng nhập bằng tài khoản <a href="https://lms.mindx.edu.vn/" target="_blank" rel="noreferrer" className="text-[#a1001f] font-medium hover:underline">https://lms.mindx.edu.vn/</a></div>
           </div>
 
           {error && (
@@ -215,7 +215,7 @@ export default function LoginPage() {
               <label className="block text-xs font-semibold mb-1 text-gray-700">Username or Email</label>
               <input
                 type="email"
-                placeholder="...@mindx.edu.vn"
+                placeholder="...@mindx.net.vn"
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 transition-all"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
