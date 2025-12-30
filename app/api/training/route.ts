@@ -268,9 +268,9 @@ export const GET = withApiProtection(async (request: NextRequest) => {
           link: findCourseLink('Lesson 10: Hướng Dẫn Sử Dụng AI4Student cho Giáo Viên'),
         },
         {
-          name: 'Lesson 11: Đào tạo nâng cao',
+          name: 'Lesson 11: Quản lý, tổ chức lớp học hiệu quả',
           score: parseScore(columns[21]),
-          link: findCourseLink('Lesson 11: Đào tạo nâng cao') || 'https://edpuzzle.com/assignments/69413f5155116db4176ec7e3/watch',
+          link: findCourseLink('Lesson 11: Quản lý, tổ chức lớp học hiệu quả') || 'https://edpuzzle.com/assignments/69413f5155116db4176ec7e3/watch',
         },
       ],
     };
