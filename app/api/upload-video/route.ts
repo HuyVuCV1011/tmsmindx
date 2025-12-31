@@ -8,7 +8,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
   const formData = await req.formData();
   const file = formData.get("video");
   if (!file || typeof file === "string") {
@@ -19,8 +19,8 @@ export async function POST(req: NextRequest) {
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  // Upload lên Cloudinary bằng upload_stream
-  return new Promise((resolve, reject) => {
+  // Upload lên Cloudinary bằng upload_stream, trả về đúng Promise<Response>
+  return await new Promise<Response>((resolve) => {
     const stream = cloudinary.uploader.upload_stream(
       { resource_type: "video", folder: "mindx_videos" },
       (error, result) => {

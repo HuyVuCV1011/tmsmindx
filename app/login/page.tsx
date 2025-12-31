@@ -39,7 +39,25 @@ export default function LoginPage() {
     setIsSubmitting(true);
     setError("");
 
-    logger.info('Đang thực hiện login', { email, role });
+    // Basic client-side validation
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError('Vui lòng nhập tên người dùng hoặc email.');
+      setIsSubmitting(false);
+      return;
+    }
+    if (!trimmedEmail.includes('@')) {
+      setError('Email không hợp lệ.');
+      setIsSubmitting(false);
+      return;
+    }
+    if (password.length < 6) {
+      setError('Mật khẩu cần ít nhất 6 ký tự.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    logger.info('Đang thực hiện login', { email: trimmedEmail, role });
 
     try {
       logger.api('POST', '/api/auth/login', { email, role });
@@ -49,7 +67,7 @@ export default function LoginPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password, role }),
+        body: JSON.stringify({ email: trimmedEmail, password, role }),
       });
 
       const data = await response.json();
@@ -76,7 +94,14 @@ export default function LoginPage() {
       };
       
       logger.success('Login successful', { email: userData.email, role: userData.role });
-      
+      // Store refresh token for silent refresh on token expiry
+      try {
+        if (data.refreshToken) {
+          localStorage.setItem('refreshToken', data.refreshToken);
+        }
+      } catch (e) {
+        logger.warn('Unable to persist refreshToken', { error: (e as Error).message });
+      }      
       // Nếu chọn Manager, kiểm tra xem có phải admin không
       let finalRedirectPath = '/user/thongtingv'; // Default là user area
       
@@ -179,7 +204,7 @@ export default function LoginPage() {
 
           <div className="flex justify-center gap-3 mb-4">
             <button
-              className={`px-4 py-1 rounded-full border text-sm font-medium transition-all transform hover:scale-105 ${
+              className={`px-6 py-2 rounded-full border text-sm font-medium transition-all transform hover:scale-105 ${
                 role === 'teacher' 
                   ? 'bg-[#800000] text-white border-[#a1001f] shadow-md' 
                   : 'bg-white text-[#800000] border-[#a1001f] hover:border-[#c1122f]'
@@ -190,11 +215,11 @@ export default function LoginPage() {
               }}
               type="button"
               disabled={isSubmitting}
-            >
-              Teacher
+>
+              Giáo viên
             </button>
             <button
-              className={`px-4 py-1 rounded-full border text-sm font-medium transition-all transform hover:scale-105 ${
+              className={`px-6 py-2 rounded-full border text-sm font-medium transition-all transform hover:scale-105 ${
                 role === 'manager' 
                   ? 'bg-[#800000] text-white border-[#a1001f] shadow-md' 
                   : 'bg-white text-[#800000] border-[#a1001f] hover:border-[#c1122f]'
@@ -205,14 +230,14 @@ export default function LoginPage() {
               }}
               type="button"
               disabled={isSubmitting}
-            >
-              Manager
+>
+              Quản lý
             </button>
           </div>
 
           <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
             <div className="relative">
-              <label className="block text-xs font-semibold mb-1 text-gray-700">Username or Email</label>
+              <label className="block text-xs font-semibold mb-1 text-gray-700">Tên người dùng/Email</label>
               <input
                 type="email"
                 placeholder="...@mindx.net.vn"
@@ -224,11 +249,11 @@ export default function LoginPage() {
               />
             </div>
             <div className="relative">
-              <label className="block text-xs font-semibold mb-1 text-gray-700">Password</label>
+              <label className="block text-xs font-semibold mb-1 text-gray-700">Mật khẩu</label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
-                  placeholder="Password"
+                  placeholder="**********"
                   className="w-full border border-gray-300 rounded px-3 py-2 pr-10 text-sm focus:outline-none focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 transition-all"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
@@ -265,7 +290,7 @@ export default function LoginPage() {
                   </svg>
                   Đang đăng nhập...
                 </span>
-              ) : 'Sign In'}
+              ) : 'Đăng nhập'}
             </button>
           </form>
 
