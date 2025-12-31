@@ -17,10 +17,10 @@ export function Sidebar() {
   const adminMenuItems = [
     { href: "/admin/dashboard", label: "Dashboard", icon: Home },
     { href: "/admin/page1", label: "Thông tin GV", icon: LayoutDashboard },
-    { href: "/admin/page2", label: "Màn hình 2", icon: Users },
+    { href: "/admin/page2", label: "màn hình 2", icon: Users },
     { href: "/admin/page3", label: "Màn hình 3", icon: Users },
     { href: "/admin/page4", label: "Màn hình 4", icon: Settings },
-    { href: "/admin/page5", label: "Màn hình 5", icon: FileText },
+    { href: "/admin/page5", label: "Đào tạo nâng cao", icon: FileText },
     { href: "/admin/giaithich", label: "Quản lý Giải thích", icon: MessageSquare },
   ];
 
@@ -28,6 +28,7 @@ export function Sidebar() {
     { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
     { href: "/user/giaithich", label: "Giải thích kiểm tra", icon: MessageSquare },
   ];
+
 
   const menuItems = isUserArea ? userMenuItems : adminMenuItems;
 
