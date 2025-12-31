@@ -151,21 +151,21 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
       <div className="bg-white rounded-xl shadow-2xl flex w-[768px] h-[540px] overflow-hidden transform transition-all duration-300 hover:shadow-3xl">
         {/* Left side: Banner */}
-        <div className="hidden md:flex flex-col justify-between items-start bg-gradient-to-br from-[#a1001f] to-[#c1122f] w-1/2 h-full p-8 text-white">
+        <div className="hidden md:flex flex-col justify-between items-start bg-gradient-to-br from-[#800000] to-[#E31F26] w-1/3 h-full p-8 text-white">
           <div>
             <img src="/logo_white.svg" alt="logo" className="h-20 mb-8 animate-fade-in" />
-            <h2 className="text-2xl font-bold mb-4 leading-tight animate-slide-up">Nuturing Global<br />Pioneer in tech</h2>
-            <p className="text-sm opacity-90 mb-8 animate-slide-up animation-delay-200">Access your dashboard to manage classes, track student performance, and coordinate with the Teaching Management System.</p>
+            <h2 className="text-2xl font-bold mb-4 leading-tight animate-slide-up">Teachingl<br />Management System(TMS)</h2>
+            <p className="text-sm opacity-90 mb-8 animate-slide-up animation-delay-200">Hệ thống quản lý thông tin giáo viên, theo dõi tiến độ đào tạo,xử lý yêu cầu,tra cứu thông tin nội bộ.</p>
           </div>
           <div className="flex items-center gap-2 text-xs opacity-80">
-            <span>MindX Teaching Team</span>
+            <span>Teaching Team</span>
           </div>
         </div>
 
         {/* Right side: Login form */}
-        <div className="flex-1 flex flex-col justify-center px-8 py-6">
-          <div className="flex flex-col gap-2 mb-2">
-            <h2 className="text-xl font-bold text-center text-[#a1001f]">MindX Technology School</h2>
+        <div className="flex-1 flex flex-col justify-center px-12 py-6">
+          <div className="flex flex-col gap-4 mb-2">
+            <h2 className="text-xl font-bold text-center text-[#800000]">MindX Technology School</h2>
             <div className="text-lg font-semibold text-gray-900 text-center mt-2 mb-1">Welcome to Portal</div>
             <div className="text-sm text-gray-500 text-center mb-2">Please select your role and login to continue.</div>
             <div className="text-sm text-gray-500 text-center mb-3">Đăng nhập bằng tài khoản <a href="https://lms.mindx.edu.vn/" target="_blank" rel="noreferrer" className="text-[#a1001f] font-medium hover:underline">https://lms.mindx.edu.vn/</a></div>
@@ -181,8 +181,8 @@ export default function LoginPage() {
             <button
               className={`px-4 py-1 rounded-full border text-sm font-medium transition-all transform hover:scale-105 ${
                 role === 'teacher' 
-                  ? 'bg-[#a1001f] text-white border-[#a1001f] shadow-md' 
-                  : 'bg-white text-[#a1001f] border-[#a1001f] hover:border-[#c1122f]'
+                  ? 'bg-[#800000] text-white border-[#a1001f] shadow-md' 
+                  : 'bg-white text-[#800000] border-[#a1001f] hover:border-[#c1122f]'
               }`}
               onClick={() => {
                 setRole('teacher');
@@ -196,8 +196,8 @@ export default function LoginPage() {
             <button
               className={`px-4 py-1 rounded-full border text-sm font-medium transition-all transform hover:scale-105 ${
                 role === 'manager' 
-                  ? 'bg-[#a1001f] text-white border-[#a1001f] shadow-md' 
-                  : 'bg-white text-[#a1001f] border-[#a1001f] hover:border-[#c1122f]'
+                  ? 'bg-[#800000] text-white border-[#a1001f] shadow-md' 
+                  : 'bg-white text-[#800000] border-[#a1001f] hover:border-[#c1122f]'
               }`}
               onClick={() => {
                 setRole('manager');
@@ -249,12 +249,12 @@ export default function LoginPage() {
                 </button>
               </div>
               <div className="text-right mt-1">
-                <a href="#" className="text-xs text-[#a1001f] hover:underline transition-colors">Forgot Password?</a>
+                <a href="#" className="text-xs text-[#800000] hover:underline transition-colors">Forgot Password?</a>
               </div>
             </div>
             <button
               type="submit"
-              className="w-full bg-[#a1001f] text-white rounded py-2 font-semibold text-base mt-2 hover:bg-[#c1122f] transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg"
+              className="w-full bg-[#800000] text-white rounded py-2 font-semibold text-base mt-2 hover:bg-[#c1122f] transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg"
               disabled={isSubmitting}
             >
               {isSubmitting ? (
@@ -270,7 +270,7 @@ export default function LoginPage() {
           </form>
 
           <div className="text-xs text-center text-gray-500 mt-4">
-            Having trouble logging in? <a href="#" className="text-[#a1001f] hover:underline font-medium transition-colors">Get Help</a>
+            Having trouble logging in? <a href="#" className="text-[#800000] hover:underline font-medium transition-colors">Get Help</a>
           </div>
         </div>
       </div>

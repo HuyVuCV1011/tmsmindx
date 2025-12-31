@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
-import { FileText, Home, LayoutDashboard, LogOut, Menu, Settings, Users, X } from "lucide-react";
+import { BookMarked, FileText, Home, LayoutDashboard, LogOut, Menu, Settings, Users, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -17,10 +17,10 @@ export function Sidebar() {
   const adminMenuItems = [
     { href: "/admin/dashboard", label: "Dashboard", icon: Home },
     { href: "/admin/page1", label: "Thông tin GV", icon: LayoutDashboard },
-    { href: "/admin/page2", label: "Màn hình 2", icon: Users },
+    { href: "/admin/page2", label: "màn hình 2", icon: Users },
     { href: "/admin/page3", label: "Màn hình 3", icon: Users },
     { href: "/admin/page4", label: "Màn hình 4", icon: Settings },
-    { href: "/admin/page5", label: "Màn hình 5", icon: FileText },
+    { href: "/admin/page5", label: "Đào tạo nâng cao", icon:BookMarked},
   ];
 
 
