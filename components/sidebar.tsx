@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
-import { FileText, Home, LayoutDashboard, LogOut, Menu, Settings, Users, X } from "lucide-react";
+import { FileText, Home, LayoutDashboard, LogOut, Menu, Settings, Users, X, MessageSquare } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -21,10 +21,12 @@ export function Sidebar() {
     { href: "/admin/page3", label: "Màn hình 3", icon: Users },
     { href: "/admin/page4", label: "Màn hình 4", icon: Settings },
     { href: "/admin/page5", label: "Màn hình 5", icon: FileText },
+    { href: "/admin/giaithich", label: "Quản lý Giải thích", icon: MessageSquare },
   ];
 
   const userMenuItems = [
     { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
+    { href: "/user/giaithich", label: "Giải thích kiểm tra", icon: MessageSquare },
   ];
 
   const menuItems = isUserArea ? userMenuItems : adminMenuItems;
