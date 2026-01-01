@@ -59,7 +59,7 @@ Chạy SQL script để tạo bảng:
 
 ```bash
 # Connect to database
-psql -h pg-146bfe89-bwc-67c8.h.aivencloud.com -p 10058 -U avnadmin -d defaultdb
+psql -h pg-199adbc000-bwc-67c8.h.aivencloud.com -p 10058 -U baotc01 -d defaultdb
 
 # Sau đó copy và paste nội dung từ file:
 # scripts/create_explanations_table.sql
