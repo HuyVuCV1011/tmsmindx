@@ -387,7 +387,7 @@ export default function Page1() {
           const refreshToken = localStorage.getItem('refreshToken');
           if (refreshToken) {
             try {
-              const FIREBASE_API_KEY = 'AIzaSyAh2Au-mk5ci-hN83RUBqj1fsAmCMdvJx4';
+              const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || '';
               const refreshRes = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
