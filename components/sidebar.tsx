@@ -2,12 +2,13 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
-import { FileText, Home, LayoutDashboard, LogOut, Menu, Settings, Users, X, MessageSquare } from "lucide-react";
+import { FileText, Home, LayoutDashboard, LogOut, Menu, Settings, Users, X, MessageSquare, ChevronDown, ChevronRight, GraduationCap } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 export function Sidebar() {
   const [isOpen, setIsOpen] = useState(true);
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const { user, logout } = useAuth();
   const pathname = usePathname();
 
@@ -20,17 +21,35 @@ export function Sidebar() {
     { href: "/admin/page2", label: "màn hình 2", icon: Users },
     { href: "/admin/page3", label: "Màn hình 3", icon: Users },
     { href: "/admin/page4", label: "Màn hình 4", icon: Settings },
-    { href: "/admin/page5", label: "Đào tạo nâng cao", icon: FileText },
+    { 
+      label: "Đào tạo nâng cao", 
+      icon: FileText,
+      submenu: [
+        { href: "/admin/page5", label: "Quản lý đào tạo nâng cao" },
+        { href: "/admin/training-dashboard", label: "Thống kê" },
+        { href: "/admin/assignments", label: "Quản lý Assignments" },
+      ]
+    },
     { href: "/admin/giaithich", label: "Quản lý Giải thích", icon: MessageSquare },
   ];
 
   const userMenuItems = [
     { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
+    { href: "/user/training", label: "Đào tạo nâng cao", icon: GraduationCap },
+    { href: "/user/assignments", label: "My Assignments", icon: FileText },
     { href: "/user/giaithich", label: "Giải thích kiểm tra", icon: MessageSquare },
   ];
 
 
   const menuItems = isUserArea ? userMenuItems : adminMenuItems;
+
+  const toggleSubmenu = (label: string) => {
+    setExpandedMenus(prev => 
+      prev.includes(label) 
+        ? prev.filter(item => item !== label)
+        : [...prev, label]
+    );
+  };
 
   return (
     <>
@@ -68,21 +87,69 @@ export function Sidebar() {
             <ul className="space-y-1">
               {menuItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href;
+                const hasSubmenu = 'submenu' in item;
+                const isExpanded = expandedMenus.includes(item.label);
+                const isActive = !hasSubmenu && pathname === item.href;
+                const isSubmenuActive = hasSubmenu && item.submenu?.some(sub => pathname === sub.href);
+
                 return (
-                  <li key={item.href}>
-                    <a
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-2 rounded px-2 py-1.5 text-xs font-medium transition-all",
-                        isActive
-                          ? "bg-gray-900 text-white border border-gray-900"
-                          : "text-gray-900 border border-transparent hover:border-gray-900 hover:bg-gray-50"
-                      )}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      <span>{item.label}</span>
-                    </a>
+                  <li key={item.href || item.label}>
+                    {hasSubmenu ? (
+                      <>
+                        <button
+                          onClick={() => toggleSubmenu(item.label)}
+                          className={cn(
+                            "w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs font-medium transition-all",
+                            isSubmenuActive
+                              ? "bg-gray-900 text-white border border-gray-900"
+                              : "text-gray-900 border border-transparent hover:border-gray-900 hover:bg-gray-50"
+                          )}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          <span className="flex-1 text-left">{item.label}</span>
+                          {isExpanded ? (
+                            <ChevronDown className="h-3 w-3" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3" />
+                          )}
+                        </button>
+                        {isExpanded && (
+                          <ul className="ml-4 mt-1 space-y-1">
+                            {item.submenu?.map((subItem) => {
+                              const isSubActive = pathname === subItem.href;
+                              return (
+                                <li key={subItem.href}>
+                                  <a
+                                    href={subItem.href}
+                                    className={cn(
+                                      "flex items-center gap-2 rounded px-2 py-1.5 text-xs font-medium transition-all",
+                                      isSubActive
+                                        ? "bg-gray-700 text-white border border-gray-700"
+                                        : "text-gray-700 border border-transparent hover:border-gray-700 hover:bg-gray-50"
+                                    )}
+                                  >
+                                    <span>{subItem.label}</span>
+                                  </a>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </>
+                    ) : (
+                      <a
+                        href={item.href}
+                        className={cn(
+                          "flex items-center gap-2 rounded px-2 py-1.5 text-xs font-medium transition-all",
+                          isActive
+                            ? "bg-gray-900 text-white border border-gray-900"
+                            : "text-gray-900 border border-transparent hover:border-gray-900 hover:bg-gray-50"
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        <span>{item.label}</span>
+                      </a>
+                    )}
                   </li>
                 );
               })}
