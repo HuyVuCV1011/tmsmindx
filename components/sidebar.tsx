@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
-import { FileText, Home, LayoutDashboard, LogOut, Menu, Settings, Users, X, MessageSquare, ChevronDown, ChevronRight, GraduationCap } from "lucide-react";
+import { FileText, Home, LayoutDashboard, LogOut, Menu, Settings, Users, X, MessageSquare, ChevronDown, ChevronRight, GraduationCap,Megaphone  } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -31,6 +31,7 @@ export function Sidebar() {
       ]
     },
     { href: "/admin/giaithich", label: "Quản lý Giải thích", icon: MessageSquare },
+    { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
   ];
 
   const userMenuItems = [
@@ -38,6 +39,7 @@ export function Sidebar() {
     { href: "/user/training", label: "Đào tạo nâng cao", icon: GraduationCap },
     { href: "/user/assignments", label: "My Assignments", icon: FileText },
     { href: "/user/giaithich", label: "Giải thích kiểm tra", icon: MessageSquare },
+    { href: "/user/truyenthong", label: "Thông tin mới", icon: Megaphone },
   ];
 
 
