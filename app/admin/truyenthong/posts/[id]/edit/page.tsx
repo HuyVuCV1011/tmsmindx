@@ -10,6 +10,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import toast from 'react-hot-toast'
 import useSWR from 'swr'
+import dynamic from 'next/dynamic'
+
+// Dynamic import for RichTextEditor to avoid SSR issues
+const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), {
+    ssr: false,
+    loading: () => <div className="border rounded-xl p-4 min-h-75 animate-pulse bg-muted/20">Đang tải editor...</div>
+})
 
 // Fetcher for SWR
 const fetcher = (url: string) => fetch(url).then(r => r.json())
@@ -34,6 +41,12 @@ export default function EditPostPage() {
         status: 'draft',
         audience: 'toàn-công-ty',
         publishDate: '',
+    })
+
+    const [colors, setColors] = useState({
+        title: '#000000',
+        description: '#666666',
+        content: '#000000'
     })
 
     const [errors, setErrors] = useState<Record<string, string>>({})
@@ -184,7 +197,18 @@ export default function EditPostPage() {
                             </CardHeader>
                             <CardContent className="space-y-4 pt-6">
                                 <div className="space-y-2 group">
-                                    <Label htmlFor="title" className={`${errors.title ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Tiêu đề</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="title" className={`${errors.title ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Tiêu đề</Label>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground">Màu sắc:</span>
+                                            <input
+                                                type="color"
+                                                value={colors.title}
+                                                onChange={e => setColors({ ...colors, title: e.target.value })}
+                                                className="h-8 w-12 rounded cursor-pointer border border-border"
+                                            />
+                                        </div>
+                                    </div>
                                     <Input
                                         id="title"
                                         placeholder="Nhập tiêu đề bài viết"
@@ -194,6 +218,7 @@ export default function EditPostPage() {
                                             if (errors.title) setErrors({ ...errors, title: '' })
                                         }}
                                         className={`focus-visible:ring-primary/50 transition-all h-11 ${errors.title ? 'border-red-500 bg-red-50/30 focus-visible:ring-red-500/20 shadow-sm shadow-red-100' : ''}`}
+                                        style={{ color: colors.title }}
                                     />
                                     {errors.title && (
                                         <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">
@@ -204,7 +229,18 @@ export default function EditPostPage() {
                                 </div>
 
                                 <div className="space-y-2 group">
-                                    <Label htmlFor="description" className={`${errors.description ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Mô tả ngắn</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="description" className={`${errors.description ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Mô tả ngắn</Label>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground">Màu sắc:</span>
+                                            <input
+                                                type="color"
+                                                value={colors.description}
+                                                onChange={e => setColors({ ...colors, description: e.target.value })}
+                                                className="h-8 w-12 rounded cursor-pointer border border-border"
+                                            />
+                                        </div>
+                                    </div>
                                     <Input
                                         id="description"
                                         placeholder="Nhập mô tả ngắn (1-2 dòng)"
@@ -214,6 +250,7 @@ export default function EditPostPage() {
                                             if (errors.description) setErrors({ ...errors, description: '' })
                                         }}
                                         className={`focus-visible:ring-primary/50 transition-all h-11 ${errors.description ? 'border-red-500 bg-red-50/30 focus-visible:ring-red-500/20 shadow-sm shadow-red-100' : ''}`}
+                                        style={{ color: colors.description }}
                                     />
                                     {errors.description && (
                                         <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">
@@ -224,17 +261,26 @@ export default function EditPostPage() {
                                 </div>
 
                                 <div className="space-y-2 group">
-                                    <Label htmlFor="content" className={`${errors.content ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Nội dung bài viết</Label>
-                                    <textarea
-                                        id="content"
-                                        placeholder="Nhập nội dung bài viết..."
-                                        rows={8}
-                                        value={formData.content}
-                                        onChange={e => {
-                                            setFormData({ ...formData, content: e.target.value })
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="content" className={`${errors.content ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Nội dung bài viết</Label>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground">Màu sắc chữ:</span>
+                                            <input
+                                                type="color"
+                                                value={colors.content}
+                                                onChange={e => setColors({ ...colors, content: e.target.value })}
+                                                className="h-8 w-12 rounded cursor-pointer border border-border"
+                                            />
+                                        </div>
+                                    </div>
+                                    <RichTextEditor
+                                        content={formData.content}
+                                        onChange={(html) => {
+                                            setFormData({ ...formData, content: html })
                                             if (errors.content) setErrors({ ...errors, content: '' })
                                         }}
-                                        className={`w-full px-4 py-3 border rounded-xl bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 transition-all min-h-[300px] ${errors.content ? 'border-red-500 bg-red-50/30 focus:ring-red-500/20 shadow-sm shadow-red-100' : 'border-border focus:ring-primary/30'}`}
+                                        error={errors.content}
+                                        textColor={colors.content}
                                     />
                                     {errors.content && (
                                         <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">

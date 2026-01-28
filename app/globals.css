@@ -77,3 +77,165 @@
     animation: shake 0.5s ease-in-out;
   }
 }
+
+/* Tiptap Editor Styles */
+.ProseMirror {
+  @apply focus:outline-none;
+}
+
+.ProseMirror > * + * {
+  margin-top: 0.75em;
+}
+
+.ProseMirror h1 {
+  @apply text-3xl font-bold mt-6 mb-4;
+}
+
+.ProseMirror h2 {
+  @apply text-2xl font-bold mt-5 mb-3;
+}
+
+.ProseMirror h3 {
+  @apply text-xl font-bold mt-4 mb-2;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  @apply pl-6 my-4;
+}
+
+.ProseMirror ul {
+  @apply list-disc;
+}
+
+.ProseMirror ol {
+  @apply list-decimal;
+}
+
+.ProseMirror li {
+  @apply my-1;
+}
+
+.ProseMirror code {
+  @apply bg-gray-100 rounded px-1.5 py-0.5 text-sm font-mono;
+}
+
+.ProseMirror pre {
+  @apply bg-gray-900 text-white rounded-lg p-4 my-4 overflow-x-auto;
+}
+
+.ProseMirror pre code {
+  @apply bg-transparent text-white p-0;
+}
+
+.ProseMirror blockquote {
+  @apply border-l-4 border-gray-300 pl-4 italic my-4 text-gray-700;
+}
+
+.ProseMirror hr {
+  @apply my-6 border-t-2 border-gray-200;
+}
+
+.ProseMirror a {
+  @apply text-blue-500 underline hover:text-blue-700;
+}
+
+.ProseMirror img {
+  @apply max-w-full h-auto rounded-lg my-4 cursor-pointer block transition-all;
+}
+
+.ProseMirror img:hover {
+  @apply opacity-80 shadow-lg;
+}
+
+/* Selected image (NodeView) */
+.ProseMirror .image-wrapper-selected img {
+  @apply outline-2 outline-blue-500 outline-offset-2;
+}
+
+.tiptap-image {
+  @apply max-w-full h-auto rounded-lg my-4;
+}
+
+img.tiptap-image {
+  @apply cursor-pointer block;
+}
+
+/* Resize handle */
+.ProseMirror .image-wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.ProseMirror .image-wrapper img {
+  display: block;
+}
+
+.ProseMirror .image-wrapper .resize-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: #3b82f6;
+  border: 2px solid white;
+  border-radius: 50%;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  transition: all 0.2s;
+}
+
+.ProseMirror .image-wrapper .resize-handle::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M13,11H18L16.5,9.5L17.92,8.08L21.84,12L17.92,15.92L16.5,14.5L18,13H13V18L14.5,16.5L15.92,17.92L12,21.84L8.08,17.92L9.5,16.5L11,18V13H6L7.5,14.5L6.08,15.92L2.16,12L6.08,8.08L7.5,9.5L6,11H11V6L9.5,7.5L8.08,6.08L12,2.16L15.92,6.08L14.5,7.5L13,6V11Z'/%3E%3C/svg%3E");
+  background-size: 14px 14px;
+  background-repeat: no-repeat;
+  background-position: center;
+  top: 0;
+  left: 0;
+}
+
+.ProseMirror .image-wrapper .resize-handle:hover {
+  background: #2563eb;
+  width: 24px;
+  height: 24px;
+  transform: scale(1.15);
+}
+
+/* Corner-specific positions and cursors */
+.ProseMirror .image-wrapper .resize-se {
+  bottom: -10px;
+  right: -10px;
+  cursor: nwse-resize;
+}
+
+.ProseMirror .image-wrapper .resize-sw {
+  bottom: -10px;
+  left: -10px;
+  cursor: nesw-resize;
+}
+
+.ProseMirror .image-wrapper .resize-ne {
+  top: -10px;
+  right: -10px;
+  cursor: nesw-resize;
+}
+
+.ProseMirror .image-wrapper .resize-nw {
+  top: -10px;
+  left: -10px;
+  cursor: nwse-resize;
+}
+
+
+
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: #adb5bd;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
