@@ -1,7 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Card } from '@/components/Card';
+import { EmptyState } from '@/components/EmptyState';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { PageContainer } from '@/components/PageContainer';
+import { Edit, List, Plus, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 interface Assignment {
   id: number;
@@ -154,251 +159,269 @@ export default function AssignmentManagementPage() {
     router.push(`/admin/assignment-questions?assignment_id=${assignmentId}`);
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Quản lý Assignments</h1>
-          <button
-            onClick={() => { resetForm(); setShowModal(true); }}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
-          >
-            + Tạo Assignment mới
-          </button>
-        </div>
+  if (loading) {
+    return <LoadingSpinner text="Đang tải assignments..." />;
+  }
 
-        {loading ? (
-          <div className="text-center py-12">Đang tải dữ liệu...</div>
-        ) : error ? (
-          <div className="text-red-500 text-center py-12">{error}</div>
+  return (
+    <PageContainer
+      title="Quản lý Assignments"
+      description="Tạo và quản lý bài tập, quiz cho video đào tạo"
+    >
+      {/* Create Button */}
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={() => { resetForm(); setShowModal(true); }}
+          className="flex items-center gap-2 bg-[#a1001f] hover:bg-[#c41230] text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Tạo Assignment mới
+        </button>
+      </div>
+
+      <Card>
+        {error ? (
+          <div className="text-red-600 text-center py-8">{error}</div>
+        ) : assignments.length === 0 ? (
+          <EmptyState
+            icon={List}
+            title="Chưa có assignment"
+            description='Nhấn "Tạo Assignment mới" để thêm bài tập cho video'
+            action={{
+              label: "Tạo Assignment",
+              onClick: () => { resetForm(); setShowModal(true); }
+            }}
+          />
         ) : (
-          <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-gray-100">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-y border-gray-200">
                 <tr>
-                  <th className="px-4 py-3 text-left">#</th>
-                  <th className="px-4 py-3 text-left">Video</th>
-                  <th className="px-4 py-3 text-left">Tên Assignment</th>
-                  <th className="px-4 py-3 text-left">Loại</th>
-                  <th className="px-4 py-3 text-center">Số câu hỏi</th>
-                  <th className="px-4 py-3 text-center">Điểm tối đa</th>
-                  <th className="px-4 py-3 text-center">Điểm đạt</th>
-                  <th className="px-4 py-3 text-center">Trạng thái</th>
-                  <th className="px-4 py-3 text-center">Hành động</th>
+                  <th className="px-3 py-2 text-left font-semibold">#</th>
+                  <th className="px-3 py-2 text-left font-semibold">Video</th>
+                  <th className="px-3 py-2 text-left font-semibold">Tên Assignment</th>
+                  <th className="px-3 py-2 text-left font-semibold">Loại</th>
+                  <th className="px-3 py-2 text-center font-semibold">Câu hỏi</th>
+                  <th className="px-3 py-2 text-center font-semibold">Điểm</th>
+                  <th className="px-3 py-2 text-center font-semibold">Điểm đạt</th>
+                  <th className="px-3 py-2 text-center font-semibold">Trạng thái</th>
+                  <th className="px-3 py-2 text-center font-semibold">Hành động</th>
                 </tr>
               </thead>
-              <tbody>
-                {assignments.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
-                      Chưa có assignment nào. Nhấn "Tạo Assignment mới" để bắt đầu.
+              <tbody className="divide-y divide-gray-200">
+                {assignments.map((assignment, idx) => (
+                  <tr key={assignment.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2">{idx + 1}</td>
+                    <td className="px-3 py-2 text-xs max-w-xs truncate">{assignment.video_title}</td>
+                    <td className="px-3 py-2 font-medium">{assignment.assignment_title}</td>
+                    <td className="px-3 py-2">
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                        {assignment.assignment_type}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-center">{assignment.question_count || 0}</td>
+                    <td className="px-3 py-2 text-center font-medium">{assignment.total_points}</td>
+                    <td className="px-3 py-2 text-center">{assignment.passing_score}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={`px-2 py-0.5 rounded text-xs ${
+                        assignment.status === 'published' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {assignment.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-1 justify-center">
+                        <button
+                          onClick={() => handleManageQuestions(assignment.id)}
+                          className="p-1.5 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                          title="Quản lý câu hỏi"
+                        >
+                          <List className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleEdit(assignment)}
+                          className="p-1.5 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+                          title="Sửa"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(assignment.id)}
+                          className="p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                          title="Xóa"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ) : (
-                  assignments.map((assignment, idx) => (
-                    <tr key={assignment.id} className="border-t hover:bg-gray-50">
-                      <td className="px-4 py-3">{idx + 1}</td>
-                      <td className="px-4 py-3 text-sm">{assignment.video_title}</td>
-                      <td className="px-4 py-3 font-medium">{assignment.assignment_title}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">
-                          {assignment.assignment_type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">{assignment.question_count || 0}</td>
-                      <td className="px-4 py-3 text-center">{assignment.total_points}</td>
-                      <td className="px-4 py-3 text-center">{assignment.passing_score}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`px-2 py-1 rounded text-sm ${
-                          assignment.status === 'published' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {assignment.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex gap-2 justify-center">
-                          <button
-                            onClick={() => handleManageQuestions(assignment.id)}
-                            className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm"
-                          >
-                            Câu hỏi
-                          </button>
-                          <button
-                            onClick={() => handleEdit(assignment)}
-                            className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm"
-                          >
-                            Sửa
-                          </button>
-                          <button
-                            onClick={() => handleDelete(assignment.id)}
-                            className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm"
-                          >
-                            Xóa
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         )}
+      </Card>
 
-        {/* Modal */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <h2 className="text-2xl font-bold mb-4">
-                  {editingId ? 'Chỉnh sửa Assignment' : 'Tạo Assignment mới'}
-                </h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block mb-1 font-medium">Video ID *</label>
-                      <input
-                        type="number"
-                        required
-                        value={formData.video_id}
-                        onChange={e => setFormData({...formData, video_id: e.target.value})}
-                        className="w-full border rounded px-3 py-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block mb-1 font-medium">Loại *</label>
-                      <select
-                        value={formData.assignment_type}
-                        onChange={e => setFormData({...formData, assignment_type: e.target.value})}
-                        className="w-full border rounded px-3 py-2"
-                      >
-                        <option value="quiz">Quiz</option>
-                        <option value="test">Test</option>
-                        <option value="exam">Exam</option>
-                        <option value="practice">Practice</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block mb-1 font-medium">Tên Assignment *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.assignment_title}
-                      onChange={e => setFormData({...formData, assignment_title: e.target.value})}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1 font-medium">Mô tả</label>
-                    <textarea
-                      value={formData.description}
-                      onChange={e => setFormData({...formData, description: e.target.value})}
-                      className="w-full border rounded px-3 py-2"
-                      rows={3}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-4 gap-4">
-                    <div>
-                      <label className="block mb-1 font-medium">Điểm tối đa</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={formData.total_points}
-                        onChange={e => setFormData({...formData, total_points: e.target.value})}
-                        className="w-full border rounded px-3 py-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block mb-1 font-medium">Điểm đạt</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={formData.passing_score}
-                        onChange={e => setFormData({...formData, passing_score: e.target.value})}
-                        className="w-full border rounded px-3 py-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block mb-1 font-medium">Thời gian (phút)</label>
-                      <input
-                        type="number"
-                        value={formData.time_limit_minutes}
-                        onChange={e => setFormData({...formData, time_limit_minutes: e.target.value})}
-                        className="w-full border rounded px-3 py-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block mb-1 font-medium">Số lần làm</label>
-                      <input
-                        type="number"
-                        value={formData.max_attempts}
-                        onChange={e => setFormData({...formData, max_attempts: e.target.value})}
-                        className="w-full border rounded px-3 py-2"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block mb-1 font-medium">Hạn nộp</label>
-                      <input
-                        type="date"
-                        value={formData.due_date}
-                        onChange={e => setFormData({...formData, due_date: e.target.value})}
-                        className="w-full border rounded px-3 py-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block mb-1 font-medium">Trạng thái</label>
-                      <select
-                        value={formData.status}
-                        onChange={e => setFormData({...formData, status: e.target.value})}
-                        className="w-full border rounded px-3 py-2"
-                      >
-                        <option value="draft">Draft</option>
-                        <option value="published">Published</option>
-                        <option value="closed">Closed</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_required}
-                      onChange={e => setFormData({...formData, is_required: e.target.checked})}
-                      className="mr-2"
-                    />
-                    <label>Bắt buộc hoàn thành</label>
-                  </div>
-
-                  <div className="flex gap-3 justify-end">
-                    <button
-                      type="button"
-                      onClick={() => { setShowModal(false); resetForm(); }}
-                      className="px-4 py-2 border rounded hover:bg-gray-100"
-                    >
-                      Hủy
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                    >
-                      {editingId ? 'Cập nhật' : 'Tạo mới'}
-                    </button>
-                  </div>
-                </form>
-              </div>
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">
+                {editingId ? 'Chỉnh sửa Assignment' : 'Tạo Assignment mới'}
+              </h2>
+              <button
+                onClick={() => { setShowModal(false); resetForm(); }}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
+            
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1 text-sm font-medium">Video ID *</label>
+                  <input
+                    type="number"
+                    required
+                    value={formData.video_id}
+                    onChange={e => setFormData({...formData, video_id: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 text-sm font-medium">Loại *</label>
+                  <select
+                    value={formData.assignment_type}
+                    onChange={e => setFormData({...formData, assignment_type: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+                  >
+                    <option value="quiz">Quiz</option>
+                    <option value="test">Test</option>
+                    <option value="exam">Exam</option>
+                    <option value="practice">Practice</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block mb-1 text-sm font-medium">Tên Assignment *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.assignment_title}
+                  onChange={e => setFormData({...formData, assignment_title: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1 text-sm font-medium">Mô tả</label>
+                <textarea
+                  value={formData.description}
+                  onChange={e => setFormData({...formData, description: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+                  rows={2}
+                />
+              </div>
+
+              <div className="grid grid-cols-4 gap-3">
+                <div>
+                  <label className="block mb-1 text-sm font-medium">Điểm tối đa</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.total_points}
+                    onChange={e => setFormData({...formData, total_points: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 text-sm font-medium">Điểm đạt</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.passing_score}
+                    onChange={e => setFormData({...formData, passing_score: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 text-sm font-medium">TG (phút)</label>
+                  <input
+                    type="number"
+                    value={formData.time_limit_minutes}
+                    onChange={e => setFormData({...formData, time_limit_minutes: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 text-sm font-medium">Số lần</label>
+                  <input
+                    type="number"
+                    value={formData.max_attempts}
+                    onChange={e => setFormData({...formData, max_attempts: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1 text-sm font-medium">Hạn nộp</label>
+                  <input
+                    type="date"
+                    value={formData.due_date}
+                    onChange={e => setFormData({...formData, due_date: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 text-sm font-medium">Trạng thái</label>
+                  <select
+                    value={formData.status}
+                    onChange={e => setFormData({...formData, status: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="published">Published</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.is_required}
+                  onChange={e => setFormData({...formData, is_required: e.target.checked})}
+                  className="mr-2"
+                />
+                <label className="text-sm">Bắt buộc hoàn thành</label>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowModal(false); resetForm(); }}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#a1001f] hover:bg-[#c41230] text-white rounded-lg text-sm font-semibold transition-colors"
+                >
+                  {editingId ? 'Cập nhật' : 'Tạo mới'}
+                </button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+    </PageContainer>
   );
 }

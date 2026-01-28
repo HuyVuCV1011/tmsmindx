@@ -158,7 +158,7 @@ export default function GiaiTrinhPage() {
     }
   };
 
-  // Fetch danh sách giải thích của user
+  // Fetch danh sách giải trình của user
   const fetchExplanations = async () => {
     try {
       const response = await fetch(`/api/explanations?email=${user?.email}`);

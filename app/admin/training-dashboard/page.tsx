@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { Card } from '@/components/Card';
+import { EmptyState } from '@/components/EmptyState';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { PageContainer } from '@/components/PageContainer';
+import { Tabs } from '@/components/Tabs';
+import { BarChart3, Calendar, Play, Video } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface Video {
   id: number;
@@ -78,109 +84,93 @@ export default function TrainingDashboardPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Thống kê đào tạo nâng cao</h1>
-        <div className="flex gap-6 border-b mb-8">
-          <button
-            className={`pb-2 border-b-2 font-bold ${tab === 'assigned' ? 'border-blue-500 text-blue-700' : 'border-transparent text-gray-500'}`}
-            onClick={() => setTab('assigned')}
-          >Video đã giao</button>
-          <button
-            className={`pb-2 border-b-2 font-bold ${tab === 'dashboard' ? 'border-yellow-500 text-yellow-700' : 'border-transparent text-gray-500'}`}
-            onClick={() => setTab('dashboard')}
-          >Thống kê</button>
-        </div>
+    <PageContainer
+      title="Thống kê đào tạo nâng cao"
+      description="Theo dõi tiến độ và thành tích đào tạo"
+    >
+      <Card>
+        <Tabs
+          tabs={[
+            { id: 'assigned', label: 'Video đã giao', count: assignedVideos.length },
+            { id: 'dashboard', label: 'Thống kê giáo viên', count: dashboardData.length },
+          ]}
+          activeTab={tab}
+          onChange={(id) => setTab(id as 'assigned' | 'dashboard')}
+        />
 
         {/* Tab 1: Video đã assigned */}
         {tab === 'assigned' && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold mb-4 text-blue-700">Danh sách bài học</h2>
+          <div className="mt-4">
             {loading ? (
-              <div className="text-center py-8">Đang tải dữ liệu...</div>
+              <LoadingSpinner />
             ) : error ? (
-              <div className="text-red-500 text-center py-8">{error}</div>
+              <div className="text-red-600 text-center py-8">{error}</div>
             ) : assignedVideos.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                Chưa có bài học nào được giao
-              </div>
+              <EmptyState
+                icon={Video}
+                title="Chưa có bài học"
+                description="Chưa có bài học nào được giao cho giáo viên"
+              />
             ) : (
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 gap-3">
                 {assignedVideos.map((v, idx) => (
                   <div 
                     key={v.id} 
-                    className="flex gap-4 p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow cursor-pointer"
+                    className="flex gap-3 p-3 border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
                     onClick={() => window.open(v.video_link, '_blank')}
                   >
                     {/* Thumbnail */}
                     <div className="flex-shrink-0 relative">
-                      <div className="w-40 h-24 bg-gray-200 rounded-lg overflow-hidden">
+                      <div className="w-32 h-20 bg-gray-100 rounded-lg overflow-hidden">
                         {v.thumbnail_url ? (
                           <img 
                             src={v.thumbnail_url} 
                             alt={v.title}
                             className="w-full h-full object-cover"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiIGZpbGw9IiNlNWU3ZWIiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzljYTNhZiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0Ij5WaWRlbzwvdGV4dD48L3N2Zz4=';
-                            }}
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-100 to-blue-200">
-                            <svg className="w-12 h-12 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" />
-                            </svg>
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Play className="h-8 w-8 text-gray-400" />
                           </div>
                         )}
                       </div>
-                      {/* Duration badge */}
                       {v.duration_minutes && (
-                        <div className="absolute bottom-1 right-1 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
-                          {v.duration_minutes} phút
+                        <div className="absolute bottom-1 right-1 bg-black/75 text-white text-xs px-1.5 py-0.5 rounded">
+                          {v.duration_minutes}p
                         </div>
                       )}
                     </div>
 
                     {/* Video Info */}
                     <div className="flex-grow min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-start justify-between gap-2 mb-1">
                         <div className="flex-grow">
-                          <h3 className="font-semibold text-gray-900 line-clamp-2 mb-1">
+                          <h3 className="font-semibold text-sm text-gray-900 line-clamp-2">
                             {v.title}
                           </h3>
                           {v.lesson_number && (
-                            <span className="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded">
-                              LESSON {v.lesson_number.toString().padStart(2, '0')}
+                            <span className="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded mt-1">
+                              L{v.lesson_number.toString().padStart(2, '0')}
                             </span>
                           )}
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                          v.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {v.status === 'active' ? '✓ Đã giao' : 'Chưa giao'}
+                        <span className="px-2 py-1 rounded bg-green-100 text-green-800 text-xs font-medium whitespace-nowrap">
+                          Đã giao
                         </span>
                       </div>
                       
                       {v.description && (
-                        <p className="text-sm text-gray-600 line-clamp-2 mb-2">
+                        <p className="text-xs text-gray-600 line-clamp-1 mb-1">
                           {v.description}
                         </p>
                       )}
                       
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
+                      <div className="flex items-center gap-3 text-xs text-gray-500">
                         <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
+                          <Calendar className="h-3 w-3" />
                           {new Date(v.start_date).toLocaleDateString('vi-VN')}
                         </span>
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Video #{idx + 1}
-                        </span>
+                        <span>Video #{idx + 1}</span>
                       </div>
                     </div>
                   </div>
@@ -192,80 +182,82 @@ export default function TrainingDashboardPage() {
 
         {/* Tab 2: Dashboard thống kê */}
         {tab === 'dashboard' && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold mb-4 text-yellow-700">Thống kê</h2>
-            <div className="flex gap-4 items-center mb-4">
-              <label className="font-medium">Lọc theo cơ sở:</label>
-              <select value={centerFilter} onChange={e => setCenterFilter(e.target.value)} className="border px-2 py-1 rounded">
+          <div className="mt-4">
+            <div className="flex gap-3 items-center mb-4">
+              <label className="text-sm font-medium">Lọc theo cơ sở:</label>
+              <select 
+                value={centerFilter} 
+                onChange={e => setCenterFilter(e.target.value)} 
+                className="border border-gray-300 px-3 py-1.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+              >
                 <option value="">Tất cả</option>
                 {centers.map(center => (
                   <option key={center} value={center}>{center}</option>
                 ))}
               </select>
             </div>
+            
             {loading ? (
-              <div className="text-center py-8">Đang tải dữ liệu...</div>
+              <LoadingSpinner />
             ) : error ? (
-              <div className="text-red-500 text-center py-8">{error}</div>
+              <div className="text-red-600 text-center py-8">{error}</div>
+            ) : filteredDashboard.length === 0 ? (
+              <EmptyState
+                icon={BarChart3}
+                title="Chưa có dữ liệu"
+                description="Chưa có thống kê nào được ghi nhận"
+              />
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-300">
-                  <thead className="bg-gray-100">
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-y border-gray-200">
                     <tr>
-                      <th className="border border-gray-300 px-4 py-2">No</th>
-                      <th className="border border-gray-300 px-4 py-2">Full name</th>
-                      <th className="border border-gray-300 px-4 py-2">Code</th>
-                      <th className="border border-gray-300 px-4 py-2">Cơ sở</th>
-                      <th className="border border-gray-300 px-4 py-2">Điểm tổng kết</th>
-                      <th className="border border-gray-300 px-4 py-2">Video đã assigned</th>
-                      <th className="border border-gray-300 px-4 py-2">Video hoàn thành</th>
-                      <th className="border border-gray-300 px-4 py-2">Điểm TB Video</th>
-                      <th className="border border-gray-300 px-4 py-2">Assignment hoàn thành</th>
-                      <th className="border border-gray-300 px-4 py-2">Điểm TB Assignment</th>
+                      <th className="px-3 py-2 text-left font-semibold">No</th>
+                      <th className="px-3 py-2 text-left font-semibold">Họ tên</th>
+                      <th className="px-3 py-2 text-left font-semibold">Mã GV</th>
+                      <th className="px-3 py-2 text-left font-semibold">Cơ sở</th>
+                      <th className="px-3 py-2 text-center font-semibold">Điểm TK</th>
+                      <th className="px-3 py-2 text-center font-semibold">Video</th>
+                      <th className="px-3 py-2 text-center font-semibold">Hoàn thành</th>
+                      <th className="px-3 py-2 text-center font-semibold">ĐTB Video</th>
+                      <th className="px-3 py-2 text-center font-semibold">Assignment</th>
+                      <th className="px-3 py-2 text-center font-semibold">ĐTB Assgn</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {filteredDashboard.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="border border-gray-300 px-4 py-8 text-center text-gray-500">
-                          Chưa có dữ liệu thống kê
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredDashboard.map((row, idx) => (
+                      <tr key={row.teacher_code} className="hover:bg-gray-50">
+                        <td className="px-3 py-2">{idx + 1}</td>
+                        <td className="px-3 py-2 font-medium">{row.full_name}</td>
+                        <td className="px-3 py-2">{row.teacher_code}</td>
+                        <td className="px-3 py-2 text-xs">{row.center || '-'}</td>
+                        <td className="px-3 py-2 text-center font-bold">
+                          {row.total_score ? Number(row.total_score).toFixed(2) : '0.00'}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {row.total_videos_assigned || 0}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {row.videos_completed || 0}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {row.avg_video_score ? Number(row.avg_video_score).toFixed(2) : '-'}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {row.assignments_passed || 0}/{row.total_assignments_taken || 0}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {row.avg_assignment_score ? Number(row.avg_assignment_score).toFixed(2) : '-'}
                         </td>
                       </tr>
-                    ) : (
-                      filteredDashboard.map((row, idx) => (
-                        <tr key={row.teacher_code} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="border border-gray-300 px-4 py-2">{idx + 1}</td>
-                          <td className="border border-gray-300 px-4 py-2">{row.full_name}</td>
-                          <td className="border border-gray-300 px-4 py-2">{row.teacher_code}</td>
-                          <td className="border border-gray-300 px-4 py-2">{row.center || '-'}</td>
-                          <td className="border border-gray-300 px-4 py-2 font-bold text-center">
-                            {row.total_score ? Number(row.total_score).toFixed(2) : '0.00'}
-                          </td>
-                          <td className="border border-gray-300 px-4 py-2 text-center">
-                            {row.total_videos_assigned || 0}
-                          </td>
-                          <td className="border border-gray-300 px-4 py-2 text-center">
-                            {row.videos_completed || 0}
-                          </td>
-                          <td className="border border-gray-300 px-4 py-2 text-center">
-                            {row.avg_video_score ? Number(row.avg_video_score).toFixed(2) : '-'}
-                          </td>
-                          <td className="border border-gray-300 px-4 py-2 text-center">
-                            {row.assignments_passed || 0}/{row.total_assignments_taken || 0}
-                          </td>
-                          <td className="border border-gray-300 px-4 py-2 text-center">
-                            {row.avg_assignment_score ? Number(row.avg_assignment_score).toFixed(2) : '-'}
-                          </td>
-                        </tr>
-                      ))
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
         )}
-      </div>
-    </div>
+      </Card>
+    </PageContainer>
   );
 }
