@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import Link from 'next/link'
+import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -41,12 +42,6 @@ export default function EditPostPage() {
         status: 'draft',
         audience: 'toàn-công-ty',
         publishDate: '',
-    })
-
-    const [colors, setColors] = useState({
-        title: '#000000',
-        description: '#666666',
-        content: '#000000'
     })
 
     const [errors, setErrors] = useState<Record<string, string>>({})
@@ -209,7 +204,6 @@ export default function EditPostPage() {
                                             if (errors.title) setErrors({ ...errors, title: '' })
                                         }}
                                         className={`focus-visible:ring-primary/50 transition-all h-11 ${errors.title ? 'border-red-500 bg-red-50/30 focus-visible:ring-red-500/20 shadow-sm shadow-red-100' : ''}`}
-                                        style={{ color: colors.title }}
                                     />
                                     {errors.title && (
                                         <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">
@@ -232,7 +226,6 @@ export default function EditPostPage() {
                                             if (errors.description) setErrors({ ...errors, description: '' })
                                         }}
                                         className={`focus-visible:ring-primary/50 transition-all h-11 ${errors.description ? 'border-red-500 bg-red-50/30 focus-visible:ring-red-500/20 shadow-sm shadow-red-100' : ''}`}
-                                        style={{ color: colors.description }}
                                     />
                                     {errors.description && (
                                         <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">
@@ -253,7 +246,6 @@ export default function EditPostPage() {
                                             if (errors.content) setErrors({ ...errors, content: '' })
                                         }}
                                         error={errors.content}
-                                        textColor={colors.content}
                                     />
                                     {errors.content && (
                                         <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">
@@ -276,7 +268,7 @@ export default function EditPostPage() {
                                     {postData?.featured_image && (
                                         <div className="mb-2">
                                             <p className="text-xs text-muted-foreground mb-1">Hiện tại:</p>
-                                            <img src={postData.featured_image} alt="Thumbnail cũ" className="h-20 w-auto object-cover rounded" />
+                                            <Image src={postData.featured_image} alt="Thumbnail cũ" width={80} height={80} className="h-20 w-auto object-cover rounded" />
                                         </div>
                                     )}
                                     <Input
@@ -292,7 +284,7 @@ export default function EditPostPage() {
                                     {postData?.banner_image && (
                                         <div className="mb-2">
                                             <p className="text-xs text-muted-foreground mb-1">Hiện tại:</p>
-                                            <img src={postData.banner_image} alt="Banner cũ" className="h-20 w-auto object-cover rounded" />
+                                            <Image src={postData.banner_image} alt="Banner cũ" width={80} height={80} className="h-20 w-auto object-cover rounded" />
                                         </div>
                                     )}
                                     <Input

@@ -71,7 +71,7 @@ export default function PostsManagementPage() {
             toast.success('Đã xóa bài viết thành công')
             mutate(posts?.filter(p => p.slug !== postToDelete), false) // Optimistic update
             setDeleteModalOpen(false)
-        } catch (err) {
+        } catch {
             toast.error('Có lỗi xảy ra khi xóa bài viết')
             mutate() // Revert on error
         } finally {
@@ -81,7 +81,7 @@ export default function PostsManagementPage() {
     }
 
     const getStatusBadge = (status: string) => {
-        const variants = {
+        const variants: Record<string, "default" | "secondary" | "outline" | "destructive" | null | undefined> = {
             draft: 'secondary',
             published: 'default',
             hidden: 'outline',
@@ -92,7 +92,7 @@ export default function PostsManagementPage() {
             hidden: 'Ẩn',
         }
         return (
-            <Badge variant={variants[status as keyof typeof variants] as any}>
+            <Badge variant={variants[status] || 'default'}>
                 {labels[status as keyof typeof labels] || status}
             </Badge>
         )
