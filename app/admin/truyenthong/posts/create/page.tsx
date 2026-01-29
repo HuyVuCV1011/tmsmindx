@@ -70,7 +70,6 @@ export default function CreatePostPage() {
         const newErrors: Record<string, string> = {}
         if (!formData.title.trim()) newErrors.title = 'Tiêu đề không được để trống'
         if (!formData.description.trim()) newErrors.description = 'Mô tả ngắn không được để trống'
-        if (!formData.publishDate) newErrors.publishDate = 'Ngày đăng không được để trống'
         if (!formData.content.trim()) newErrors.content = 'Nội dung không được để trống'
 
         if (Object.keys(newErrors).length > 0) {
@@ -343,23 +342,18 @@ export default function CreatePostPage() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="publishDate" className={`${errors.publishDate ? 'text-red-500' : ''} font-medium`}>Ngày đăng</Label>
+                                    <Label htmlFor="publishDate" className="font-medium">
+                                        Ngày đăng <span className="text-xs text-muted-foreground font-normal">(để trống = ngày giờ hiện tại)</span>
+                                    </Label>
                                     <Input
                                         id="publishDate"
                                         type="datetime-local"
                                         value={formData.publishDate}
                                         onChange={e => {
                                             setFormData({ ...formData, publishDate: e.target.value })
-                                            if (errors.publishDate) setErrors({ ...errors, publishDate: '' })
                                         }}
-                                        className={`cursor-pointer rounded-xl h-11 focus-visible:ring-primary/50 ${errors.publishDate ? 'border-red-500 bg-red-50/30 focus-visible:ring-red-500/20 shadow-sm shadow-red-100' : ''}`}
+                                        className="cursor-pointer rounded-xl h-11 focus-visible:ring-primary/50"
                                     />
-                                    {errors.publishDate && (
-                                        <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">
-                                            <AlertCircle className="w-3.5 h-3.5" />
-                                            <span className="text-[11px] font-medium leading-none">{errors.publishDate}</span>
-                                        </div>
-                                    )}
                                 </div>
                             </CardContent>
                         </Card>

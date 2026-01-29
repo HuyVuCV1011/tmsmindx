@@ -12,6 +12,7 @@ const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 interface RecentPost {
     id: number
+    slug: string
     title: string
     published_at: string
     view_count: number
@@ -121,7 +122,7 @@ export default function AdminDashboard() {
                         {statsData?.recentPosts && statsData.recentPosts.length > 0 ? (
                             statsData.recentPosts.map((post) => (
                                 <Link
-                                    href={`/admin/truyenthong/posts/${post.id}/edit`}
+                                    href={`/admin/truyenthong/posts/${post.slug}/edit`}
                                     key={post.id}
                                     className="flex items-center justify-between p-4 border border-border rounded-xl hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer group"
                                 >

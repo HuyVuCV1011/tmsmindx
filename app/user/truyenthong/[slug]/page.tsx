@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import PostCard from '@/components/post-card'
+import Comments from '@/components/Comments'
 import { useParams } from 'next/navigation'
 
 import { useAuth } from '@/lib/auth-context'
 
 interface Post {
     id: string | number
+    slug: string
     title: string
     description: string
     content: string
@@ -35,21 +37,22 @@ export default function PostDetailPage() {
     const [post, setPost] = useState<Post | null>(null)
     const [loading, setLoading] = useState(true)
     const [liked, setLiked] = useState(false)
+    const [isLiking, setIsLiking] = useState(false) // Prevent multiple clicks
 
     useEffect(() => {
         const fetchPost = async () => {
-            if (!params?.id) return
+            if (!params?.slug) return
             try {
                 // Fetch post details with user ID to check if liked
                 const userIdParam = user?.localId ? `?userId=${user.localId}` : ''
-                const res = await fetch(`/api/truyenthong/posts/${params.id}${userIdParam}`)
+                const res = await fetch(`/api/truyenthong/posts/${params.slug}${userIdParam}`)
                 if (!res.ok) throw new Error('Failed to fetch post')
                 const data = await res.json()
                 setPost(data)
                 setLiked(!!data.isLiked)
 
                 // Increment view count on load (only once per session normally, simplified here)
-                fetch(`/api/truyenthong/posts/${params.id}/view`, { method: 'POST' })
+                fetch(`/api/truyenthong/posts/${params.slug}/view`, { method: 'POST' })
             } catch (error) {
                 console.error('Error fetching post:', error)
             } finally {
@@ -57,28 +60,60 @@ export default function PostDetailPage() {
             }
         }
         fetchPost()
-    }, [params?.id, user?.localId])
+    }, [params?.slug, user?.localId])
 
     const handleLike = async () => {
+        // Prevent multiple clicks - nếu đang xử lý thì return
+        if (isLiking) return
+        
         if (!post || !user?.localId) {
             if (!user) alert('Vui lòng đăng nhập để thích bài viết')
             return
         }
 
+        // Set flag đang xử lý
+        setIsLiking(true)
+
+        // Optimistic update: Cập nhật UI ngay lập tức
+        const previousLiked = liked
+        const previousLikeCount = post.like_count
+
+        // Toggle liked state và update like count ngay
+        const newLikedState = !previousLiked
+        const newLikeCount = newLikedState ? previousLikeCount + 1 : previousLikeCount - 1
+        
+        setLiked(newLikedState)
+        setPost(prev => prev ? { ...prev, like_count: newLikeCount } : null)
+
+        // Gửi request đến server ở background
         try {
-            const res = await fetch(`/api/truyenthong/posts/${post.id}/like`, {
+            const res = await fetch(`/api/truyenthong/posts/${post.slug}/like`, {
                 method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify({ userId: user.localId })
             })
 
             if (res.ok) {
                 const data = await res.json()
+                // Sync lại với server response (trong trường hợp có sai lệch)
                 setLiked(data.isLiked)
-                // Update local state to reflect new like count
                 setPost(prev => prev ? { ...prev, like_count: data.like_count } : null)
+            } else {
+                // Nếu API fail, revert lại state cũ
+                setLiked(previousLiked)
+                setPost(prev => prev ? { ...prev, like_count: previousLikeCount } : null)
+                throw new Error('Failed to like post')
             }
         } catch (error) {
+            // Revert lại state cũ nếu có lỗi
+            setLiked(previousLiked)
+            setPost(prev => prev ? { ...prev, like_count: previousLikeCount } : null)
             console.error('Error liking post:', error)
+        } finally {
+            // Release flag sau khi xử lý xong
+            setIsLiking(false)
         }
     }
 
@@ -174,15 +209,17 @@ export default function PostDetailPage() {
                             <Button
                                 variant="outline"
                                 onClick={handleLike}
+                                disabled={isLiking}
                                 className={`gap-2 transition-all duration-300 transform active:scale-95 group shadow-sm
                                     ${liked
                                         ? 'bg-rose-50 border-rose-200 text-rose-500 opacity-70 hover:opacity-90'
                                         : 'hover:bg-rose-500 hover:text-white hover:border-rose-500 active:bg-rose-600'
-                                    }`}
+                                    }
+                                    ${isLiking ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
-                                <Heart className={`w-4 h-4 transition-colors ${liked ? 'fill-rose-500 text-rose-500' : 'group-hover:fill-current'}`} />
+                                <Heart className={`w-4 h-4 transition-colors ${liked ? 'fill-rose-500 text-rose-500' : 'group-hover:fill-current'} ${isLiking ? 'animate-pulse' : ''}`} />
                                 <span className="font-medium cursor-pointer">
-                                    {liked ? 'Đã thích bài viết' : 'Thích bài viết'}
+                                    {isLiking ? 'Đang xử lý...' : liked ? 'Đã thích bài viết' : 'Thích bài viết'}
                                 </span>
                             </Button>
                         </div>
@@ -211,6 +248,15 @@ export default function PostDetailPage() {
                         </Card>
                     </aside>
                 </div>
+
+                {/* Comments Section */}
+                <Comments 
+                    postSlug={post.slug}
+                    currentUserId={user?.localId}
+                    currentUserName={user?.displayName || user?.email}
+                    currentUserEmail={user?.email}
+                    isAdmin={user?.isAdmin}
+                />
 
                 {/* Related Posts */}
                 <section className="mt-16 border-t border-border pt-8">

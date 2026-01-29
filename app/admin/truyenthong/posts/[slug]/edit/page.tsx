@@ -24,11 +24,11 @@ const fetcher = (url: string) => fetch(url).then(r => r.json())
 export default function EditPostPage() {
     const router = useRouter()
     const params = useParams()
-    const id = params?.id
+    const slug = params?.slug
 
     // Using SWR for initial data fetch
     const { data: postData, error, isLoading: isFetching } = useSWR(
-        id ? `/api/truyenthong/posts/${id}` : null,
+        slug ? `/api/truyenthong/posts/${slug}` : null,
         fetcher
     )
 
@@ -133,7 +133,7 @@ export default function EditPostPage() {
                 banner_image
             }
 
-            const res = await fetch(`/api/truyenthong/posts/${id}`, {
+            const res = await fetch(`/api/truyenthong/posts/${slug}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json'
@@ -199,15 +199,6 @@ export default function EditPostPage() {
                                 <div className="space-y-2 group">
                                     <div className="flex items-center justify-between">
                                         <Label htmlFor="title" className={`${errors.title ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Tiêu đề</Label>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-muted-foreground">Màu sắc:</span>
-                                            <input
-                                                type="color"
-                                                value={colors.title}
-                                                onChange={e => setColors({ ...colors, title: e.target.value })}
-                                                className="h-8 w-12 rounded cursor-pointer border border-border"
-                                            />
-                                        </div>
                                     </div>
                                     <Input
                                         id="title"
@@ -231,15 +222,6 @@ export default function EditPostPage() {
                                 <div className="space-y-2 group">
                                     <div className="flex items-center justify-between">
                                         <Label htmlFor="description" className={`${errors.description ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Mô tả ngắn</Label>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-muted-foreground">Màu sắc:</span>
-                                            <input
-                                                type="color"
-                                                value={colors.description}
-                                                onChange={e => setColors({ ...colors, description: e.target.value })}
-                                                className="h-8 w-12 rounded cursor-pointer border border-border"
-                                            />
-                                        </div>
                                     </div>
                                     <Input
                                         id="description"
@@ -263,15 +245,6 @@ export default function EditPostPage() {
                                 <div className="space-y-2 group">
                                     <div className="flex items-center justify-between">
                                         <Label htmlFor="content" className={`${errors.content ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Nội dung bài viết</Label>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-muted-foreground">Màu sắc chữ:</span>
-                                            <input
-                                                type="color"
-                                                value={colors.content}
-                                                onChange={e => setColors({ ...colors, content: e.target.value })}
-                                                className="h-8 w-12 rounded cursor-pointer border border-border"
-                                            />
-                                        </div>
                                     </div>
                                     <RichTextEditor
                                         content={formData.content}

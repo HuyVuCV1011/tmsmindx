@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { generateSlug } from '@/lib/utils';
 
 export async function GET(request: Request) {
     try {
@@ -75,13 +76,25 @@ export async function POST(request: Request) {
                 );
             }
 
+            // Generate slug from title
+            let slug = generateSlug(title);
+            
+            // Ensure slug is unique by appending number if needed
+            let slugExists = await client.query('SELECT 1 FROM communications WHERE slug = $1', [slug]);
+            let counter = 1;
+            while (slugExists.rows.length > 0) {
+                slug = `${generateSlug(title)}-${counter}`;
+                slugExists = await client.query('SELECT 1 FROM communications WHERE slug = $1', [slug]);
+                counter++;
+            }
+
             const result = await client.query(
                 `INSERT INTO communications (
-          title, description, content, featured_image, banner_image, 
+          title, slug, description, content, featured_image, banner_image, 
           post_type, audience, status, published_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
                 [
-                    title, description, content, featured_image, banner_image,
+                    title, slug, description, content, featured_image, banner_image,
                     post_type, audience, status, published_at || new Date()
                 ]
             );

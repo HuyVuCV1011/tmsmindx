@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { X } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 
 const Dialog = ({
@@ -13,20 +13,27 @@ const Dialog = ({
     onOpenChange?: (open: boolean) => void
     children: React.ReactNode
 }) => {
-    if (!open) return null
+    const [mounted, setMounted] = React.useState(false)
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            {/* Backdrop */}
+    React.useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    if (!open || !mounted) return null
+
+    return createPortal(
+        <div className="fixed inset-0 z-9999 flex items-center justify-center opacity-100">
+            {/* Backdrop with stronger blur and opacity */}
             <div
-                className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-all duration-100 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=open]:fade-in"
+                className="fixed inset-0 backdrop-blur-xs backdrop-saturate-150 transition-all duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=open]:fade-in opacity-100"
                 onClick={() => onOpenChange?.(false)}
             />
             {/* Content Container - z-index higher than backdrop */}
-            <div className="z-50 w-full max-w-lg p-4 sm:p-0 flex items-center justify-center pointer-events-none">
+            <div className="z-10000 w-full max-w-lg p-4 sm:p-0 flex items-center justify-center pointer-events-none opacity-100">
                 {children}
             </div>
-        </div>
+        </div>,
+        document.body
     )
 }
 
@@ -37,7 +44,7 @@ const DialogContent = React.forwardRef<
     <div
         ref={ref}
         className={cn(
-            "pointer-events-auto relative grid w-full gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg md:w-full",
+            "pointer-events-auto relative grid w-full gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg md:w-full opacity-100",
             "animate-in fade-in-0 zoom-in-95 slide-in-from-left-1/2 slide-in-from-top-[48%]",
             className
         )}

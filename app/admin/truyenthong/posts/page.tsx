@@ -21,6 +21,7 @@ import DeleteConfirmationModal from '@/components/delete-confirmation-modal'
 
 interface Post {
     id: number
+    slug: string
     title: string
     post_type: string
     status: 'draft' | 'published' | 'hidden'
@@ -40,18 +41,18 @@ export default function PostsManagementPage() {
     if (filterStatus !== 'all') queryParams.append('status', filterStatus)
     if (searchTerm) queryParams.append('search', searchTerm)
 
-    const { data: posts, error, isLoading, mutate } = useSWR<Post[]>(
+    const { data: posts, isLoading, mutate } = useSWR<Post[]>(
         `/api/truyenthong/posts?${queryParams.toString()}`,
         fetcher
     )
 
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-    const [postToDelete, setPostToDelete] = useState<number | null>(null)
+    const [postToDelete, setPostToDelete] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
 
     // Open modal
-    const handleDeleteClick = (id: number) => {
-        setPostToDelete(id)
+    const handleDeleteClick = (slug: string) => {
+        setPostToDelete(slug)
         setDeleteModalOpen(true)
     }
 
@@ -68,7 +69,7 @@ export default function PostsManagementPage() {
             if (!res.ok) throw new Error('Failed to delete')
 
             toast.success('Đã xóa bài viết thành công')
-            mutate(posts?.filter(p => p.id !== postToDelete), false) // Optimistic update
+            mutate(posts?.filter(p => p.slug !== postToDelete), false) // Optimistic update
             setDeleteModalOpen(false)
         } catch (err) {
             toast.error('Có lỗi xảy ra khi xóa bài viết')
@@ -190,7 +191,7 @@ export default function PostsManagementPage() {
                                         <TableCell>{post.view_count?.toLocaleString('vi-VN') || 0}</TableCell>
                                         <TableCell className="text-right space-x-1">
                                             {/* Link to Edit Page - assuming standardized route */}
-                                            <Link href={`/admin/truyenthong/posts/${post.id}/edit`}>
+                                            <Link href={`/admin/truyenthong/posts/${post.slug}/edit`}>
                                                 <Button variant="ghost" size="sm" className="hover:bg-blue-50 hover:text-blue-600 transition-colors cursor-pointer">
                                                     <Edit2 className="w-4 h-4" />
                                                 </Button>
@@ -198,7 +199,7 @@ export default function PostsManagementPage() {
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                onClick={() => handleDeleteClick(post.id)}
+                                                onClick={() => handleDeleteClick(post.slug)}
                                                 className="hover:bg-red-50 hover:text-red-600 transition-colors cursor-pointer"
                                             >
                                                 <Trash2 className="w-4 h-4 text-destructive" />

@@ -11,6 +11,7 @@ import PostCard from '@/components/post-card'
 
 interface Post {
     id: string | number
+    slug: string
     title: string
     description: string
     content: string
