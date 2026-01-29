@@ -17,8 +17,8 @@ Hệ thống cho phép giáo viên gửi giải trình không tham gia kiểm tr
 - `app/api/send-explanation-email/route.ts` - Gửi email thông báo
 
 ### 3. Frontend Pages
-- `app/user/giaithich/page.tsx` - Giao diện cho giáo viên
-- `app/admin/giaithich/page.tsx` - Giao diện cho quản lý
+- `app/user/giaitrinh/page.tsx` - Giao diện cho giáo viên
+- `app/admin/giaitrinh/page.tsx` - Giao diện cho quản lý
 
 ### 4. Library
 - `lib/db.ts` - Connection pool database (đã tạo trước đó)
@@ -97,7 +97,7 @@ Hoặc sử dụng GUI tool như pgAdmin, DBeaver để chạy script.
 ## 🎯 Chức năng
 
 ### Giao diện User (Giáo viên)
-**URL:** `/user/giaithich`
+**URL:** `/user/giaitrinh`
 
 ✅ Tạo giải trình mới với form:
 - Họ và tên
@@ -113,7 +113,7 @@ Hoặc sử dụng GUI tool như pgAdmin, DBeaver để chạy script.
 ✅ Xem ghi chú từ quản lý
 
 ### Giao diện Admin (Quản lý)
-**URL:** `/admin/giaithich`
+**URL:** `/admin/giaitrinh`
 
 ✅ Xem tất cả giải trình của tất cả giáo viên
 ✅ Lọc theo trạng thái (All, Pending, Accepted, Rejected)

@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { NextResponse } from 'next/server';
 
 // GET: Lấy danh sách giải thích
 // Query params: email (để lọc theo user), status (để lọc theo trạng thái)
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: Tạo giải thích mới
+// POST: Tạo giải trình mới
 export async function POST(request: Request) {
   let client;
   
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
   }
 }
 
-// PATCH: Cập nhật trạng thái giải thích (admin)
+// PATCH: Cập nhật trạng thái giải trình (admin)
 export async function PATCH(request: Request) {
   let client;
   

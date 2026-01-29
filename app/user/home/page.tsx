@@ -1,30 +1,31 @@
 "use client";
-import React from "react";
-import "./style.css";
 import CalendarMonth from "@/components/CalendarMonth";
+import { Card } from "@/components/Card";
+import { PageContainer } from "@/components/PageContainer";
 
 const TeacherHomePage = () => {
   return (
-    <div className="teacher-home-container">
-      {/* Carousel Tin tức mới nhất */}
-      <section className="news-carousel-section">
-        <h2 className="section-title">Tin tức mới nhất</h2>
-        <div className="carousel-placeholder">
-          {/* TODO: Thay thế bằng component Carousel thực tế */}
-          <div style={{height: 200, background: '#f3f3f3', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8}}>
-            <span>Carousel Tin tức sẽ hiển thị ở đây</span>
+    <PageContainer
+      title="Trang chủ"
+      description="Thông tin và lịch hoạt động của bạn"
+    >
+      <div className="space-y-6">
+        {/* Carousel Tin tức mới nhất */}
+        <Card title="📰 Tin tức mới nhất" hover>
+          <div className="h-48 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
+            <div className="text-center">
+              <p className="text-gray-600 font-medium">Carousel tin tức sẽ hiển thị ở đây</p>
+              <p className="text-sm text-gray-500 mt-2">Đang phát triển...</p>
+            </div>
           </div>
-        </div>
-      </section>
+        </Card>
 
-      {/* Lịch bảng hoạt động tháng hiện tại */}
-      <section className="calendar-section" style={{marginTop: 32}}>
-        <h2 className="section-title">Lịch hoạt động tháng</h2>
-        <div className="calendar-placeholder">
+        {/* Lịch bảng hoạt động tháng hiện tại */}
+        <Card title="📅 Lịch hoạt động tháng">
           <CalendarMonth />
-        </div>
-      </section>
-    </div>
+        </Card>
+      </div>
+    </PageContainer>
   );
 };
 

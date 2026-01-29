@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     let mailOptions;
     
     if (type === 'new') {
-      // Email khi giáo viên tạo giải thích mới
+      // Email khi giáo viên tạo giải trình mới
       const htmlContent = renderEmailTemplate('new-explanation', {
         teacher_name: explanation.teacher_name,
         lms_code: explanation.lms_code,
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
         html: htmlContent
       };
     } else if (type === 'accepted') {
-      // Email khi admin chấp nhận giải thích
+      // Email khi admin chấp nhận giải trình
       const htmlContent = renderEmailTemplate('accepted-explanation', {
         teacher_name: explanation.teacher_name,
         email: explanation.email,
@@ -84,11 +84,11 @@ export async function POST(request: Request) {
         from: GMAIL_USER,
         to: explanation.email,
         cc: 'academick12@mindx.com.vn',
-        subject: '[MindX | Teaching] Thông báo: Giải thích được chấp nhận',
+        subject: '[MindX | Teaching] Thông báo: Giải trình được chấp nhận',
         html: htmlContent
       };
     } else if (type === 'rejected') {
-      // Email khi admin từ chối giải thích
+      // Email khi admin từ chối giải trình
       const htmlContent = renderEmailTemplate('rejected-explanation', {
         teacher_name: explanation.teacher_name,
         email: explanation.email,
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
         from: GMAIL_USER,
         to: explanation.email,
         cc: 'academick12@mindx.com.vn',
-        subject: '[MindX | Teaching] Thông báo: Giải thích không được chấp nhận',
+        subject: '[MindX | Teaching] Thông báo: Giải trình không được chấp nhận',
         html: htmlContent
       };
     }
