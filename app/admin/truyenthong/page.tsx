@@ -14,6 +14,7 @@ const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 interface RecentPost {
     id: number
+    slug: string
     title: string
     published_at: string
     view_count: number

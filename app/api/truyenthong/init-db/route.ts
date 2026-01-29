@@ -10,6 +10,7 @@ export async function GET() {
         CREATE TABLE IF NOT EXISTS communications (
           id SERIAL PRIMARY KEY,
           title TEXT NOT NULL,
+          slug TEXT UNIQUE NOT NULL,
           description TEXT,
           content TEXT,
           featured_image TEXT,
@@ -23,6 +24,16 @@ export async function GET() {
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- Add slug column if it doesn't exist (for existing tables)
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'communications' AND column_name = 'slug') THEN
+                ALTER TABLE communications ADD COLUMN slug TEXT;
+                -- Create index for better performance
+                CREATE INDEX IF NOT EXISTS idx_communications_slug ON communications(slug);
+            END IF;
+        END $$;
 
         -- Add like_count column if it doesn't exist (for existing tables)
         DO $$

@@ -19,7 +19,7 @@ export async function GET() {
 
             // Get recent 5 posts
             const recentPostsResult = await client.query(`
-        SELECT id, title, published_at, view_count, status 
+        SELECT id, slug, title, published_at, view_count, status 
         FROM communications 
         ORDER BY created_at DESC 
         LIMIT 5

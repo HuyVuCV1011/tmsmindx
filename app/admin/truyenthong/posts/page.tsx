@@ -14,6 +14,7 @@ import useSWR from 'swr'
 
 interface Post {
     id: number
+    slug: string
     title: string
     post_type: string
     status: 'draft' | 'published' | 'hidden'
@@ -33,7 +34,7 @@ export default function PostsManagementPage() {
     if (filterStatus !== 'all') queryParams.append('status', filterStatus)
     if (searchTerm) queryParams.append('search', searchTerm)
 
-    const { data: posts, error, isLoading, mutate } = useSWR<Post[]>(
+    const { data: posts, isLoading, mutate } = useSWR<Post[]>(
         `/api/truyenthong/posts?${queryParams.toString()}`,
         fetcher
     )
@@ -57,11 +58,11 @@ export default function PostsManagementPage() {
     }
 
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-    const [postToDelete, setPostToDelete] = useState<number | null>(null)
+    const [postToDelete, setPostToDelete] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
 
-    const handleDeleteClick = (id: number) => {
-        setPostToDelete(id)
+    const handleDeleteClick = (slug: string) => {
+        setPostToDelete(slug)
         setDeleteConfirmOpen(true)
     }
 
@@ -77,9 +78,9 @@ export default function PostsManagementPage() {
             if (!res.ok) throw new Error('Failed to delete')
 
             toast.success('Đã xóa bài viết thành công')
-            mutate(posts?.filter(p => p.id !== postToDelete), false)
+            mutate(posts?.filter(p => p.slug !== postToDelete), false) // Optimistic update
             setDeleteConfirmOpen(false)
-        } catch (err) {
+        } catch {
             toast.error('Có lỗi xảy ra khi xóa bài viết')
             mutate()
         } finally {
@@ -171,7 +172,7 @@ export default function PostsManagementPage() {
                                         <td className="px-3 py-2 text-center">{post.view_count?.toLocaleString('vi-VN') || 0}</td>
                                         <td className="px-3 py-2">
                                             <div className="flex gap-1 justify-center">
-                                                <Link href={`/admin/truyenthong/posts/${post.id}/edit`}>
+                                                <Link href={`/admin/truyenthong/posts/${post.slug}/edit`}>
                                                     <button
                                                         className="p-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                                                         title="Sửa"
@@ -180,7 +181,7 @@ export default function PostsManagementPage() {
                                                     </button>
                                                 </Link>
                                                 <button
-                                                    onClick={() => handleDeleteClick(post.id)}
+                                                    onClick={() => handleDeleteClick(post.slug)}
                                                     className="p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
                                                     title="Xóa"
                                                 >

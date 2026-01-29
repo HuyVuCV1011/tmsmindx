@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import Link from 'next/link'
+import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import toast from 'react-hot-toast'
 import useSWR from 'swr'
+import dynamic from 'next/dynamic'
+
+// Dynamic import for RichTextEditor to avoid SSR issues
+const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), {
+    ssr: false,
+    loading: () => <div className="border rounded-xl p-4 min-h-75 animate-pulse bg-muted/20">Đang tải editor...</div>
+})
 
 // Fetcher for SWR
 const fetcher = (url: string) => fetch(url).then(r => r.json())
@@ -17,11 +25,11 @@ const fetcher = (url: string) => fetch(url).then(r => r.json())
 export default function EditPostPage() {
     const router = useRouter()
     const params = useParams()
-    const id = params?.id
+    const slug = params?.slug
 
     // Using SWR for initial data fetch
     const { data: postData, error, isLoading: isFetching } = useSWR(
-        id ? `/api/truyenthong/posts/${id}` : null,
+        slug ? `/api/truyenthong/posts/${slug}` : null,
         fetcher
     )
 
@@ -120,7 +128,7 @@ export default function EditPostPage() {
                 banner_image
             }
 
-            const res = await fetch(`/api/truyenthong/posts/${id}`, {
+            const res = await fetch(`/api/truyenthong/posts/${slug}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json'
@@ -184,7 +192,9 @@ export default function EditPostPage() {
                             </CardHeader>
                             <CardContent className="space-y-4 pt-6">
                                 <div className="space-y-2 group">
-                                    <Label htmlFor="title" className={`${errors.title ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Tiêu đề</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="title" className={`${errors.title ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Tiêu đề</Label>
+                                    </div>
                                     <Input
                                         id="title"
                                         placeholder="Nhập tiêu đề bài viết"
@@ -204,7 +214,9 @@ export default function EditPostPage() {
                                 </div>
 
                                 <div className="space-y-2 group">
-                                    <Label htmlFor="description" className={`${errors.description ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Mô tả ngắn</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="description" className={`${errors.description ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Mô tả ngắn</Label>
+                                    </div>
                                     <Input
                                         id="description"
                                         placeholder="Nhập mô tả ngắn (1-2 dòng)"
@@ -224,17 +236,16 @@ export default function EditPostPage() {
                                 </div>
 
                                 <div className="space-y-2 group">
-                                    <Label htmlFor="content" className={`${errors.content ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Nội dung bài viết</Label>
-                                    <textarea
-                                        id="content"
-                                        placeholder="Nhập nội dung bài viết..."
-                                        rows={8}
-                                        value={formData.content}
-                                        onChange={e => {
-                                            setFormData({ ...formData, content: e.target.value })
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="content" className={`${errors.content ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Nội dung bài viết</Label>
+                                    </div>
+                                    <RichTextEditor
+                                        content={formData.content}
+                                        onChange={(html) => {
+                                            setFormData({ ...formData, content: html })
                                             if (errors.content) setErrors({ ...errors, content: '' })
                                         }}
-                                        className={`w-full px-4 py-3 border rounded-xl bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 transition-all min-h-[300px] ${errors.content ? 'border-red-500 bg-red-50/30 focus:ring-red-500/20 shadow-sm shadow-red-100' : 'border-border focus:ring-primary/30'}`}
+                                        error={errors.content}
                                     />
                                     {errors.content && (
                                         <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">
@@ -257,7 +268,7 @@ export default function EditPostPage() {
                                     {postData?.featured_image && (
                                         <div className="mb-2">
                                             <p className="text-xs text-muted-foreground mb-1">Hiện tại:</p>
-                                            <img src={postData.featured_image} alt="Thumbnail cũ" className="h-20 w-auto object-cover rounded" />
+                                            <Image src={postData.featured_image} alt="Thumbnail cũ" width={80} height={80} className="h-20 w-auto object-cover rounded" />
                                         </div>
                                     )}
                                     <Input
@@ -273,7 +284,7 @@ export default function EditPostPage() {
                                     {postData?.banner_image && (
                                         <div className="mb-2">
                                             <p className="text-xs text-muted-foreground mb-1">Hiện tại:</p>
-                                            <img src={postData.banner_image} alt="Banner cũ" className="h-20 w-auto object-cover rounded" />
+                                            <Image src={postData.banner_image} alt="Banner cũ" width={80} height={80} className="h-20 w-auto object-cover rounded" />
                                         </div>
                                     )}
                                     <Input

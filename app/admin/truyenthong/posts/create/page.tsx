@@ -10,6 +10,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import toast from 'react-hot-toast'
+import dynamic from 'next/dynamic'
+
+// Dynamic import for RichTextEditor to avoid SSR issues
+const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), {
+    ssr: false,
+    loading: () => <div className="border rounded-xl p-4 min-h-75 animate-pulse bg-muted/20">Đang tải editor...</div>
+})
 
 export default function CreatePostPage() {
     const router = useRouter()
@@ -22,6 +29,12 @@ export default function CreatePostPage() {
         status: 'draft',
         audience: 'toàn-công-ty',
         publishDate: '',
+    })
+
+    const [colors, setColors] = useState({
+        title: '#000000',
+        description: '#666666',
+        content: '#000000'
     })
 
     const [errors, setErrors] = useState<Record<string, string>>({})
@@ -57,7 +70,6 @@ export default function CreatePostPage() {
         const newErrors: Record<string, string> = {}
         if (!formData.title.trim()) newErrors.title = 'Tiêu đề không được để trống'
         if (!formData.description.trim()) newErrors.description = 'Mô tả ngắn không được để trống'
-        if (!formData.publishDate) newErrors.publishDate = 'Ngày đăng không được để trống'
         if (!formData.content.trim()) newErrors.content = 'Nội dung không được để trống'
 
         if (Object.keys(newErrors).length > 0) {
@@ -111,9 +123,9 @@ export default function CreatePostPage() {
 
             toast.success('Bài viết đã được tạo thành công!')
             router.push('/admin/truyenthong/posts')
-        } catch (error: any) {
+        } catch (error) {
             console.error(error)
-            toast.error(error.message || 'Có lỗi xảy ra khi tạo bài viết')
+            toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra khi tạo bài viết')
         } finally {
             setLoading(false)
         }
@@ -144,7 +156,19 @@ export default function CreatePostPage() {
                             </CardHeader>
                             <CardContent className="space-y-4 pt-6">
                                 <div className="space-y-2 group">
-                                    <Label htmlFor="title" className={`${errors.title ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Tiêu đề</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="title" className={`${errors.title ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Tiêu đề</Label>
+                                        {/* màu chữ tiêu đề */}
+                                        {/* <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground">Màu sắc:</span>
+                                            <input
+                                                type="color"
+                                                value={colors.title}
+                                                onChange={e => setColors({ ...colors, title: e.target.value })}
+                                                className="h-8 w-12 rounded cursor-pointer border border-border"
+                                            />
+                                        </div> */}
+                                    </div>
                                     <Input
                                         id="title"
                                         placeholder="Nhập tiêu đề bài viết"
@@ -154,6 +178,7 @@ export default function CreatePostPage() {
                                             if (errors.title) setErrors({ ...errors, title: '' })
                                         }}
                                         className={`focus-visible:ring-primary/50 transition-all h-11 ${errors.title ? 'border-red-500 bg-red-50/30 focus-visible:ring-red-500/20 shadow-sm shadow-red-100' : ''}`}
+                                        style={{ color: colors.title }}
                                     />
                                     {errors.title && (
                                         <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">
@@ -164,7 +189,19 @@ export default function CreatePostPage() {
                                 </div>
 
                                 <div className="space-y-2 group">
-                                    <Label htmlFor="description" className={`${errors.description ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Mô tả ngắn</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="description" className={`${errors.description ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Mô tả ngắn</Label>
+                                        {/* chỉnh màu chữ */}
+                                        {/* <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground">Màu sắc:</span>
+                                            <input
+                                                type="color"
+                                                value={colors.description}
+                                                onChange={e => setColors({ ...colors, description: e.target.value })}
+                                                className="h-8 w-12 rounded cursor-pointer border border-border"
+                                            />
+                                        </div> */}
+                                    </div>
                                     <Input
                                         id="description"
                                         placeholder="Nhập mô tả ngắn (1-2 dòng)"
@@ -174,6 +211,7 @@ export default function CreatePostPage() {
                                             if (errors.description) setErrors({ ...errors, description: '' })
                                         }}
                                         className={`focus-visible:ring-primary/50 transition-all h-11 ${errors.description ? 'border-red-500 bg-red-50/30 focus-visible:ring-red-500/20 shadow-sm shadow-red-100' : ''}`}
+                                        style={{ color: colors.description }}
                                     />
                                     {errors.description && (
                                         <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">
@@ -184,17 +222,27 @@ export default function CreatePostPage() {
                                 </div>
 
                                 <div className="space-y-2 group">
-                                    <Label htmlFor="content" className={`${errors.content ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Nội dung bài viết</Label>
-                                    <textarea
-                                        id="content"
-                                        placeholder="Nhập nội dung bài viết..."
-                                        rows={8}
-                                        value={formData.content}
-                                        onChange={e => {
-                                            setFormData({ ...formData, content: e.target.value })
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="content" className={`${errors.content ? 'text-red-500' : 'group-focus-within:text-primary'} transition-colors font-medium`}>Nội dung bài viết</Label>
+                                        {/* màu chữ bài viết */}
+                                        {/* <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground">Màu sắc chữ:</span>
+                                            <input
+                                                type="color"
+                                                value={colors.content}
+                                                onChange={e => setColors({ ...colors, content: e.target.value })}
+                                                className="h-8 w-12 rounded cursor-pointer border border-border"
+                                            />
+                                        </div> */}
+                                    </div>
+                                    <RichTextEditor
+                                        content={formData.content}
+                                        onChange={(html) => {
+                                            setFormData({ ...formData, content: html })
                                             if (errors.content) setErrors({ ...errors, content: '' })
                                         }}
-                                        className={`w-full px-4 py-3 border rounded-xl bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 transition-all min-h-[300px] ${errors.content ? 'border-red-500 bg-red-50/30 focus:ring-red-500/20 shadow-sm shadow-red-100' : 'border-border focus:ring-primary/30'}`}
+                                        error={errors.content}
+                                        textColor={colors.content}
                                     />
                                     {errors.content && (
                                         <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">
@@ -213,8 +261,9 @@ export default function CreatePostPage() {
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="thumbnail">Ảnh thumbnail</Label>
+                                    <Label className=" cursor-pointer" htmlFor="thumbnail">Ảnh thumbnail</Label>
                                     <Input
+                                        className="cursor-pointer"
                                         id="thumbnail"
                                         type="file"
                                         accept="image/*"
@@ -223,8 +272,9 @@ export default function CreatePostPage() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="banner">Hình ảnh banner</Label>
+                                    <Label className=" cursor-pointer" htmlFor="banner">Hình ảnh banner</Label>
                                     <Input
+                                        className="cursor-pointer"
                                         id="banner"
                                         type="file"
                                         accept="image/*"
@@ -249,7 +299,7 @@ export default function CreatePostPage() {
                                         id="type"
                                         value={formData.type}
                                         onChange={e => setFormData({ ...formData, type: e.target.value })}
-                                        className="w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm"
+                                        className="w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm cursor-pointer"
                                     >
                                         <option value="tin-tức">Tin tức</option>
                                         <option value="chính-sách">Chính sách</option>
@@ -268,7 +318,7 @@ export default function CreatePostPage() {
                                         onChange={e =>
                                             setFormData({ ...formData, audience: e.target.value })
                                         }
-                                        className="w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm"
+                                        className="w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm cursor-pointer"
                                     >
                                         <option value="toàn-công-ty">Toàn công ty</option>
                                         <option value="bộ-phận-hr">Bộ phận HR</option>
@@ -283,7 +333,7 @@ export default function CreatePostPage() {
                                         id="status"
                                         value={formData.status}
                                         onChange={e => setFormData({ ...formData, status: e.target.value })}
-                                        className="w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm"
+                                        className="w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm cursor-pointer"
                                     >
                                         <option value="draft">Nháp</option>
                                         <option value="published">Công bố</option>
@@ -292,23 +342,18 @@ export default function CreatePostPage() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="publishDate" className={`${errors.publishDate ? 'text-red-500' : ''} font-medium`}>Ngày đăng</Label>
+                                    <Label htmlFor="publishDate" className="font-medium">
+                                        Ngày đăng <span className="text-xs text-muted-foreground font-normal">(để trống = ngày giờ hiện tại)</span>
+                                    </Label>
                                     <Input
                                         id="publishDate"
                                         type="datetime-local"
                                         value={formData.publishDate}
                                         onChange={e => {
                                             setFormData({ ...formData, publishDate: e.target.value })
-                                            if (errors.publishDate) setErrors({ ...errors, publishDate: '' })
                                         }}
-                                        className={`rounded-xl h-11 focus-visible:ring-primary/50 ${errors.publishDate ? 'border-red-500 bg-red-50/30 focus-visible:ring-red-500/20 shadow-sm shadow-red-100' : ''}`}
+                                        className="cursor-pointer rounded-xl h-11 focus-visible:ring-primary/50"
                                     />
-                                    {errors.publishDate && (
-                                        <div className="flex items-center gap-1.5 text-red-500 mt-1 animate-in fade-in slide-in-from-top-1">
-                                            <AlertCircle className="w-3.5 h-3.5" />
-                                            <span className="text-[11px] font-medium leading-none">{errors.publishDate}</span>
-                                        </div>
-                                    )}
                                 </div>
                             </CardContent>
                         </Card>

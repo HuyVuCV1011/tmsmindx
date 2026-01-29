@@ -8,6 +8,7 @@ import { Eye, Calendar } from 'lucide-react'
 
 interface Post {
     id: string | number
+    slug: string
     title: string
     description: string
     featured_image: string
@@ -42,7 +43,7 @@ export default function PostCard({ post }: { post: Post }) {
     }
 
     return (
-        <Link href={`/user/truyenthong/${post.id}`}>
+        <Link href={`/user/truyenthong/${post.slug}`}>
             <Card className="h-full hover:shadow-lg transition-shadow duration-300 cursor-pointer overflow-hidden">
                 <CardHeader className="p-0">
                     <div className="relative w-full h-48 bg-muted">
