@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
 import { withApiProtection } from "@/lib/api-protection";
+import { NextRequest, NextResponse } from "next/server";
 
 const TEACHER_PROFILE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_PROFILE_CSV_URL || "";
 const TEACHER_EXPERTISE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERTISE_CSV_URL || "";
@@ -314,7 +314,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
   let isAdmin = false;
   
   try {
-    const FIREBASE_API_KEY = 'AIzaSyAh2Au-mk5ci-hN83RUBqj1fsAmCMdvJx4';
+    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || '';
     const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`;
     
     const verifyResponse = await fetch(verifyUrl, {
