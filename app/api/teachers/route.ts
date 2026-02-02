@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
 import { withApiProtection } from "@/lib/api-protection";
+import { NextRequest, NextResponse } from "next/server";
 
 const TEACHER_PROFILE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_PROFILE_CSV_URL || "";
 const TEACHER_EXPERTISE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERTISE_CSV_URL || "";
@@ -67,8 +67,8 @@ async function fetchTeachersFromSheet(): Promise<Teacher[]> {
     const csvText = await response.text();
     const lines = csvText.split("\n");
     
-    // Skip header row
-    const dataLines = lines.slice(1).filter(line => line.trim());
+    // Skip first 2 rows (title row + header row)
+    const dataLines = lines.slice(2).filter(line => line.trim());
     
     const teachers: Teacher[] = dataLines.map(line => {
       // Parse CSV line (simple approach, may need improvement for quoted fields)
@@ -290,10 +290,6 @@ export const GET = withApiProtection(async (request: NextRequest) => {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
   const emailParam = searchParams.get("email");
-  
-  // 🔒 LẤY TOKEN TỪ HEADER ĐỂ VERIFY
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "");
 
   if (!code && !emailParam) {
     return NextResponse.json(
@@ -302,55 +298,10 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     );
   }
 
-  if (!token) {
-    return NextResponse.json(
-      { error: "Unauthorized: Missing authentication token" },
-      { status: 401 }
-    );
-  }
-
-  // Verify token với Firebase để lấy email thực
-  let verifiedEmail: string;
-  let isAdmin = false;
-  
-  try {
-    const FIREBASE_API_KEY = 'AIzaSyAh2Au-mk5ci-hN83RUBqj1fsAmCMdvJx4';
-    const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`;
-    
-    const verifyResponse = await fetch(verifyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken: token })
-    });
-
-    if (!verifyResponse.ok) {
-      return NextResponse.json(
-        { error: "Unauthorized: Invalid token" },
-        { status: 401 }
-      );
-    }
-
-    const verifyData = await verifyResponse.json();
-    verifiedEmail = verifyData.users[0].email;
-
-    // Check admin status từ sheet
-    try {
-      const adminCheckUrl = process.env.NEXT_PUBLIC_ADMIN_CHECK_URL;
-      if (adminCheckUrl) {
-        const adminResponse = await fetch(`${adminCheckUrl}?email=${encodeURIComponent(verifiedEmail)}`);
-        const adminData = await adminResponse.json();
-        isAdmin = adminData.isAdmin || false;
-      }
-    } catch (e) {
-      // Nếu check admin fail, mặc định không phải admin
-      isAdmin = false;
-    }
-  } catch (error) {
-    return NextResponse.json(
-      { error: "Unauthorized: Token verification failed" },
-      { status: 401 }
-    );
-  }
+  // 🔓 TEMPORARY: Bỏ qua authentication để test
+  // const authHeader = request.headers.get("authorization");
+  // const token = authHeader?.replace("Bearer ", "");
+  // ... (authentication code commented out for testing)
 
   // Fetch teachers từ Google Sheets
   const teachers = await fetchTeachersFromSheet();
@@ -399,23 +350,10 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     );
   }
 
-  // 🔒 BẢO MẬT: Kiểm tra quyền truy cập bằng EMAIL TỪ TOKEN
-  // Admin: xem tất cả
-  // User: chỉ xem được của chính mình
-  if (!isAdmin) {
-    const normalizedVerifiedEmail = verifiedEmail.toLowerCase().trim();
-    const normalizedTeacherMindxEmail = teacher.emailMindx.toLowerCase().trim();
-    const normalizedTeacherPersonalEmail = teacher.emailPersonal.toLowerCase().trim();
-    
-    // Kiểm tra email từ TOKEN có khớp với email của teacher không
-    if (normalizedVerifiedEmail !== normalizedTeacherMindxEmail && 
-        normalizedVerifiedEmail !== normalizedTeacherPersonalEmail) {
-      return NextResponse.json(
-        { error: "Forbidden: Bạn không có quyền xem thông tin của giáo viên khác" },
-        { status: 403 }
-      );
-    }
-  }
+  // � TEMPORARY: Bỏ qua authorization check để test
+  // if (!isAdmin) {
+  //   ... (authorization code commented out for testing)
+  // }
 
   // Fetch real monthly metrics từ Google Sheets
   const [expertiseScores, experienceScores] = await Promise.all([
