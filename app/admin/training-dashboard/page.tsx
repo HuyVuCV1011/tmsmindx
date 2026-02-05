@@ -2,9 +2,9 @@
 
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
-import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
+import { TableSkeleton } from '@/components/skeletons';
 import { BarChart3, Calendar, Play, Video } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -102,7 +102,18 @@ export default function TrainingDashboardPage() {
         {tab === 'assigned' && (
           <div className="mt-4">
             {loading ? (
-              <LoadingSpinner />
+              <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex gap-3 p-3 border border-gray-200 rounded-lg animate-pulse">
+                    <div className="w-32 h-20 bg-gray-200 rounded-lg"></div>
+                    <div className="flex-grow space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : error ? (
               <div className="text-red-600 text-center py-8">{error}</div>
             ) : assignedVideos.length === 0 ? (
@@ -198,7 +209,7 @@ export default function TrainingDashboardPage() {
             </div>
             
             {loading ? (
-              <LoadingSpinner />
+              <TableSkeleton rows={10} columns={10} />
             ) : error ? (
               <div className="text-red-600 text-center py-8">{error}</div>
             ) : filteredDashboard.length === 0 ? (
@@ -220,8 +231,8 @@ export default function TrainingDashboardPage() {
                       <th className="px-3 py-2 text-center font-semibold">Video</th>
                       <th className="px-3 py-2 text-center font-semibold">Hoàn thành</th>
                       <th className="px-3 py-2 text-center font-semibold">ĐTB Video</th>
-                      <th className="px-3 py-2 text-center font-semibold">Assignment</th>
-                      <th className="px-3 py-2 text-center font-semibold">ĐTB Assgn</th>
+                      <th className="px-3 py-2 text-center font-semibold">Bài tập</th>
+                      <th className="px-3 py-2 text-center font-semibold">ĐTB BT</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">

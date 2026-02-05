@@ -33,9 +33,23 @@ export default function AnalyticsPage() {
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto p-8">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-          <p className="mt-4 text-gray-600">Đang tải dữ liệu...</p>
+        <div className="space-y-6">
+          {/* Header Skeleton */}
+          <div className="h-10 bg-gray-200 rounded w-64 animate-pulse"></div>
+          {/* Stats Cards Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="bg-white border rounded-lg p-6 animate-pulse">
+                <div className="h-5 bg-gray-200 rounded w-32 mb-3"></div>
+                <div className="h-8 bg-gray-200 rounded w-20 mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-24"></div>
+              </div>
+            ))}
+          </div>
+          {/* Chart Skeleton */}
+          <div className="bg-white rounded-lg p-6 h-96 animate-pulse">
+            <div className="h-full bg-gray-200 rounded"></div>
+          </div>
         </div>
       </div>
     );

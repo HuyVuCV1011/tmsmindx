@@ -1,9 +1,9 @@
 'use client';
 
 import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { useRouter } from "next/navigation";
 
 interface TrainingLesson {
   id: number;

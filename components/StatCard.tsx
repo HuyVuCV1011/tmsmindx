@@ -43,30 +43,30 @@ export function StatCard({
   return (
     <div
       className={`
-        relative overflow-hidden rounded-lg border border-gray-200 bg-white p-4 lg:p-5
+        relative overflow-hidden rounded-lg border border-gray-200 bg-white p-3
         shadow-sm hover:shadow-md transition-shadow duration-200
         ${onClick ? "cursor-pointer" : ""}
       `}
       onClick={onClick}
     >
       {/* Background Pattern */}
-      <div className={`absolute top-0 right-0 w-24 h-24 ${bgColorClasses[color]} rounded-bl-full opacity-30`}></div>
+      <div className={`absolute top-0 right-0 w-20 h-20 ${bgColorClasses[color]} rounded-bl-full opacity-30`}></div>
       
       <div className="relative flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-xs lg:text-sm font-medium text-gray-600 mb-1">
+          <p className="text-xs font-semibold text-gray-600 mb-1">
             {title}
           </p>
-          <p className="text-2xl lg:text-3xl font-bold text-gray-900 mb-1">
+          <p className="text-2xl font-bold text-gray-900 mb-0.5">
             {value}
           </p>
           {description && (
-            <p className="text-xs text-gray-500">{description}</p>
+            <p className="text-[10px] text-gray-500">{description}</p>
           )}
           {trend && (
-            <div className="flex items-center gap-1 mt-2">
+            <div className="flex items-center gap-1 mt-1.5">
               <span
-                className={`text-xs font-semibold ${
+                className={`text-[10px] font-semibold ${
                   trend.isPositive ? "text-green-600" : "text-red-600"
                 }`}
               >
@@ -76,8 +76,8 @@ export function StatCard({
           )}
         </div>
         
-        <div className={`p-3 rounded-lg bg-gradient-to-br ${colorClasses[color]} shadow-lg`}>
-          <Icon className="h-5 w-5 lg:h-6 lg:w-6 text-white" />
+        <div className={`p-2.5 rounded-lg bg-gradient-to-br ${colorClasses[color]} shadow-lg`}>
+          <Icon className="h-5 w-5 text-white" />
         </div>
       </div>
     </div>

@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { MessageCircle, ThumbsUp, Heart, Laugh, Angry, Frown, Edit, Trash2, ChevronDown, TrendingUp, Clock, Shield, EyeOff, Eye, AlertTriangle } from 'lucide-react'
+import { MessageCircle, ThumbsUp, Heart, Laugh, Angry, Frown, Edit, Trash2, ChevronDown, TrendingUp, Clock, Shield, EyeOff, Eye, AlertTriangle, Image as ImageIcon, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card } from '@/components/ui/card'
+import Image from 'next/image'
 import {
     Dialog,
     DialogContent,
@@ -654,6 +655,10 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
     const [loadingComments, setLoadingComments] = useState(true)
     const [displayCount, setDisplayCount] = useState(5)
     const [sortBy, setSortBy] = useState<'newest' | 'most_reactions'>('newest')
+    const [commentImages, setCommentImages] = useState<string[]>([])
+    const [isDragging, setIsDragging] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
 
     // Debug log for admin status
     useEffect(() => {
@@ -697,12 +702,14 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                     userName: currentUserName || 'Anonymous',
                     userEmail: currentUserEmail,
                     content: newComment,
+                    images: commentImages,
                     parentId: null
                 })
             })
 
             if (res.ok) {
                 setNewComment('')
+                setCommentImages([])
                 await loadComments()
             }
         } catch (error) {
@@ -710,6 +717,62 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
         } finally {
             setLoading(false)
         }
+    }
+
+    const handleImageUpload = (files: FileList | null) => {
+        if (!files) return
+
+        Array.from(files).forEach(file => {
+            if (file.type.startsWith('image/')) {
+                if (file.size > 5 * 1024 * 1024) {
+                    alert('Ảnh không được vượt quá 5MB')
+                    return
+                }
+
+                const reader = new FileReader()
+                reader.onload = (e) => {
+                    if (e.target?.result) {
+                        setCommentImages(prev => [...prev, e.target!.result as string])
+                    }
+                }
+                reader.readAsDataURL(file)
+            }
+        })
+    }
+
+    const handlePaste = (e: React.ClipboardEvent) => {
+        const items = e.clipboardData?.items
+        if (!items) return
+
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                const file = items[i].getAsFile()
+                if (file) {
+                    const dataTransfer = new DataTransfer()
+                    dataTransfer.items.add(file)
+                    handleImageUpload(dataTransfer.files)
+                }
+            }
+        }
+    }
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault()
+        setIsDragging(true)
+    }
+
+    const handleDragLeave = () => {
+        setIsDragging(false)
+    }
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault()
+        setIsDragging(false)
+        handleImageUpload(e.dataTransfer.files)
+    }
+
+    const removeImage = (index: number) => {
+        setCommentImages(prev => prev.filter((_, i) => i !== index))
     }
 
     const handleReply = async (parentId: number, content: string) => {
@@ -860,19 +923,75 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
             {/* New Comment Box */}
             {currentUserId ? (
                 <div className="mb-6">
-                    <Textarea
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Viết bình luận..."
-                        className="min-h-20"
-                    />
-                    <Button 
-                        onClick={handleSubmitComment} 
-                        disabled={loading || !newComment.trim()}
-                        className="mt-2 cursor-pointer"
+                    <div 
+                        className={`relative border-2 rounded-lg transition-colors ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
                     >
-                        {loading ? 'Đang gửi...' : 'Đăng bình luận'}
-                    </Button>
+                        <Textarea
+                            ref={textareaRef}
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            onPaste={handlePaste}
+                            placeholder="Viết bình luận... (Ctrl+V để dán ảnh)"
+                            className="min-h-24 border-0 focus-visible:ring-0 resize-none"
+                        />
+                        
+                        {/* Image Previews */}
+                        {commentImages.length > 0 && (
+                            <div className="px-3 pb-3 flex gap-2 flex-wrap">
+                                {commentImages.map((img, idx) => (
+                                    <div key={idx} className="relative group">
+                                        <Image
+                                            src={img}
+                                            alt={`Preview ${idx + 1}`}
+                                            width={100}
+                                            height={100}
+                                            className="rounded-lg object-cover border border-gray-200"
+                                        />
+                                        <button
+                                            onClick={() => removeImage(idx)}
+                                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-2">
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) => handleImageUpload(e.target.files)}
+                            className="hidden"
+                        />
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="gap-2 h-9"
+                        >
+                            <ImageIcon className="w-4 h-4" />
+                            Thêm ảnh
+                        </Button>
+                        <Button 
+                            onClick={handleSubmitComment} 
+                            disabled={loading || !newComment.trim()}
+                            className="gap-2 h-9 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                        >
+                            {loading ? 'Đang gửi...' : 'Đăng bình luận'}
+                        </Button>
+                    </div>
+
+                    <p className="text-xs text-gray-500 mt-2">
+                        💡 Bạn có thể kéo thả hoặc Ctrl+V để dán ảnh vào bình luận
+                    </p>
                 </div>
             ) : (
                 <Card className="p-3 mb-6 bg-muted/30">

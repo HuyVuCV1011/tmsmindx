@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
-import Image from 'next/image'
-import { ChevronLeft, ChevronRight, Inbox } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import Slider from '@/components/slider'
 import PostCard from '@/components/post-card'
+import { PostCardSkeleton } from '@/components/skeletons'
+import Slider from '@/components/slider'
+import { Button } from '@/components/ui/button'
+import { PageContainer } from '@/components/PageContainer'
+import { ChevronLeft, ChevronRight, Inbox, Filter } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import useSWR from 'swr'
 
 interface Post {
     id: string | number
@@ -23,32 +23,14 @@ interface Post {
     created_at: string
 }
 
+const fetcher = (url: string) => fetch(url).then(r => r.json())
+
 export default function HomePage() {
-    const [posts, setPosts] = useState<Post[]>([])
+    const { data: posts = [], isLoading } = useSWR<Post[]>('/api/truyenthong/posts?status=published', fetcher)
     const [filteredPosts, setFilteredPosts] = useState<Post[]>([])
     const [selectedFilter, setSelectedFilter] = useState<string>('all')
-    const [loading, setLoading] = useState(true)
     const [currentPage, setCurrentPage] = useState(1)
     const postsPerPage = 6
-
-    useEffect(() => {
-        const fetchPosts = async () => {
-            setLoading(true)
-            try {
-                // lấy các bài viết có trạng thái công khai
-                const res = await fetch('/api/truyenthong/posts?status=published')
-                if (!res.ok) throw new Error('Failed to fetch')
-                const data = await res.json()
-                setPosts(data)
-            } catch (error) {
-                console.error("Error fetching posts:", error)
-            } finally {
-                setLoading(false)
-            }
-        }
-
-        fetchPosts()
-    }, [])
 
     useEffect(() => {
         if (selectedFilter === 'all') {
@@ -75,82 +57,87 @@ export default function HomePage() {
     const currentPosts = filteredPosts.slice(indexOfFirstPost, indexOfLastPost)
     const totalPages = Math.ceil(filteredPosts.length / postsPerPage)
 
-    return (
-        <div className="min-h-screen bg-background">
-            {/* Header */}
-            <header className="border-b border-border bg-card sticky top-0 z-50 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 py-4">
-                    <h1 className="text-2xl font-bold text-primary">Truyền Thông Nội Bộ</h1>
-                    <p className="text-sm text-muted-foreground mt-1">Chia sẻ tin tức và thông báo từ công ty</p>
-                </div>
-            </header>
+    const getPostTypeCount = (type: string) => {
+        if (type === 'all') return posts.length
+        return posts.filter(post => post.post_type === type).length
+    }
 
-            <main className="max-w-7xl mx-auto px-4 py-8">
-                {loading ? (
-                    <div className="flex justify-center items-center py-20">
-                        {/* Simple loading state or keep existing skeleton structure if preferred, 
-                             but simplicity matches the request for "clean" UI. 
-                             Let's reuse the skeleton grid for better UX during load if we want, 
-                             but simplest is to just wait. 
-                             Actually, let's keep the skeletons but we need to conditionally render the headers.
-                         */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-                            {[...Array(6)].map((_, i) => (
-                                <Card key={i} className="animate-pulse">
-                                    <CardContent className="p-0">
-                                        <div className="w-full h-40 bg-muted rounded-t-lg" />
-                                        <div className="p-4 space-y-3">
-                                            <div className="h-4 bg-muted rounded w-3/4" />
-                                            <div className="h-3 bg-muted rounded w-full" />
-                                            <div className="h-3 bg-muted rounded w-2/3" />
-                                        </div>
-                                    </CardContent>
-                                </Card>
+    return (
+        <PageContainer>
+            <div className="max-w-7xl mx-auto">
+                {isLoading ? (
+                    <div className="space-y-8">
+                        {/* Slider Skeleton */}
+                        <div className="w-full h-64 md:h-96 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 rounded-2xl animate-pulse shadow-lg"></div>
+                        
+                        {/* Posts Grid Skeleton */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {[...Array(8)].map((_, i) => (
+                                <PostCardSkeleton key={i} />
                             ))}
                         </div>
                     </div>
                 ) : posts.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in zoom-in duration-500">
-                        <div className="bg-muted p-6 rounded-full mb-6">
-                            <Inbox className="w-12 h-12 text-muted-foreground" />
+                    <div className="flex flex-col items-center justify-center py-24 text-center bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-dashed border-blue-200">
+                        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-6 rounded-2xl mb-6 shadow-lg">
+                            <Inbox className="w-16 h-16 text-white" />
                         </div>
-                        <h3 className="text-2xl font-bold text-foreground mb-2">Chưa có bài viết nào</h3>
-                        <p className="text-muted-foreground max-w-sm mx-auto">
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2">Chưa có bài viết nào</h3>
+                        <p className="text-gray-600 max-w-md mx-auto leading-relaxed">
                             Hiện tại chưa có tin tức hoặc thông báo nào được đăng tải.
-                            Vui lòng quay lại sau!
+                            Vui lòng quay lại sau để xem nội dung mới nhất!
                         </p>
                     </div>
                 ) : (
                     <>
                         {/* Slider Section */}
-                        <section className="mb-12">
-                            <h2 className="text-xl font-semibold text-foreground mb-4">Tin nổi bật</h2>
+                        <section className="mb-10">
                             <Slider posts={posts.slice(0, 5)} />
                         </section>
 
                         {/* News Section */}
                         <section>
-                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                                <h2 className="text-xl font-semibold text-foreground">Tin tức mới nhất</h2>
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-5">
+                                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="h-6 w-1 bg-gradient-to-b from-blue-600 to-indigo-600 rounded-full shadow-sm"></div>
+                                        <div>
+                                            <h2 className="text-lg md:text-xl font-bold text-gray-900">Tất cả bài viết</h2>
+                                            <p className="text-[10px] text-gray-500">{filteredPosts.length} bài viết</p>
+                                        </div>
+                                    </div>
 
-                                {/* Filter */}
-                                <div className="flex flex-wrap gap-2">
-                                    {postTypes.map(type => (
-                                        <Button
-                                            key={type.value}
-                                            variant={selectedFilter === type.value ? 'default' : 'outline'}
-                                            size="sm"
-                                            onClick={() => setSelectedFilter(type.value)}
-                                            className="text-xs"
-                                        >
-                                            {type.label}
-                                        </Button>
-                                    ))}
+                                    {/* Filter */}
+                                    <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-hide">
+                                        <Filter className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                                        <div className="flex gap-1.5">
+                                            {postTypes.map(type => (
+                                                <button
+                                                    key={type.value}
+                                                    onClick={() => setSelectedFilter(type.value)}
+                                                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                                                        selectedFilter === type.value 
+                                                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md' 
+                                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                    }`}
+                                                >
+                                                    {type.label}
+                                                    <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                                        selectedFilter === type.value 
+                                                            ? 'bg-white/25 text-white' 
+                                                            : 'bg-white text-gray-600'
+                                                    }`}>
+                                                        {getPostTypeCount(type.value)}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
                             {/* Posts Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 {currentPosts.map(post => (
                                     <PostCard key={post.id} post={post} />
                                 ))}
@@ -158,44 +145,70 @@ export default function HomePage() {
 
                             {/* Pagination */}
                             {totalPages > 1 && (
-                                <div className="flex items-center justify-center gap-2 mt-8">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                                        disabled={currentPage === 1}
-                                    >
-                                        <ChevronLeft className="w-4 h-4" />
-                                    </Button>
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+                                    <p className="text-sm text-gray-600">
+                                        Hiển thị <span className="font-semibold text-gray-900">{indexOfFirstPost + 1}-{Math.min(indexOfLastPost, filteredPosts.length)}</span> trong <span className="font-semibold text-gray-900">{filteredPosts.length}</span> bài viết
+                                    </p>
+                                    
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                                            disabled={currentPage === 1}
+                                            className="gap-1"
+                                        >
+                                            <ChevronLeft className="w-4 h-4" />
+                                            Trước
+                                        </Button>
 
-                                    <div className="flex gap-1">
-                                        {[...Array(totalPages)].map((_, i) => (
-                                            <Button
-                                                key={i + 1}
-                                                variant={currentPage === i + 1 ? 'default' : 'outline'}
-                                                size="sm"
-                                                onClick={() => setCurrentPage(i + 1)}
-                                                className="w-9 h-9 p-0"
-                                            >
-                                                {i + 1}
-                                            </Button>
-                                        ))}
+                                        <div className="flex gap-1">
+                                            {[...Array(totalPages)].map((_, i) => {
+                                                // Show first, last, current, and adjacent pages
+                                                const pageNum = i + 1
+                                                const showPage = pageNum === 1 || 
+                                                               pageNum === totalPages || 
+                                                               Math.abs(pageNum - currentPage) <= 1
+                                                const showEllipsis = (pageNum === 2 && currentPage > 3) || 
+                                                                   (pageNum === totalPages - 1 && currentPage < totalPages - 2)
+                                                
+                                                if (!showPage && !showEllipsis) return null
+                                                
+                                                if (showEllipsis) {
+                                                    return <span key={i} className="px-2 py-1 text-gray-400">...</span>
+                                                }
+                                                
+                                                return (
+                                                    <Button
+                                                        key={i + 1}
+                                                        variant={currentPage === pageNum ? 'default' : 'outline'}
+                                                        size="sm"
+                                                        onClick={() => setCurrentPage(pageNum)}
+                                                        className="w-9 h-9 p-0"
+                                                    >
+                                                        {pageNum}
+                                                    </Button>
+                                                )
+                                            })}
+                                        </div>
+
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                                            disabled={currentPage === totalPages}
+                                            className="gap-1"
+                                        >
+                                            Sau
+                                            <ChevronRight className="w-4 h-4" />
+                                        </Button>
                                     </div>
-
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                                        disabled={currentPage === totalPages}
-                                    >
-                                        <ChevronRight className="w-4 h-4" />
-                                    </Button>
                                 </div>
                             )}
                         </section>
                     </>
                 )}
-            </main>
-        </div>
+            </div>
+        </PageContainer>
     )
 }

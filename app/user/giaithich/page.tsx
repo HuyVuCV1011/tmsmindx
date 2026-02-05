@@ -237,10 +237,26 @@ export default function GiaiTrinhPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen p-4">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Đang tải...</p>
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Header Skeleton */}
+          <div className="mb-6 space-y-3 animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-96"></div>
+            <div className="h-4 bg-gray-200 rounded w-64"></div>
+          </div>
+          {/* Table Skeleton */}
+          <div className="bg-white rounded-lg shadow-md p-6 space-y-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex gap-4 p-4 border rounded-lg animate-pulse">
+                <div className="flex-1 space-y-3">
+                  <div className="h-5 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                </div>
+                <div className="w-24 h-8 bg-gray-200 rounded"></div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
