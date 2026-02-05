@@ -1,13 +1,20 @@
 'use client'
 
+import React, { useEffect, useState } from 'react'
+import useSWR from 'swr'
+import Link from 'next/link'
+import Image from 'next/image'
+import { ChevronRight, Filter, Search, Flame, TrendingUp } from 'lucide-react'
+
 import PostCard from '@/components/post-card'
-import { PostCardSkeleton } from '@/components/skeletons'
 import Slider from '@/components/slider'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { PageContainer } from '@/components/PageContainer'
-import { ChevronLeft, ChevronRight, Inbox, Filter } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import useSWR from 'swr'
+import { cn } from '@/lib/utils'
+
+// Skeleton Imports (Inline for simplicity or import if available)
+import { PostCardSkeleton } from '@/components/skeletons'
 
 interface Post {
     id: string | number
@@ -25,21 +32,37 @@ interface Post {
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
-export default function HomePage() {
+export default function CommunicationsPage() {
     const { data: posts = [], isLoading } = useSWR<Post[]>('/api/truyenthong/posts?status=published', fetcher)
     const [filteredPosts, setFilteredPosts] = useState<Post[]>([])
     const [selectedFilter, setSelectedFilter] = useState<string>('all')
-    const [currentPage, setCurrentPage] = useState(1)
-    const postsPerPage = 6
+    const [searchQuery, setSearchQuery] = useState('')
 
+    // Initialize filtered posts
     useEffect(() => {
-        if (selectedFilter === 'all') {
-            setFilteredPosts(posts)
-        } else {
-            setFilteredPosts(posts.filter(post => post.post_type === selectedFilter))
+        let result = posts
+
+        // Filter by Type
+        if (selectedFilter !== 'all') {
+            result = result.filter(post => post.post_type === selectedFilter)
         }
-        setCurrentPage(1)
-    }, [selectedFilter, posts])
+
+        // Filter by Search
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase()
+            result = result.filter(post =>
+                post.title.toLowerCase().includes(query) ||
+                post.description.toLowerCase().includes(query)
+            )
+        }
+
+        setFilteredPosts(result)
+    }, [selectedFilter, searchQuery, posts])
+
+    // Derived Data
+    const featuredPosts = posts.slice(0, 5) // Top 5 for Slider
+    // Sort by views for "Trending"
+    const trendingPosts = [...posts].sort((a, b) => b.view_count - a.view_count).slice(0, 5)
 
     const postTypes = [
         { value: 'all', label: 'Tất cả' },
@@ -51,163 +74,158 @@ export default function HomePage() {
         { value: 'thông-báo', label: 'Thông báo' },
     ]
 
-    // Pagination
-    const indexOfLastPost = currentPage * postsPerPage
-    const indexOfFirstPost = indexOfLastPost - postsPerPage
-    const currentPosts = filteredPosts.slice(indexOfFirstPost, indexOfLastPost)
-    const totalPages = Math.ceil(filteredPosts.length / postsPerPage)
-
-    const getPostTypeCount = (type: string) => {
-        if (type === 'all') return posts.length
-        return posts.filter(post => post.post_type === type).length
-    }
-
     return (
         <PageContainer>
-            <div className="max-w-7xl mx-auto">
-                {isLoading ? (
-                    <div className="space-y-8">
-                        {/* Slider Skeleton */}
-                        <div className="w-full h-64 md:h-96 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 rounded-2xl animate-pulse shadow-lg"></div>
-                        
-                        {/* Posts Grid Skeleton */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {[...Array(8)].map((_, i) => (
-                                <PostCardSkeleton key={i} />
-                            ))}
+            <div className="bg-gray-50/50 min-h-screen pb-20">
+                {/* Header Section */}
+                <div className="bg-white border-b border-gray-200">
+                    <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h1 className="text-3xl font-black text-gray-900 tracking-tight">Truyền Thông Nội Bộ</h1>
+                                <p className="text-gray-500 mt-2 font-light text-lg">Cập nhật tin tức, sự kiện và thông báo mới nhất</p>
+                            </div>
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <Input
+                                    placeholder="Tìm kiếm bài viết..."
+                                    className="pl-10 w-full md:w-80 bg-gray-50 border-gray-200 focus:bg-white transition-all"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
-                ) : posts.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-24 text-center bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-dashed border-blue-200">
-                        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-6 rounded-2xl mb-6 shadow-lg">
-                            <Inbox className="w-16 h-16 text-white" />
-                        </div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">Chưa có bài viết nào</h3>
-                        <p className="text-gray-600 max-w-md mx-auto leading-relaxed">
-                            Hiện tại chưa có tin tức hoặc thông báo nào được đăng tải.
-                            Vui lòng quay lại sau để xem nội dung mới nhất!
-                        </p>
-                    </div>
-                ) : (
-                    <>
-                        {/* Slider Section */}
-                        <section className="mb-10">
-                            <Slider posts={posts.slice(0, 5)} />
+                </div>
+
+                <div className="max-w-7xl mx-auto px-4 md:px-6 pt-8 space-y-12">
+
+                    {/* Hero Slider */}
+                    {!isLoading && posts.length > 0 && (
+                        <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+                            <Slider posts={featuredPosts} />
                         </section>
+                    )}
 
-                        {/* News Section */}
-                        <section>
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-5">
-                                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-                                    <div className="flex items-center gap-2.5">
-                                        <div className="h-6 w-1 bg-gradient-to-b from-blue-600 to-indigo-600 rounded-full shadow-sm"></div>
-                                        <div>
-                                            <h2 className="text-lg md:text-xl font-bold text-gray-900">Tất cả bài viết</h2>
-                                            <p className="text-[10px] text-gray-500">{filteredPosts.length} bài viết</p>
-                                        </div>
-                                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                        {/* Main Stream (Left 8 Cols) */}
+                        <div className="lg:col-span-8 flex flex-col gap-8">
 
-                                    {/* Filter */}
-                                    <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-hide">
-                                        <Filter className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                                        <div className="flex gap-1.5">
-                                            {postTypes.map(type => (
-                                                <button
-                                                    key={type.value}
-                                                    onClick={() => setSelectedFilter(type.value)}
-                                                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                                                        selectedFilter === type.value 
-                                                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md' 
-                                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                                    }`}
-                                                >
-                                                    {type.label}
-                                                    <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                                        selectedFilter === type.value 
-                                                            ? 'bg-white/25 text-white' 
-                                                            : 'bg-white text-gray-600'
-                                                    }`}>
-                                                        {getPostTypeCount(type.value)}
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+                            {/* Sticky Filter Bar */}
+                            <div className="sticky top-20 z-30 bg-white/80 backdrop-blur-xl border border-gray-200/50 p-2 rounded-2xl shadow-sm flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
+                                <div className="flex p-1 gap-1">
+                                    {postTypes.map(type => (
+                                        <button
+                                            key={type.value}
+                                            onClick={() => setSelectedFilter(type.value)}
+                                            className={cn(
+                                                "px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap",
+                                                selectedFilter === type.value
+                                                    ? "bg-gray-900 text-white shadow-md"
+                                                    : "bg-transparent text-gray-600 hover:bg-gray-100"
+                                            )}
+                                        >
+                                            {type.label}
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
 
                             {/* Posts Grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {currentPosts.map(post => (
-                                    <PostCard key={post.id} post={post} />
-                                ))}
-                            </div>
-
-                            {/* Pagination */}
-                            {totalPages > 1 && (
-                                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                                    <p className="text-sm text-gray-600">
-                                        Hiển thị <span className="font-semibold text-gray-900">{indexOfFirstPost + 1}-{Math.min(indexOfLastPost, filteredPosts.length)}</span> trong <span className="font-semibold text-gray-900">{filteredPosts.length}</span> bài viết
-                                    </p>
-                                    
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                                            disabled={currentPage === 1}
-                                            className="gap-1"
-                                        >
-                                            <ChevronLeft className="w-4 h-4" />
-                                            Trước
-                                        </Button>
-
-                                        <div className="flex gap-1">
-                                            {[...Array(totalPages)].map((_, i) => {
-                                                // Show first, last, current, and adjacent pages
-                                                const pageNum = i + 1
-                                                const showPage = pageNum === 1 || 
-                                                               pageNum === totalPages || 
-                                                               Math.abs(pageNum - currentPage) <= 1
-                                                const showEllipsis = (pageNum === 2 && currentPage > 3) || 
-                                                                   (pageNum === totalPages - 1 && currentPage < totalPages - 2)
-                                                
-                                                if (!showPage && !showEllipsis) return null
-                                                
-                                                if (showEllipsis) {
-                                                    return <span key={i} className="px-2 py-1 text-gray-400">...</span>
-                                                }
-                                                
-                                                return (
-                                                    <Button
-                                                        key={i + 1}
-                                                        variant={currentPage === pageNum ? 'default' : 'outline'}
-                                                        size="sm"
-                                                        onClick={() => setCurrentPage(pageNum)}
-                                                        className="w-9 h-9 p-0"
-                                                    >
-                                                        {pageNum}
-                                                    </Button>
-                                                )
-                                            })}
+                            {isLoading ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {[...Array(4)].map((_, i) => <PostCardSkeleton key={i} />)}
+                                </div>
+                            ) : filteredPosts.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-500">
+                                    {filteredPosts.map(post => (
+                                        <div key={post.id}>
+                                            <PostCard post={post} />
                                         </div>
-
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                                            disabled={currentPage === totalPages}
-                                            className="gap-1"
-                                        >
-                                            Sau
-                                            <ChevronRight className="w-4 h-4" />
-                                        </Button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
+                                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <Filter className="w-6 h-6 text-gray-300" />
                                     </div>
+                                    <h3 className="text-lg font-bold text-gray-900">Không tìm thấy bài viết</h3>
+                                    <p className="text-gray-500">Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm</p>
                                 </div>
                             )}
-                        </section>
-                    </>
-                )}
+
+                        </div>
+
+                        {/* Sidebar (Right 4 Cols) */}
+                        <div className="lg:col-span-4 space-y-8">
+
+                            {/* Trending Section */}
+                            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 sticky top-24">
+                                <div className="flex items-center gap-2 mb-6">
+                                    <span className="p-2 bg-rose-50 rounded-lg text-rose-600">
+                                        <Flame className="w-5 h-5" />
+                                    </span>
+                                    <h3 className="font-bold text-lg text-gray-900">Đọc nhiều nhất</h3>
+                                </div>
+
+                                <div className="space-y-6">
+                                    {isLoading ? (
+                                        [...Array(3)].map((_, i) => (
+                                            <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />
+                                        ))
+                                    ) : trendingPosts.map((post, index) => (
+                                        <Link
+                                            key={post.id}
+                                            href={`/user/truyenthong/${post.slug || post.id}`}
+                                            className="group flex gap-4 items-start"
+                                        >
+                                            <span className="text-4xl font-black text-gray-100 leading-[0.8] tabular-nums group-hover:text-blue-100 transition-colors">
+                                                {index + 1}
+                                            </span>
+                                            <div className="space-y-1">
+                                                <h4 className="font-bold text-gray-700 group-hover:text-blue-600 transition-colors line-clamp-2 text-sm leading-relaxed">
+                                                    {post.title}
+                                                </h4>
+                                                <div className="flex items-center gap-2 text-xs text-gray-400">
+                                                    <TrendingUp className="w-3 h-3" />
+                                                    {post.view_count.toLocaleString()} lượt xem
+                                                </div>
+                                            </div>
+                                        </Link>
+                                    ))}
+                                </div>
+
+                                <div className="mt-6 pt-6 border-t border-gray-50">
+                                    <Button variant="outline" className="w-full justify-between group rounded-xl">
+                                        Xem tất cả bảng xếp hạng
+                                        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-600 transition-colors" />
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Newsletter / CTA */}
+                            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-8 text-white text-center relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+                                <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2" />
+
+                                <h3 className="font-bold text-xl mb-2 relative z-10">Đăng ký nhận tin</h3>
+                                <p className="text-blue-100 text-sm mb-6 relative z-10 font-light">
+                                    Nhận thông báo về các sự kiện và tin tức quan trọng hàng tuần trực tiếp vào email.
+                                </p>
+                                <div className="relative z-10 space-y-3">
+                                    <Input
+                                        placeholder="Email của bạn"
+                                        className="bg-white/10 border-white/20 text-white placeholder:text-blue-200/50 backdrop-blur-sm focus:bg-white/20"
+                                    />
+                                    <Button className="w-full bg-white text-blue-600 hover:bg-blue-50 font-bold shadow-lg">
+                                        Đăng ký ngay
+                                    </Button>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
             </div>
         </PageContainer>
     )
