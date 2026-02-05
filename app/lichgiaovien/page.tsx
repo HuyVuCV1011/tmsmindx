@@ -357,9 +357,27 @@ export default function Page2() {
 
       {/* Calendar */}
       {isLoading ? (
-        <div className="bg-white rounded-lg shadow-md p-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Đang tải dữ liệu...</p>
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="overflow-x-auto">
+            <div className="space-y-3">
+              {/* Table Header Skeleton */}
+              <div className="flex gap-2">
+                <div className="w-32 h-12 bg-gray-200 rounded animate-pulse"></div>
+                {[...Array(7)].map((_, i) => (
+                  <div key={i} className="flex-1 h-12 bg-gray-200 rounded animate-pulse"></div>
+                ))}
+              </div>
+              {/* Table Rows Skeleton */}
+              {[...Array(3)].map((_, rowIdx) => (
+                <div key={rowIdx} className="flex gap-2">
+                  <div className="w-32 h-24 bg-gray-200 rounded animate-pulse"></div>
+                  {[...Array(7)].map((_, colIdx) => (
+                    <div key={colIdx} className="flex-1 h-24 bg-gray-200 rounded animate-pulse"></div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">

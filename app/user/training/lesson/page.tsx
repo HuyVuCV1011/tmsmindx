@@ -543,7 +543,7 @@ function LessonContent() {
                 </div>
               )}
 
-              {/* Assignment - Show after video completed */}
+              {/* Bài tập - Show after video completed */}
               {videoCompleted && (
                 <div className="border-t border-gray-200 pt-4">
                   <h3 className="font-bold text-gray-800 mb-3">📋 Kiểm tra tổng kết</h3>
@@ -560,7 +560,7 @@ function LessonContent() {
                         </p>
                         <button
                           onClick={() => {
-                            // Navigate to assignment page
+                            // Đi đến trang bài tập
                             router.push(`/user/assignments?lesson_id=${lessonId}`);
                           }}
                           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
