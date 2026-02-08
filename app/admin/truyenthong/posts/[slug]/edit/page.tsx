@@ -263,7 +263,7 @@ export default function EditPostPage() {
                                 <CardTitle className="text-base">Hình ảnh</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="space-y-2">
+                                <div className="space-y-2 cursor-pointer">
                                     <Label htmlFor="thumbnail">Hình ảnh nút nhỏ</Label>
                                     {postData?.featured_image && (
                                         <div className="mb-2">
@@ -275,11 +275,12 @@ export default function EditPostPage() {
                                         id="thumbnail"
                                         type="file"
                                         accept="image/*"
+                                        className=" cursor-pointer"
                                         onChange={e => setFiles({ ...files, thumbnail: e.target.files?.[0] || null })}
                                     />
                                 </div>
 
-                                <div className="space-y-2">
+                                <div className="space-y-2 cursor-pointer">
                                     <Label htmlFor="banner">Hình ảnh banner</Label>
                                     {postData?.banner_image && (
                                         <div className="mb-2">
@@ -291,6 +292,7 @@ export default function EditPostPage() {
                                         id="banner"
                                         type="file"
                                         accept="image/*"
+                                        className=" cursor-pointer"
                                         onChange={e => setFiles({ ...files, banner: e.target.files?.[0] || null })}
                                     />
                                 </div>
@@ -312,7 +314,7 @@ export default function EditPostPage() {
                                         id="type"
                                         value={formData.type}
                                         onChange={e => setFormData({ ...formData, type: e.target.value })}
-                                        className="w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm"
+                                        className="cursor-pointer w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm"
                                     >
                                         <option value="tin-tức">Tin tức</option>
                                         <option value="chính-sách">Chính sách</option>
@@ -331,7 +333,7 @@ export default function EditPostPage() {
                                         onChange={e =>
                                             setFormData({ ...formData, audience: e.target.value })
                                         }
-                                        className="w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm"
+                                        className="cursor-pointer w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm"
                                     >
                                         <option value="toàn-công-ty">Toàn công ty</option>
                                         <option value="bộ-phận-hr">Bộ phận HR</option>
@@ -346,7 +348,7 @@ export default function EditPostPage() {
                                         id="status"
                                         value={formData.status}
                                         onChange={e => setFormData({ ...formData, status: e.target.value })}
-                                        className="w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm"
+                                        className="cursor-pointer w-full px-3 py-2 border border-border rounded-xl bg-background text-foreground focus:ring-2 focus:ring-primary/30 outline-none transition-all shadow-sm"
                                     >
                                         <option value="draft">Nháp</option>
                                         <option value="published">Công bố</option>

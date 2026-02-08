@@ -75,13 +75,13 @@ export default function AdminDashboard() {
             {/* Action Buttons */}
             <div className="flex gap-3 mb-6">
                 <Link href="/admin/truyenthong/posts">
-                    <button className="flex items-center gap-2 bg-[#a1001f] hover:bg-[#c41230] text-white px-4 py-2 rounded-lg font-semibold transition-colors">
+                    <button className="cursor-pointer flex items-center gap-2 bg-[#a1001f] hover:bg-[#c41230] text-white px-4 py-2 rounded-lg font-semibold transition-colors">
                         <Edit className="h-4 w-4" />
                         Quản lý bài viết
                     </button>
                 </Link>
                 <Link href="/admin/truyenthong/sliders">
-                    <button className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors">
+                    <button className="cursor-pointer flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors">
                         <Image className="h-4 w-4" />
                         Quản lý Slider
                     </button>

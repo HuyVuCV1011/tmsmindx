@@ -113,7 +113,7 @@ export default function PostsManagementPage() {
                     placeholder="Tìm kiếm bài viết..."
                 />
                 <Link href="/admin/truyenthong/posts/create">
-                    <button className="flex items-center gap-2 bg-[#a1001f] hover:bg-[#c41230] text-white px-4 py-2 rounded-lg font-semibold transition-colors ml-4">
+                    <button className="cursor-pointer flex items-center gap-2 bg-[#a1001f] hover:bg-[#c41230] text-white px-4 py-2 rounded-lg font-semibold transition-colors ml-4">
                         <Plus className="h-4 w-4" />
                         Tạo bài viết
                     </button>
@@ -174,7 +174,7 @@ export default function PostsManagementPage() {
                                             <div className="flex gap-1 justify-center">
                                                 <Link href={`/admin/truyenthong/posts/${post.slug}/edit`}>
                                                     <button
-                                                        className="p-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                                                        className="cursor-pointer p-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                                                         title="Sửa"
                                                     >
                                                         <Edit className="h-4 w-4" />
@@ -182,7 +182,7 @@ export default function PostsManagementPage() {
                                                 </Link>
                                                 <button
                                                     onClick={() => handleDeleteClick(post.slug)}
-                                                    className="p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                                    className="cursor-pointer p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
                                                     title="Xóa"
                                                 >
                                                     <Trash2 className="h-4 w-4" />

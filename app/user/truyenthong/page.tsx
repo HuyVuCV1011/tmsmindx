@@ -88,12 +88,6 @@ export default function HomePage() {
             <main className="max-w-7xl mx-auto px-4 py-8">
                 {loading ? (
                     <div className="flex justify-center items-center py-20">
-                        {/* Simple loading state or keep existing skeleton structure if preferred, 
-                             but simplicity matches the request for "clean" UI. 
-                             Let's reuse the skeleton grid for better UX during load if we want, 
-                             but simplest is to just wait. 
-                             Actually, let's keep the skeletons but we need to conditionally render the headers.
-                         */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
                             {[...Array(6)].map((_, i) => (
                                 <Card key={i} className="animate-pulse">
