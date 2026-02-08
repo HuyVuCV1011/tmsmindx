@@ -1,12 +1,14 @@
 "use client";
 
 import { Card } from "@/components/Card";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
 import { PageContainer } from "@/components/PageContainer";
 import { SearchBar } from "@/components/SearchBar";
 import { SkeletonList } from "@/components/skeletons";
 import { Tabs } from "@/components/Tabs";
-import { Lock, Upload, Video } from "lucide-react";
+import { ToastContainer, ToastType } from "@/components/Toast";
+import { Lock, Trash2, Upload, Video } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -32,6 +34,34 @@ export default function Page5() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
+  // Toast state
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: ToastType }>>([]);
+  
+  // Confirm dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type?: "danger" | "warning" | "info";
+    requireTextConfirm?: boolean;
+    icon?: "delete" | "lock" | "warning";
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
+  const showToast = (message: string, type: ToastType = "info") => {
+    const id = Math.random().toString(36).substring(7);
+    setToasts((prev) => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  };
+
   useEffect(() => {
     fetchVideos();
   }, []);
@@ -51,29 +81,67 @@ export default function Page5() {
     }
   };
 
-  const handleLockVideo = async (videoId: number, videoTitle: string) => {
-    if (!confirm(`Bạn có chắc chắn muốn khóa video "${videoTitle}"?\n\nVideo sẽ chuyển sang trạng thái inactive và không thể truy cập bởi giáo viên.`)) {
-      return;
-    }
+  const handleLockVideo = (videoId: number, videoTitle: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Khóa video",
+      message: `Bạn có chắc chắn muốn khóa video "${videoTitle}"?\n\nVideo sẽ chuyển sang trạng thái inactive và không thể truy cập bởi giáo viên.`,
+      type: "warning",
+      icon: "lock",
+      onConfirm: async () => {
+        setConfirmDialog({ ...confirmDialog, isOpen: false });
+        try {
+          const response = await fetch('/api/training-videos', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: videoId, status: 'inactive' })
+          });
 
-    try {
-      const response = await fetch('/api/training-videos', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: videoId, status: 'inactive' })
-      });
+          const data = await response.json();
+          if (data.success) {
+            showToast('Khóa video thành công!', 'success');
+            fetchVideos();
+          } else {
+            showToast('Lỗi: ' + data.error, 'error');
+          }
+        } catch (error) {
+          console.error('Error locking video:', error);
+          showToast('Lỗi khi khóa video!', 'error');
+        }
+      },
+    });
+  };
 
-      const data = await response.json();
-      if (data.success) {
-        alert('Khóa video thành công!');
-        fetchVideos(); // Refresh list
-      } else {
-        alert('Lỗi: ' + data.error);
-      }
-    } catch (error) {
-      console.error('Error locking video:', error);
-      alert('Lỗi khi khóa video!');
-    }
+  const handleDeleteVideo = (videoId: number, videoTitle: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Xóa video vĩnh viễn",
+      message: `Bạn có chắc chắn muốn XÓA VĨNH VIỄN video "${videoTitle}"?\n\n⚠️ CẢNH BÁO: Hành động này KHÔNG THỂ HOÀN TÁC!\n\n- Video sẽ bị xóa khỏi database\n- Tất cả câu hỏi liên quan sẽ bị xóa\n- Dữ liệu xem của giáo viên sẽ bị xóa`,
+      type: "danger",
+      icon: "delete",
+      requireTextConfirm: true,
+      onConfirm: async () => {
+        setConfirmDialog({ ...confirmDialog, isOpen: false });
+        try {
+          const response = await fetch('/api/training-videos', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: videoId })
+          });
+
+          const data = await response.json();
+          if (data.success) {
+            showToast('Xóa video thành công!', 'success');
+            fetchVideos();
+          } else {
+            showToast('Lỗi: ' + data.error, 'error');
+          }
+        } catch (error) {
+          console.error('Error deleting video:', error);
+          showToast('Lỗi khi xóa video!', 'error');
+        }
+      },
+    });
   };
 
   const handleUploadClick = () => {
@@ -85,42 +153,70 @@ export default function Page5() {
     if (!file) return;
 
     setUploading(true);
-    const formData = new FormData();
-    formData.append("video", file);
 
     try {
-      const res = await fetch("/api/upload-video", {
+      // Step 1: Get signature from our API
+      const signatureRes = await fetch("/api/cloudinary-signature", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: "mindx_videos" }),
       });
-      const data = await res.json();
 
-      if (res.ok && data.url) {
-        // Create video record with minimal info
-        const response = await fetch('/api/training-videos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: file.name.replace(/\.[^/.]+$/, ""), // Use filename without extension as default title
-            video_link: data.url,
-            start_date: new Date().toISOString().split('T')[0],
-            duration_minutes: 30,
-            status: "draft"
-          })
-        });
+      if (!signatureRes.ok) {
+        throw new Error("Không thể tạo signature cho upload");
+      }
 
-        const videoData = await response.json();
-        if (videoData.success) {
-          // Redirect to setup page to fill in details
-          router.push(`/admin/video-setup?id=${videoData.data.id}`);
-        } else {
-          alert("Lỗi khi lưu video: " + videoData.error);
+      const { signature, timestamp, cloudName, apiKey, folder } = await signatureRes.json();
+
+      // Step 2: Upload directly to Cloudinary from client
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("signature", signature);
+      formData.append("timestamp", timestamp.toString());
+      formData.append("api_key", apiKey);
+      formData.append("folder", folder);
+
+      const uploadRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`,
+        {
+          method: "POST",
+          body: formData,
         }
+      );
+
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json();
+        throw new Error(errorData.error?.message || "Upload lên Cloudinary thất bại");
+      }
+
+      const uploadData = await uploadRes.json();
+
+      // Step 3: Save video record to database
+      const response = await fetch('/api/training-videos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: file.name.replace(/\.[^/.]+$/, ""), // Use filename without extension as default title
+          video_link: uploadData.secure_url,
+          start_date: new Date().toISOString().split('T')[0],
+          duration_minutes: Math.ceil(uploadData.duration / 60) || 30, // Convert seconds to minutes
+          status: "draft"
+        })
+      });
+
+      const videoData = await response.json();
+      if (videoData.success) {
+        showToast('Upload video thành công!', 'success');
+        // Redirect to setup page to fill in details
+        setTimeout(() => {
+          router.push(`/admin/video-setup?id=${videoData.data.id}`);
+        }, 500);
       } else {
-        alert(data.error || "Lỗi upload video!");
+        showToast("Lỗi khi lưu video: " + videoData.error, 'error');
       }
     } catch (err) {
-      alert("Lỗi khi upload video!");
+      console.error("Upload error:", err);
+      showToast(err instanceof Error ? err.message : "Lỗi khi upload video!", 'error');
     } finally {
       setUploading(false);
       // Reset file input
@@ -233,21 +329,36 @@ export default function Page5() {
             {filteredVideos.map(video => (
               <div
                 key={video.id}
-                className="bg-white rounded-lg border border-gray-200 p-2 hover:border-gray-300 hover:shadow-sm transition-all group"
+                className="bg-white rounded-lg border border-gray-200 p-2 hover:border-gray-300 hover:shadow-sm transition-all group relative"
               >
-                {/* Lock Button */}
-                {video.status !== 'inactive' && (
+                {/* Action Buttons */}
+                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  {/* Delete Button */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleLockVideo(video.id, video.title);
+                      handleDeleteVideo(video.id, video.title);
                     }}
-                    className="absolute top-2 right-2 bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-orange-600 z-10"
-                    title="Khóa video"
+                    className="bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
+                    title="Xóa video"
                   >
-                    <Lock className="h-3 w-3" />
+                    <Trash2 className="h-3 w-3" />
                   </button>
-                )}
+                  
+                  {/* Lock Button */}
+                  {video.status !== 'inactive' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleLockVideo(video.id, video.title);
+                      }}
+                      className="bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-orange-600"
+                      title="Khóa video"
+                    >
+                      <Lock className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
 
                 <div
                   className="cursor-pointer"
@@ -287,6 +398,21 @@ export default function Page5() {
           </div>
         )}
       </Card>
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+        requireTextConfirm={confirmDialog.requireTextConfirm}
+        icon={confirmDialog.icon}
+      />
     </PageContainer>
   );
 }
