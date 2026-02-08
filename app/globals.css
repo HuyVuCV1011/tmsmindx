@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./z-index.css";
 
 @layer base {
   * {

@@ -1,10 +1,10 @@
 'use client';
 
-import { useAuth } from '@/lib/auth-context';
-import { useEffect, useState } from 'react';
 import { PageContainer } from '@/components/PageContainer';
-import { Clock, FileText, Award, CheckCircle, XCircle, AlertCircle, ArrowLeft, Send, BookOpen } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
+import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send, XCircle } from 'lucide-react';
 import Image from 'next/image';
+import { useEffect, useState } from 'react';
 
 interface Assignment {
   id: number;
@@ -335,10 +335,31 @@ export default function TeacherAssignmentPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Đang tải bài tập...</p>
+        {/* Assignment Loading Skeleton */}
+        <div className="space-y-6">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/3 mb-2"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2 mb-6"></div>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4" style={{ animationDelay: `${i * 100}ms` }}>
+                <div className="animate-pulse">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-8 h-8 bg-gray-200 rounded-lg"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-full"></div>
+                      <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-3 bg-gray-200 rounded w-full"></div>
+                    <div className="h-3 bg-gray-200 rounded w-4/5"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </PageContainer>
@@ -351,7 +372,7 @@ export default function TeacherAssignmentPage() {
     
     return (
       <PageContainer>
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full">
           <div className="flex flex-col lg:flex-row gap-6">
             {/* Main Content - Questions */}
             <div className="flex-1 min-w-0">
@@ -652,7 +673,7 @@ export default function TeacherAssignmentPage() {
     
     return (
       <PageContainer>
-        <div className="max-w-3xl mx-auto">
+        <div className="w-full">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
             {/* Result Header */}
             <div className="text-center mb-8">

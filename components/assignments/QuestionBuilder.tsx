@@ -365,7 +365,7 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
                 {uploadingImage && (
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
                     <div className="text-white text-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                      <div className="h-8 w-8 bg-white/30 rounded-full mx-auto mb-2 animate-pulse"></div>
                       <p className="text-sm">Đang tải lên...</p>
                     </div>
                   </div>
@@ -388,7 +388,7 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
                 <div className="text-center">
                   {uploadingImage ? (
                     <>
-                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                      <div className="h-10 w-10 bg-blue-200 rounded-full mx-auto mb-2 animate-pulse"></div>
                       <span className="text-sm text-gray-600">Đang tải lên...</span>
                     </>
                   ) : (
@@ -613,7 +613,7 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
           >
             {uploadingImage ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <div className="h-4 w-4 bg-white/50 rounded-full animate-pulse"></div>
                 <span>Đang tải ảnh lên...</span>
               </>
             ) : (

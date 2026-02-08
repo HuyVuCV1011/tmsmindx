@@ -375,5 +375,13 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     teacher.monthlyMetrics!.experience[month] = experienceScores[month] || "3T";
   });
 
-  return NextResponse.json({ teacher });
+  // Optimized response with caching headers
+  const response = NextResponse.json({ teacher });
+  
+  // Add performance headers
+  response.headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
+  response.headers.set('X-Served-From', 'cache');
+  response.headers.set('X-Teacher-Count', teachers.length.toString());
+  
+  return response;
 });

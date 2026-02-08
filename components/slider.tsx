@@ -1,11 +1,11 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { cn } from '@/lib/utils'
 
 interface Post {
     id: string | number
@@ -85,10 +85,6 @@ export default function Slider({ posts }: SliderProps) {
                             className="object-cover"
                             priority={index === 0}
                         />
-
-                        {/* Dramatic Gradient Overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90" />
-                        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-transparent to-transparent opacity-60" />
 
                         {/* Content */}
                         <div className="absolute inset-0 flex flex-col justify-end p-8 md:p-16 text-white max-w-5xl mx-auto w-full">

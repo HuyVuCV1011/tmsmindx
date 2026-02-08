@@ -241,9 +241,13 @@ function AssignmentQuestionsContent() {
   if (loading) {
     return (
       <PageContainer title="Quản lý câu hỏi">
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="text-gray-600 mt-4">Đang tải...</p>
+        <div className="animate-pulse space-y-6 p-6">
+          <div className="h-8 bg-gray-300 rounded w-1/3"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="h-32 bg-gray-300 rounded"></div>
+            <div className="h-32 bg-gray-300 rounded"></div>
+            <div className="h-32 bg-gray-300 rounded"></div>
+          </div>
         </div>
       </PageContainer>
     );

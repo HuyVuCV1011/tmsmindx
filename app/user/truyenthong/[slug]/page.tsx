@@ -3,14 +3,12 @@
 import Comments from '@/components/Comments'
 import PostCard from '@/components/post-card'
 import { PostDetailSkeleton } from '@/components/skeletons'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { ArrowLeft, Calendar, Eye, FileText, Heart, ThumbsUp, Laugh, Frown, Angry, Smile } from 'lucide-react'
+import { Angry, ArrowLeft, Calendar, Eye, FileText, Frown, Heart, Laugh, ThumbsUp } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { useAuth } from '@/lib/auth-context'
 
@@ -246,10 +244,10 @@ export default function PostDetailPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+        <div>
             {/* Header */}
             <header className="border-b border-gray-200 bg-white sticky top-0 z-40 shadow-sm">
-                <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+                <div className="max-w-7xl mx-auto py-3 flex items-center gap-3">
                     <Link href="/user/truyenthong">
                         <Button variant="ghost" size="sm" className="gap-2 h-9 hover:bg-blue-50 hover:text-blue-600">
                             <ArrowLeft className="w-4 h-4" />
@@ -260,7 +258,7 @@ export default function PostDetailPage() {
                 </div>
             </header>
 
-            <main className="max-w-5xl mx-auto px-4 py-6">
+            <main className="max-w-7xl mx-auto">
                 {/* Banner */}
                 <div className="relative w-full h-72 md:h-96 rounded-xl overflow-hidden mb-5 shadow-lg">
                     <Image
@@ -429,7 +427,7 @@ export default function PostDetailPage() {
                                     ))}
                                 </div>
                             ) : (
-                                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                                <div className="text-center py-8 bg-white rounded-lg border-2 border-gray-100">
                                     <FileText className="w-12 h-12 text-gray-300 mx-auto mb-2" />
                                     <p className="text-sm text-gray-500">Hiện tại chưa có bài viết liên quan.</p>
                                 </div>

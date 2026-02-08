@@ -44,13 +44,19 @@ export default function AppLayout({
     }
   }, [user, isLoading, router, requireAuth, requireAdmin, redirectPath]);
 
-  // Show loading while checking authentication
+  // Show skeleton while checking authentication
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-[#a1001f] mx-auto"></div>
-          <p className="text-gray-600 mt-4 font-medium">Đang tải...</p>
+      <div className="min-h-screen bg-white p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="flex items-center space-x-4">
+            <div className="h-10 w-10 bg-gray-300 rounded-full"></div>
+            <div className="h-6 bg-gray-300 rounded w-32"></div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="h-64 bg-gray-300 rounded"></div>
+            <div className="md:col-span-3 h-64 bg-gray-300 rounded"></div>
+          </div>
         </div>
       </div>
     );
@@ -66,19 +72,6 @@ export default function AppLayout({
   }
 
   return (
-    <div className="relative min-h-screen bg-white">
-      {/* Main Content Area with smooth transitions */}
-      <main className="min-h-screen transition-all duration-300 ease-in-out pl-0 lg:pl-56">
-        {/* Content wrapper - optimized spacing and responsive */}
-        <div className="w-full h-screen">
-          {/* Inner container with max-width and proper padding */}
-          <div className="h-full overflow-y-auto custom-scrollbar">
-            <div className="max-w-7xl mx-auto px-3 py-4 sm:px-4 sm:py-5 lg:px-6 lg:py-6 xl:px-8 xl:py-8">
-              {children}
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
+    <>{children}</>
   );
 }

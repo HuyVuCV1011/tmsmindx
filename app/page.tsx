@@ -40,12 +40,21 @@ export default function Home() {
   }, [user, token, isLoading, router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-[#a1001f] mx-auto mb-4"></div>
-        <p className="text-gray-600 text-sm font-medium">
-          {isLoading ? 'Đang kiểm tra đăng nhập...' : 'Đang chuyển hướng...'}
-        </p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-300 rounded w-1/4"></div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="h-32 bg-gray-300 rounded"></div>
+            <div className="h-32 bg-gray-300 rounded"></div>
+            <div className="h-32 bg-gray-300 rounded"></div>
+          </div>
+          <div className="space-y-4">
+            <div className="h-4 bg-gray-300 rounded w-3/4"></div>
+            <div className="h-4 bg-gray-300 rounded w-1/2"></div>
+            <div className="h-4 bg-gray-300 rounded w-2/3"></div>
+          </div>
+        </div>
       </div>
     </div>
   );

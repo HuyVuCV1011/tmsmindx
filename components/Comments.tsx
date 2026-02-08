@@ -1,17 +1,17 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { MessageCircle, ThumbsUp, Heart, Laugh, Angry, Frown, Edit, Trash2, ChevronDown, TrendingUp, Clock, Shield, EyeOff, Eye, AlertTriangle, Image as ImageIcon, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { Card } from '@/components/ui/card'
-import Image from 'next/image'
 import {
     Dialog,
     DialogContent,
     DialogDescription,
     DialogTitle,
 } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { AlertTriangle, Angry, ChevronDown, Clock, Edit, Eye, EyeOff, Frown, Heart, Image as ImageIcon, Laugh, MessageCircle, Shield, ThumbsUp, Trash2, TrendingUp, X } from 'lucide-react'
+import Image from 'next/image'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 interface Reaction {
     type: string
@@ -414,7 +414,7 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                             >
                                 <Shield className="w-3.5 h-3.5 mr-1.5" />
                                 {isHiding ? (
-                                    <Clock className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                                    <div className="w-3 h-3 bg-gray-400 rounded-full mr-1.5 animate-pulse"></div>
                                 ) : (
                                     <EyeOff className="w-3.5 h-3.5 mr-1.5" />
                                 )}
@@ -434,7 +434,7 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                             >
                                 <Shield className="w-3.5 h-3.5 mr-1.5" />
                                 {isDeleting ? (
-                                    <Clock className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                                    <div className="w-3 h-3 bg-gray-400 rounded-full mr-1.5 animate-pulse"></div>
                                 ) : (
                                     <Trash2 className="w-3.5 h-3.5 mr-1.5" />
                                 )}
