@@ -419,7 +419,7 @@ function VideoSetupContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
+      <div className="min-h-screen bg-white p-8">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Header Skeleton */}
           <div className="flex justify-between items-center">
@@ -446,7 +446,7 @@ function VideoSetupContent() {
 
   if (error || !video) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
+      <div className="min-h-screen bg-white p-8">
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded mb-4">
             {error || "Không tìm thấy video"}
@@ -463,7 +463,7 @@ function VideoSetupContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-white p-2">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
@@ -913,7 +913,7 @@ function VideoSetupContent() {
 
 export default function VideoSetupPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">Đang tải...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-white p-8 flex items-center justify-center">Đang tải...</div>}>
       <VideoSetupContent />
     </Suspense>
   );

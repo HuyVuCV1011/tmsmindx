@@ -1,29 +1,18 @@
 "use client";
 
 import { useAuth } from "@/lib/auth-context";
+import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
 import { ChevronDown, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Sparkles, Users, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export function Sidebar() {
-  const [isOpen, setIsOpen] = useState(true);
+  const { isOpen, setIsOpen } = useSidebar();
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { user, logout } = useAuth();
   const pathname = usePathname();
-
-  // Auto-collapse on mobile
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 1024) {
-        setIsOpen(false);
-      }
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   // Load expanded menus from localStorage on mount
   useEffect(() => {
@@ -79,11 +68,11 @@ export function Sidebar() {
   ];
 
   const userMenuItems = [
+    { href: "/user/truyenthong", label: "Thông tin mới", icon: Megaphone },
     { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
     { href: "/user/training", label: "Đào tạo nâng cao", icon: GraduationCap },
     { href: "/user/assignments", label: "My Assignments", icon: FileText },
     { href: "/user/giaitrinh", label: "Giải trình kiểm tra", icon: MessageSquare },
-    { href: "/user/truyenthong", label: "Thông tin mới", icon: Megaphone },
   ];
 
 
@@ -103,22 +92,32 @@ export function Sidebar() {
 
   return (
     <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-sidebar-overlay-custom bg-black/50 backdrop-blur-sm lg:hidden transition-all duration-300 ease-in-out animate-in fade-in-0"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
       {/* Toggle Button - Modern floating design */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed top-3 left-3 z-50 p-2 rounded-lg bg-white shadow-md border border-gray-200 hover:shadow-lg hover:scale-105 hover:bg-gradient-to-br hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:border-[#a1001f] transition-all duration-300 group"
+          className="fixed top-3 left-3 z-sidebar-toggle p-2 rounded-lg bg-white shadow-md border border-gray-200 hover:shadow-lg hover:scale-105 hover:bg-gradient-to-br hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:border-[#a1001f] transition-all duration-300 group animate-in fade-in-0 slide-in-from-left-2"
         >
-          <Menu className="h-4 w-4 transition-transform group-hover:rotate-180" />
+          <Menu className="h-4 w-4 transition-transform group-hover:rotate-180 duration-300" />
         </button>
       )}
 
       {/* Sidebar - Modern glass-morphism design */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 h-screen backdrop-blur-xl bg-white/95 border-r border-gray-200 shadow-xl transition-all duration-500 ease-in-out",
-          isOpen ? "translate-x-0 w-56" : "-translate-x-full"
+          "fixed left-0 top-0 z-sidebar-custom h-screen backdrop-blur-xl bg-white/95 border-r border-gray-200 shadow-xl w-56",
+          "transition-all duration-500 ease-in-out will-change-transform",
+          isOpen ? "translate-x-0" : "-translate-x-full"
         )}
+        style={{ transform: `translate3d(${isOpen ? '0' : '-100%'}, 0, 0)` }}
       >
         <div className="flex h-full flex-col">
           {/* Header - Gradient brand header */}
@@ -146,8 +145,8 @@ export function Sidebar() {
               const Icon = item.icon;
               const hasSubmenu = 'submenu' in item;
               const isExpanded = expandedMenus.includes(item.label);
-              const isActive = !hasSubmenu && pathname === item.href;
-              const isSubmenuActive = hasSubmenu && item.submenu?.some(sub => pathname === sub.href);
+              const isActive = !hasSubmenu && (pathname === item.href || pathname.startsWith(item.href + '/'));
+              const isSubmenuActive = hasSubmenu && item.submenu?.some(sub => pathname === sub.href || pathname.startsWith(sub.href + '/'));
 
               return (
                 <div key={item.href || item.label} className="group">
@@ -186,7 +185,7 @@ export function Sidebar() {
                       )}>
                         <div className="ml-3 mt-1 space-y-0.5 border-l-2 border-gray-200 pl-2">
                           {item.submenu?.map((subItem) => {
-                            const isSubActive = pathname === subItem.href;
+                            const isSubActive = pathname === subItem.href || pathname.startsWith(subItem.href + '/');
                             return (
                               <a
                                 key={subItem.href}

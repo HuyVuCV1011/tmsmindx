@@ -345,7 +345,7 @@ function RawDataContent() {
 export default function RawDataPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 p-4">
+      <div className="min-h-screen bg-white p-4">
         <div className="max-w-7xl mx-auto space-y-4">
           {/* Header Skeleton */}
           <div className="space-y-3 animate-pulse">

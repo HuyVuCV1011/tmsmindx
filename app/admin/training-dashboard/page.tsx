@@ -6,6 +6,7 @@ import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
 import { TableSkeleton } from '@/components/skeletons';
 import { BarChart3, Calendar, Play, Video } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 interface Video {
@@ -37,6 +38,7 @@ interface TeacherStats {
 }
 
 export default function TrainingDashboardPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<'assigned' | 'dashboard'>('assigned');
   const [assignedVideos, setAssignedVideos] = useState<Video[]>([]);
   const [dashboardData, setDashboardData] = useState<TeacherStats[]>([]);
@@ -128,7 +130,7 @@ export default function TrainingDashboardPage() {
                   <div 
                     key={v.id} 
                     className="flex gap-3 p-3 border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
-                    onClick={() => window.open(v.video_link, '_blank')}
+                    onClick={() => router.push(`/admin/video-detail?id=${v.id}`)}
                   >
                     {/* Thumbnail */}
                     <div className="flex-shrink-0 relative">

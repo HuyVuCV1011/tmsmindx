@@ -432,7 +432,7 @@ export function AssignmentWizard({ onSubmit, onCancel, initialData, isSubmitting
               >
                 {isSubmitting ? (
                   <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <div className="h-5 w-5 bg-white/50 rounded-full animate-pulse"></div>
                     <span>Đang xử lý...</span>
                   </>
                 ) : (

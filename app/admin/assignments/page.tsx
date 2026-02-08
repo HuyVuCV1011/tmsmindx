@@ -2,8 +2,8 @@
 
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
-import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { PageContainer } from '@/components/PageContainer';
+import { SkeletonTable } from '@/components/skeletons';
 import { Edit, List, Plus, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -160,7 +160,11 @@ export default function AssignmentManagementPage() {
   };
 
   if (loading) {
-    return <LoadingSpinner text="Đang tải assignments..." />;
+    return (
+      <PageContainer title="Quản lý Assignment" description="Quản lý câu hỏi và bài tập">
+        <SkeletonTable />
+      </PageContainer>
+    );
   }
 
   return (

@@ -2,9 +2,9 @@
 
 import { Card } from "@/components/Card";
 import { EmptyState } from "@/components/EmptyState";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { PageContainer } from "@/components/PageContainer";
 import { SearchBar } from "@/components/SearchBar";
+import { SkeletonList } from "@/components/skeletons";
 import { Tabs } from "@/components/Tabs";
 import { Lock, Upload, Video } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -87,14 +87,14 @@ export default function Page5() {
     setUploading(true);
     const formData = new FormData();
     formData.append("video", file);
-    
+
     try {
       const res = await fetch("/api/upload-video", {
         method: "POST",
         body: formData,
       });
       const data = await res.json();
-      
+
       if (res.ok && data.url) {
         // Create video record with minimal info
         const response = await fetch('/api/training-videos', {
@@ -108,7 +108,7 @@ export default function Page5() {
             status: "draft"
           })
         });
-        
+
         const videoData = await response.json();
         if (videoData.success) {
           // Redirect to setup page to fill in details
@@ -145,8 +145,16 @@ export default function Page5() {
     locked: videos.filter(v => v.status === 'inactive').length,
   };
 
+  // Show skeleton while loading
   if (loading) {
-    return <LoadingSpinner text="Đang tải danh sách video..." />;
+    return (
+      <PageContainer
+        title="Quản lý đào tạo nâng cao"
+        description="Quản lý video và bài học đào tạo"
+      >
+        <SkeletonList items={8} />
+      </PageContainer>
+    );
   }
 
   return (
@@ -178,8 +186,11 @@ export default function Page5() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="max-w-sm" padding="lg">
             <div className="text-center">
-              <LoadingSpinner size="lg" text="Đang tải video lên..." />
-              <p className="text-sm text-gray-500 mt-2">Vui lòng đợi trong giây lát</p>
+              <div className="animate-pulse space-y-3">
+                <div className="h-12 w-12 bg-gray-300 rounded-full mx-auto"></div>
+                <div className="h-4 bg-gray-300 rounded w-3/4 mx-auto"></div>
+              </div>
+              <p className="text-sm text-gray-500 mt-4">Vui lòng đợi trong giây lát</p>
             </div>
           </Card>
         </div>
@@ -238,7 +249,7 @@ export default function Page5() {
                   </button>
                 )}
 
-                <div 
+                <div
                   className="cursor-pointer"
                   onClick={() => router.push(`/admin/video-detail?id=${video.id}`)}
                 >
@@ -261,14 +272,13 @@ export default function Page5() {
                     <span>•</span>
                     <span>👁️ {video.view_count || 0}</span>
                   </div>
-                  
+
                   <div className="font-semibold text-xs mb-1 line-clamp-2">{video.title}</div>
-                  
-                  <span className={`inline-block text-xs px-2 py-0.5 rounded ${
-                    video.status === 'active' ? 'bg-green-100 text-green-800' :
-                    video.status === 'inactive' ? 'bg-gray-100 text-gray-800' :
-                    'bg-yellow-100 text-yellow-800'
-                  }`}>
+
+                  <span className={`inline-block text-xs px-2 py-0.5 rounded ${video.status === 'active' ? 'bg-green-100 text-green-800' :
+                      video.status === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                        'bg-yellow-100 text-yellow-800'
+                    }`}>
                     {video.status}
                   </span>
                 </div>

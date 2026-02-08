@@ -223,7 +223,7 @@ export default function Page2() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-600 text-lg font-medium">Lỗi tải dữ liệu</p>
           <p className="text-gray-600 mt-2">{error.message}</p>
@@ -233,7 +233,7 @@ export default function Page2() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-white p-2">
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">

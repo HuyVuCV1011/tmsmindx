@@ -2,8 +2,8 @@
 
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
-import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { PageContainer } from '@/components/PageContainer';
+import { SkeletonPage } from '@/components/skeletons';
 import { Tabs } from '@/components/Tabs';
 import { useAuth } from '@/lib/auth-context';
 import { CheckCircle, Eye, FileText, XCircle } from 'lucide-react';
@@ -136,11 +136,11 @@ export default function AdminGiaiThichPage() {
   };
 
   if (loading) {
-    return <LoadingSpinner text="Đang tải giải trình..." />;
-  }
-
-  if (loading) {
-    return <LoadingSpinner text="Đang tải giải trình..." />;
+    return (
+      <PageContainer title="Quản lý giải trình" description="Xem và phê duyệt giải trình của giảng viên">
+        <SkeletonPage />
+      </PageContainer>
+    );
   }
 
   const tabs = [
@@ -248,8 +248,9 @@ export default function AdminGiaiThichPage() {
 
       {/* Detail Modal */}
       {selectedExplanation && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <Card className="max-w-3xl w-full my-8">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="max-w-3xl w-full my-8 max-h-[90vh] overflow-y-auto">
+            <Card>
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h2 className="text-xl font-bold">Chi tiết Giải trình #{selectedExplanation.id}</h2>
@@ -397,6 +398,7 @@ export default function AdminGiaiThichPage() {
               )}
             </div>
           </Card>
+          </div>
         </div>
       )}
     </PageContainer>

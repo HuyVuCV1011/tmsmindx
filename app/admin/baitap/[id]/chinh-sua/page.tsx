@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useParams } from 'next/navigation';
 import { PageContainer } from '@/components/PageContainer';
 import { AssignmentWizard } from '@/components/assignments';
 import { ArrowLeft } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
 function EditAssignmentContent() {
@@ -74,9 +74,13 @@ function EditAssignmentContent() {
   if (loading) {
     return (
       <PageContainer title="Chỉnh sửa bài tập">
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="text-gray-600 mt-4">Đang tải...</p>
+        <div className="animate-pulse space-y-6 p-6">
+          <div className="h-8 bg-gray-300 rounded w-1/3"></div>
+          <div className="space-y-4">
+            <div className="h-12 bg-gray-300 rounded"></div>
+            <div className="h-32 bg-gray-300 rounded"></div>
+            <div className="h-10 bg-gray-300 rounded w-1/4"></div>
+          </div>
         </div>
       </PageContainer>
     );
