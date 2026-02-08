@@ -2,10 +2,11 @@
 
 import { Card } from '@/components/Card'
 import { EmptyState } from '@/components/EmptyState'
-import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { PageContainer } from '@/components/PageContainer'
 import { SearchBar } from '@/components/SearchBar'
+import { TableSkeleton } from '@/components/skeletons'
 import { Tabs } from '@/components/Tabs'
+import TruyenThongStats from '@/components/truyenthong-stats'
 import { Edit, FileText, Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
@@ -70,6 +71,12 @@ export default function PostsManagementPage() {
         if (!postToDelete) return
 
         setIsDeleting(true)
+        
+        // Optimistic update: Remove from UI immediately
+        const previousPosts = posts
+        mutate(posts?.filter(p => p.slug !== postToDelete), false)
+        setDeleteConfirmOpen(false)
+        
         try {
             const res = await fetch(`/api/truyenthong/posts/${postToDelete}`, {
                 method: 'DELETE',
@@ -78,11 +85,11 @@ export default function PostsManagementPage() {
             if (!res.ok) throw new Error('Failed to delete')
 
             toast.success('Đã xóa bài viết thành công')
-            mutate(posts?.filter(p => p.slug !== postToDelete), false) // Optimistic update
-            setDeleteConfirmOpen(false)
+            mutate() // Revalidate from server
         } catch {
             toast.error('Có lỗi xảy ra khi xóa bài viết')
-            mutate()
+            // Revert on error
+            mutate(previousPosts, false)
         } finally {
             setIsDeleting(false)
             setPostToDelete(null)
@@ -96,15 +103,14 @@ export default function PostsManagementPage() {
         { id: 'hidden', label: 'Ẩn', count: posts?.filter(p => p.status === 'hidden').length || 0 },
     ]
 
-    if (isLoading) {
-        return <LoadingSpinner text="Đang tải bài viết..." />
-    }
-
     return (
         <PageContainer
             title="Quản lý bài viết"
             description={`Tổng cộng: ${posts?.length || 0} bài viết`}
         >
+            {/* Stats Dashboard */}
+            <TruyenThongStats />
+            
             {/* Create Button */}
             <div className="flex justify-between items-center mb-4">
                 <SearchBar
@@ -129,7 +135,9 @@ export default function PostsManagementPage() {
 
             {/* Posts Table */}
             <Card>
-                {!posts || posts.length === 0 ? (
+                {isLoading ? (
+                    <TableSkeleton rows={5} columns={8} />
+                ) : !posts || posts.length === 0 ? (
                     <EmptyState
                         icon={FileText}
                         title="Không tìm thấy bài viết"

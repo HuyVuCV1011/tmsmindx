@@ -1,9 +1,8 @@
 "use client";
 
-import { useAuth } from "@/lib/auth-context";
 import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import useSWR, { mutate } from "swr";
+import useSWR from "swr";
 
 interface TeacherAvailability {
   timestamp: string;
@@ -104,17 +103,13 @@ const InfoItem = memo(({ icon, label, value }: { icon: React.ReactNode; label: s
 });
 InfoItem.displayName = 'InfoItem';
 
-// API Secret Key for internal requests
-const API_SECRET_KEY = process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025';
-
 // Fetcher function with caching and compression
 const fetcher = async (url: string) => {
   const res = await fetch(url, { 
     next: { revalidate: 60 }, // Cache 60s
     headers: { 
       'Accept-Encoding': 'gzip, deflate, br',
-      'Cache-Control': 'max-age=60',
-      'x-api-key': API_SECRET_KEY
+      'Cache-Control': 'max-age=60'
     }
   });
   if (!res.ok) throw new Error('Failed to fetch');
@@ -142,29 +137,6 @@ export default function Page1() {
   const [feedbackSuccessModalOpen, setFeedbackSuccessModalOpen] = useState(false);
   const [hasFeedback, setHasFeedback] = useState(false);
   const [isFirstTimeFeedback, setIsFirstTimeFeedback] = useState(false);
-  const [feedbackEnabled, setFeedbackEnabled] = useState(true);
-
-  const disableFeedback = () => {
-    try {
-      localStorage.setItem('feedbackDisabled', 'true');
-      setFeedbackEnabled(false);
-      setFeedbackModalOpen(false);
-    } catch (e) {
-      console.warn('Unable to persist feedbackDisabled flag', e);
-      setFeedbackEnabled(false);
-      setFeedbackModalOpen(false);
-    }
-  };
-
-  const enableFeedback = () => {
-    try {
-      localStorage.removeItem('feedbackDisabled');
-      setFeedbackEnabled(true);
-    } catch (e) {
-      console.warn('Unable to remove feedbackDisabled flag', e);
-      setFeedbackEnabled(true);
-    }
-  };
   const [availabilityPeriod, setAvailabilityPeriod] = useState<"week" | "month" | "year">("month");
   const [notFoundModalOpen, setNotFoundModalOpen] = useState(false);
   const [registrationCheckModalOpen, setRegistrationCheckModalOpen] = useState(false);
@@ -181,61 +153,12 @@ export default function Page1() {
     if (feedbackGiven === 'true') {
       setHasFeedback(true);
     }
-
-    const disabled = localStorage.getItem('feedbackDisabled');
-    if (disabled === 'true') {
-      setFeedbackEnabled(false);
-    }
-  }, []);
-
-  const { user } = useAuth();
-
-  // Custom fetcher với Authorization header và API key
-  const secureFetcher = useCallback(async (url: string) => {
-    const token = localStorage.getItem('token');
-    const headers: HeadersInit = {
-      'x-api-key': API_SECRET_KEY
-    };
-    
-    // Debug: Log token status
-    console.log('🔐 Fetching with token:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN');
-    
-    // Thêm Authorization token nếu có
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    
-    const response = await fetch(url, {
-      headers
-    });
-    
-    console.log('📡 API Response:', url, 'Status:', response.status);
-    
-    // Nếu 401 Unauthorized, có nghĩa token không hợp lệ hoặc đã hết hạn
-    if (response.status === 401) {
-      console.error('❌ Token không hợp lệ hoặc đã hết hạn. Đang chuyển về trang đăng nhập...');
-      // Xóa token và user data cũ
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      // Chuyển về trang login
-      window.location.href = '/login';
-      throw new Error('Token đã hết hạn. Vui lòng đăng nhập lại.');
-    }
-    
-    if (!response.ok) {
-      const error: any = new Error('An error occurred while fetching the data.');
-      error.info = await response.json();
-      error.status = response.status;
-      console.error('❌ API Error:', error.info);
-      throw error;
-    }
-    return response.json();
   }, []);
 
   // SWR với auto caching và revalidation
   const { data: teacherData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
-    submitCode && user ? `/api/teachers?code=${submitCode}` : null,
-    secureFetcher,
+    submitCode ? `/api/teachers?code=${submitCode}` : null,
+    fetcher,
     { 
       revalidateOnFocus: false,
       dedupingInterval: 60000, // Dedupe requests trong 60s
@@ -247,8 +170,8 @@ export default function Page1() {
 
   // Only load scores after teacher is loaded
   const { data: expertiseDataRes, isLoading: isLoadingExpertise } = useSWR(
-    teacher && user ? `/api/rawdata?code=${submitCode}` : null,
-    secureFetcher,
+    teacher ? `/api/rawdata?code=${submitCode}` : null,
+    fetcher,
     { 
       revalidateOnFocus: false,
       dedupingInterval: 60000
@@ -256,8 +179,8 @@ export default function Page1() {
   );
 
   const { data: experienceDataRes, isLoading: isLoadingExperience } = useSWR(
-    teacher && user ? `/api/rawdata-experience?code=${submitCode}` : null,
-    secureFetcher,
+    teacher ? `/api/rawdata-experience?code=${submitCode}` : null,
+    fetcher,
     { 
       revalidateOnFocus: false,
       dedupingInterval: 60000
@@ -268,20 +191,17 @@ export default function Page1() {
   const experienceData = experienceDataRes?.monthlyData || [];
   const scoresLoaded = !isLoadingExpertise && !isLoadingExperience;
 
-  // Show feedback modal 1 minute after successful teacher search
+  // Show feedback modal 30 seconds after successful teacher search
   useEffect(() => {
-    // Auto-show disabled by default; enable by setting NEXT_PUBLIC_FEEDBACK_AUTO_SHOW=true
-    const autoShowEnabled = process.env.NEXT_PUBLIC_FEEDBACK_AUTO_SHOW === 'true';
-
-    if (autoShowEnabled && submitCode && teacherData && !hasFeedback && !feedbackModalOpen && feedbackEnabled) {
+    if (submitCode && teacherData && !hasFeedback && !feedbackModalOpen) {
       const timer = setTimeout(() => {
         setFeedbackModalOpen(true);
-        setIsFirstTimeFeedback(false); // Disabled mandatory behavior
-      }, 60000); // 60 seconds = 1 minute
+        setIsFirstTimeFeedback(true); // Mark as mandatory first-time feedback
+      }, 30000);
       
       return () => clearTimeout(timer);
     }
-  }, [submitCode, teacherData, hasFeedback, feedbackModalOpen, feedbackEnabled]);
+  }, [submitCode, teacherData, hasFeedback, feedbackModalOpen]);
 
   // Prevent body scroll when feedback modal is open
   useEffect(() => {
@@ -323,8 +243,8 @@ export default function Page1() {
 
   // Load training data AFTER teacher is loaded
   const { data: trainingData, isLoading: isLoadingTraining } = useSWR(
-    teacher && user ? `/api/training?code=${submitCode}` : null,
-    secureFetcher,
+    teacher ? `/api/training?code=${submitCode}` : null,
+    fetcher,
     { 
       revalidateOnFocus: false,
       dedupingInterval: 60000,
@@ -380,55 +300,19 @@ export default function Page1() {
 
   // Handle teacher data errors
   useEffect(() => {
-    (async () => {
-      if (teacherError) {
-        const status = (teacherError as any)?.status;
-        if (status === 401) {
-          const refreshToken = localStorage.getItem('refreshToken');
-          if (refreshToken) {
-            try {
-              const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || '';
-              const refreshRes = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `grant_type=refresh_token&refresh_token=${refreshToken}`
-              });
-
-              if (refreshRes.ok) {
-                const refreshData = await refreshRes.json();
-                const newIdToken = refreshData.id_token;
-                const newRefreshToken = refreshData.refresh_token;
-                if (newIdToken) {
-                  localStorage.setItem('token', newIdToken);
-                  if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
-                  await mutate(`/api/teachers?code=${submitCode}`);
-                  return;
-                }
-              }
-            } catch (e) {
-              console.warn('Silent refresh failed', e);
-            }
-          }
-
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          localStorage.removeItem('refreshToken');
-          window.location.href = '/login';
-          return;
-        }
-
-        setNotFoundModalOpen(true);
-      } else if (teacherData && teacherData.error) {
-        // API returned error in response body
-        setError(teacherData.error);
-        setNotFoundModalOpen(true);
-      } else if (submitCode && !isLoadingTeacher && teacherData && !teacher) {
-        // API returned but no teacher found
-        setNotFoundModalOpen(true);
-      } else if (teacher) {
-        setError("");
-      }
-    })();
+    if (teacherError) {
+      // API returned error (404, 500, etc)
+      setNotFoundModalOpen(true);
+    } else if (teacherData && teacherData.error) {
+      // API returned error in response body
+      setError(teacherData.error);
+      setNotFoundModalOpen(true);
+    } else if (submitCode && !isLoadingTeacher && teacherData && !teacher) {
+      // API returned but no teacher found
+      setNotFoundModalOpen(true);
+    } else if (teacher) {
+      setError("");
+    }
   }, [teacherData, teacher, submitCode, isLoadingTeacher, teacherError]);
 
   // Handle not found modal confirm
@@ -466,7 +350,8 @@ export default function Page1() {
       if (e.key === 'Escape') {
         if (feedbackSuccessModalOpen) {
           setFeedbackSuccessModalOpen(false);
-        } else if (feedbackModalOpen) {
+        } else if (feedbackModalOpen && !isFirstTimeFeedback) {
+          // Only allow ESC if it's not first-time mandatory feedback
           setFeedbackModalOpen(false);
           setFeedbackRating(0);
           setFeedbackComment("");
@@ -534,10 +419,7 @@ export default function Page1() {
     try {
       const response = await fetch('/api/feedback', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-api-key': API_SECRET_KEY
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rating: feedbackRating,
           comment: feedbackComment.trim(),
@@ -1923,58 +1805,27 @@ export default function Page1() {
         )}
 
         {/* Floating Feedback Button */}
-        {feedbackEnabled && (
-          <div className="fixed bottom-6 right-6 z-40">
-            <button
-              onClick={() => {
-                setFeedbackModalOpen(true);
-                setIsFirstTimeFeedback(false); // Manual click is not mandatory
-              }}
-              disabled={feedbackModalOpen}
-              className="w-14 h-14 bg-gray-900 hover:bg-gray-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center group disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Gửi phản hồi"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-              </svg>
-            </button>
-
-            {/* Small disable control */}
-            <button
-              onClick={(e) => { e.stopPropagation(); disableFeedback(); }}
-              title="Tắt nút phản hồi"
-              className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center shadow"
-            >
-              <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-          </div>
-        )}
-
-        {/* If feedback is disabled, show small pill to re-enable it */}
-        {!feedbackEnabled && (
-          <div className="fixed bottom-6 right-6 z-40">
-            <button
-              onClick={() => enableFeedback()}
-              className="px-3 py-2 rounded-full bg-gray-100 text-gray-700 shadow flex items-center gap-2"
-              title="Bật lại nút phản hồi"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h4l3-7 4 18 3-7h4" />
-              </svg>
-              <span className="text-xs">Bật phản hồi</span>
-            </button>
-          </div>
-        )}
+        <button
+          onClick={() => {
+            setFeedbackModalOpen(true);
+            setIsFirstTimeFeedback(false); // Manual click is not mandatory
+          }}
+          disabled={feedbackModalOpen}
+          className="fixed bottom-6 right-6 w-14 h-14 bg-gray-900 hover:bg-gray-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center z-40 group disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Gửi phản hồi"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+          </svg>
+        </button>
 
         {/* Feedback Modal */}
         {feedbackModalOpen && (
           <div 
             className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
             onClick={(e) => {
-              // Allow closing modal by clicking outside
-              if (e.target === e.currentTarget) {
+              // Prevent closing modal by clicking outside if it's first-time mandatory
+              if (!isFirstTimeFeedback && e.target === e.currentTarget) {
                 setFeedbackModalOpen(false);
                 setFeedbackRating(0);
                 setFeedbackComment("");
@@ -1985,6 +1836,7 @@ export default function Page1() {
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
               <div className="bg-gray-900 text-white px-4 py-3 rounded-t-lg flex items-center justify-between">
                 <h3 className="font-semibold">{isFirstTimeFeedback ? 'Góp ý để cải thiện hệ thống' : 'Gửi phản hồi'}</h3>
+                {!isFirstTimeFeedback && (
                   <button
                     onClick={() => {
                       setFeedbackModalOpen(false);
@@ -1998,6 +1850,7 @@ export default function Page1() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
+                )}
               </div>
               
               <div className="p-5 space-y-5">

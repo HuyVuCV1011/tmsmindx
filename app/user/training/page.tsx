@@ -1,9 +1,9 @@
 'use client';
 
 import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { useRouter } from "next/navigation";
 
 interface TrainingLesson {
   id: number;
@@ -74,7 +74,7 @@ export default function TrainingPage() {
       const refreshToken = localStorage.getItem('refreshToken');
       if (refreshToken) {
         try {
-          const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || '';
+          const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '';
           const refreshRes = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -188,8 +188,8 @@ export default function TrainingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
-      <div className="max-w-6xl mx-auto">
+    <div className="bg-white">
+      <div className="w-full">
         {/* Header */}
         <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg p-6 mb-6">
           <div className="flex items-center gap-3">
@@ -203,45 +203,49 @@ export default function TrainingPage() {
           </div>
         </div>
 
-        {/* Loading State */}
-        {(isResolvingCode || isLoadingTeacher || isLoadingTraining) && (
-          <div className="bg-white rounded-lg shadow-md p-12 text-center">
-            <div className="inline-flex items-center gap-3">
-              <svg className="animate-spin h-8 w-8 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span className="text-lg text-gray-600">Đang tải dữ liệu...</span>
+        {/* Always show content structure with skeleton when loading */}
+        <div className="flex gap-6 border-b mb-6">
+          <button
+            className={`pb-3 px-2 border-b-2 font-bold transition-colors ${
+              tab === 'lessons' 
+                ? 'border-purple-500 text-purple-700' 
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setTab('lessons')}
+          >
+            Bài học nâng cao
+          </button>
+          <button
+            className={`pb-3 px-2 border-b-2 font-bold transition-colors ${
+              tab === 'stats' 
+                ? 'border-yellow-500 text-yellow-700' 
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setTab('stats')}
+          >
+            Thống kê điểm số
+          </button>
+        </div>
+
+        {/* Loading Skeleton or Content */}
+        {(isResolvingCode || isLoadingTeacher || isLoadingTraining) ? (
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="animate-pulse">
+              <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4" style={{ animationDelay: `${i * 100}ms` }}>
+                    <div className="aspect-video bg-gray-200 rounded mb-3"></div>
+                    <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
+                    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        )}
-
-        {/* Tabs */}
-        {!isLoadingTeacher && !isLoadingTraining && trainingData && (
+        ) : trainingData ? (
           <>
-            <div className="flex gap-6 border-b mb-6">
-              <button
-                className={`pb-3 px-2 border-b-2 font-bold transition-colors ${
-                  tab === 'lessons' 
-                    ? 'border-purple-500 text-purple-700' 
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-                onClick={() => setTab('lessons')}
-              >
-                Bài học nâng cao
-              </button>
-              <button
-                className={`pb-3 px-2 border-b-2 font-bold transition-colors ${
-                  tab === 'stats' 
-                    ? 'border-yellow-500 text-yellow-700' 
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-                onClick={() => setTab('stats')}
-              >
-                Thống kê điểm số
-              </button>
-            </div>
-
             {/* Tab: Bài học nâng cao */}
             {tab === 'lessons' && (
               <div className="bg-white rounded-lg shadow-md p-6">
@@ -393,7 +397,7 @@ export default function TrainingPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-gray-50 border-b-2 border-gray-200">
+                      <tr className="bg-white border-b-2 border-gray-200">
                         <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Lesson</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Tên bài học</th>
                         <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase">Điểm số</th>
@@ -462,12 +466,12 @@ export default function TrainingPage() {
               </div>
             )}
           </>
-        )}
+        ) : null}
 
         {/* No Data State */}
         {!isLoadingTeacher && !isLoadingTraining && !trainingData && (
           <div className="bg-white rounded-lg shadow-md p-12 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
               </svg>

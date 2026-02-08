@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 
 interface Question {
   id: number;
@@ -35,6 +35,13 @@ function LessonContent() {
   const [nextLessonData, setNextLessonData] = useState<any>(null);
   const [maxWatchedTime, setMaxWatchedTime] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const lastValidTimeRef = useRef(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [showControls, setShowControls] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const playerContainerRef = useRef<HTMLDivElement>(null);
 
   // Load questions from database
   useEffect(() => {
@@ -149,6 +156,9 @@ function LessonContent() {
     if (!video) return;
 
     const handleTimeUpdate = () => {
+      // Update last valid time (for seeking prevention)
+      lastValidTimeRef.current = video.currentTime;
+      
       setCurrentTime(video.currentTime);
       
       // Update max watched time
@@ -184,10 +194,14 @@ function LessonContent() {
     };
 
     const handleSeeking = () => {
-      // Prevent seeking forward beyond what has been watched
-      if (video.currentTime > maxWatchedTime + 0.5) {
-        console.log(`[Lesson] ⚠️ Seeking blocked! Attempted: ${video.currentTime.toFixed(2)}s, Max watched: ${maxWatchedTime.toFixed(2)}s`);
-        video.currentTime = maxWatchedTime;
+      // Completely prevent seeking (both forward and backward)
+      const attemptedTime = video.currentTime;
+      const timeDiff = Math.abs(attemptedTime - lastValidTimeRef.current);
+      
+      // If seeking detected (difference > 0.5s), revert to last valid time
+      if (timeDiff > 0.5) {
+        console.log(`[Lesson] 🚫 Seeking blocked! Attempted: ${attemptedTime.toFixed(2)}s → Reverted to: ${lastValidTimeRef.current.toFixed(2)}s`);
+        video.currentTime = lastValidTimeRef.current;
       }
     };
 
@@ -249,382 +263,451 @@ function LessonContent() {
     console.log('[Lesson] Resuming video playback');
     if (videoRef.current) {
       videoRef.current.play();
+      setIsPlaying(true);
     }
   };
 
+  // Custom video controls handlers
+  const togglePlayPause = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        videoRef.current.play();
+        setIsPlaying(true);
+      }
+    }
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    if (videoRef.current) {
+      videoRef.current.volume = newVolume;
+      setVolume(newVolume);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (!playerContainerRef.current) return;
+    
+    if (!isFullscreen) {
+      if (playerContainerRef.current.requestFullscreen) {
+        playerContainerRef.current.requestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+
+  const handleMouseMove = () => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (isPlaying) {
+        setShowControls(false);
+      }
+    }, 3000);
+  };
+
+  // Fullscreen change listener
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="flex flex-col h-screen">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-4">
+    <div className="bg-black h-screen overflow-hidden">
+      <div className="flex flex-col h-full">
+        {/* Header - compact */}
+        <div className="bg-gradient-to-r from-purple-900 to-indigo-900 px-4 py-2 flex items-center gap-3 z-50">
           <button
             onClick={() => router.back()}
-            className="p-2 hover:bg-gray-100 rounded-full transition"
+            className="p-1.5 hover:bg-white/10 rounded-full transition"
           >
-            <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-xl font-bold text-gray-800">{title ? decodeURIComponent(title) : 'Bài học'}</h1>
+          <h1 className="text-sm font-bold text-white truncate flex-1">{title ? decodeURIComponent(title) : 'Bài học'}</h1>
+          <div className="text-xs text-white/80">
+            {Math.floor(currentTime / 60)}:{String(Math.floor(currentTime % 60)).padStart(2, '0')} / {Math.floor(duration / 60)}:{String(Math.floor(duration % 60)).padStart(2, '0')}
+          </div>
         </div>
 
-        {/* Main content */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Left: Video player */}
-          <div className="flex-1 flex flex-col border-r border-gray-200 overflow-hidden">
-            {/* Video container */}
-            <div className="flex-1 bg-black relative overflow-hidden">
-              <video
-                ref={videoRef}
-                src={videoUrl ? decodeURIComponent(videoUrl) : ''}
-                className="w-full h-full"
-                controls
-              />
-              {/* Playback speed controls */}
-              <div className="absolute top-4 right-4 z-40">
-                <div className="bg-black bg-opacity-70 rounded-lg p-2 flex gap-2">
-                  <span className="text-white text-xs font-semibold self-center mr-1">Tốc độ:</span>
-                  {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((speed) => (
-                    <button
-                      key={speed}
-                      onClick={() => setPlaybackSpeed(speed)}
-                      className={`px-3 py-1 rounded text-xs font-semibold transition ${
-                        playbackSpeed === speed
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                      }`}
+        {/* Video player container */}
+        <div 
+          ref={playerContainerRef}
+          className="flex-1 relative bg-black overflow-hidden"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={() => isPlaying && setShowControls(false)}
+        >
+          {/* Video element - NO CONTROLS */}
+          <video
+            ref={videoRef}
+            src={videoUrl ? decodeURIComponent(videoUrl) : ''}
+            className="w-full h-full object-contain"
+            onClick={togglePlayPause}
+            onContextMenu={(e) => e.preventDefault()}
+          />
+
+          {/* Central Play/Pause overlay */}
+          {!isPlaying && currentQuestionIdx === null && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+              <button
+                onClick={togglePlayPause}
+                className="bg-white/90 hover:bg-white rounded-full p-8 transition-all hover:scale-110"
+              >
+                <svg className="w-16 h-16 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* Custom Controls Overlay */}
+          <div 
+            className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6 transition-all duration-300 ${
+              showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+            }`}
+          >
+            {/* Progress bar - READ ONLY with question markers */}
+            <div className="mb-4">
+              <div className="relative h-10 flex items-center">
+                {/* Progress bar background */}
+                <div className="absolute left-0 right-0 h-1.5 bg-white/20 rounded-full top-1/2 transform -translate-y-1/2">
+                  <div
+                    className="h-1.5 bg-gradient-to-r from-purple-500 to-yellow-500 rounded-full transition-all"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                
+                {/* Question markers */}
+                <div className="absolute left-0 right-0 h-10 flex items-center top-1/2 transform -translate-y-1/2">
+                  {questions.map((q, idx) => (
+                    <div
+                      key={q.id}
+                      className="absolute transform -translate-x-1/2"
+                      style={{
+                        left: duration > 0 ? `${(q.time / duration) * 100}%` : '0%'
+                      }}
                     >
-                      {speed}x
-                    </button>
+                      <div
+                        className={`w-3 h-3 rounded-full border-2 transition ${
+                          answeredQuestions.has(q.id)
+                            ? 'bg-green-400 border-green-500'
+                            : 'bg-orange-400 border-orange-500 animate-pulse'
+                        }`}
+                      />
+                    </div>
                   ))}
                 </div>
               </div>
-              {/* Question modal overlay */}
-              {currentQuestionIdx !== null && (
-                <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-                  <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
-                    <div className="mb-6">
-                      {/* Result indicator */}
-                      {showResult && (
-                        <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
-                          isCorrectAnswer 
-                            ? 'bg-green-100 border-2 border-green-500' 
-                            : 'bg-red-100 border-2 border-red-500'
-                        }`}>
-                          {isCorrectAnswer ? (
-                            <>
-                              <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                              </svg>
-                              <span className="font-bold text-green-700">Chính xác!</span>
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-6 h-6 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                              </svg>
-                              <span className="font-bold text-red-700">Chưa chính xác!</span>
-                            </>
-                          )}
-                        </div>
-                      )}
-                      
-                      <h3 className="text-lg font-bold text-gray-800 mb-4">
-                        {questions[currentQuestionIdx]?.question}
-                      </h3>
-                      <div className="space-y-3">
-                        {questions[currentQuestionIdx]?.options.map((option: string, idx: number) => {
-                          const isUserAnswer = userAnswer === idx;
-                          const isCorrectOption = questions[currentQuestionIdx].answer === idx;
-                          
-                          let buttonClass = 'w-full p-3 text-left rounded-lg border-2 transition ';
-                          
-                          if (!showResult) {
-                            // Before answering
-                            buttonClass += isUserAnswer
-                              ? 'border-yellow-500 bg-yellow-50'
-                              : 'border-gray-200 hover:border-yellow-300';
-                          } else {
-                            // After answering
-                            if (isCorrectOption) {
-                              // Correct answer - always green
-                              buttonClass += 'border-green-500 bg-green-50';
-                            } else if (isUserAnswer && !isCorrectAnswer) {
-                              // User's wrong answer - red
-                              buttonClass += 'border-red-500 bg-red-50';
-                            } else {
-                              // Other options
-                              buttonClass += 'border-gray-200 bg-gray-50';
-                            }
-                          }
-                          
-                          return (
-                            <button
-                              key={idx}
-                              onClick={() => !showResult && setUserAnswer(idx)}
-                              disabled={showResult}
-                              className={buttonClass}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className={`font-semibold mr-2 ${
-                                    showResult && isCorrectOption 
-                                      ? 'text-green-600' 
-                                      : showResult && isUserAnswer && !isCorrectAnswer
-                                      ? 'text-red-600'
-                                      : 'text-purple-600'
-                                  }`}>
-                                    {String.fromCharCode(65 + idx)}.
-                                  </span>
-                                  <span className={
-                                    showResult && isCorrectOption 
-                                      ? 'text-green-700 font-semibold' 
-                                      : showResult && isUserAnswer && !isCorrectAnswer
-                                      ? 'text-red-700'
-                                      : 'text-gray-800'
-                                  }>
-                                    {option}
-                                  </span>
-                                </div>
-                                {showResult && isCorrectOption && (
-                                  <svg className="w-6 h-6 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                  </svg>
-                                )}
-                                {showResult && isUserAnswer && !isCorrectAnswer && (
-                                  <svg className="w-6 h-6 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                                  </svg>
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    {!showResult ? (
-                      <button
-                        onClick={handleAnswerQuestion}
-                        disabled={userAnswer === null}
-                        className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-300 text-white font-bold py-2 rounded-lg transition"
-                      >
-                        Trả lời
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleContinue}
-                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-lg transition"
-                      >
-                        Tiếp tục
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Progress bar section */}
-            <div className="bg-white border-t border-gray-200 p-4">
-              {/* Timeline with question markers */}
-              <div className="mb-4">
-                <div className="relative h-8 flex items-center">
-                  {/* Progress bar background */}
-                  <div className="absolute left-0 right-0 h-2 bg-gray-200 rounded-full top-1/2 transform -translate-y-1/2">
-                    <div
-                      className="h-2 bg-gradient-to-r from-purple-600 to-yellow-500 rounded-full transition-all"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                  
-                  {/* Question markers and timeline points */}
-                  <div className="absolute left-0 right-0 h-8 flex items-center top-1/2 transform -translate-y-1/2">
-                    {questions.map((q, idx) => (
-                      <div
-                        key={q.id}
-                        className="absolute transform -translate-x-1/2 top-1/2 -translate-y-1/2 flex flex-col items-center group"
-                        style={{
-                          left: duration > 0 ? `${(q.time / duration) * 100}%` : '0%'
-                        }}
-                      >
-                        {/* Marker dot */}
-                        <div
-                          className={`w-4 h-4 rounded-full border-2 transition ${
-                            answeredQuestions.has(q.id)
-                              ? 'bg-green-500 border-green-600'
-                              : 'bg-orange-400 border-orange-500'
-                          }`}
-                        />
-                        {/* Tooltip on hover */}
-                        <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
-                          Câu {idx + 1}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+            {/* Controls bar */}
+            <div className="flex items-center gap-4">
+              {/* Play/Pause */}
+              <button
+                onClick={togglePlayPause}
+                className="p-2 hover:bg-white/10 rounded-full transition"
+              >
+                {isPlaying ? (
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </button>
 
-
+              {/* Volume */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleVolumeChange(volume > 0 ? 0 : 1)}
+                  className="p-2 hover:bg-white/10 rounded-full transition"
+                >
+                  {volume === 0 ? (
+                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={volume}
+                  onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                  className="w-20 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer"
+                  style={{
+                    background: `linear-gradient(to right, white ${volume * 100}%, rgba(255,255,255,0.2) ${volume * 100}%)`
+                  }}
+                />
               </div>
 
-              {/* Time display */}
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-600 font-medium">
-                  {Math.floor(currentTime / 60)}:{String(Math.floor(currentTime % 60)).padStart(2, '0')} / {Math.floor(duration / 60)}:{String(Math.floor(duration % 60)).padStart(2, '0')}
-                </span>
-                <span className="text-purple-600 font-bold">{Math.round(progress)}%</span>
+              {/* Speed control */}
+              <div className="flex items-center gap-1">
+                {[0.5, 0.75, 1, 1.25, 1.5, 2].map((speed) => (
+                  <button
+                    key={speed}
+                    onClick={() => setPlaybackSpeed(speed)}
+                    className={`px-2 py-1 rounded text-xs font-semibold transition ${
+                      playbackSpeed === speed
+                        ? 'bg-purple-600 text-white'
+                        : 'text-white/70 hover:bg-white/10'
+                    }`}
+                  >
+                    {speed}x
+                  </button>
+                ))}
               </div>
+
+              <div className="flex-1" />
+
+              {/* Progress percentage */}
+              <span className="text-white text-sm font-bold">
+                {Math.round(progress)}%
+              </span>
+
+              {/* Fullscreen */}
+              <button
+                onClick={toggleFullscreen}
+                className="p-2 hover:bg-white/10 rounded-full transition"
+              >
+                {isFullscreen ? (
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
 
-          {/* Right: Sidebar */}
-          <div className="w-80 bg-white flex flex-col overflow-hidden">
-            {/* Sidebar header */}
-            <div className="border-b border-gray-200 p-4">
-              <h2 className="text-lg font-bold text-gray-800">Thông tin bài học</h2>
-            </div>
-
-            {/* Sidebar content */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              {/* Questions list */}
-              {questions.length > 0 ? (
-                <div>
-                  <h3 className="font-bold text-gray-800 mb-3">📝 Câu hỏi tương tác ({questions.length})</h3>
-                  <div className="space-y-2">
-                    {questions.map((q, idx) => (
-                      <div
-                        key={q.id}
-                        className={`p-3 rounded-lg text-sm border transition cursor-default ${
-                          answeredQuestions.has(q.id)
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-orange-50 border-orange-200 hover:border-orange-300'
-                        }`}
-                      >
-                        <div className="flex items-start gap-2">
-                          <span className="font-bold text-purple-600 shrink-0">
-                            {idx + 1}.
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-gray-700 font-medium line-clamp-2">{q.question}</p>
-                            <p className="text-xs text-gray-500 mt-1 font-mono">
-                              🕐 {Math.floor(q.time / 60)}:{String(Math.floor(q.time % 60)).padStart(2, '0')}
-                            </p>
-                          </div>
-                          {answeredQuestions.has(q.id) && (
-                            <span className="text-green-600 font-bold shrink-0 text-lg">✓</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-sm text-blue-700 font-medium">
-                      ℹ️ Bài học này chưa có câu hỏi tương tác
-                    </p>
-                  </div>
-                  {/* Debug info */}
-                  <div className="bg-gray-100 border border-gray-300 rounded-lg p-3 text-xs font-mono text-gray-600">
-                    <p className="font-bold mb-1">🔍 Debug Info:</p>
-                    <p>Video ID: <span className="text-purple-600">{lessonId || 'Not found'}</span></p>
-                    <p>Duration: <span className="text-purple-600">{duration > 0 ? duration.toFixed(2) + 's' : 'Loading...'}</span></p>
-                    <p>Mở Console (F12) để xem logs chi tiết</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Completion message */}
-              {videoCompleted && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <p className="text-sm text-green-700 font-semibold">
-                    ✓ Bạn đã hoàn thành bài học!
-                  </p>
-                </div>
-              )}
-
-              {/* Assignment - Show after video completed */}
-              {videoCompleted && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="font-bold text-gray-800 mb-3">📋 Kiểm tra tổng kết</h3>
-                  <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-lg hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3 mb-3">
-                      <svg className="w-6 h-6 text-blue-600 flex-shrink-0 mt-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                        <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
-                      </svg>
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-blue-800 mb-1">Bài tập tổng hợp</p>
-                        <p className="text-xs text-blue-700 leading-relaxed mb-3">
-                          Hoàn thành bài kiểm tra để củng cố kiến thức đã học
-                        </p>
-                        <button
-                          onClick={() => {
-                            // Navigate to assignment page
-                            router.push(`/user/assignments?lesson_id=${lessonId}`);
-                          }}
-                          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-                        >
-                          <span>Bắt đầu làm bài</span>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          {/* Question modal overlay */}
+          {currentQuestionIdx !== null && (
+            <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
+                <div className="mb-6">
+                  {/* Result indicator */}
+                  {showResult && (
+                    <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
+                      isCorrectAnswer 
+                        ? 'bg-green-100 border-2 border-green-500' 
+                        : 'bg-red-100 border-2 border-red-500'
+                    }`}>
+                      {isCorrectAnswer ? (
+                        <>
+                          <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                           </svg>
-                        </button>
-                      </div>
+                          <span className="font-bold text-green-700">Chính xác!</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-6 h-6 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                          </svg>
+                          <span className="font-bold text-red-700">Chưa chính xác!</span>
+                        </>
+                      )}
                     </div>
+                  )}
+                  
+                  <h3 className="text-lg font-bold text-gray-800 mb-4">
+                    {questions[currentQuestionIdx]?.question}
+                  </h3>
+                  <div className="space-y-3">
+                    {questions[currentQuestionIdx]?.options.map((option: string, idx: number) => {
+                      const isUserAnswer = userAnswer === idx;
+                      const isCorrectOption = questions[currentQuestionIdx].answer === idx;
+                      
+                      let buttonClass = 'w-full p-3 text-left rounded-lg border-2 transition ';
+                      
+                      if (!showResult) {
+                        // Before answering
+                        buttonClass += isUserAnswer
+                          ? 'border-yellow-500 bg-yellow-50'
+                          : 'border-gray-200 hover:border-yellow-300';
+                      } else {
+                        // After answering
+                        if (isCorrectOption) {
+                          // Correct answer - always green
+                          buttonClass += 'border-green-500 bg-green-50';
+                        } else if (isUserAnswer && !isCorrectAnswer) {
+                          // User's wrong answer - red
+                          buttonClass += 'border-red-500 bg-red-50';
+                        } else {
+                          // Other options
+                          buttonClass += 'border-gray-200 bg-gray-50';
+                        }
+                      }
+                      
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => !showResult && setUserAnswer(idx)}
+                          disabled={showResult}
+                          className={buttonClass}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-semibold mr-2 ${
+                                showResult && isCorrectOption 
+                                  ? 'text-green-600' 
+                                  : showResult && isUserAnswer && !isCorrectAnswer
+                                  ? 'text-red-600'
+                                  : 'text-purple-600'
+                              }`}>
+                                {String.fromCharCode(65 + idx)}.
+                              </span>
+                              <span className={
+                                showResult && isCorrectOption 
+                                  ? 'text-green-700 font-semibold' 
+                                  : showResult && isUserAnswer && !isCorrectAnswer
+                                  ? 'text-red-700'
+                                  : 'text-gray-800'
+                              }>
+                                {option}
+                              </span>
+                            </div>
+                            {showResult && isCorrectOption && (
+                              <svg className="w-6 h-6 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                            {showResult && isUserAnswer && !isCorrectAnswer && (
+                              <svg className="w-6 h-6 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-              )}
-
-              {/* Next lesson */}
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="font-bold text-gray-800 mb-3">Bài học kế tiếp</h3>
-                {hasNextLesson && nextLessonData ? (
-                  <div 
-                    onClick={() => router.push(`/user/training/lesson?id=${nextLessonData.id}&url=${encodeURIComponent(nextLessonData.video_url)}&title=${encodeURIComponent(nextLessonData.title)}`)}
-                    className="p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 cursor-pointer transition"
+                {!showResult ? (
+                  <button
+                    onClick={handleAnswerQuestion}
+                    disabled={userAnswer === null}
+                    className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-300 text-white font-bold py-2 rounded-lg transition"
                   >
-                    <p className="text-xs font-semibold text-purple-600 mb-1">Lesson {nextLessonData.id}</p>
-                    <p className="text-sm text-gray-700">{nextLessonData.title}</p>
-                  </div>
-                ) : !hasNextLesson && videoCompleted ? (
-                  <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <svg className="w-8 h-8 text-green-600 flex-shrink-0 mt-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      <div>
-                        <p className="text-sm font-bold text-green-800 mb-1">🎉 Xuất sắc!</p>
-                        <p className="text-xs text-green-700 leading-relaxed">
-                          Chúc mừng bạn đã hoàn thành tất cả các bài đào tạo nâng cao
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                    Trả lời
+                  </button>
                 ) : (
-                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                    <p className="text-xs text-gray-500">Đang tải...</p>
-                  </div>
+                  <button
+                    onClick={handleContinue}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-lg transition"
+                  >
+                    Tiếp tục
+                  </button>
                 )}
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Completion overlay */}
+          {videoCompleted && (
+            <div className="absolute top-4 left-4 right-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-lg shadow-lg animate-bounce z-40">
+              <div className="flex items-center gap-3">
+                <svg className="w-6 h-6 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <div className="flex-1">
+                  <p className="font-bold text-sm">🎉 Hoàn thành!</p>
+                  <p className="text-xs opacity-90">Bạn đã xem xong bài học này</p>
+                </div>
+                {hasNextLesson && nextLessonData && (
+                  <button
+                    onClick={() => router.push(`/user/training/lesson?id=${nextLessonData.id}&url=${encodeURIComponent(nextLessonData.video_url)}&title=${encodeURIComponent(nextLessonData.title)}`)}
+                    className="bg-white text-green-600 hover:bg-green-50 px-4 py-2 rounded-lg font-semibold text-sm transition flex items-center gap-2"
+                  >
+                    <span>Bài tiếp theo</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Bottom info bar - only in non-fullscreen */}
+        {!isFullscreen && (
+          <div className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white px-4 py-3 flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <span className="font-semibold">Video không cho phép tua</span>
+            </div>
+            <div className="h-4 w-px bg-white/30" />
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+              </svg>
+              <span>{questions.length} câu hỏi</span>
+            </div>
+            <div className="h-4 w-px bg-white/30" />
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <span>{answeredQuestions.size} {" / "} {questions.length} đã trả lời</span>
+            </div>
+            <div className="flex-1" />
+            {videoCompleted && (
+              <button
+                onClick={() => router.push(`/user/assignments?lesson_id=${lessonId}`)}
+                className="bg-white/10 hover:bg-white/20 px-4 py-1.5 rounded-lg font-semibold transition flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                  <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
+                </svg>
+                <span>Làm bài tập</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
-    );
-  }
+  );
+}
 
 export default function LessonPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <svg className="animate-spin h-12 w-12 text-purple-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <p className="text-gray-600">Đang tải bài học...</p>
+      <div className="min-h-screen bg-white p-6">
+        <div className="max-w-4xl mx-auto animate-pulse space-y-6">
+          <div className="h-8 bg-gray-300 rounded w-1/3"></div>
+          <div className="aspect-video bg-gray-300 rounded"></div>
+          <div className="space-y-3">
+            <div className="h-4 bg-gray-300 rounded w-3/4"></div>
+            <div className="h-4 bg-gray-300 rounded w-1/2"></div>
+            <div className="h-4 bg-gray-300 rounded w-2/3"></div>
+          </div>
         </div>
       </div>
     }>

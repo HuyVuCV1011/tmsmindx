@@ -1,7 +1,7 @@
 "use client";
 
-import { useSearchParams, useRouter } from "next/navigation";
-import React, { useRef, useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 
 interface Video {
   id: number;
@@ -60,7 +60,7 @@ function VideoSetupContent() {
   const [addTime, setAddTime] = useState("");
   const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
 
-  // Assignment state
+  // Bài tập state
   const [assignmentForm, setAssignmentForm] = useState({
     assignment_title: "",
     assignment_type: "quiz",
@@ -116,10 +116,10 @@ function VideoSetupContent() {
             setThumbnailPreview(currentVideo.thumbnail_url);
           }
           
-          // Auto-fill assignment title from video title
+          // Tự động điền tiêu đề bài tập từ tiêu đề video
           setAssignmentForm(prev => ({
             ...prev,
-            assignment_title: `Assignment - ${currentVideo.title}`
+            assignment_title: `Bài tập - ${currentVideo.title}`
           }));
 
           // Load questions from database
@@ -419,15 +419,34 @@ function VideoSetupContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
-        <div>Đang tải thông tin video...</div>
+      <div className="min-h-screen bg-white p-8">
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Header Skeleton */}
+          <div className="flex justify-between items-center">
+            <div className="h-8 bg-gray-200 rounded w-64 animate-pulse"></div>
+            <div className="h-10 bg-gray-200 rounded w-32 animate-pulse"></div>
+          </div>
+          {/* Video Player Skeleton */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="w-full aspect-video bg-gray-200 rounded animate-pulse mb-6"></div>
+            {/* Form Fields Skeleton */}
+            <div className="space-y-4">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
+                  <div className="h-10 bg-gray-200 rounded w-full animate-pulse"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (error || !video) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
+      <div className="min-h-screen bg-white p-8">
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded mb-4">
             {error || "Không tìm thấy video"}
@@ -444,7 +463,7 @@ function VideoSetupContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-white p-2">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
@@ -894,7 +913,7 @@ function VideoSetupContent() {
 
 export default function VideoSetupPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">Đang tải...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-white p-8 flex items-center justify-center">Đang tải...</div>}>
       <VideoSetupContent />
     </Suspense>
   );
