@@ -179,7 +179,7 @@ export default function LoginPage() {
         <div className="hidden md:flex flex-col justify-between items-start bg-gradient-to-br from-[#800000] to-[#E31F26] w-1/3 h-full p-8 text-white">
           <div>
             <img src="/logo_white.svg" alt="logo" className="h-20 mb-8 animate-fade-in" />
-            <h2 className="text-2xl font-bold mb-4 leading-tight animate-slide-up">Teachingl<br />Management System(TMS)</h2>
+            <h2 className="text-2xl font-bold mb-4 leading-tight animate-slide-up">Teaching<br />Management System(TMS)</h2>
             <p className="text-sm opacity-90 mb-8 animate-slide-up animation-delay-200">Hệ thống quản lý thông tin giáo viên, theo dõi tiến độ đào tạo,xử lý yêu cầu,tra cứu thông tin nội bộ.</p>
           </div>
           <div className="flex items-center gap-2 text-xs opacity-80">
