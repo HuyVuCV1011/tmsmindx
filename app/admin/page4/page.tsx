@@ -1,14 +1,23 @@
+"use client";
+
+import { Card } from "@/components/Card";
+import { EmptyState } from "@/components/EmptyState";
+import { PageContainer } from "@/components/PageContainer";
+import { Layers } from "lucide-react";
+
 export default function Page4() {
   return (
-    <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
-      <div className="text-center space-y-3 p-4 rounded-lg border border-gray-900 bg-white">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Màn hình 4
-        </h1>
-        <p className="text-gray-600 text-sm font-medium">
-          Nội dung màn hình 4
-        </p>
-      </div>
-    </div>
+    <PageContainer
+      title="Màn hình 4"
+      description="Nội dung và quản lý màn hình 4"
+    >
+      <Card>
+        <EmptyState
+          icon={Layers}
+          title="Chưa có nội dung"
+          description="Màn hình này đang được phát triển. Nội dung sẽ được cập nhật sớm."
+        />
+      </Card>
+    </PageContainer>
   );
 }

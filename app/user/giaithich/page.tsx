@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/lib/auth-context';
 import Modal from '@/components/Modal';
+import { useAuth } from '@/lib/auth-context';
+import { useEffect, useState } from 'react';
 
 interface Explanation {
   id: number;
@@ -77,7 +77,7 @@ const SUBJECT_LIST = [
   '[Trial] Quy Trình Trai nghiệm'
 ];
 
-export default function GiaiThichPage() {
+export default function GiaiTrinhPage() {
   const { user } = useAuth();
   const [explanations, setExplanations] = useState<Explanation[]>([]);
   const [loading, setLoading] = useState(true);

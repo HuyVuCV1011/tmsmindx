@@ -37,14 +37,14 @@ npm run dev
 
 Sau khi cấu hình xong:
 
-1. Vào `/user/giaithich`
-2. Tạo giải thích mới
+1. Vào `/user/giaitrinh`
+2. Tạo giải trình mới
 3. Kiểm tra email tại `academick12@mindx.com.vn`
 
 ## Nếu không muốn gửi email (Development)
 
 Hệ thống đã được cập nhật để hoạt động ngay cả khi không có Gmail credentials:
-- Giải thích vẫn được lưu vào database
+- Giải trình vẫn được lưu vào database
 - Console sẽ log thông tin thay vì gửi email
 - Không có lỗi fatal
 
