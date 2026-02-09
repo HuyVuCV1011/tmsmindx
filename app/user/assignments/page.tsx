@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send, XCircle } from 'lucide-react';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 
 interface Assignment {
   id: number;
@@ -161,7 +162,7 @@ export default function TeacherAssignmentPage() {
       const questionsData = await questionsRes.json();
       
       if (!questionsData.success) {
-        alert('Không thể tải câu hỏi');
+        toast.error('Không thể tải câu hỏi');
         return;
       }
 
@@ -178,7 +179,7 @@ export default function TeacherAssignmentPage() {
 
       const submissionData = await submissionRes.json();
       if (!submissionData.success) {
-        alert('Không thể bắt đầu bài tập: ' + submissionData.error);
+        toast.error('Không thể bắt đầu bài tập: ' + submissionData.error);
         return;
       }
 
@@ -213,7 +214,7 @@ export default function TeacherAssignmentPage() {
       }
     } catch (err) {
       console.error('Error starting assignment:', err);
-      alert('Lỗi khi bắt đầu bài tập');
+      toast.error('Lỗi khi bắt đầu bài tập');
     }
   };
 
@@ -288,7 +289,7 @@ export default function TeacherAssignmentPage() {
       // Ensure score is a valid number
       if (isNaN(totalScore) || totalScore === null || totalScore === undefined) {
         console.error('[Assignment] Invalid total score calculated:', totalScore);
-        alert('Lỗi: Không thể tính điểm. Vui lòng thử lại.');
+        toast.error('Lỗi: Không thể tính điểm. Vui lòng thử lại.');
         return;
       }
 
@@ -316,11 +317,11 @@ export default function TeacherAssignmentPage() {
         
         setView('result');
       } else {
-        alert('Lỗi khi nộp bài: ' + data.error);
+        toast.error('Lỗi khi nộp bài: ' + data.error);
       }
     } catch (err) {
       console.error('Error submitting assignment:', err);
-      alert('Lỗi khi nộp bài');
+      toast.error('Lỗi khi nộp bài');
     }
   };
 

@@ -9,6 +9,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import toast from 'react-hot-toast'
 
 import { useAuth } from '@/lib/auth-context'
 
@@ -67,9 +68,9 @@ export default function PostDetailPage() {
     const handleLike = async () => {
         // Prevent multiple clicks - nếu đang xử lý thì return
         if (isLiking) return
-        
+
         if (!post || !user?.localId) {
-            if (!user) alert('Vui lòng đăng nhập để thích bài viết')
+            if (!user) toast.error('Vui lòng đăng nhập để thích bài viết')
             return
         }
 
@@ -83,7 +84,7 @@ export default function PostDetailPage() {
         // Toggle liked state và update like count ngay
         const newLikedState = !previousLiked
         const newLikeCount = newLikedState ? previousLikeCount + 1 : previousLikeCount - 1
-        
+
         setLiked(newLikedState)
         setPost(prev => prev ? { ...prev, like_count: newLikeCount } : null)
 
@@ -146,9 +147,9 @@ export default function PostDetailPage() {
 
     const handleReaction = async (reactionType: string, e: React.MouseEvent) => {
         e.stopPropagation() // Prevent click outside from closing
-        
+
         if (isLiking || !user?.localId) {
-            if (!user) alert('Vui lòng đăng nhập để bày tỏ cảm xúc')
+            if (!user) toast.error('Vui lòng đăng nhập để bày tỏ cảm xúc')
             return
         }
 
@@ -332,7 +333,7 @@ export default function PostDetailPage() {
                                         )}
 
                                         {/* React Button */}
-                                        <div 
+                                        <div
                                             ref={reactionsRef}
                                             className="relative"
                                         >
@@ -343,9 +344,8 @@ export default function PostDetailPage() {
                                                     setShowReactions(true)
                                                 }}
                                                 disabled={isLiking}
-                                                className={`text-xs font-semibold transition-all duration-200 cursor-pointer ${
-                                                    currentReaction ? 'text-blue-600' : 'text-muted-foreground hover:text-foreground'
-                                                } ${isLiking ? 'opacity-50' : ''}`}
+                                                className={`text-xs font-semibold transition-all duration-200 cursor-pointer ${currentReaction ? 'text-blue-600' : 'text-muted-foreground hover:text-foreground'
+                                                    } ${isLiking ? 'opacity-50' : ''}`}
                                             >
                                                 {currentReaction ? reactions.find(r => r.type === currentReaction)?.label : 'Thích'}
                                             </button>
@@ -404,7 +404,7 @@ export default function PostDetailPage() {
 
                 {/* Comments Section */}
                 <div className="mt-5">
-                    <Comments 
+                    <Comments
                         postSlug={post.slug}
                         currentUserId={user?.localId}
                         currentUserName={user?.displayName || user?.email}

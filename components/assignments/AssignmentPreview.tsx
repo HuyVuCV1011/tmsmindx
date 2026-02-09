@@ -5,6 +5,7 @@ import { Question } from '@/types/assignment';
 import { Award, CheckCheck, CheckSquare, Clock, FileText, PenLine, X } from 'lucide-react';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 
 interface AssignmentPreviewProps {
   assignment: {
@@ -50,7 +51,7 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
       'short_answer': 'PenLine',
       'essay': 'FileText'
     }[type] || 'FileText';
-    
+
     const IconComponent = iconMap[iconName];
     return IconComponent;
   };
@@ -112,7 +113,7 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
             questions.map((question, index) => {
               const IconComponent = getQuestionIcon(question.question_type);
               const difficultyLevel = DIFFICULTY_LEVELS.find(d => d.value === question.difficulty);
-              
+
               // Map Bloom colors to Tailwind classes
               const getDifficultyColor = () => {
                 const colorMap: Record<string, { bg: string; text: string }> = {
@@ -127,7 +128,7 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
               };
 
               const difficultyColors = getDifficultyColor();
-              
+
               return (
                 <div key={question.id} className="bg-gray-50 rounded-xl p-5 border border-gray-200">
                   {/* Question Header */}
@@ -147,7 +148,7 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
                           {difficultyLevel?.icon} {difficultyLevel?.label}
                         </span>
                       </div>
-                      <div 
+                      <div
                         className="text-gray-900 font-medium text-lg prose prose-sm max-w-none"
                         dangerouslySetInnerHTML={{ __html: question.question_text }}
                       />
@@ -175,11 +176,10 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
                         {question.options.map((option, idx) => (
                           <label
                             key={idx}
-                            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                              answers[question.id] === option
+                            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${answers[question.id] === option
                                 ? 'border-blue-500 bg-blue-50'
                                 : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
-                            }`}
+                              }`}
                           >
                             <input
                               type="radio"
@@ -201,11 +201,10 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
                         {['Đúng', 'Sai'].map((option) => (
                           <label
                             key={option}
-                            className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                              answers[question.id] === option
+                            className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${answers[question.id] === option
                                 ? 'border-blue-500 bg-blue-50'
                                 : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
-                            }`}
+                              }`}
                           >
                             <input
                               type="radio"
@@ -264,7 +263,7 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
             <button
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
               onClick={() => {
-                alert('Đây là chế độ xem trước. Không thể nộp bài.');
+                toast.error('Đây là chế độ xem trước. Không thể nộp bài.');
               }}
             >
               Nộp bài (Demo)

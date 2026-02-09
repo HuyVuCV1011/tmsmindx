@@ -7,10 +7,10 @@ import { PageContainer } from "@/components/PageContainer";
 import { SearchBar } from "@/components/SearchBar";
 import { SkeletonList } from "@/components/skeletons";
 import { Tabs } from "@/components/Tabs";
-import { ToastContainer, ToastType } from "@/components/Toast";
 import { Lock, Trash2, Upload, Video } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import toast from 'react-hot-toast';
 
 interface Video {
   id: number;
@@ -33,9 +33,6 @@ export default function Page5() {
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-
-  // Toast state
-  const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: ToastType }>>([]);
   
   // Confirm dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -52,15 +49,6 @@ export default function Page5() {
     message: "",
     onConfirm: () => {},
   });
-
-  const showToast = (message: string, type: ToastType = "info") => {
-    const id = Math.random().toString(36).substring(7);
-    setToasts((prev) => [...prev, { id, message, type }]);
-  };
-
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
-  };
 
   useEffect(() => {
     fetchVideos();
@@ -99,14 +87,14 @@ export default function Page5() {
 
           const data = await response.json();
           if (data.success) {
-            showToast('Khóa video thành công!', 'success');
+            toast.success('Khóa video thành công!');
             fetchVideos();
           } else {
-            showToast('Lỗi: ' + data.error, 'error');
+            toast.error('Lỗi: ' + data.error);
           }
         } catch (error) {
           console.error('Error locking video:', error);
-          showToast('Lỗi khi khóa video!', 'error');
+          toast.error('Lỗi khi khóa video!');
         }
       },
     });
@@ -131,14 +119,14 @@ export default function Page5() {
 
           const data = await response.json();
           if (data.success) {
-            showToast('Xóa video thành công!', 'success');
+            toast.success('Xóa video thành công!');
             fetchVideos();
           } else {
-            showToast('Lỗi: ' + data.error, 'error');
+            toast.error('Lỗi: ' + data.error);
           }
         } catch (error) {
           console.error('Error deleting video:', error);
-          showToast('Lỗi khi xóa video!', 'error');
+          toast.error('Lỗi khi xóa video!');
         }
       },
     });
@@ -206,17 +194,17 @@ export default function Page5() {
 
       const videoData = await response.json();
       if (videoData.success) {
-        showToast('Upload video thành công!', 'success');
+        toast.success('Upload video thành công!');
         // Redirect to setup page to fill in details
         setTimeout(() => {
           router.push(`/admin/video-setup?id=${videoData.data.id}`);
         }, 500);
       } else {
-        showToast("Lỗi khi lưu video: " + videoData.error, 'error');
+        toast.error("Lỗi khi lưu video: " + videoData.error);
       }
     } catch (err) {
       console.error("Upload error:", err);
-      showToast(err instanceof Error ? err.message : "Lỗi khi upload video!", 'error');
+      toast.error(err instanceof Error ? err.message : "Lỗi khi upload video!");
     } finally {
       setUploading(false);
       // Reset file input
@@ -398,9 +386,6 @@ export default function Page5() {
           </div>
         )}
       </Card>
-
-      {/* Toast Notifications */}
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       {/* Confirm Dialog */}
       <ConfirmDialog

@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
+import toast from 'react-hot-toast';
 
 interface Video {
   id: number;
@@ -1084,7 +1085,7 @@ function VideoDetailContent() {
                   }
                   const filteredOptions = newOptions.filter(opt => opt.trim());
                   if (!newQuestion.trim() || filteredOptions.length < 2) {
-                    alert("Vui lòng điền đầy đủ câu hỏi và ít nhất 2 đáp án!");
+                    toast.error("Vui lòng điền đầy đủ câu hỏi và ít nhất 2 đáp án!");
                     return;
                   }
                   const newQ = { 

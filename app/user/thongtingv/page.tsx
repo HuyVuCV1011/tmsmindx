@@ -3,6 +3,7 @@
 import { useAuth } from "@/lib/auth-context";
 import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import toast from 'react-hot-toast';
 import useSWR, { mutate } from "swr";
 
 // Cache for processed data
@@ -121,24 +122,24 @@ const fetcher = async (url: string) => {
     return cached.data;
   }
 
-  const res = await fetch(url, { 
+  const res = await fetch(url, {
     next: { revalidate: 300 }, // Cache 5 minutes
-    headers: { 
+    headers: {
       'Accept-Encoding': 'gzip, deflate, br',
       'Cache-Control': 'max-age=300, stale-while-revalidate=600',
       'x-api-key': API_SECRET_KEY
     }
   });
   if (!res.ok) throw new Error('Failed to fetch');
-  
+
   const data = await res.json();
-  
+
   // Store in cache
   dataCache.set(cacheKey, {
     data,
     timestamp: Date.now()
   });
-  
+
   return data;
 };
 
@@ -158,16 +159,16 @@ export default function Page1() {
   const [selectedMonth, setSelectedMonth] = useState("12");
   const [selectedYear, setSelectedYear] = useState("2025");
   const [selectedTableYear, setSelectedTableYear] = useState("2025");
-  
+
   // Debounce refs
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSearchRef = useRef("");
-  
+
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMonth, setModalMonth] = useState<string | null>(null);
   const [modalType, setModalType] = useState<"expertise" | "experience" | null>(null);
   const [modalRecords, setModalRecords] = useState<TestRecord[]>([]);
-  
+
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState("");
@@ -202,7 +203,7 @@ export default function Page1() {
   const [availabilityPeriod, setAvailabilityPeriod] = useState<"week" | "month" | "year">("month");
   const [notFoundModalOpen, setNotFoundModalOpen] = useState(false);
   const [registrationCheckModalOpen, setRegistrationCheckModalOpen] = useState(false);
-  
+
   // Custom fetcher với Authorization header và token refresh
   const secureFetcher = useCallback(async (url: string) => {
     let token = localStorage.getItem('token');
@@ -272,7 +273,7 @@ export default function Page1() {
 
     return response.json();
   }, []);
-  
+
   // Auto-search based on logged-in user's email - ONLY ONCE
   useEffect(() => {
     if (user && user.email && !hasAutoSearched && !submitCode) {
@@ -308,7 +309,7 @@ export default function Page1() {
         setIsResolvingCode(false);
       })();
     }
-    
+
     // Check if user has already given feedback
     if (!hasAutoSearched) {
       const feedbackGiven = localStorage.getItem('userHasFeedback');
@@ -327,7 +328,7 @@ export default function Page1() {
   const { data: teacherData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
     submitCode && user ? `/api/teachers?code=${submitCode}` : null,
     secureFetcher,
-    { 
+    {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       dedupingInterval: 300000, // 5 minutes deduping
@@ -342,7 +343,7 @@ export default function Page1() {
   const { data: expertiseDataRes, isLoading: isLoadingExpertise } = useSWR(
     teacher && user ? `/api/rawdata?code=${submitCode}` : null,
     secureFetcher,
-    { 
+    {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       dedupingInterval: 300000,
@@ -354,7 +355,7 @@ export default function Page1() {
   const { data: experienceDataRes, isLoading: isLoadingExperience } = useSWR(
     teacher && user ? `/api/rawdata-experience?code=${submitCode}` : null,
     secureFetcher,
-    { 
+    {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       dedupingInterval: 300000,
@@ -367,7 +368,7 @@ export default function Page1() {
   const { data: trainingData, isLoading: isLoadingTraining } = useSWR(
     teacher && user ? `/api/training?code=${submitCode}` : null,
     secureFetcher,
-    { 
+    {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       dedupingInterval: 300000,
@@ -390,7 +391,7 @@ export default function Page1() {
         setFeedbackModalOpen(true);
         setIsFirstTimeFeedback(false); // Disabled mandatory behavior
       }, 30000);
-      
+
       return () => clearTimeout(timer);
     }
   }, [submitCode, teacherData, hasFeedback, feedbackModalOpen, feedbackEnabled]);
@@ -423,7 +424,7 @@ export default function Page1() {
     } else {
       document.body.style.overflow = 'unset';
     }
-    
+
     return () => {
       document.body.style.overflow = 'unset';
     };
@@ -434,7 +435,7 @@ export default function Page1() {
     const date = new Date();
     const today = date.toISOString().split('T')[0];
     const fromDate = new Date();
-    
+
     if (availabilityPeriod === 'week') {
       // Get start of current week (Sunday)
       const dayOfWeek = date.getDay();
@@ -447,7 +448,7 @@ export default function Page1() {
       fromDate.setMonth(0);
       fromDate.setDate(1);
     }
-    
+
     return {
       fromDate: fromDate.toISOString().split('T')[0],
       toDate: today
@@ -459,7 +460,7 @@ export default function Page1() {
   const { data: availabilityDataRes, isLoading: isLoadingAvailabilityData } = useSWR(
     (teacher && scoresLoaded) ? `/api/availability?fromDate=${availabilityFromDate}&toDate=${availabilityToDate}&teacherName=${encodeURIComponent(teacher.name || '')}` : null,
     fetcher,
-    { 
+    {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       dedupingInterval: 120000,
@@ -471,13 +472,13 @@ export default function Page1() {
     if (!availabilityDataRes?.teachers || !teacher) return [];
     // Additional client-side filter for email matching (backup)
     const records = availabilityDataRes.teachers.filter((t: TeacherAvailability) => {
-      const emailMatch = t.email?.toLowerCase() === teacher.emailMindx?.toLowerCase() || 
-                         t.email?.toLowerCase() === teacher.emailPersonal?.toLowerCase();
-      const nameMatch = t.name?.toLowerCase().includes(teacher.name?.toLowerCase()) || 
-                        teacher.name?.toLowerCase().includes(t.name?.toLowerCase());
+      const emailMatch = t.email?.toLowerCase() === teacher.emailMindx?.toLowerCase() ||
+        t.email?.toLowerCase() === teacher.emailPersonal?.toLowerCase();
+      const nameMatch = t.name?.toLowerCase().includes(teacher.name?.toLowerCase()) ||
+        teacher.name?.toLowerCase().includes(t.name?.toLowerCase());
       return emailMatch || nameMatch;
     });
-    
+
     console.log('🔍 Availability Records:', {
       totalTeachers: availabilityDataRes.teachers.length,
       filteredRecords: records.length,
@@ -485,7 +486,7 @@ export default function Page1() {
       teacherName: teacher.name,
       sampleRecord: records[0]
     });
-    
+
     return records;
   }, [availabilityDataRes, teacher]);
 
@@ -574,25 +575,25 @@ export default function Page1() {
       setError("Vui lòng nhập mã giáo viên");
       return;
     }
-    
+
     const trimmedCode = searchCode.trim();
-    
+
     // Skip if same as previous search
     if (trimmedCode === lastSearchRef.current) {
       return;
     }
-    
+
     lastSearchRef.current = trimmedCode;
     setError("");
     setSubmitCode(trimmedCode);
-    
+
     // Save to localStorage for quick access
     try {
       localStorage.setItem('lastSearchCode', trimmedCode);
     } catch (e) {
       console.warn('Unable to save to localStorage:', e);
     }
-    
+
     // Track search analytics (non-blocking)
     fetch('/api/analytics', {
       method: 'POST',
@@ -607,12 +608,12 @@ export default function Page1() {
   // Improved debounced search
   useEffect(() => {
     if (!searchCode.trim()) return;
-    
+
     // Clear previous timeout
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
-    
+
     // Set new timeout for auto-search
     searchTimeoutRef.current = setTimeout(() => {
       const trimmedCode = searchCode.trim();
@@ -620,7 +621,7 @@ export default function Page1() {
         handleSearch();
       }
     }, 800); // Increased debounce time for better performance
-    
+
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
@@ -670,7 +671,7 @@ export default function Page1() {
   const openModal = useCallback((month: string, type: "expertise" | "experience") => {
     const data = type === "expertise" ? expertiseData : experienceData;
     const monthData = data.find((d: MonthlyAverage) => d.month === month);
-    
+
     if (monthData && monthData.records.length > 0) {
       setModalMonth(month);
       setModalType(type);
@@ -681,15 +682,15 @@ export default function Page1() {
 
   const handleFeedbackSubmit = async () => {
     if (feedbackRating === 0) {
-      alert('Vui lòng chọn số sao đánh giá');
+      toast.error('Vui lòng chọn số sao đánh giá');
       return;
     }
-    
+
     setFeedbackSubmitting(true);
     try {
       const response = await fetch('/api/feedback', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'x-api-key': API_SECRET_KEY
         },
@@ -701,7 +702,7 @@ export default function Page1() {
           userCode: submitCode || 'anonymous'
         })
       });
-      
+
       if (response.ok) {
         setFeedbackRating(0);
         setFeedbackComment("");
@@ -709,15 +710,15 @@ export default function Page1() {
         setFeedbackModalOpen(false);
         setFeedbackSuccessModalOpen(true);
         setIsFirstTimeFeedback(false); // Reset first-time flag after successful submission
-        
+
         // Save to localStorage so modal doesn't show again
         localStorage.setItem('userHasFeedback', 'true');
         setHasFeedback(true);
       } else {
-        alert('Gửi feedback thất bại. Vui lòng thử lại.');
+        toast.error('Gửi feedback thất bại. Vui lòng thử lại.');
       }
     } catch (error) {
-      alert('Lỗi kết nối. Vui lòng thử lại.');
+      toast.error('Lỗi kết nối. Vui lòng thử lại.');
     } finally {
       setFeedbackSubmitting(false);
     }
@@ -728,24 +729,24 @@ export default function Page1() {
     const currentMonth = parseInt(selectedMonth);
     const currentYear = parseInt(selectedYear);
     const scores: number[] = [];
-    
+
     for (let i = 0; i < 6; i++) {
       let month = currentMonth - i;
       let year = currentYear;
-      
+
       if (month <= 0) {
         month += 12;
         year -= 1;
       }
-      
+
       const monthKey = `${month}/${year}`;
       const score = getScoreForMonth(expertiseData, monthKey);
-      
+
       if (score !== "N/A") {
         scores.push(parseFloat(score));
       }
     }
-    
+
     return scores.length > 0 ? Math.max(...scores).toFixed(1) : "N/A";
   }, [selectedMonth, selectedYear, expertiseData, getScoreForMonth]);
 
@@ -753,24 +754,24 @@ export default function Page1() {
     const currentMonth = parseInt(selectedMonth);
     const currentYear = parseInt(selectedYear);
     const scores: number[] = [];
-    
+
     for (let i = 0; i < 6; i++) {
       let month = currentMonth - i;
       let year = currentYear;
-      
+
       if (month <= 0) {
         month += 12;
         year -= 1;
       }
-      
+
       const monthKey = `${month}/${year}`;
       const score = getScoreForMonth(experienceData, monthKey);
-      
+
       if (score !== "N/A") {
         scores.push(parseFloat(score));
       }
     }
-    
+
     return scores.length > 0 ? Math.max(...scores).toFixed(1) : "N/A";
   }, [selectedMonth, selectedYear, experienceData, getScoreForMonth]);
 
@@ -779,19 +780,19 @@ export default function Page1() {
     const currentMonth = parseInt(selectedMonth);
     const currentYear = parseInt(selectedYear);
     const months: string[] = [];
-    
+
     for (let i = 0; i < 6; i++) {
       let month = currentMonth - i;
       let year = currentYear;
-      
+
       if (month <= 0) {
         month += 12;
         year -= 1;
       }
-      
+
       months.push(`${month}/${year}`);
     }
-    
+
     return months;
   }, [selectedMonth, selectedYear]);
 
@@ -809,11 +810,11 @@ export default function Page1() {
       { key: 'sunday' as const, label: 'Chủ nhật', short: 'CN' },
     ];
     const TIME_SLOTS = ['Sáng', 'Chiều', 'Tối'] as const;
-    
+
     const dayCount: Record<string, number> = {};
     const timeSlotCount: Record<string, number> = { 'Sáng': 0, 'Chiều': 0, 'Tối': 0 };
     const periodData: { label: string; count: number }[] = [];
-    
+
     // Create availability matrix for heatmap
     type DayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
     type TimeSlot = 'Sáng' | 'Chiều' | 'Tối';
@@ -831,21 +832,21 @@ export default function Page1() {
 
     // Group records by period and count slots
     const recordsByPeriod = new Map<string, number>();
-    
+
     availabilityRecords.forEach((record: TeacherAvailability) => {
       // Parse record date
       const [datePart] = record.timestamp.split(' ');
       const [day, month, year] = datePart.split('/').map(Number);
       const recordDate = new Date(year, month - 1, day);
-      
+
       // Count total available slots in this record
       let recordSlotCount = 0;
-      
+
       DAYS.forEach(({ key: dayKey }) => {
         const availability = record[dayKey as keyof TeacherAvailability] as string;
         if (availability && availability !== 'Bận') {
           dayCount[dayKey]++;
-          
+
           // Count by time slot and build matrix
           TIME_SLOTS.forEach(slot => {
             if (availability.includes(slot)) {
@@ -856,7 +857,7 @@ export default function Page1() {
           });
         }
       });
-      
+
       // Determine period key based on filter selection
       let periodKey = '';
       const now = new Date();
@@ -864,13 +865,13 @@ export default function Page1() {
       const recordYear = recordDate.getFullYear();
       const nowMonth = now.getMonth();
       const nowYear = now.getFullYear();
-      
+
       if (availabilityPeriod === 'week') {
         // Only include records in current week
         const nowWeekStart = new Date(now);
         nowWeekStart.setDate(now.getDate() - now.getDay());
         nowWeekStart.setHours(0, 0, 0, 0);
-        
+
         if (recordDate >= nowWeekStart && recordDate <= now) {
           const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
           periodKey = `${dayNames[recordDate.getDay()]} (${day}/${month})`;
@@ -889,7 +890,7 @@ export default function Page1() {
           periodKey = `T${displayMonth}/${recordYear}`;
         }
       }
-      
+
       if (periodKey) {
         recordsByPeriod.set(periodKey, (recordsByPeriod.get(periodKey) || 0) + recordSlotCount);
       }
@@ -897,7 +898,7 @@ export default function Page1() {
 
     // Convert to array and sort
     const entries = Array.from(recordsByPeriod.entries()).map(([label, count]) => ({ label, count }));
-    
+
     if (availabilityPeriod === 'week') {
       // Sort by day of week (CN, T2, T3, ...)
       entries.sort((a, b) => {
@@ -922,7 +923,7 @@ export default function Page1() {
         return aMonth - bMonth;
       });
     }
-    
+
     periodData.push(...entries);
 
     // Find most available day and time
@@ -931,12 +932,12 @@ export default function Page1() {
 
     const totalRegistrations = availabilityRecords.length;
     const avgPerPeriod = availabilityPeriod === 'week' ? Math.round(totalRegistrations / 7) :
-                          availabilityPeriod === 'month' ? Math.round((totalRegistrations / 30) * 7) :
-                          Math.round(totalRegistrations / 12);
+      availabilityPeriod === 'month' ? Math.round((totalRegistrations / 30) * 7) :
+        Math.round(totalRegistrations / 12);
 
     // Calculate total slots across all records
     const totalSlots = Object.values(timeSlotCount).reduce((sum, count) => sum + count, 0);
-    
+
     const stats = {
       totalRegistrations,
       dayCount,
@@ -950,7 +951,7 @@ export default function Page1() {
       DAYS,
       TIME_SLOTS,
     };
-    
+
     // Debug logging
     if (periodData.length === 0) {
       console.warn('⚠️ No availability data:', {
@@ -959,7 +960,7 @@ export default function Page1() {
         dateRange: { from: availabilityFromDate, to: availabilityToDate }
       });
     }
-    
+
     return stats;
   }, [availabilityRecords, availabilityPeriod, availabilityFromDate, availabilityToDate]);
 
@@ -970,7 +971,7 @@ export default function Page1() {
         <div className="border-b border-gray-900 pb-2 sm:pb-3">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Thông tin của tôi</h1>
           <p className="text-xs text-gray-600 mt-1">
-            { (isLoadingTeacher || isResolvingCode) ? (
+            {(isLoadingTeacher || isResolvingCode) ? (
               <span className="inline-flex items-center gap-2">
                 <div className="w-3 h-1 bg-gray-300 rounded overflow-hidden">
                   <div className="w-full h-full bg-blue-500 animate-pulse"></div>
@@ -1052,11 +1053,10 @@ export default function Page1() {
                   <p className="text-xs opacity-90">{teacher.code}</p>
                 </div>
                 <div className="shrink-0">
-                  <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${
-                    teacher.status === "Active" 
-                      ? "bg-green-500 text-white" 
+                  <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${teacher.status === "Active"
+                      ? "bg-green-500 text-white"
                       : "bg-gray-500 text-white"
-                  }`}>
+                    }`}>
                     {teacher.status}
                   </span>
                 </div>
@@ -1110,9 +1110,8 @@ export default function Page1() {
                   </div>
                   <div className="text-xs">
                     <span className="text-gray-600">Trạng thái hoạt động:</span>
-                    <span className={`ml-2 font-medium ${
-                      teacher.programIn === "Active" ? "text-green-600" : "text-gray-600"
-                    }`}>{teacher.programIn}</span>
+                    <span className={`ml-2 font-medium ${teacher.programIn === "Active" ? "text-green-600" : "text-gray-600"
+                      }`}>{teacher.programIn}</span>
                   </div>
                 </div>
               </div>
@@ -1230,115 +1229,110 @@ export default function Page1() {
               ) : (
                 /* Actual Table */
                 <>
-              {(() => {
-                const months = Array.from({ length: 12 }, (_, i) => `${i + 1}/${selectedTableYear}`);
+                  {(() => {
+                    const months = Array.from({ length: 12 }, (_, i) => `${i + 1}/${selectedTableYear}`);
 
-                return (
-                  <table className="w-full text-[10px] sm:text-xs min-w-[600px]">
-                    <thead>
-                      <tr className="border-b border-gray-900">
-                        <th className="text-left py-1.5 sm:py-2 px-1.5 sm:px-2 font-bold text-gray-900 min-w-[100px] sticky left-0 bg-white z-10">Chỉ tiêu</th>
-                        {months.map((month) => (
-                          <th key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 min-w-[50px] sm:min-w-[60px] ${
-                            highlightedMonths.includes(month) ? "bg-blue-50" : ""
-                          }`}>
-                            <div className="font-medium text-gray-700 whitespace-nowrap">T{month.split('/')[0]}</div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-gray-200">
-                        <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 sticky left-0 bg-white z-10">
-                          <div className="font-medium text-gray-900 text-[10px] sm:text-xs">CM Chuyên sâu</div>
-                        </td>
-                        {months.map((month) => {
-                          const score = getScoreForMonth(expertiseData, month);
-                          const scoreValue = score === "N/A" ? 0 : parseFloat(score);
-                          const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
-                          return (
-                            <td key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 ${
-                              highlightedMonths.includes(month) ? "bg-blue-50" : ""
-                            }`}>
-                              <span 
-                                onClick={() => {
-                                  if (score === "N/A" && isCurrentMonth) {
-                                    setRegistrationCheckModalOpen(true);
-                                  } else if (score !== "N/A") {
-                                    openModal(month, "expertise");
-                                  }
-                                }}
-                                className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${
-                                  score === "N/A"
-                                    ? isCurrentMonth
-                                      ? "bg-yellow-200 text-yellow-900 cursor-pointer hover:bg-yellow-300 animate-pulse font-bold shadow-lg border-2 border-yellow-400"
-                                      : "bg-gray-200 text-gray-700"
-                                    : scoreValue >= 8 
-                                      ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200" 
-                                      : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
+                    return (
+                      <table className="w-full text-[10px] sm:text-xs min-w-[600px]">
+                        <thead>
+                          <tr className="border-b border-gray-900">
+                            <th className="text-left py-1.5 sm:py-2 px-1.5 sm:px-2 font-bold text-gray-900 min-w-[100px] sticky left-0 bg-white z-10">Chỉ tiêu</th>
+                            {months.map((month) => (
+                              <th key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 min-w-[50px] sm:min-w-[60px] ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
                                 }`}>
-                                {score === "N/A" && isCurrentMonth ? "📝 Đăng ký" : score}
-                              </span>
+                                <div className="font-medium text-gray-700 whitespace-nowrap">T{month.split('/')[0]}</div>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b border-gray-200">
+                            <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 sticky left-0 bg-white z-10">
+                              <div className="font-medium text-gray-900 text-[10px] sm:text-xs">CM Chuyên sâu</div>
                             </td>
-                          );
-                        })}
-                      </tr>
-                      <tr className="border-b border-gray-200">
-                        <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 sticky left-0 bg-white z-10">
-                          <div className="font-medium text-gray-900 text-[10px] sm:text-xs">KN - QT Trải nghiệm</div>
-                        </td>
-                        {months.map((month) => {
-                          const score = getScoreForMonth(experienceData, month);
-                          const scoreValue = score === "N/A" ? 0 : parseFloat(score);
-                          const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
-                          return (
-                            <td key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 ${
-                              highlightedMonths.includes(month) ? "bg-blue-50" : ""
-                            }`}>
-                              <span 
-                                onClick={() => {
-                                  if (score === "N/A" && isCurrentMonth) {
-                                    setRegistrationCheckModalOpen(true);
-                                  } else if (score !== "N/A") {
-                                    openModal(month, "experience");
-                                  }
-                                }}
-                                className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${
-                                  score === "N/A"
-                                    ? isCurrentMonth
-                                      ? "bg-yellow-200 text-yellow-900 cursor-pointer hover:bg-yellow-300 animate-pulse font-bold shadow-lg border-2 border-yellow-400"
-                                      : "bg-gray-200 text-gray-700"
-                                    : scoreValue >= 8 
-                                      ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200" 
-                                      : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
-                                }`}>
-                                {score === "N/A" && isCurrentMonth ? "📝 Đăng ký" : score}
-                              </span>
+                            {months.map((month) => {
+                              const score = getScoreForMonth(expertiseData, month);
+                              const scoreValue = score === "N/A" ? 0 : parseFloat(score);
+                              const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
+                              return (
+                                <td key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
+                                  }`}>
+                                  <span
+                                    onClick={() => {
+                                      if (score === "N/A" && isCurrentMonth) {
+                                        setRegistrationCheckModalOpen(true);
+                                      } else if (score !== "N/A") {
+                                        openModal(month, "expertise");
+                                      }
+                                    }}
+                                    className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${score === "N/A"
+                                        ? isCurrentMonth
+                                          ? "bg-yellow-200 text-yellow-900 cursor-pointer hover:bg-yellow-300 animate-pulse font-bold shadow-lg border-2 border-yellow-400"
+                                          : "bg-gray-200 text-gray-700"
+                                        : scoreValue >= 8
+                                          ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
+                                          : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
+                                      }`}>
+                                    {score === "N/A" && isCurrentMonth ? "📝 Đăng ký" : score}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                          <tr className="border-b border-gray-200">
+                            <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 sticky left-0 bg-white z-10">
+                              <div className="font-medium text-gray-900 text-[10px] sm:text-xs">KN - QT Trải nghiệm</div>
                             </td>
-                          );
-                        })}
-                      </tr>
-                    </tbody>
-                  </table>
-                );
-              })()}
-              {scoresLoaded && (
-                <div className="mt-2 sm:mt-3 flex flex-col sm:flex-row gap-1.5 sm:gap-4 text-[10px] sm:text-xs text-gray-600">
-                  <div className="flex items-center gap-1">
-                    <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-green-100 border border-green-200 rounded flex-shrink-0"></span>
-                    <span>≥ 8.0 điểm</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-red-100 border border-red-200 rounded flex-shrink-0"></span>
-                    <span>&lt; 7.0 điểm</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-gray-200 border border-gray-300 rounded flex-shrink-0"></span>
-                    <span>N/A (Click vào tháng hiện tại để đăng ký)</span>
-                  </div>
-                </div>
-              )}
-              </>
+                            {months.map((month) => {
+                              const score = getScoreForMonth(experienceData, month);
+                              const scoreValue = score === "N/A" ? 0 : parseFloat(score);
+                              const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
+                              return (
+                                <td key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
+                                  }`}>
+                                  <span
+                                    onClick={() => {
+                                      if (score === "N/A" && isCurrentMonth) {
+                                        setRegistrationCheckModalOpen(true);
+                                      } else if (score !== "N/A") {
+                                        openModal(month, "experience");
+                                      }
+                                    }}
+                                    className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${score === "N/A"
+                                        ? isCurrentMonth
+                                          ? "bg-yellow-200 text-yellow-900 cursor-pointer hover:bg-yellow-300 animate-pulse font-bold shadow-lg border-2 border-yellow-400"
+                                          : "bg-gray-200 text-gray-700"
+                                        : scoreValue >= 8
+                                          ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
+                                          : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
+                                      }`}>
+                                    {score === "N/A" && isCurrentMonth ? "📝 Đăng ký" : score}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tbody>
+                      </table>
+                    );
+                  })()}
+                  {scoresLoaded && (
+                    <div className="mt-2 sm:mt-3 flex flex-col sm:flex-row gap-1.5 sm:gap-4 text-[10px] sm:text-xs text-gray-600">
+                      <div className="flex items-center gap-1">
+                        <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-green-100 border border-green-200 rounded flex-shrink-0"></span>
+                        <span>≥ 8.0 điểm</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-red-100 border border-red-200 rounded flex-shrink-0"></span>
+                        <span>&lt; 7.0 điểm</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-gray-200 border border-gray-300 rounded flex-shrink-0"></span>
+                        <span>N/A (Click vào tháng hiện tại để đăng ký)</span>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -1394,7 +1388,7 @@ export default function Page1() {
                         <div>Hoàn thành: {trainingData.lessons?.filter((l: any) => l.score > 0).length || 0}/10</div>
                         <div className="mt-1">
                           <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div 
+                            <div
                               className="h-full bg-purple-600 rounded-full transition-all"
                               style={{ width: `${((trainingData.lessons?.filter((l: any) => l.score > 0).length || 0) / 10) * 100}%` }}
                             />
@@ -1412,12 +1406,12 @@ export default function Page1() {
                       const isPerfect = score >= 10;
                       const needsImprovement = hasScore && !isPerfect;
                       const notStarted = !hasScore;
-                      
+
                       const scoreColor = hasScore ? 'text-purple-600' : 'text-gray-400';
                       const bgColor = hasScore ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200';
 
                       return (
-                        <div 
+                        <div
                           key={idx}
                           className={`border rounded-lg p-3 transition-all hover:shadow-md ${bgColor}`}
                         >
@@ -1429,19 +1423,18 @@ export default function Page1() {
                               <div className="text-xs text-gray-700 line-clamp-2 mb-2">
                                 {lesson.name.replace(/^Lesson \d+:\s*/, '')}
                               </div>
-                              
+
                               {/* Buttons - Show only for lessons not perfect (< 10 points) */}
                               {!isPerfect && (
                                 lesson.link ? (
-                                  <a 
+                                  <a
                                     href={lesson.link}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded transition-colors ${
-                                      notStarted
+                                    className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded transition-colors ${notStarted
                                         ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
                                         : 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
-                                    }`}
+                                      }`}
                                   >
                                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -1504,7 +1497,7 @@ export default function Page1() {
                     </p>
                   </div>
                 </div>
-                
+
                 {/* Period Filter */}
                 <div className="flex gap-1 sm:gap-2">
                   {[
@@ -1515,11 +1508,10 @@ export default function Page1() {
                     <button
                       key={value}
                       onClick={() => setAvailabilityPeriod(value as any)}
-                      className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded text-xs sm:text-sm font-medium transition-all ${
-                        availabilityPeriod === value
+                      className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded text-xs sm:text-sm font-medium transition-all ${availabilityPeriod === value
                           ? 'bg-white text-blue-600 shadow-md'
                           : 'bg-white/20 hover:bg-white/30 text-white'
-                      }`}
+                        }`}
                     >
                       {label}
                     </button>
@@ -1541,13 +1533,13 @@ export default function Page1() {
                       </div>
                     ))}
                   </div>
-                  
+
                   {/* Heatmap Skeleton */}
                   <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50">
                     <div className="h-4 bg-gray-300 rounded w-48 mb-3 animate-pulse"></div>
                     <div className="h-48 bg-gray-200 rounded animate-pulse"></div>
                   </div>
-                  
+
                   {/* Charts Skeleton */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
                     <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50">
@@ -1593,253 +1585,250 @@ export default function Page1() {
                     </div>
                   </div>
 
-              {/* Heatmap - Availability Matrix */}
-              <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    Bản đồ nhiệt - Phân bố theo ngày & khung giờ
-                  </h4>
-                  
-                  {/* Info Icon with Tooltip */}
-                  <div className="relative group">
-                    <div className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold cursor-help">
-                      i
-                    </div>
-                    <div className="absolute right-0 top-6 w-72 bg-gray-900 text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-30 shadow-xl">
-                      <div className="font-bold mb-2">Hướng dẫn đọc bản đồ:</div>
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 bg-gray-100 rounded flex-shrink-0 border border-gray-600"></div>
-                          <span><strong>0 lần:</strong> Không có lịch rảnh</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 bg-blue-300 rounded flex-shrink-0"></div>
-                          <span><strong>1 lần:</strong> Ít</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 bg-blue-400 rounded flex-shrink-0"></div>
-                          <span><strong>2 lần:</strong> Trung bình</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 bg-blue-500 rounded flex-shrink-0"></div>
-                          <span><strong>3 lần:</strong> Nhiều</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 bg-blue-600 rounded flex-shrink-0"></div>
-                          <span><strong>4+ lần:</strong> Rất nhiều</span>
-                        </div>
-                      </div>
-                      <div className="mt-2 pt-2 border-t border-gray-700 text-[10px] text-gray-300 space-y-1">
-                        <div><strong>Thang đo chuẩn:</strong></div>
-                        <div>• <strong>Tuần:</strong> 1 lần = Rất nhiều</div>
-                        <div>• <strong>Tháng:</strong> 4 lần = Rất nhiều</div>
-                        <div>• <strong>Năm:</strong> 48 lần = Rất nhiều</div>
-                        <div className="text-[9px] italic mt-1">(Năm: 4 lần/tháng × 12 tháng = 48 lần)</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="overflow-x-auto">
-                  <div className="min-w-[500px]">
-                    {/* Header */}
-                    <div className="grid grid-cols-8 gap-1 mb-1">
-                      <div className="text-xs text-gray-600 font-medium"></div>
-                      {availabilityStats.DAYS.map(day => (
-                        <div key={day.key} className="text-xs text-gray-600 font-medium text-center">
-                          {day.short}
-                        </div>
-                      ))}
-                    </div>
-                    
-                    {/* Rows */}
-                    {availabilityStats.TIME_SLOTS.map(slot => {
-                      // Fixed scale based on period: week=1, month=4, year=48
-                      const maxStandard = availabilityPeriod === 'week' ? 1 : 
-                                         availabilityPeriod === 'month' ? 4 : 48;
-                      
-                      return (
-                        <div key={slot} className="grid grid-cols-8 gap-1 mb-1">
-                          <div className="text-xs text-gray-600 font-medium flex items-center">
-                            {slot}
-                          </div>
-                          {availabilityStats.DAYS.map(day => {
-                            const dayKey = day.key as 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
-                            const timeSlot = slot as 'Sáng' | 'Chiều' | 'Tối';
-                            const count = availabilityStats.availabilityMatrix[dayKey][timeSlot];
-                            
-                            // Fixed scale: calculate thresholds based on maxStandard
-                            const threshold4 = maxStandard;                    // 100% = Very high
-                            const threshold3 = Math.ceil(maxStandard * 0.75); // 75% = High
-                            const threshold2 = Math.ceil(maxStandard * 0.5);  // 50% = Medium
-                            const threshold1 = Math.ceil(maxStandard * 0.25); // 25% = Low
-                            
-                            let bgColor = 'bg-gray-100';
-                            if (count >= threshold4) bgColor = 'bg-blue-600';      // 100%+ = Very high
-                            else if (count >= threshold3) bgColor = 'bg-blue-500'; // 75%+ = High
-                            else if (count >= threshold2) bgColor = 'bg-blue-400'; // 50%+ = Medium
-                            else if (count >= threshold1) bgColor = 'bg-blue-300'; // 25%+ = Low
-                            
-                            return (
-                              <div 
-                                key={`${day.key}-${slot}`}
-                                className={`${bgColor} rounded p-2 text-center text-xs font-bold transition-all hover:scale-105 cursor-pointer relative group ${
-                                  count >= 2 ? 'text-white' : 'text-gray-900'
-                                }`}
-                              >
-                                {count}
-                                <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-2 py-1 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                                  {day.label} {slot}: {count} lần
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                    
-                    {/* Legend */}
-                    <div className="mt-4 flex items-center gap-3 text-xs">
-                      <span className="text-gray-600 font-medium">Cường độ:</span>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1">
-                          <div className="w-4 h-4 bg-gray-100 rounded border border-gray-300"></div>
-                          <span>0</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-4 h-4 bg-blue-300 rounded"></div>
-                          <span>Ít</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-4 h-4 bg-blue-400 rounded"></div>
-                          <span>TB</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-4 h-4 bg-blue-500 rounded"></div>
-                          <span>Nhiều</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-4 h-4 bg-blue-600 rounded"></div>
-                          <span>Rất nhiều</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                  {/* Heatmap - Availability Matrix */}
+                  <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        Bản đồ nhiệt - Phân bố theo ngày & khung giờ
+                      </h4>
 
-              {/* Bar Charts Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* By Day */}
-                <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-white">
-                  <h4 className="text-sm font-bold text-gray-900 mb-6">Phân bố theo ngày</h4>
-                  <div className="flex items-end justify-between gap-2 h-64">
-                    {availabilityStats.DAYS.map(day => {
-                      const count = availabilityStats.dayCount[day.key] || 0;
-                      const maxDay = Math.max(...availabilityStats.DAYS.map(d => availabilityStats.dayCount[d.key] || 0), 1);
-                      // Calculate height in pixels for better control (180px max in h-64 container)
-                      const maxHeight = 180;
-                      const heightPx = count > 0 ? Math.max(24, (count / maxDay) * maxHeight) : 8;
-                      
-                      return (
-                        <div key={day.key} className="flex-1 flex flex-col items-center gap-2 group">
-                          <div className="relative w-full flex flex-col justify-end h-64">
-                            <div 
-                              className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${
-                                count === 0 ? 'bg-gray-200' : 'bg-gradient-to-t from-blue-600 to-blue-400 hover:from-blue-700 hover:to-blue-500'
-                              }`}
-                              style={{ 
-                                height: `${heightPx}px`
-                              }}
-                            >
-                              {/* Count inside bar */}
-                              {count > 0 && (
-                                <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold">
-                                  {count}
-                                </div>
-                              )}
-                              
-                              {/* Tooltip */}
-                              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-2 py-1 rounded text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                {day.label}: {count} lần
-                              </div>
+                      {/* Info Icon with Tooltip */}
+                      <div className="relative group">
+                        <div className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold cursor-help">
+                          i
+                        </div>
+                        <div className="absolute right-0 top-6 w-72 bg-gray-900 text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-30 shadow-xl">
+                          <div className="font-bold mb-2">Hướng dẫn đọc bản đồ:</div>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 bg-gray-100 rounded flex-shrink-0 border border-gray-600"></div>
+                              <span><strong>0 lần:</strong> Không có lịch rảnh</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 bg-blue-300 rounded flex-shrink-0"></div>
+                              <span><strong>1 lần:</strong> Ít</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 bg-blue-400 rounded flex-shrink-0"></div>
+                              <span><strong>2 lần:</strong> Trung bình</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 bg-blue-500 rounded flex-shrink-0"></div>
+                              <span><strong>3 lần:</strong> Nhiều</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 bg-blue-600 rounded flex-shrink-0"></div>
+                              <span><strong>4+ lần:</strong> Rất nhiều</span>
                             </div>
                           </div>
-                          <div className="text-center">
-                            <div className="text-xs text-gray-900 font-bold">{day.short}</div>
-                            <div className="text-[10px] text-gray-500">{count}</div>
+                          <div className="mt-2 pt-2 border-t border-gray-700 text-[10px] text-gray-300 space-y-1">
+                            <div><strong>Thang đo chuẩn:</strong></div>
+                            <div>• <strong>Tuần:</strong> 1 lần = Rất nhiều</div>
+                            <div>• <strong>Tháng:</strong> 4 lần = Rất nhiều</div>
+                            <div>• <strong>Năm:</strong> 48 lần = Rất nhiều</div>
+                            <div className="text-[9px] italic mt-1">(Năm: 4 lần/tháng × 12 tháng = 48 lần)</div>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                      </div>
+                    </div>
 
-                {/* By Time Slot */}
-                <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-white">
-                  <h4 className="text-sm font-bold text-gray-900 mb-6">Phân bố theo khung giờ</h4>
-                  <div className="flex items-end justify-around gap-4 h-64">
-                    {availabilityStats.TIME_SLOTS.map((slot, idx) => {
-                      const count = availabilityStats.timeSlotCount[slot] || 0;
-                      const maxSlot = Math.max(...availabilityStats.TIME_SLOTS.map(s => availabilityStats.timeSlotCount[s] || 0), 1);
-                      // Calculate height in pixels for better control (180px max in h-64 container)
-                      const maxHeight = 180;
-                      const heightPx = count > 0 ? Math.max(24, (count / maxSlot) * maxHeight) : 8;
-                      const colors = ['from-amber-500 to-amber-400', 'from-blue-500 to-blue-400', 'from-indigo-600 to-indigo-500'];
-                      const textColors = ['text-amber-600', 'text-blue-600', 'text-indigo-600'];
-                      
-                      return (
-                        <div key={slot} className="flex-1 flex flex-col items-center gap-2 max-w-32 group">
-                          <div className="relative w-full flex flex-col justify-end h-64">
-                            <div 
-                              className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${
-                                count === 0 ? 'bg-gray-200' : `bg-gradient-to-t ${colors[idx]}`
-                              }`}
-                              style={{ 
-                                height: `${heightPx}px`
-                              }}
-                            >
-                              {/* Count inside bar */}
-                              {count > 0 && (
-                                <div className="absolute inset-0 flex items-center justify-center text-white text-sm font-bold">
-                                  {count}
-                                </div>
-                              )}
-                              
-                              {/* Tooltip */}
-                              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-2 py-1 rounded text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                {slot}: {count} lần
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[500px]">
+                        {/* Header */}
+                        <div className="grid grid-cols-8 gap-1 mb-1">
+                          <div className="text-xs text-gray-600 font-medium"></div>
+                          {availabilityStats.DAYS.map(day => (
+                            <div key={day.key} className="text-xs text-gray-600 font-medium text-center">
+                              {day.short}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Rows */}
+                        {availabilityStats.TIME_SLOTS.map(slot => {
+                          // Fixed scale based on period: week=1, month=4, year=48
+                          const maxStandard = availabilityPeriod === 'week' ? 1 :
+                            availabilityPeriod === 'month' ? 4 : 48;
+
+                          return (
+                            <div key={slot} className="grid grid-cols-8 gap-1 mb-1">
+                              <div className="text-xs text-gray-600 font-medium flex items-center">
+                                {slot}
                               </div>
+                              {availabilityStats.DAYS.map(day => {
+                                const dayKey = day.key as 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+                                const timeSlot = slot as 'Sáng' | 'Chiều' | 'Tối';
+                                const count = availabilityStats.availabilityMatrix[dayKey][timeSlot];
+
+                                // Fixed scale: calculate thresholds based on maxStandard
+                                const threshold4 = maxStandard;                    // 100% = Very high
+                                const threshold3 = Math.ceil(maxStandard * 0.75); // 75% = High
+                                const threshold2 = Math.ceil(maxStandard * 0.5);  // 50% = Medium
+                                const threshold1 = Math.ceil(maxStandard * 0.25); // 25% = Low
+
+                                let bgColor = 'bg-gray-100';
+                                if (count >= threshold4) bgColor = 'bg-blue-600';      // 100%+ = Very high
+                                else if (count >= threshold3) bgColor = 'bg-blue-500'; // 75%+ = High
+                                else if (count >= threshold2) bgColor = 'bg-blue-400'; // 50%+ = Medium
+                                else if (count >= threshold1) bgColor = 'bg-blue-300'; // 25%+ = Low
+
+                                return (
+                                  <div
+                                    key={`${day.key}-${slot}`}
+                                    className={`${bgColor} rounded p-2 text-center text-xs font-bold transition-all hover:scale-105 cursor-pointer relative group ${count >= 2 ? 'text-white' : 'text-gray-900'
+                                      }`}
+                                  >
+                                    {count}
+                                    <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-2 py-1 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                      {day.label} {slot}: {count} lần
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+
+                        {/* Legend */}
+                        <div className="mt-4 flex items-center gap-3 text-xs">
+                          <span className="text-gray-600 font-medium">Cường độ:</span>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 bg-gray-100 rounded border border-gray-300"></div>
+                              <span>0</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 bg-blue-300 rounded"></div>
+                              <span>Ít</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 bg-blue-400 rounded"></div>
+                              <span>TB</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 bg-blue-500 rounded"></div>
+                              <span>Nhiều</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 bg-blue-600 rounded"></div>
+                              <span>Rất nhiều</span>
                             </div>
                           </div>
-                          <div className="text-center">
-                            <div className={`text-sm font-bold ${textColors[idx]}`}>{slot}</div>
-                            <div className="text-[10px] text-gray-500">{count} lần</div>
-                          </div>
                         </div>
-                      );
-                    })}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              {/* Insights */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
-                <h4 className="text-sm font-bold text-blue-900 mb-2 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4" />
-                  Nhận xét xu hướng
-                </h4>
-                <div className="space-y-1 text-xs sm:text-sm text-gray-700">
-                  <p>• Giáo viên thường rảnh nhất vào <strong className="text-blue-700">
-                    {availabilityStats.DAYS.find(d => d.key === availabilityStats.mostAvailableDay)?.label}
-                  </strong></p>
-                  <p>• Khung giờ ưa thích: <strong className="text-blue-700">{availabilityStats.mostAvailableTime}</strong></p>
-                  <p>• Tổng cộng đã đăng ký <strong className="text-blue-700">{availabilityStats.totalSlots} slots</strong> trong {availabilityStats.totalRegistrations} lần đăng ký</p>
-                  <p>• Trung bình: <strong className="text-blue-700">{availabilityStats.totalRegistrations > 0 ? (availabilityStats.totalSlots / availabilityStats.totalRegistrations).toFixed(1) : '0'} slots/lần</strong></p>
-                </div>
-              </div>
-              </>
+                  {/* Bar Charts Grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* By Day */}
+                    <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-white">
+                      <h4 className="text-sm font-bold text-gray-900 mb-6">Phân bố theo ngày</h4>
+                      <div className="flex items-end justify-between gap-2 h-64">
+                        {availabilityStats.DAYS.map(day => {
+                          const count = availabilityStats.dayCount[day.key] || 0;
+                          const maxDay = Math.max(...availabilityStats.DAYS.map(d => availabilityStats.dayCount[d.key] || 0), 1);
+                          // Calculate height in pixels for better control (180px max in h-64 container)
+                          const maxHeight = 180;
+                          const heightPx = count > 0 ? Math.max(24, (count / maxDay) * maxHeight) : 8;
+
+                          return (
+                            <div key={day.key} className="flex-1 flex flex-col items-center gap-2 group">
+                              <div className="relative w-full flex flex-col justify-end h-64">
+                                <div
+                                  className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${count === 0 ? 'bg-gray-200' : 'bg-gradient-to-t from-blue-600 to-blue-400 hover:from-blue-700 hover:to-blue-500'
+                                    }`}
+                                  style={{
+                                    height: `${heightPx}px`
+                                  }}
+                                >
+                                  {/* Count inside bar */}
+                                  {count > 0 && (
+                                    <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold">
+                                      {count}
+                                    </div>
+                                  )}
+
+                                  {/* Tooltip */}
+                                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-2 py-1 rounded text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                    {day.label}: {count} lần
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-xs text-gray-900 font-bold">{day.short}</div>
+                                <div className="text-[10px] text-gray-500">{count}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* By Time Slot */}
+                    <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-white">
+                      <h4 className="text-sm font-bold text-gray-900 mb-6">Phân bố theo khung giờ</h4>
+                      <div className="flex items-end justify-around gap-4 h-64">
+                        {availabilityStats.TIME_SLOTS.map((slot, idx) => {
+                          const count = availabilityStats.timeSlotCount[slot] || 0;
+                          const maxSlot = Math.max(...availabilityStats.TIME_SLOTS.map(s => availabilityStats.timeSlotCount[s] || 0), 1);
+                          // Calculate height in pixels for better control (180px max in h-64 container)
+                          const maxHeight = 180;
+                          const heightPx = count > 0 ? Math.max(24, (count / maxSlot) * maxHeight) : 8;
+                          const colors = ['from-amber-500 to-amber-400', 'from-blue-500 to-blue-400', 'from-indigo-600 to-indigo-500'];
+                          const textColors = ['text-amber-600', 'text-blue-600', 'text-indigo-600'];
+
+                          return (
+                            <div key={slot} className="flex-1 flex flex-col items-center gap-2 max-w-32 group">
+                              <div className="relative w-full flex flex-col justify-end h-64">
+                                <div
+                                  className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${count === 0 ? 'bg-gray-200' : `bg-gradient-to-t ${colors[idx]}`
+                                    }`}
+                                  style={{
+                                    height: `${heightPx}px`
+                                  }}
+                                >
+                                  {/* Count inside bar */}
+                                  {count > 0 && (
+                                    <div className="absolute inset-0 flex items-center justify-center text-white text-sm font-bold">
+                                      {count}
+                                    </div>
+                                  )}
+
+                                  {/* Tooltip */}
+                                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-2 py-1 rounded text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                    {slot}: {count} lần
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-center">
+                                <div className={`text-sm font-bold ${textColors[idx]}`}>{slot}</div>
+                                <div className="text-[10px] text-gray-500">{count} lần</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Insights */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+                    <h4 className="text-sm font-bold text-blue-900 mb-2 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" />
+                      Nhận xét xu hướng
+                    </h4>
+                    <div className="space-y-1 text-xs sm:text-sm text-gray-700">
+                      <p>• Giáo viên thường rảnh nhất vào <strong className="text-blue-700">
+                        {availabilityStats.DAYS.find(d => d.key === availabilityStats.mostAvailableDay)?.label}
+                      </strong></p>
+                      <p>• Khung giờ ưa thích: <strong className="text-blue-700">{availabilityStats.mostAvailableTime}</strong></p>
+                      <p>• Tổng cộng đã đăng ký <strong className="text-blue-700">{availabilityStats.totalSlots} slots</strong> trong {availabilityStats.totalRegistrations} lần đăng ký</p>
+                      <p>• Trung bình: <strong className="text-blue-700">{availabilityStats.totalRegistrations > 0 ? (availabilityStats.totalSlots / availabilityStats.totalRegistrations).toFixed(1) : '0'} slots/lần</strong></p>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -1847,11 +1836,11 @@ export default function Page1() {
 
         {/* Modal - Chi tiết bài test */}
         {modalOpen && modalMonth && modalType && (
-          <div 
+          <div
             className="fixed inset-0 flex items-center justify-center z-50 p-2 sm:p-4"
             onClick={() => setModalOpen(false)}
           >
-            <div 
+            <div
               className="bg-white rounded-xl shadow-2xl w-full sm:max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden border border-gray-200"
               onClick={(e) => e.stopPropagation()}
             >
@@ -1861,18 +1850,17 @@ export default function Page1() {
                     Test T{modalMonth}
                   </h3>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-1 sm:mt-2">
-                    <span className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold w-fit ${
-                      modalType === "expertise" ? "bg-blue-500" : "bg-purple-500"
-                    }`}>
+                    <span className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold w-fit ${modalType === "expertise" ? "bg-blue-500" : "bg-purple-500"
+                      }`}>
                       {modalType === "expertise" ? "Chuyên môn" : "Kỹ năng"}
                     </span>
                     <p className={`text-xs sm:text-sm ${modalType === "expertise" ? "text-blue-100" : "text-purple-100"}`}>
-                      <span className="font-semibold">{modalRecords.length}</span> bài • 
+                      <span className="font-semibold">{modalRecords.length}</span> bài •
                       <span className="font-semibold"> {modalRecords.filter(r => r.isCountedInAverage).length}</span> tính điểm
                     </p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => setModalOpen(false)}
                   className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 sm:p-2 transition-all flex-shrink-0"
                   title="Đóng"
@@ -1898,21 +1886,19 @@ export default function Page1() {
                   </thead>
                   <tbody>
                     {modalRecords.map((record, index) => (
-                      <tr key={index} className={`border-b border-gray-200 transition-colors ${
-                        !record.isCountedInAverage ? "bg-red-50" : "hover:bg-blue-50"
-                      }`}>
+                      <tr key={index} className={`border-b border-gray-200 transition-colors ${!record.isCountedInAverage ? "bg-red-50" : "hover:bg-blue-50"
+                        }`}>
                         <td className="py-2 sm:py-4 px-2 sm:px-4 text-gray-500 font-medium text-center">{index + 1}</td>
                         <td className="py-2 sm:py-4 px-2 sm:px-4 font-semibold text-gray-900">{modalType === "expertise" ? record.subject : record.teachingLevel}</td>
                         {modalType === "expertise" && <td className="py-2 sm:py-4 px-2 sm:px-4 text-gray-600">{record.exam}</td>}
                         <td className="text-center py-2 sm:py-4 px-2 sm:px-4 font-medium text-gray-700">{record.correct}</td>
                         <td className="text-center py-2 sm:py-4 px-2 sm:px-4">
-                          <span className={`inline-block px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold text-xs sm:text-base whitespace-nowrap ${
-                            parseFloat(record.score.replace(",", ".")) >= 4 
-                              ? "bg-green-100 text-green-700" 
-                              : parseFloat(record.score.replace(",", ".")) >= 3 
-                                ? "bg-yellow-100 text-yellow-700" 
+                          <span className={`inline-block px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold text-xs sm:text-base whitespace-nowrap ${parseFloat(record.score.replace(",", ".")) >= 4
+                              ? "bg-green-100 text-green-700"
+                              : parseFloat(record.score.replace(",", ".")) >= 3
+                                ? "bg-yellow-100 text-yellow-700"
                                 : "bg-red-100 text-red-700"
-                          }`}>
+                            }`}>
                             {record.score}
                           </span>
                         </td>
@@ -2111,7 +2097,7 @@ export default function Page1() {
 
         {/* Feedback Modal */}
         {feedbackModalOpen && (
-          <div 
+          <div
             className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
             onClick={(e) => {
               // Allow closing modal by clicking outside
@@ -2126,21 +2112,21 @@ export default function Page1() {
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
               <div className="bg-gray-900 text-white px-4 py-3 rounded-t-lg flex items-center justify-between">
                 <h3 className="font-semibold">{isFirstTimeFeedback ? 'Góp ý để cải thiện hệ thống' : 'Gửi phản hồi'}</h3>
-                  <button
-                    onClick={() => {
-                      setFeedbackModalOpen(false);
-                      setFeedbackRating(0);
-                      setFeedbackComment("");
-                      setFeedbackFeature("");
-                    }}
-                    className="hover:bg-white/20 rounded p-1"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                <button
+                  onClick={() => {
+                    setFeedbackModalOpen(false);
+                    setFeedbackRating(0);
+                    setFeedbackComment("");
+                    setFeedbackFeature("");
+                  }}
+                  className="hover:bg-white/20 rounded p-1"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
-              
+
               <div className="p-5 space-y-5">
                 <div>
                   <label className="block text-sm font-semibold text-gray-900 mb-3">
@@ -2155,11 +2141,10 @@ export default function Page1() {
                         className="transition-all hover:scale-110"
                       >
                         <svg
-                          className={`w-10 h-10 ${
-                            star <= feedbackRating
+                          className={`w-10 h-10 ${star <= feedbackRating
                               ? 'text-yellow-400 fill-yellow-400'
                               : 'text-gray-300'
-                          }`}
+                            }`}
                           fill={star <= feedbackRating ? 'currentColor' : 'none'}
                           stroke="currentColor"
                           strokeWidth={1.5}
@@ -2206,7 +2191,7 @@ export default function Page1() {
                     rows={3}
                   />
                 </div>
-                
+
                 <div className="flex gap-2 pt-2">
                   {!isFirstTimeFeedback && (
                     <button
@@ -2224,9 +2209,8 @@ export default function Page1() {
                   <button
                     onClick={handleFeedbackSubmit}
                     disabled={feedbackSubmitting || feedbackRating === 0}
-                    className={`px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium ${
-                      isFirstTimeFeedback ? 'w-full' : 'flex-1'
-                    }`}
+                    className={`px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium ${isFirstTimeFeedback ? 'w-full' : 'flex-1'
+                      }`}
                   >
                     {feedbackSubmitting ? 'Đang gửi...' : 'Gửi phản hồi'}
                   </button>

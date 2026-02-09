@@ -1,11 +1,10 @@
 'use client'
 
-import { Card } from '@/components/ui/card'
-import { Calendar, Eye, ArrowUpRight, Clock } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { ArrowUpRight, Clock, Eye } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
-import { cn } from '@/lib/utils'
 
 interface Post {
     id: string | number

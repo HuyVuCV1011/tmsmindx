@@ -3,6 +3,7 @@
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth-context';
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 
 interface Explanation {
   id: number;
@@ -194,7 +195,7 @@ export default function GiaiTrinhPage() {
       const data = await response.json();
       
       if (data.success) {
-        alert('Gửi giải trình thành công! Email đã được gửi đến bộ phận học vụ.');
+        toast.success('Gửi giải trình thành công! Email đã được gửi đến bộ phận học vụ.');
         setShowModal(false);
         setCampusSearch('');
         setSubjectSearch('');
@@ -207,11 +208,11 @@ export default function GiaiTrinhPage() {
         }));
         fetchExplanations();
       } else {
-        alert('Lỗi: ' + data.error);
+        toast.error('Lỗi: ' + data.error);
       }
     } catch (error) {
       console.error('Error submitting explanation:', error);
-      alert('Có lỗi xảy ra khi gửi giải trình');
+      toast.error('Có lỗi xảy ra khi gửi giải trình');
     } finally {
       setSubmitting(false);
     }
