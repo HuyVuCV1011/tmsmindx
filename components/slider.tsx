@@ -86,41 +86,49 @@ export default function Slider({ posts }: SliderProps) {
                             priority={index === 0}
                         />
 
+                        {/* Contrast Overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/35 to-transparent" />
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.12),transparent_45%)]" />
+
                         {/* Content */}
                         <div className="absolute inset-0 flex flex-col justify-end p-8 md:p-16 text-white max-w-5xl mx-auto w-full">
                             <div className={cn(
                                 "flex flex-col gap-6 transform transition-all duration-1000 delay-300",
                                 index === currentSlide ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0'
                             )}>
+                                <div className="max-w-3xl rounded-3xl bg-white/5 border border-white/15 backdrop-blur-md p-6 md:p-8 shadow-[0_20px_60px_-30px_rgba(0,0,0,0.6)]">
                                 {/* Tag */}
                                 <div className="inline-flex">
-                                    <span className="px-4 py-1.5 rounded-full text-xs md:text-sm font-bold tracking-wider uppercase bg-blue-600/90 hover:bg-blue-600 text-white backdrop-blur-md shadow-lg transition-colors border border-blue-500/30">
+                                    <span className="px-4 py-1.5 rounded-full text-xs md:text-sm font-bold tracking-wider uppercase bg-white/10 text-white backdrop-blur-md shadow-lg transition-colors border border-white/20">
                                         {post.post_type}
                                     </span>
                                 </div>
 
                                 {/* Title */}
-                                <h3 className="text-3xl md:text-5xl lg:text-6xl font-black leading-tight tracking-tight drop-shadow-lg text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-gray-400">
-                                    <Link href={`/user/truyenthong/${post.slug || post.id}`} className="hover:underline decoration-blue-500/50 underline-offset-8 transition-all">
+                                <h3 className="text-3xl md:text-5xl lg:text-6xl font-black leading-[1.05] tracking-tight text-white drop-shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                                    <Link href={`/user/truyenthong/${post.slug || post.id}`} className="transition-all hover:text-white/90">
                                         {post.title}
                                     </Link>
                                 </h3>
 
+                                <div className="h-1 w-16 rounded-full bg-gradient-to-r from-white/90 via-white/60 to-transparent" />
+
                                 {/* Description */}
-                                <p className="text-base md:text-lg text-gray-300 line-clamp-2 max-w-2xl leading-relaxed font-light">
+                                <p className="text-base md:text-lg text-white/80 line-clamp-2 max-w-2xl leading-relaxed font-light">
                                     {post.description}
                                 </p>
 
                                 {/* Action */}
-                                <div className="pt-4">
+                                <div className="pt-2">
                                     <Link href={`/user/truyenthong/${post.slug || post.id}`}>
                                         <Button
                                             size="lg"
-                                            className="bg-white text-gray-900 hover:bg-gray-100 font-bold rounded-full px-8 py-6 text-base shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5)] transition-all duration-300 hover:-translate-y-1"
+                                            className="bg-white text-gray-900 hover:bg-gray-100 font-bold rounded-full px-8 py-6 text-base shadow-[0_10px_30px_rgba(0,0,0,0.35)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.45)] transition-all duration-300 hover:-translate-y-1"
                                         >
                                             Đọc ngay
                                         </Button>
                                     </Link>
+                                </div>
                                 </div>
                             </div>
                         </div>

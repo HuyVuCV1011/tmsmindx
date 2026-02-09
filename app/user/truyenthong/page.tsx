@@ -1,7 +1,7 @@
 'use client'
 
 import { Filter, Search } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import useSWR from 'swr'
 
 import { PageContainer } from '@/components/PageContainer'
@@ -31,12 +31,10 @@ const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 export default function CommunicationsPage() {
     const { data: posts = [], isLoading } = useSWR<Post[]>('/api/truyenthong/posts?status=published', fetcher)
-    const [filteredPosts, setFilteredPosts] = useState<Post[]>([])
     const [selectedFilter, setSelectedFilter] = useState<string>('all')
     const [searchQuery, setSearchQuery] = useState('')
 
-    // Initialize filtered posts
-    useEffect(() => {
+    const filteredPosts = useMemo(() => {
         let result = posts
 
         // Filter by Type
@@ -53,7 +51,7 @@ export default function CommunicationsPage() {
             )
         }
 
-        setFilteredPosts(result)
+        return result
     }, [selectedFilter, searchQuery, posts])
 
     // Derived Data

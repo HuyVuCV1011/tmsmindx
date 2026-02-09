@@ -350,24 +350,28 @@
   max-width: 100%;
   height: auto;
   border-radius: 0.5rem;
-  margin-top: 1rem;
-  margin-bottom: 1rem;
+  margin: 0 0.75rem 0.75rem 0;
+  vertical-align: top;
 }
 
 img.tiptap-image {
   cursor: pointer;
-  display: block;
+  display: inline-block;
+  vertical-align: top;
 }
 
 /* Resize handle */
 .ProseMirror .image-wrapper {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
+  align-items: flex-start;
+  vertical-align: top;
   max-width: 100%;
 }
 
 .ProseMirror .image-wrapper img {
-  display: block;
+  display: inline-block;
+  vertical-align: top;
 }
 
 .ProseMirror .image-wrapper .resize-handle {
