@@ -123,10 +123,12 @@ function ResizableImageNodeView(props: NodeViewProps) {
     window.addEventListener('pointerup', onUp, { passive: true })
   }
 
+  const verticalAlign = typeof node.attrs.verticalAlign === 'string' ? node.attrs.verticalAlign : 'top'
+
   return (
     <NodeViewWrapper
       className={`image-wrapper ${selected ? 'image-wrapper-selected' : ''}`}
-      style={{ display: 'inline-block', position: 'relative', maxWidth: '100%' }}
+      style={{ display: 'inline-block', position: 'relative', maxWidth: '100%', verticalAlign }}
       onClick={onClick}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -159,6 +161,20 @@ const ResizableImage = Image.extend({
   addAttributes() {
     return {
       ...(this.parent?.() ?? {}),
+      verticalAlign: {
+        default: 'top',
+        parseHTML: (element) => {
+          const data = element.getAttribute('data-vertical-align')
+          return data || 'top'
+        },
+        renderHTML: (attributes) => {
+          if (!attributes.verticalAlign) return {}
+          return {
+            'data-vertical-align': attributes.verticalAlign,
+            style: `vertical-align: ${attributes.verticalAlign};`
+          }
+        }
+      },
       width: {
         default: null,
         parseHTML: (element) => {
@@ -204,6 +220,7 @@ export default function RichTextEditor({
   showToolbar = true
 }: RichTextEditorProps) {
   const [selectedImageWidth, setSelectedImageWidth] = useState<string>('100%')
+  const [selectedImageAlign, setSelectedImageAlign] = useState<string>('top')
   const [showImageControls, setShowImageControls] = useState(false)
   
   const editor = useEditor({
@@ -215,7 +232,7 @@ export default function RichTextEditor({
         }
       }),
       ResizableImage.configure({
-        inline: false,
+        inline: true,
         allowBase64: true,
         HTMLAttributes: {
           class: 'tiptap-image'
@@ -252,6 +269,8 @@ export default function RichTextEditor({
         const w = selection.node.attrs.width
         if (typeof w === 'number' && Number.isFinite(w)) setSelectedImageWidth(`${Math.round(w)}px`)
         else setSelectedImageWidth('auto')
+        const align = selection.node.attrs.verticalAlign
+        setSelectedImageAlign(typeof align === 'string' && align ? align : 'top')
       } else {
         setShowImageControls(false)
       }
@@ -328,6 +347,12 @@ export default function RichTextEditor({
     setShowImageControls(false)
   }, [editor])
 
+  const setImageVerticalAlign = useCallback((align: string) => {
+    if (!editor) return
+    editor.chain().focus().updateAttributes('image', { verticalAlign: align }).run()
+    setSelectedImageAlign(align)
+  }, [editor])
+
   if (!editor) {
     return null
   }
@@ -343,6 +368,19 @@ export default function RichTextEditor({
           <span className="text-xs text-blue-700 ml-2">
             ({selectedImageWidth})
           </span>
+          <div className="flex items-center gap-2 ml-2">
+            <span className="text-xs text-blue-700">Căn dọc:</span>
+            <select
+              value={selectedImageAlign}
+              onChange={(e) => setImageVerticalAlign(e.target.value)}
+              className="h-8 rounded-md border border-blue-200 bg-white/90 px-2 text-xs text-blue-900"
+            >
+              <option value="top">Trên</option>
+              <option value="middle">Giữa</option>
+              <option value="bottom">Dưới</option>
+              <option value="baseline">Baseline</option>
+            </select>
+          </div>
           <Button
             type="button"
             size="sm"
