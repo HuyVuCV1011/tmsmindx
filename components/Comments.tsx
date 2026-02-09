@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { AlertTriangle, Angry, ChevronDown, Clock, Edit, Eye, EyeOff, Frown, Heart, Image as ImageIcon, Laugh, MessageCircle, Shield, ThumbsUp, Trash2, TrendingUp, X } from 'lucide-react'
 import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import toast from 'react-hot-toast'
 
 interface Reaction {
     type: string
@@ -74,7 +75,7 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
     const [isDeleting, setIsDeleting] = useState(false)
     const [isHiding, setIsHiding] = useState(false)
     const [optimisticHidden, setOptimisticHidden] = useState(comment.hidden)
-    
+
     // Handle click outside to close reactions popup
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -91,13 +92,13 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
             document.removeEventListener('mousedown', handleClickOutside)
         }
     }, [showReactions])
-    
+
     // Confirm Dialog State
     const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
         open: false,
         title: '',
         description: '',
-        onConfirm: () => {},
+        onConfirm: () => { },
         variant: 'delete'
     })
 
@@ -120,20 +121,20 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
         // Optimistic update
         setOptimisticReactions(prev => {
             const existingReaction = prev.find(r => r.user_id === currentUserId)
-            
+
             if (existingReaction) {
                 // If same reaction, remove it (toggle off)
                 if (existingReaction.type === reactionType) {
                     return prev.filter(r => r.user_id !== currentUserId)
                 }
                 // If different reaction, update it
-                return prev.map(r => 
-                    r.user_id === currentUserId 
+                return prev.map(r =>
+                    r.user_id === currentUserId
                         ? { ...r, type: reactionType }
                         : r
                 )
             }
-            
+
             // Add new reaction
             return [...prev, { type: reactionType, user_id: currentUserId }]
         })
@@ -185,20 +186,20 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
 
     const handleAdminHide = () => {
         const isCurrentlyHidden = optimisticHidden
-        
+
         setConfirmDialog({
             open: true,
             title: isCurrentlyHidden ? '👀 ADMIN: Hiện bình luận' : '🫣 ADMIN: Ẩn bình luận',
-            description: isCurrentlyHidden 
+            description: isCurrentlyHidden
                 ? 'Hiện lại bình luận này cho người dùng thường xem?'
                 : 'Ẩn bình luận này khỏi người dùng thường? Chỉ admin mới nhìn thấy.',
             onConfirm: async () => {
                 setIsHiding(true)
                 setConfirmDialog(prev => ({ ...prev, open: false }))
-                
+
                 // Optimistic update
                 setOptimisticHidden(!isCurrentlyHidden)
-                
+
                 if (onToggleHide) {
                     await onToggleHide(comment.id, !isCurrentlyHidden)
                 }
@@ -222,10 +223,10 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
         // Parse the date string and ensure it's treated as UTC if it doesn't have timezone info
         const commentDate = new Date(date)
         const now = new Date()
-        
+
         // Calculate difference in seconds
         const seconds = Math.floor((now.getTime() - commentDate.getTime()) / 1000)
-        
+
         if (seconds < 60) return 'Vừa xong'
         const minutes = Math.floor(seconds / 60)
         if (minutes < 60) return `${minutes} phút trước`
@@ -276,9 +277,9 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                                         Đang chỉnh sửa bình luận
                                     </span>
                                     <div className="flex gap-2">
-                                        <Button 
-                                            size="sm" 
-                                            variant="ghost" 
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
                                             onClick={() => {
                                                 setIsEditing(false)
                                                 setEditContent(comment.content)
@@ -287,8 +288,8 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                                         >
                                             Hủy
                                         </Button>
-                                        <Button 
-                                            size="sm" 
+                                        <Button
+                                            size="sm"
                                             onClick={handleEdit}
                                             disabled={!editContent.trim() || editContent === comment.content}
                                             className="cursor-pointer h-8 bg-blue-600 hover:bg-blue-700 text-white"
@@ -329,15 +330,14 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                         )}
 
                         {/* React Button */}
-                        <div 
+                        <div
                             ref={reactionsRef}
                             className="relative"
                             onMouseEnter={() => setShowReactions(true)}
                         >
                             <button
-                                className={`text-xs font-semibold transition-all duration-200 cursor-pointer ${
-                                    userReaction ? 'text-blue-600' : 'text-muted-foreground hover:text-foreground'
-                                }`}
+                                className={`text-xs font-semibold transition-all duration-200 cursor-pointer ${userReaction ? 'text-blue-600' : 'text-muted-foreground hover:text-foreground'
+                                    }`}
                             >
                                 {userReaction ? REACTIONS.find(r => r.type === userReaction.type)?.label : 'Thích'}
                             </button>
@@ -406,11 +406,10 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                                 variant="outline"
                                 onClick={handleAdminHide}
                                 disabled={isHiding || isDeleting}
-                                className={`h-7 px-2 transition-all shadow-sm cursor-pointer ${
-                                    isHidden 
+                                className={`h-7 px-2 transition-all shadow-sm cursor-pointer ${isHidden
                                         ? 'border-green-500 text-green-600 hover:bg-green-50 hover:text-green-700 hover:border-green-600'
                                         : 'border-orange-500 text-orange-600 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-600'
-                                }`}
+                                    }`}
                             >
                                 <Shield className="w-3.5 h-3.5 mr-1.5" />
                                 {isHiding ? (
@@ -421,9 +420,8 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                                 <span className="text-xs font-semibold">
                                     {isHiding ? 'Đang xử lý...' : (isHidden ? 'Hiện bình luận' : 'Ẩn bình luận')}
                                 </span>
-                                <span className={`ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded ${
-                                    isHidden ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                                }`}>ADMIN</span>
+                                <span className={`ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded ${isHidden ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                                    }`}>ADMIN</span>
                             </Button>
                             <Button
                                 size="sm"
@@ -501,7 +499,7 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                                             depth={depth + 1}
                                         />
                                     ))}
-                                    
+
                                     {/* Load More Replies Button */}
                                     {visibleRepliesCount < comment.replies.length && (
                                         <Button
@@ -514,7 +512,7 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                                             Xem thêm {Math.min(2, comment.replies.length - visibleRepliesCount)} câu trả lời
                                         </Button>
                                     )}
-                                    
+
                                     {/* Hide Replies Button */}
                                     {visibleRepliesCount > 0 && (
                                         <Button
@@ -537,34 +535,30 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
             <Dialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}>
                 <DialogContent className="sm:max-w-120 p-0 gap-0 overflow-hidden rounded-2xl shadow-2xl border-0">
                     {/* Header with Icon */}
-                    <div className={`p-6 pb-5 relative overflow-hidden ${
-                        confirmDialog.variant === 'delete' ? 'bg-linear-to-br from-red-50 via-red-100 to-red-50' :
-                        confirmDialog.variant === 'hide' ? 'bg-linear-to-br from-orange-50 via-orange-100 to-orange-50' :
-                        confirmDialog.variant === 'unhide' ? 'bg-linear-to-br from-green-50 via-green-100 to-green-50' :
-                        'bg-linear-to-br from-gray-50 via-gray-100 to-gray-50'
-                    }`}>
+                    <div className={`p-6 pb-5 relative overflow-hidden ${confirmDialog.variant === 'delete' ? 'bg-linear-to-br from-red-50 via-red-100 to-red-50' :
+                            confirmDialog.variant === 'hide' ? 'bg-linear-to-br from-orange-50 via-orange-100 to-orange-50' :
+                                confirmDialog.variant === 'unhide' ? 'bg-linear-to-br from-green-50 via-green-100 to-green-50' :
+                                    'bg-linear-to-br from-gray-50 via-gray-100 to-gray-50'
+                        }`}>
                         {/* Decorative blur circles */}
-                        <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full blur-3xl opacity-30 ${
-                            confirmDialog.variant === 'delete' ? 'bg-red-400' :
-                            confirmDialog.variant === 'hide' ? 'bg-orange-400' :
-                            confirmDialog.variant === 'unhide' ? 'bg-green-400' :
-                            'bg-gray-400'
-                        }`} />
-                        <div className={`absolute -bottom-10 -left-10 w-32 h-32 rounded-full blur-3xl opacity-20 ${
-                            confirmDialog.variant === 'delete' ? 'bg-red-300' :
-                            confirmDialog.variant === 'hide' ? 'bg-orange-300' :
-                            confirmDialog.variant === 'unhide' ? 'bg-green-300' :
-                            'bg-gray-300'
-                        }`} />
-                        
+                        <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full blur-3xl opacity-30 ${confirmDialog.variant === 'delete' ? 'bg-red-400' :
+                                confirmDialog.variant === 'hide' ? 'bg-orange-400' :
+                                    confirmDialog.variant === 'unhide' ? 'bg-green-400' :
+                                        'bg-gray-400'
+                            }`} />
+                        <div className={`absolute -bottom-10 -left-10 w-32 h-32 rounded-full blur-3xl opacity-20 ${confirmDialog.variant === 'delete' ? 'bg-red-300' :
+                                confirmDialog.variant === 'hide' ? 'bg-orange-300' :
+                                    confirmDialog.variant === 'unhide' ? 'bg-green-300' :
+                                        'bg-gray-300'
+                            }`} />
+
                         <div className="flex items-start gap-4 relative z-10">
                             {/* Icon with animation */}
-                            <div className={`shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center animate-pulse shadow-2xl ${
-                                confirmDialog.variant === 'delete' ? 'bg-linear-to-br from-red-500 to-red-700 shadow-red-500/50' :
-                                confirmDialog.variant === 'hide' ? 'bg-linear-to-br from-orange-500 to-orange-700 shadow-orange-500/50' :
-                                confirmDialog.variant === 'unhide' ? 'bg-linear-to-br from-green-500 to-green-700 shadow-green-500/50' :
-                                'bg-linear-to-br from-gray-500 to-gray-700 shadow-gray-500/50'
-                            }`}>
+                            <div className={`shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center animate-pulse shadow-2xl ${confirmDialog.variant === 'delete' ? 'bg-linear-to-br from-red-500 to-red-700 shadow-red-500/50' :
+                                    confirmDialog.variant === 'hide' ? 'bg-linear-to-br from-orange-500 to-orange-700 shadow-orange-500/50' :
+                                        confirmDialog.variant === 'unhide' ? 'bg-linear-to-br from-green-500 to-green-700 shadow-green-500/50' :
+                                            'bg-linear-to-br from-gray-500 to-gray-700 shadow-gray-500/50'
+                                }`}>
                                 {confirmDialog.variant === 'delete' && (
                                     <AlertTriangle className="w-7 h-7 text-white drop-shadow-lg" />
                                 )}
@@ -575,20 +569,19 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                                     <Eye className="w-7 h-7 text-white drop-shadow-lg" />
                                 )}
                             </div>
-                            
+
                             {/* Title */}
                             <div className="flex-1 pt-1.5">
                                 <DialogTitle className="text-2xl font-extrabold bg-linear-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent leading-tight mb-2">
                                     {confirmDialog.variant === 'delete' ? 'Xóa bình luận' :
-                                     confirmDialog.variant === 'hide' ? 'Ẩn bình luận' : 
-                                     confirmDialog.variant === 'unhide' ? 'Hiện bình luận' : 'Xác nhận'}
+                                        confirmDialog.variant === 'hide' ? 'Ẩn bình luận' :
+                                            confirmDialog.variant === 'unhide' ? 'Hiện bình luận' : 'Xác nhận'}
                                 </DialogTitle>
-                                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                                    confirmDialog.variant === 'delete' ? 'bg-red-200/80 text-red-900' :
-                                    confirmDialog.variant === 'hide' ? 'bg-orange-200/80 text-orange-900' :
-                                    confirmDialog.variant === 'unhide' ? 'bg-green-200/80 text-green-900' :
-                                    'bg-gray-200/80 text-gray-900'
-                                }`}>
+                                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${confirmDialog.variant === 'delete' ? 'bg-red-200/80 text-red-900' :
+                                        confirmDialog.variant === 'hide' ? 'bg-orange-200/80 text-orange-900' :
+                                            confirmDialog.variant === 'unhide' ? 'bg-green-200/80 text-green-900' :
+                                                'bg-gray-200/80 text-gray-900'
+                                    }`}>
                                     <Shield className="w-3 h-3" />
                                     {isAdmin ? 'Admin Action' : 'Xác nhận'}
                                 </div>
@@ -602,7 +595,7 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                             {confirmDialog.description}
                         </DialogDescription>
                     </div>
-                    
+
                     {/* Footer Buttons */}
                     <div className="px-6 pb-6 pt-2 bg-linear-to-b from-white to-gray-50">
                         <div className="flex gap-3">
@@ -615,12 +608,11 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                             </Button>
                             <Button
                                 onClick={confirmDialog.onConfirm}
-                                className={`flex-1 h-12 font-bold text-base cursor-pointer transition-all rounded-xl shadow-lg hover:shadow-xl text-white border-0 hover:scale-105 ${
-                                    confirmDialog.variant === 'delete' ? 'bg-linear-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800' :
-                                    confirmDialog.variant === 'hide' ? 'bg-linear-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800' :
-                                    confirmDialog.variant === 'unhide' ? 'bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800' :
-                                    'bg-linear-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800'
-                                }`}
+                                className={`flex-1 h-12 font-bold text-base cursor-pointer transition-all rounded-xl shadow-lg hover:shadow-xl text-white border-0 hover:scale-105 ${confirmDialog.variant === 'delete' ? 'bg-linear-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800' :
+                                        confirmDialog.variant === 'hide' ? 'bg-linear-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800' :
+                                            confirmDialog.variant === 'unhide' ? 'bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800' :
+                                                'bg-linear-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800'
+                                    }`}
                             >
                                 {confirmDialog.variant === 'delete' && (
                                     <><Trash2 className="w-5 h-5 mr-2" /> Xóa ngay</>
@@ -725,7 +717,7 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
         Array.from(files).forEach(file => {
             if (file.type.startsWith('image/')) {
                 if (file.size > 5 * 1024 * 1024) {
-                    alert('Ảnh không được vượt quá 5MB')
+                    toast.error('Ảnh không được vượt quá 5MB')
                     return
                 }
 
@@ -845,10 +837,10 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
         if (!currentUserId) return
 
         try {
-            const url = isAdmin 
+            const url = isAdmin
                 ? `/api/truyenthong/comments/${commentId}?userId=${currentUserId}&userEmail=${encodeURIComponent(currentUserEmail || '')}`
                 : `/api/truyenthong/comments/${commentId}?userId=${currentUserId}`
-            
+
             const res = await fetch(url, {
                 method: 'DELETE'
             })
@@ -878,11 +870,11 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                 await loadComments()
             } else {
                 const error = await res.json()
-                alert(error.error || 'Không thể ẩn bình luận')
+                toast.error(error.error || 'Không thể ẩn bình luận')
             }
         } catch (error) {
             console.error('Error toggling hide comment:', error)
-            alert('Có lỗi xảy ra khi ẩn bình luận')
+            toast.error('Có lỗi xảy ra khi ẩn bình luận')
         }
     }
 
@@ -923,7 +915,7 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
             {/* New Comment Box */}
             {currentUserId ? (
                 <div className="mb-6">
-                    <div 
+                    <div
                         className={`relative border-2 rounded-lg transition-colors ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
@@ -937,7 +929,7 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                             placeholder="Viết bình luận... (Ctrl+V để dán ảnh)"
                             className="min-h-24 border-0 focus-visible:ring-0 resize-none"
                         />
-                        
+
                         {/* Image Previews */}
                         {commentImages.length > 0 && (
                             <div className="px-3 pb-3 flex gap-2 flex-wrap">
@@ -980,8 +972,8 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                             <ImageIcon className="w-4 h-4" />
                             Thêm ảnh
                         </Button>
-                        <Button 
-                            onClick={handleSubmitComment} 
+                        <Button
+                            onClick={handleSubmitComment}
                             disabled={loading || !newComment.trim()}
                             className="gap-2 h-9 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
                         >

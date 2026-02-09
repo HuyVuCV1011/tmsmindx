@@ -33,6 +33,7 @@ import {
     Undo
 } from 'lucide-react'
 import React, { useCallback, useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
 import { Button } from './ui/button'
 
 interface RichTextEditorProps {
@@ -318,7 +319,7 @@ export default function RichTextEditor({
         editor.chain().focus().setImage({ src: data.url }).run()
       } catch (error) {
         console.error('Image upload error:', error)
-        alert('Không thể tải lên hình ảnh. Vui lòng thử lại.')
+        toast.error('Không thể tải lên hình ảnh. Vui lòng thử lại.')
       }
     }
 

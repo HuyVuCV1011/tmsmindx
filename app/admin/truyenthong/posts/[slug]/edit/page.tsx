@@ -1,17 +1,16 @@
 'use client'
 
-import React, { useState, useEffect } from "react"
-import Link from 'next/link'
-import Image from 'next/image'
-import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react'
+import dynamic from 'next/dynamic'
+import Image from 'next/image'
+import Link from 'next/link'
+import { useParams, useRouter } from 'next/navigation'
+import React, { useEffect, useState } from "react"
 import toast from 'react-hot-toast'
 import useSWR from 'swr'
-import dynamic from 'next/dynamic'
 
 // Dynamic import for RichTextEditor to avoid SSR issues
 const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), {

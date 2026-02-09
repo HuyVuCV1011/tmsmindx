@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useState } from 'react'
-import { GripVertical, Plus, Edit2, Trash2, Eye, EyeOff, Clock, Image as ImageIcon, Settings, List, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Clock, Edit2, Eye, EyeOff, GripVertical, Image as ImageIcon, List, Plus, Settings, Trash2, X } from 'lucide-react'
+import React, { useState } from 'react'
+import toast from 'react-hot-toast'
 
 interface Slider {
     id: string
@@ -60,7 +61,7 @@ export default function SlidersManagementPage() {
 
     const handleCreateSlider = () => {
         if (!newSlider.title.trim()) {
-            alert('Vui lòng nhập tiêu đề slider')
+            toast.error('Vui lòng nhập tiêu đề slider')
             return
         }
 
@@ -107,10 +108,10 @@ export default function SlidersManagementPage() {
             const targetIndex = sliders.findIndex(s => s.id === targetId)
 
             const newSliders = [...sliders]
-            ;[newSliders[draggedIndex], newSliders[targetIndex]] = [
-                newSliders[targetIndex],
-                newSliders[draggedIndex],
-            ]
+                ;[newSliders[draggedIndex], newSliders[targetIndex]] = [
+                    newSliders[targetIndex],
+                    newSliders[draggedIndex],
+                ]
 
             newSliders.forEach((slider, idx) => {
                 slider.order = idx + 1
@@ -216,9 +217,8 @@ export default function SlidersManagementPage() {
                                             onDragStart={() => handleDragStart(slider.id)}
                                             onDragOver={handleDragOver}
                                             onDrop={() => handleDrop(slider.id)}
-                                            className={`flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-all cursor-move group ${
-                                                draggedId === slider.id ? 'opacity-50 scale-95' : ''
-                                            }`}
+                                            className={`flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-all cursor-move group ${draggedId === slider.id ? 'opacity-50 scale-95' : ''
+                                                }`}
                                         >
                                             <GripVertical className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors flex-shrink-0" />
 
@@ -240,11 +240,10 @@ export default function SlidersManagementPage() {
                                             </div>
 
                                             <div className="flex items-center gap-2 flex-shrink-0">
-                                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                                                    slider.status === 'active' 
-                                                        ? 'bg-green-100 text-green-700' 
+                                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${slider.status === 'active'
+                                                        ? 'bg-green-100 text-green-700'
                                                         : 'bg-gray-100 text-gray-600'
-                                                }`}>
+                                                    }`}>
                                                     {slider.status === 'active' ? 'Hoạt động' : 'Tạm dừng'}
                                                 </span>
 

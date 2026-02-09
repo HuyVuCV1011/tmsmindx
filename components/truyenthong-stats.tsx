@@ -1,6 +1,6 @@
 'use client'
 
-import { FileText, Eye, MessageSquare, TrendingUp } from 'lucide-react'
+import { Eye, FileText, MessageSquare, TrendingUp } from 'lucide-react'
 import useSWR from 'swr'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())

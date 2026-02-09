@@ -7,6 +7,7 @@ import { SkeletonTable } from '@/components/skeletons';
 import { Edit, List, Plus, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 
 interface Assignment {
   id: number;
@@ -87,16 +88,16 @@ export default function AssignmentManagementPage() {
 
       const data = await response.json();
       if (data.success) {
-        alert(editingId ? 'Cập nhật assignment thành công!' : 'Tạo assignment thành công!');
+        toast.success(editingId ? 'Cập nhật assignment thành công!' : 'Tạo assignment thành công!');
         setShowModal(false);
         resetForm();
         fetchAssignments();
       } else {
-        alert('Lỗi: ' + data.error);
+        toast.error('Lỗi: ' + data.error);
       }
     } catch (err) {
       console.error('Error saving assignment:', err);
-      alert('Lỗi khi lưu assignment');
+      toast.error('Lỗi khi lưu assignment');
     }
   };
 
@@ -127,14 +128,14 @@ export default function AssignmentManagementPage() {
       });
       const data = await response.json();
       if (data.success) {
-        alert('Xóa assignment thành công!');
+        toast.success('Xóa assignment thành công!');
         fetchAssignments();
       } else {
-        alert('Lỗi: ' + data.error);
+        toast.error('Lỗi: ' + data.error);
       }
     } catch (err) {
       console.error('Error deleting assignment:', err);
-      alert('Lỗi khi xóa assignment');
+      toast.error('Lỗi khi xóa assignment');
     }
   };
 
