@@ -3,7 +3,8 @@
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
-import { ChevronDown, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Sparkles, Users, X } from "lucide-react";
+import { ChevronDown, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Sparkles, Users, X, UserCircle } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -104,7 +105,7 @@ export function Sidebar() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed top-3 left-3 z-sidebar-toggle p-2 rounded-lg bg-white shadow-md border border-gray-200 hover:shadow-lg hover:scale-105 hover:bg-gradient-to-br hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:border-[#a1001f] transition-all duration-300 group animate-in fade-in-0 slide-in-from-left-2"
+          className="fixed top-3 left-3 z-sidebar-toggle p-2 rounded-lg bg-white shadow-md border border-gray-200 hover:shadow-lg hover:scale-105 hover:bg-linear-to-br hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:border-[#a1001f] transition-all duration-300 group animate-in fade-in-0 slide-in-from-left-2"
         >
           <Menu className="h-4 w-4 transition-transform group-hover:rotate-180 duration-300" />
         </button>
@@ -121,7 +122,7 @@ export function Sidebar() {
       >
         <div className="flex h-full flex-col">
           {/* Header - Gradient brand header */}
-          <div className="relative h-14 flex items-center justify-between px-4 bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white shadow-md">
+          <div className="relative h-14 flex items-center justify-between px-4 bg-linear-to-r from-[#a1001f] to-[#c41230] text-white shadow-md">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
                 <Sparkles className="h-4 w-4" />
@@ -157,8 +158,8 @@ export function Sidebar() {
                         className={cn(
                           "w-full flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-300 group/item",
                           isSubmenuActive || isExpanded
-                            ? "bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white shadow-md shadow-[#a1001f]/20 scale-[1.01]"
-                            : "text-gray-700 hover:bg-gradient-to-r hover:from-gray-100 hover:to-gray-50 hover:shadow-sm hover:scale-[1.01]"
+                            ? "bg-linear-to-r from-[#a1001f] to-[#c41230] text-white shadow-md shadow-[#a1001f]/20 scale-[1.01]"
+                            : "text-gray-700 hover:bg-linear-to-r hover:from-gray-100 hover:to-gray-50 hover:shadow-sm hover:scale-[1.01]"
                         )}
                       >
                         <div className={cn(
@@ -187,31 +188,31 @@ export function Sidebar() {
                           {item.submenu?.map((subItem) => {
                             const isSubActive = pathname === subItem.href || pathname.startsWith(subItem.href + '/');
                             return (
-                              <a
+                              <Link
                                 key={subItem.href}
                                 href={subItem.href}
                                 className={cn(
                                   "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all duration-300 hover:scale-[1.01]",
                                   isSubActive
-                                    ? "bg-gradient-to-r from-[#a1001f]/10 to-[#c41230]/10 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm"
+                                    ? "bg-linear-to-r from-[#a1001f]/10 to-[#c41230]/10 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm"
                                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-3 hover:border-gray-300"
                                 )}
                               >
                                 <span>{subItem.label}</span>
-                              </a>
+                              </Link>
                             );
                           })}
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <a
+                    <Link
                       href={item.href}
                       className={cn(
                         "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-300 group/item",
                         isActive
-                          ? "bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white shadow-md shadow-[#a1001f]/20 scale-[1.01]"
-                          : "text-gray-700 hover:bg-gradient-to-r hover:from-gray-100 hover:to-gray-50 hover:shadow-sm hover:scale-[1.01]"
+                          ? "bg-linear-to-r from-[#a1001f] to-[#c41230] text-white shadow-md shadow-[#a1001f]/20 scale-[1.01]"
+                          : "text-gray-700 hover:bg-linear-to-r hover:from-gray-100 hover:to-gray-50 hover:shadow-sm hover:scale-[1.01]"
                       )}
                     >
                       <div className={cn(
@@ -223,7 +224,7 @@ export function Sidebar() {
                         <Icon className="h-3.5 w-3.5" />
                       </div>
                       <span>{item.label}</span>
-                    </a>
+                    </Link>
                   )}
                 </div>
               );
@@ -232,10 +233,18 @@ export function Sidebar() {
 
           {/* User Info and Logout - Modern card design */}
           {user && (
-            <div className="border-t border-gray-200 p-3 bg-gradient-to-br from-gray-50 to-white">
-              <div className="mb-2 p-2 bg-white rounded-lg shadow-sm border border-gray-100">
+            <div className="border-t border-gray-200 p-3 bg-linear-to-br from-gray-50 to-white">
+              <Link 
+                href="/user/profile"
+                className={cn(
+                  "block mb-2 p-2 rounded-lg shadow-sm border transition-all duration-300 hover:shadow-md hover:scale-[1.01] cursor-pointer",
+                  pathname === "/user/profile"
+                    ? "bg-linear-to-br from-[#a1001f]/5 to-[#c41230]/5 border-[#a1001f]"
+                    : "bg-white border-gray-100 hover:border-[#a1001f]/30"
+                )}
+              >
                 <div className="flex items-center gap-2 mb-1.5">
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#a1001f] to-[#c41230] flex items-center justify-center text-white font-bold text-xs shadow-md">
+                  <div className="h-8 w-8 rounded-full bg-linear-to-br from-[#a1001f] to-[#c41230] flex items-center justify-center text-white font-bold text-xs shadow-md">
                     {user.displayName?.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -243,13 +252,14 @@ export function Sidebar() {
                     <p className="text-xs text-gray-500 truncate">{user.email}</p>
                   </div>
                 </div>
-                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white text-xs rounded-full font-semibold shadow-sm">
+                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-linear-to-r from-[#a1001f] to-[#c41230] text-white text-xs rounded-full font-semibold shadow-sm">
                   <Sparkles className="h-2.5 w-2.5" />
                   <span>{user.role === 'teacher' ? 'Teacher' : 'Manager'}</span>
                 </div>
-              </div>
+              </Link>
+              
               <button
-                className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold bg-white border-2 border-gray-200 text-gray-700 hover:border-[#a1001f] hover:bg-gradient-to-r hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:shadow-md transition-all duration-300 group"
+                className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold bg-white border-2 border-gray-200 text-gray-700 hover:border-[#a1001f] hover:bg-linear-to-r hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:shadow-md transition-all duration-300 group"
                 onClick={logout}
               >
                 <LogOut className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
