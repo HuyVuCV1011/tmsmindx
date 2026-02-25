@@ -2,8 +2,12 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR, { mutate } from "swr";
+
+// Cache for processed data
+const dataCache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 interface TeacherAvailability {
   timestamp: string;
@@ -107,18 +111,35 @@ InfoItem.displayName = 'InfoItem';
 // API Secret Key for internal requests
 const API_SECRET_KEY = process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025';
 
-// Fetcher function with caching and compression
+// Optimized fetcher with better caching and compression
 const fetcher = async (url: string) => {
+  // Check cache first
+  const cacheKey = url;
+  const cached = dataCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    console.log('📦 Using cached data for:', url);
+    return cached.data;
+  }
+
   const res = await fetch(url, { 
-    next: { revalidate: 60 }, // Cache 60s
+    next: { revalidate: 300 }, // Cache 5 minutes
     headers: { 
       'Accept-Encoding': 'gzip, deflate, br',
-      'Cache-Control': 'max-age=60',
+      'Cache-Control': 'max-age=300, stale-while-revalidate=600',
       'x-api-key': API_SECRET_KEY
     }
   });
   if (!res.ok) throw new Error('Failed to fetch');
-  return res.json();
+  
+  const data = await res.json();
+  
+  // Store in cache
+  dataCache.set(cacheKey, {
+    data,
+    timestamp: Date.now()
+  });
+  
+  return data;
 };
 
 // Function to extract teacher code from email
@@ -132,11 +153,15 @@ export default function Page1() {
   const [searchCode, setSearchCode] = useState("");
   const [submitCode, setSubmitCode] = useState("");
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
-  const [isResolvingCode, setIsResolvingCode] = useState(false); // true while resolving code via sheet
+  const [isResolvingCode, setIsResolvingCode] = useState(false);
   const [error, setError] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("12");
   const [selectedYear, setSelectedYear] = useState("2025");
   const [selectedTableYear, setSelectedTableYear] = useState("2025");
+  
+  // Debounce refs
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSearchRef = useRef("");
   
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMonth, setModalMonth] = useState<string | null>(null);
@@ -199,7 +224,7 @@ export default function Page1() {
       const refreshToken = localStorage.getItem('refreshToken');
       if (refreshToken) {
         try {
-          const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || '';
+          const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '';
           const refreshRes = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -298,29 +323,31 @@ export default function Page1() {
     }
   }, [user, hasAutoSearched, submitCode, secureFetcher]);
 
-  // SWR với auto caching và revalidation - GỬI TOKEN QUA HEADER
+  // Optimized SWR with better caching and parallel loading
   const { data: teacherData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
     submitCode && user ? `/api/teachers?code=${submitCode}` : null,
     secureFetcher,
     { 
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      dedupingInterval: 120000, // Dedupe requests trong 2 phút
-      shouldRetryOnError: false // Don't retry on 404
+      dedupingInterval: 300000, // 5 minutes deduping
+      shouldRetryOnError: false,
+      revalidateIfStale: false // Don't revalidate stale data automatically
     }
   );
 
   const teacher = teacherData?.teacher || null;
 
-  // Only load scores after teacher is loaded
+  // Parallel loading of score data - start immediately after teacher is found
   const { data: expertiseDataRes, isLoading: isLoadingExpertise } = useSWR(
     teacher && user ? `/api/rawdata?code=${submitCode}` : null,
     secureFetcher,
     { 
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      dedupingInterval: 120000,
-      shouldRetryOnError: false
+      dedupingInterval: 300000,
+      shouldRetryOnError: false,
+      revalidateIfStale: false
     }
   );
 
@@ -330,8 +357,22 @@ export default function Page1() {
     { 
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      dedupingInterval: 120000,
-      shouldRetryOnError: false
+      dedupingInterval: 300000,
+      shouldRetryOnError: false,
+      revalidateIfStale: false
+    }
+  );
+
+  // Load training data in parallel
+  const { data: trainingData, isLoading: isLoadingTraining } = useSWR(
+    teacher && user ? `/api/training?code=${submitCode}` : null,
+    secureFetcher,
+    { 
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 300000,
+      shouldRetryOnError: false,
+      revalidateIfStale: false
     }
   );
 
@@ -412,18 +453,6 @@ export default function Page1() {
       toDate: today
     };
   }, [availabilityPeriod]);
-
-  // Load training data AFTER teacher is loaded
-  const { data: trainingData, isLoading: isLoadingTraining } = useSWR(
-    teacher && user ? `/api/training?code=${submitCode}` : null,
-    secureFetcher,
-    { 
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 120000,
-      shouldRetryOnError: false
-    }
-  );
 
   // Load availability AFTER scores are loaded - filter by teacher name on server side
   // This allows UI to render first, then load availability data later
@@ -539,16 +568,65 @@ export default function Page1() {
     localStorage.removeItem('lastSearchCode');
   }, []);
 
-  // Debounce search for better performance
+  // Optimized search with better debouncing
+  const handleSearch = useCallback(() => {
+    if (!searchCode.trim()) {
+      setError("Vui lòng nhập mã giáo viên");
+      return;
+    }
+    
+    const trimmedCode = searchCode.trim();
+    
+    // Skip if same as previous search
+    if (trimmedCode === lastSearchRef.current) {
+      return;
+    }
+    
+    lastSearchRef.current = trimmedCode;
+    setError("");
+    setSubmitCode(trimmedCode);
+    
+    // Save to localStorage for quick access
+    try {
+      localStorage.setItem('lastSearchCode', trimmedCode);
+    } catch (e) {
+      console.warn('Unable to save to localStorage:', e);
+    }
+    
+    // Track search analytics (non-blocking)
+    fetch('/api/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'search',
+        searchCode: trimmedCode
+      })
+    }).catch(err => console.warn('Analytics tracking failed:', err));
+  }, [searchCode]);
+
+  // Improved debounced search
   useEffect(() => {
     if (!searchCode.trim()) return;
     
-    const timer = setTimeout(() => {
-      // Auto-search after 500ms of no typing
-    }, 500);
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
     
-    return () => clearTimeout(timer);
-  }, [searchCode]);
+    // Set new timeout for auto-search
+    searchTimeoutRef.current = setTimeout(() => {
+      const trimmedCode = searchCode.trim();
+      if (trimmedCode && trimmedCode !== submitCode && trimmedCode.length >= 2) {
+        handleSearch();
+      }
+    }, 800); // Increased debounce time for better performance
+    
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchCode, submitCode, handleSearch]);
 
   // Track page visit on mount
   useEffect(() => {
@@ -583,28 +661,6 @@ export default function Page1() {
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [feedbackSuccessModalOpen, feedbackModalOpen, isFirstTimeFeedback, registrationCheckModalOpen, notFoundModalOpen, modalOpen]);
-
-  const handleSearch = useCallback(() => {
-    if (!searchCode.trim()) {
-      setError("Vui lòng nhập mã giáo viên");
-      return;
-    }
-    setError("");
-    const trimmedCode = searchCode.trim();
-    setSubmitCode(trimmedCode);
-    // Save to localStorage for quick access
-    localStorage.setItem('lastSearchCode', trimmedCode);
-    
-    // Track search analytics
-    fetch('/api/analytics', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'search',
-        searchCode: trimmedCode
-      })
-    }).catch(err => console.error('Analytics tracking failed:', err));
-  }, [searchCode]);
 
   const getScoreForMonth = useCallback((data: MonthlyAverage[], month: string): string => {
     const found = data.find(d => d.month === month);
@@ -908,7 +964,7 @@ export default function Page1() {
   }, [availabilityRecords, availabilityPeriod, availabilityFromDate, availabilityToDate]);
 
   return (
-    <div className="max-w-4xl mx-auto px-2 sm:px-4">
+    <div className="max-w-4xl mx-auto">
       <div className="space-y-3 sm:space-y-4">
         {/* Header */}
         <div className="border-b border-gray-900 pb-2 sm:pb-3">
@@ -916,10 +972,9 @@ export default function Page1() {
           <p className="text-xs text-gray-600 mt-1">
             { (isLoadingTeacher || isResolvingCode) ? (
               <span className="inline-flex items-center gap-2">
-                <svg className="animate-spin h-3 w-3 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
+                <div className="w-3 h-1 bg-gray-300 rounded overflow-hidden">
+                  <div className="w-full h-full bg-blue-500 animate-pulse"></div>
+                </div>
                 Đang tải thông tin của bạn...
               </span>
             ) : user?.displayName ? `Xin chào ${user.displayName}` : 'Đang tải thông tin của bạn...'}
@@ -940,7 +995,7 @@ export default function Page1() {
         {!submitCode && !error && (
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 sm:p-12 text-center">
             <div className="flex flex-col items-center gap-3">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+              <div className="w-16 h-16 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center">
                 <Search className="w-8 h-8 text-gray-400" />
               </div>
               <h3 className="text-base sm:text-lg font-semibold text-gray-900">Tìm kiếm giáo viên</h3>
@@ -970,7 +1025,7 @@ export default function Page1() {
             <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div key={i} className="flex items-start gap-2 p-2 bg-gray-50 rounded">
+                  <div key={i} className="flex items-start gap-2 p-2 bg-white border border-gray-100 rounded">
                     <div className="w-4 h-4 bg-gray-300 rounded animate-pulse mt-0.5"></div>
                     <div className="flex-1 space-y-1">
                       <div className="h-3 bg-gray-300 rounded w-20 animate-pulse"></div>

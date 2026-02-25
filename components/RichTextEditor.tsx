@@ -1,38 +1,38 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
-import { useEditor, EditorContent, NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
 import { mergeAttributes, type Editor as TiptapEditor } from '@tiptap/core'
-import { NodeSelection } from '@tiptap/pm/state'
-import StarterKit from '@tiptap/starter-kit'
+import Color from '@tiptap/extension-color'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
-import Underline from '@tiptap/extension-underline'
 import TextAlign from '@tiptap/extension-text-align'
-import Color from '@tiptap/extension-color'
 import { TextStyle } from '@tiptap/extension-text-style'
+import Underline from '@tiptap/extension-underline'
+import { NodeSelection } from '@tiptap/pm/state'
+import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type NodeViewProps } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
 import {
-  Bold,
-  Italic,
-  Underline as UnderlineIcon,
-  List,
-  ListOrdered,
-  Heading1,
-  Heading2,
-  Heading3,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  AlignJustify,
-  Image as ImageIcon,
-  Link as LinkIcon,
-  Undo,
-  Redo,
-  Code,
-  Quote,
-  Minus,
-  Trash2
+    AlignCenter,
+    AlignJustify,
+    AlignLeft,
+    AlignRight,
+    Bold,
+    Code,
+    Heading1,
+    Heading2,
+    Heading3,
+    Image as ImageIcon,
+    Italic,
+    Link as LinkIcon,
+    List,
+    ListOrdered,
+    Minus,
+    Quote,
+    Redo,
+    Trash2,
+    Underline as UnderlineIcon,
+    Undo
 } from 'lucide-react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Button } from './ui/button'
 
 interface RichTextEditorProps {
@@ -40,6 +40,7 @@ interface RichTextEditorProps {
   onChange: (html: string) => void
   error?: string
   textColor?: string
+  showToolbar?: boolean
 }
 
 function ResizableImageNodeView(props: NodeViewProps) {
@@ -122,10 +123,12 @@ function ResizableImageNodeView(props: NodeViewProps) {
     window.addEventListener('pointerup', onUp, { passive: true })
   }
 
+  const verticalAlign = typeof node.attrs.verticalAlign === 'string' ? node.attrs.verticalAlign : 'top'
+
   return (
     <NodeViewWrapper
       className={`image-wrapper ${selected ? 'image-wrapper-selected' : ''}`}
-      style={{ display: 'inline-block', position: 'relative', maxWidth: '100%' }}
+      style={{ display: 'inline-block', position: 'relative', maxWidth: '100%', verticalAlign }}
       onClick={onClick}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -158,6 +161,20 @@ const ResizableImage = Image.extend({
   addAttributes() {
     return {
       ...(this.parent?.() ?? {}),
+      verticalAlign: {
+        default: 'top',
+        parseHTML: (element) => {
+          const data = element.getAttribute('data-vertical-align')
+          return data || 'top'
+        },
+        renderHTML: (attributes) => {
+          if (!attributes.verticalAlign) return {}
+          return {
+            'data-vertical-align': attributes.verticalAlign,
+            style: `vertical-align: ${attributes.verticalAlign};`
+          }
+        }
+      },
       width: {
         default: null,
         parseHTML: (element) => {
@@ -199,9 +216,11 @@ export default function RichTextEditor({
   content,
   onChange,
   error,
-  textColor = '#000000'
+  textColor = '#000000',
+  showToolbar = true
 }: RichTextEditorProps) {
   const [selectedImageWidth, setSelectedImageWidth] = useState<string>('100%')
+  const [selectedImageAlign, setSelectedImageAlign] = useState<string>('top')
   const [showImageControls, setShowImageControls] = useState(false)
   
   const editor = useEditor({
@@ -213,7 +232,7 @@ export default function RichTextEditor({
         }
       }),
       ResizableImage.configure({
-        inline: false,
+        inline: true,
         allowBase64: true,
         HTMLAttributes: {
           class: 'tiptap-image'
@@ -250,6 +269,8 @@ export default function RichTextEditor({
         const w = selection.node.attrs.width
         if (typeof w === 'number' && Number.isFinite(w)) setSelectedImageWidth(`${Math.round(w)}px`)
         else setSelectedImageWidth('auto')
+        const align = selection.node.attrs.verticalAlign
+        setSelectedImageAlign(typeof align === 'string' && align ? align : 'top')
       } else {
         setShowImageControls(false)
       }
@@ -326,12 +347,18 @@ export default function RichTextEditor({
     setShowImageControls(false)
   }, [editor])
 
+  const setImageVerticalAlign = useCallback((align: string) => {
+    if (!editor) return
+    editor.chain().focus().updateAttributes('image', { verticalAlign: align }).run()
+    setSelectedImageAlign(align)
+  }, [editor])
+
   if (!editor) {
     return null
   }
 
   return (
-    <div className={`border rounded-xl overflow-hidden ${error ? 'border-red-500 shadow-sm shadow-red-100' : 'border-border'}`}>
+    <div className={`overflow-hidden ${error ? 'border-red-500 shadow-sm shadow-red-100' : ''}`}>
       {/* Image Controls */}
       {showImageControls && (
         <div className="image-controls-panel bg-blue-50 border-b border-blue-200 p-3 flex items-center gap-3">
@@ -341,6 +368,19 @@ export default function RichTextEditor({
           <span className="text-xs text-blue-700 ml-2">
             ({selectedImageWidth})
           </span>
+          <div className="flex items-center gap-2 ml-2">
+            <span className="text-xs text-blue-700">Căn dọc:</span>
+            <select
+              value={selectedImageAlign}
+              onChange={(e) => setImageVerticalAlign(e.target.value)}
+              className="h-8 rounded-md border border-blue-200 bg-white/90 px-2 text-xs text-blue-900"
+            >
+              <option value="top">Trên</option>
+              <option value="middle">Giữa</option>
+              <option value="bottom">Dưới</option>
+              <option value="baseline">Baseline</option>
+            </select>
+          </div>
           <Button
             type="button"
             size="sm"
@@ -363,15 +403,15 @@ export default function RichTextEditor({
       )}
       
       {/* Toolbar */}
-      <div className="bg-muted/30 border-b border-border p-2 flex flex-wrap gap-1">
-        {/* Text Formatting */}
-        <div className="flex gap-1 pr-2 border-r">
+      {showToolbar && (
+        <div className="bg-gray-50 border-b border-gray-200 p-2 flex flex-wrap gap-1">{/* Text Formatting */}
+        <div className="flex gap-1 pr-2 border-r border-gray-300">
           <Button
             type="button"
             size="sm"
             variant={editor.isActive('bold') ? 'default' : 'ghost'}
             onClick={() => editor.chain().focus().toggleBold().run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
+            className="h-8 w-8 p-0 cursor-pointer hover:bg-blue-100"
             title="Bold (Ctrl+B)"
           >
             <Bold className="h-4 w-4" />
@@ -381,7 +421,7 @@ export default function RichTextEditor({
             size="sm"
             variant={editor.isActive('italic') ? 'default' : 'ghost'}
             onClick={() => editor.chain().focus().toggleItalic().run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
+            className="h-8 w-8 p-0 cursor-pointer hover:bg-blue-100"
             title="Italic (Ctrl+I)"
           >
             <Italic className="h-4 w-4" />
@@ -391,7 +431,7 @@ export default function RichTextEditor({
             size="sm"
             variant={editor.isActive('underline') ? 'default' : 'ghost'}
             onClick={() => editor.chain().focus().toggleUnderline().run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
+            className="h-8 w-8 p-0 cursor-pointer hover:bg-blue-100"
             title="Underline (Ctrl+U)"
           >
             <UnderlineIcon className="h-4 w-4" />
@@ -594,6 +634,7 @@ export default function RichTextEditor({
           </Button>
         </div>
       </div>
+      )}
 
       {/* Editor */}
       <EditorContent editor={editor} className="bg-background" />

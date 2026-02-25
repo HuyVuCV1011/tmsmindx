@@ -1,12 +1,8 @@
 'use client'
 
-import React from "react"
-
-import { useState } from 'react'
-import { GripVertical, Plus, Edit2, Trash2, Eye, EyeOff, Clock, FileText } from 'lucide-react'
+import React, { useState } from 'react'
+import { GripVertical, Plus, Edit2, Trash2, Eye, EyeOff, Clock, Image as ImageIcon, Settings, List, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 
@@ -55,6 +51,33 @@ export default function SlidersManagementPage() {
     const [autoPlayEnabled, setAutoPlayEnabled] = useState(true)
     const [globalDuration, setGlobalDuration] = useState(5000)
     const [draggedId, setDraggedId] = useState<string | null>(null)
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+    const [newSlider, setNewSlider] = useState({
+        title: '',
+        duration: 5000,
+        autoPlay: true,
+    })
+
+    const handleCreateSlider = () => {
+        if (!newSlider.title.trim()) {
+            alert('Vui lòng nhập tiêu đề slider')
+            return
+        }
+
+        const slider: Slider = {
+            id: Date.now().toString(),
+            title: newSlider.title,
+            order: sliders.length + 1,
+            status: 'active',
+            duration: newSlider.duration,
+            autoPlay: newSlider.autoPlay,
+            slideCount: 0,
+        }
+
+        setSliders([...sliders, slider])
+        setIsCreateModalOpen(false)
+        setNewSlider({ title: '', duration: 5000, autoPlay: true })
+    }
 
     const handleDelete = (id: string) => {
         if (confirm('Bạn có chắc chắn muốn xóa slider này?')) {
@@ -84,10 +107,10 @@ export default function SlidersManagementPage() {
             const targetIndex = sliders.findIndex(s => s.id === targetId)
 
             const newSliders = [...sliders]
-                ;[newSliders[draggedIndex], newSliders[targetIndex]] = [
-                    newSliders[targetIndex],
-                    newSliders[draggedIndex],
-                ]
+            ;[newSliders[draggedIndex], newSliders[targetIndex]] = [
+                newSliders[targetIndex],
+                newSliders[draggedIndex],
+            ]
 
             newSliders.forEach((slider, idx) => {
                 slider.order = idx + 1
@@ -99,142 +122,265 @@ export default function SlidersManagementPage() {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-5">
             {/* Header */}
-            <div className="flex items-center justify-between flex-col md:flex-row gap-4">
+            <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold text-foreground">Quản lý Slider</h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        Tổng cộng: {sliders.length} slider
+                    <h2 className="text-2xl font-bold text-gray-900">Quản lý Slider</h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        Tổng cộng <span className="font-semibold text-gray-700">{sliders.length}</span> slider
                     </p>
                 </div>
-                <Button className="gap-2 bg-primary hover:bg-primary/90 transition-all hover:scale-105 shadow-md cursor-pointer">
+                <Button className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-10 shadow-sm" onClick={() => setIsCreateModalOpen(true)}>
                     <Plus className="w-4 h-4" />
                     Tạo slider mới
                 </Button>
             </div>
 
-            {/* Settings */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Cài đặt chung</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <Label className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={autoPlayEnabled}
-                                    onChange={e => setAutoPlayEnabled(e.target.checked)}
-                                    className="rounded cursor-pointer"
-                                />
-                                Bật tự động chạy cho tất cả slider
-                            </Label>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                {/* Settings Panel */}
+                <div className="lg:col-span-1">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-4">
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 px-4 py-3">
+                            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                <Settings className="w-4 h-4 text-blue-600" />
+                                Cài đặt chung
+                            </h3>
                         </div>
-                        <div>
-                            <Label htmlFor="duration">Thời gian chuyển slide (ms)</Label>
-                            <Input
-                                id="duration"
-                                type="number"
-                                value={globalDuration}
-                                onChange={e => setGlobalDuration(Number(e.target.value))}
-                                min="1000"
-                                step="500"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="bg-muted p-3 rounded text-sm text-muted-foreground">
-                        💡 Các cài đặt này sẽ áp dụng cho tất cả slider khi được tạo hoặc cập nhật.
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Sliders List */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Danh sách Slider</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-2">
-                        {sliders.map(slider => (
-                            <div
-                                key={slider.id}
-                                draggable
-                                onDragStart={() => handleDragStart(slider.id)}
-                                onDragOver={handleDragOver}
-                                className={`flex items-center gap-4 p-5 border border-border rounded-xl hover:bg-muted/80 hover:border-primary/30 shadow-sm transition-all cursor-move group ${draggedId === slider.id ? 'opacity-50 bg-muted scale-95' : ''
-                                    }`}
-                            >
-                                <GripVertical className="w-5 h-5 text-muted-foreground/50 group-hover:text-primary transition-colors flex-shrink-0" />
-
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-semibold text-foreground group-hover:text-primary transition-colors">{slider.title}</p>
-                                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                                        <span className="bg-muted px-2 py-0.5 rounded-full">Thứ tự: #{slider.order}</span>
-                                        <span className="flex items-center gap-1">
-                                            <Clock className="w-3 h-3" />
-                                            {slider.duration / 1000}s
-                                        </span>
-                                        <span className="flex items-center gap-1">
-                                            <FileText className="w-3 h-3" />
-                                            {slider.slideCount} slides
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-3 flex-shrink-0">
-                                    <Badge
-                                        variant={slider.status === 'active' ? 'default' : 'secondary'}
-                                        className={slider.status === 'active' ? 'bg-green-100 text-green-700 hover:bg-green-200' : ''}
-                                    >
-                                        {slider.status === 'active' ? 'Hoạt động' : 'Tạm dừng'}
-                                    </Badge>
-
-                                    <div className="flex bg-background rounded-lg border shadow-sm p-1">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleToggleStatus(slider.id)}
-                                            className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 transition-colors cursor-pointer"
-                                            title={slider.status === 'active' ? 'Tạm dừng' : 'Kích hoạt'}
-                                        >
-                                            {slider.status === 'active' ? (
-                                                <Eye className="w-4 h-4" />
-                                            ) : (
-                                                <EyeOff className="w-4 h-4" />
-                                            )}
-                                        </Button>
-
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 transition-colors cursor-pointer"
-                                        >
-                                            <Edit2 className="w-4 h-4" />
-                                        </Button>
-
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleDelete(slider.id)}
-                                            className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 transition-colors cursor-pointer"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                </div>
+                        <div className="p-4 space-y-4">
+                            <div className="space-y-2">
+                                <Label className="flex items-center gap-2 text-sm cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={autoPlayEnabled}
+                                        onChange={e => setAutoPlayEnabled(e.target.checked)}
+                                        className="rounded w-4 h-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    />
+                                    <span className="font-semibold text-gray-700">Tự động chạy slider</span>
+                                </Label>
+                                <p className="text-xs text-gray-500 ml-6">Áp dụng cho tất cả slider mới</p>
                             </div>
-                        ))}
-                    </div>
-                </CardContent>
-            </Card>
 
-            <div className="text-xs text-muted-foreground bg-muted p-3 rounded">
-                💡 Kéo và thả để sắp xếp thứ tự hiển thị slider. Slider ở trên cùng sẽ được hiển thị
-                trước.
+                            <div className="space-y-2">
+                                <Label htmlFor="duration" className="text-sm font-semibold text-gray-700">
+                                    Thời gian chuyển slide
+                                </Label>
+                                <div className="relative">
+                                    <Input
+                                        id="duration"
+                                        type="number"
+                                        value={globalDuration}
+                                        onChange={e => setGlobalDuration(Number(e.target.value))}
+                                        min="1000"
+                                        step="500"
+                                        className="h-10 pr-12"
+                                    />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-500">ms</span>
+                                </div>
+                                <p className="text-xs text-gray-500">
+                                    = {(globalDuration / 1000).toFixed(1)} giây
+                                </p>
+                            </div>
+
+                            <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                                <p className="text-xs text-blue-700 leading-relaxed">
+                                    💡 Cài đặt này sẽ áp dụng cho slider mới. Slider cũ giữ nguyên cấu hình.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Sliders List */}
+                <div className="lg:col-span-2">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 px-4 py-3">
+                            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                <List className="w-4 h-4 text-blue-600" />
+                                Danh sách Slider
+                            </h3>
+                        </div>
+                        <div className="p-4">
+                            {sliders.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <ImageIcon className="w-16 h-16 text-gray-300 mx-auto mb-3" />
+                                    <p className="text-gray-600 font-semibold mb-1">Chưa có slider nào</p>
+                                    <p className="text-sm text-gray-500">Tạo slider đầu tiên để bắt đầu</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {sliders.map(slider => (
+                                        <div
+                                            key={slider.id}
+                                            draggable
+                                            onDragStart={() => handleDragStart(slider.id)}
+                                            onDragOver={handleDragOver}
+                                            onDrop={() => handleDrop(slider.id)}
+                                            className={`flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-all cursor-move group ${
+                                                draggedId === slider.id ? 'opacity-50 scale-95' : ''
+                                            }`}
+                                        >
+                                            <GripVertical className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors flex-shrink-0" />
+
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-semibold text-sm text-gray-900 group-hover:text-blue-600 transition-colors truncate">
+                                                    {slider.title}
+                                                </p>
+                                                <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                                                    <span className="bg-gray-100 px-2 py-0.5 rounded font-semibold">#{slider.order}</span>
+                                                    <span className="flex items-center gap-1">
+                                                        <Clock className="w-3 h-3" />
+                                                        {slider.duration / 1000}s
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <ImageIcon className="w-3 h-3" />
+                                                        {slider.slideCount} slides
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                                    slider.status === 'active' 
+                                                        ? 'bg-green-100 text-green-700' 
+                                                        : 'bg-gray-100 text-gray-600'
+                                                }`}>
+                                                    {slider.status === 'active' ? 'Hoạt động' : 'Tạm dừng'}
+                                                </span>
+
+                                                <div className="flex bg-gray-50 rounded-lg border border-gray-200 p-0.5">
+                                                    <button
+                                                        onClick={() => handleToggleStatus(slider.id)}
+                                                        className="h-7 w-7 flex items-center justify-center hover:bg-blue-50 hover:text-blue-600 rounded transition-colors"
+                                                        title={slider.status === 'active' ? 'Tạm dừng' : 'Kích hoạt'}
+                                                    >
+                                                        {slider.status === 'active' ? (
+                                                            <Eye className="w-4 h-4" />
+                                                        ) : (
+                                                            <EyeOff className="w-4 h-4" />
+                                                        )}
+                                                    </button>
+
+                                                    <button
+                                                        className="h-7 w-7 flex items-center justify-center hover:bg-blue-50 hover:text-blue-600 rounded transition-colors"
+                                                        title="Chỉnh sửa"
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
+
+                                                    <button
+                                                        onClick={() => handleDelete(slider.id)}
+                                                        className="h-7 w-7 flex items-center justify-center hover:bg-red-50 hover:text-red-600 rounded transition-colors"
+                                                        title="Xóa"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="mt-4 text-xs text-gray-500 bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                                💡 <span className="font-semibold">Mẹo:</span> Kéo và thả để sắp xếp thứ tự hiển thị slider. Slider ở trên cùng sẽ được hiển thị trước.
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
+
+            {/* Create Slider Modal */}
+            {isCreateModalOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+                        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-4 flex items-center justify-between sticky top-0">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <Plus className="w-5 h-5" />
+                                Tạo Slider Mới
+                            </h3>
+                            <button
+                                onClick={() => setIsCreateModalOpen(false)}
+                                className="text-white/80 hover:text-white transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="slider-title" className="text-sm font-semibold text-gray-700">
+                                    Tiêu đề Slider <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                    id="slider-title"
+                                    type="text"
+                                    placeholder="VD: Slider khuyến mãi tháng 2"
+                                    value={newSlider.title}
+                                    onChange={e => setNewSlider({ ...newSlider, title: e.target.value })}
+                                    className="h-10"
+                                    autoFocus
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="slider-duration" className="text-sm font-semibold text-gray-700">
+                                    Thời gian chuyển slide
+                                </Label>
+                                <div className="relative">
+                                    <Input
+                                        id="slider-duration"
+                                        type="number"
+                                        value={newSlider.duration}
+                                        onChange={e => setNewSlider({ ...newSlider, duration: Number(e.target.value) })}
+                                        min="1000"
+                                        step="500"
+                                        className="h-10 pr-12"
+                                    />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-500">ms</span>
+                                </div>
+                                <p className="text-xs text-gray-500">
+                                    = {(newSlider.duration / 1000).toFixed(1)} giây
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label className="flex items-center gap-2 text-sm cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={newSlider.autoPlay}
+                                        onChange={e => setNewSlider({ ...newSlider, autoPlay: e.target.checked })}
+                                        className="rounded w-4 h-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    />
+                                    <span className="font-semibold text-gray-700">Tự động chạy slider</span>
+                                </Label>
+                                <p className="text-xs text-gray-500 ml-6">Slider sẽ tự động chuyển sau mỗi khoảng thời gian</p>
+                            </div>
+
+                            <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                                <p className="text-xs text-blue-700 leading-relaxed">
+                                    💡 Sau khi tạo slider, bạn có thể thêm các slide ảnh vào slider này từ trang chỉnh sửa.
+                                </p>
+                            </div>
+
+                            <div className="flex gap-3 pt-2">
+                                <Button
+                                    onClick={() => setIsCreateModalOpen(false)}
+                                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 h-10"
+                                >
+                                    Hủy
+                                </Button>
+                                <Button
+                                    onClick={handleCreateSlider}
+                                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-10 shadow-sm"
+                                >
+                                    Tạo Slider
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
