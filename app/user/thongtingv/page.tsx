@@ -970,7 +970,7 @@ export default function Page1() {
         {/* Header */}
         <div className="border-b border-gray-900 pb-2 sm:pb-3">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Thông tin của tôi</h1>
-          <p className="text-xs text-gray-600 mt-1">
+          <div className="text-xs text-gray-600 mt-1">
             {(isLoadingTeacher || isResolvingCode) ? (
               <span className="inline-flex items-center gap-2">
                 <div className="w-3 h-1 bg-gray-300 rounded overflow-hidden">
@@ -979,13 +979,13 @@ export default function Page1() {
                 Đang tải thông tin của bạn...
               </span>
             ) : user?.displayName ? `Xin chào ${user.displayName}` : 'Đang tải thông tin của bạn...'}
-          </p>
+          </div>
         </div>
 
         {/* Error Message */}
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 flex items-center gap-2">
-            <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <svg className="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
             </svg>
             <span>{error}</span>
@@ -1206,7 +1206,7 @@ export default function Page1() {
                     <div className="flex gap-2 mb-3">
                       <div className="h-8 bg-gray-200 rounded w-24"></div>
                       {Array.from({ length: 12 }).map((_, i) => (
-                        <div key={i} className="h-8 bg-gray-200 rounded flex-1 min-w-[50px]"></div>
+                        <div key={i} className="h-8 bg-gray-200 rounded flex-1 min-w-12.5"></div>
                       ))}
                     </div>
                     <div className="space-y-2">
@@ -1214,7 +1214,7 @@ export default function Page1() {
                         <div key={row} className="flex gap-2">
                           <div className="h-10 bg-gray-300 rounded w-24"></div>
                           {Array.from({ length: 12 }).map((_, i) => (
-                            <div key={i} className="h-10 bg-gray-100 rounded flex-1 min-w-[50px]"></div>
+                            <div key={i} className="h-10 bg-gray-100 rounded flex-1 min-w-12.5"></div>
                           ))}
                         </div>
                       ))}
@@ -1233,12 +1233,12 @@ export default function Page1() {
                     const months = Array.from({ length: 12 }, (_, i) => `${i + 1}/${selectedTableYear}`);
 
                     return (
-                      <table className="w-full text-[10px] sm:text-xs min-w-[600px]">
+                      <table className="w-full text-[10px] sm:text-xs min-w-150">
                         <thead>
                           <tr className="border-b border-gray-900">
-                            <th className="text-left py-1.5 sm:py-2 px-1.5 sm:px-2 font-bold text-gray-900 min-w-[100px] sticky left-0 bg-white z-10">Chỉ tiêu</th>
+                            <th className="text-left py-1.5 sm:py-2 px-1.5 sm:px-2 font-bold text-gray-900 min-w-25 sticky left-0 bg-white z-10">Chỉ tiêu</th>
                             {months.map((month) => (
-                              <th key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 min-w-[50px] sm:min-w-[60px] ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
+                              <th key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 min-w-12.5 sm:min-w-15 ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
                                 }`}>
                                 <div className="font-medium text-gray-700 whitespace-nowrap">T{month.split('/')[0]}</div>
                               </th>
@@ -1319,15 +1319,15 @@ export default function Page1() {
                   {scoresLoaded && (
                     <div className="mt-2 sm:mt-3 flex flex-col sm:flex-row gap-1.5 sm:gap-4 text-[10px] sm:text-xs text-gray-600">
                       <div className="flex items-center gap-1">
-                        <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-green-100 border border-green-200 rounded flex-shrink-0"></span>
+                        <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-green-100 border border-green-200 rounded shrink-0"></span>
                         <span>≥ 8.0 điểm</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-red-100 border border-red-200 rounded flex-shrink-0"></span>
+                        <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-red-100 border border-red-200 rounded shrink-0"></span>
                         <span>&lt; 7.0 điểm</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-gray-200 border border-gray-300 rounded flex-shrink-0"></span>
+                        <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-gray-200 border border-gray-300 rounded shrink-0"></span>
                         <span>N/A (Click vào tháng hiện tại để đăng ký)</span>
                       </div>
                     </div>
@@ -1342,7 +1342,7 @@ export default function Page1() {
         {teacher && (
           <div className="border border-gray-900 rounded-lg overflow-hidden mt-3 sm:mt-4 animate-fadeIn" style={{ animationDelay: '0.3s' }}>
             {/* Header */}
-            <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-3 sm:p-4">
+            <div className="bg-linear-to-r from-purple-600 to-purple-700 text-white p-3 sm:p-4">
               <div className="flex items-center gap-2 sm:gap-3">
                 <UserCheck className="w-5 h-5 sm:w-6 sm:h-6" />
                 <div>
@@ -1449,7 +1449,7 @@ export default function Page1() {
                                 )
                               )}
                             </div>
-                            <div className="text-right flex-shrink-0">
+                            <div className="text-right shrink-0">
                               <div className={`text-xl font-bold ${scoreColor}`}>
                                 {hasScore ? score?.toFixed(1) || '—' : '—'}
                               </div>
@@ -1486,7 +1486,7 @@ export default function Page1() {
         {teacher && (
           <div className="border border-gray-900 rounded-lg overflow-hidden mt-3 sm:mt-4 animate-fadeIn" style={{ animationDelay: '0.5s' }}>
             {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-3 sm:p-4">
+            <div className="bg-linear-to-r from-blue-600 to-indigo-700 text-white p-3 sm:p-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -1563,21 +1563,21 @@ export default function Page1() {
                 <>
                   {/* Summary Stats */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-                    <div className="bg-gradient-to-br from-blue-50 to-white border border-blue-200 rounded-lg p-2 sm:p-3 text-center">
+                    <div className="bg-linear-to-br from-blue-50 to-white border border-blue-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-2xl font-bold text-blue-600">{availabilityStats.totalSlots}</div>
                       <div className="text-[10px] sm:text-xs text-gray-600 mt-0.5">Tổng slots rảnh</div>
                     </div>
-                    <div className="bg-gradient-to-br from-green-50 to-white border border-green-200 rounded-lg p-2 sm:p-3 text-center">
+                    <div className="bg-linear-to-br from-green-50 to-white border border-green-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-2xl font-bold text-green-600">
                         {availabilityStats.DAYS.find(d => d.key === availabilityStats.mostAvailableDay)?.short || 'N/A'}
                       </div>
                       <div className="text-[10px] sm:text-xs text-gray-600 mt-0.5">Ngày ưa thích</div>
                     </div>
-                    <div className="bg-gradient-to-br from-purple-50 to-white border border-purple-200 rounded-lg p-2 sm:p-3 text-center">
+                    <div className="bg-linear-to-br from-purple-50 to-white border border-purple-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-2xl font-bold text-purple-600">{availabilityStats.mostAvailableTime}</div>
                       <div className="text-[10px] sm:text-xs text-gray-600 mt-0.5">Khung giờ ưa thích</div>
                     </div>
-                    <div className="bg-gradient-to-br from-orange-50 to-white border border-orange-200 rounded-lg p-2 sm:p-3 text-center">
+                    <div className="bg-linear-to-br from-orange-50 to-white border border-orange-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-2xl font-bold text-orange-600">
                         {availabilityStats.totalRegistrations}
                       </div>
@@ -1602,23 +1602,23 @@ export default function Page1() {
                           <div className="font-bold mb-2">Hướng dẫn đọc bản đồ:</div>
                           <div className="space-y-1.5">
                             <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 bg-gray-100 rounded flex-shrink-0 border border-gray-600"></div>
+                              <div className="w-3 h-3 bg-gray-100 rounded shrink-0 border border-gray-600"></div>
                               <span><strong>0 lần:</strong> Không có lịch rảnh</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 bg-blue-300 rounded flex-shrink-0"></div>
+                              <div className="w-3 h-3 bg-blue-300 rounded shrink-0"></div>
                               <span><strong>1 lần:</strong> Ít</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 bg-blue-400 rounded flex-shrink-0"></div>
+                              <div className="w-3 h-3 bg-blue-400 rounded shrink-0"></div>
                               <span><strong>2 lần:</strong> Trung bình</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 bg-blue-500 rounded flex-shrink-0"></div>
+                              <div className="w-3 h-3 bg-blue-500 rounded shrink-0"></div>
                               <span><strong>3 lần:</strong> Nhiều</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 bg-blue-600 rounded flex-shrink-0"></div>
+                              <div className="w-3 h-3 bg-blue-600 rounded shrink-0"></div>
                               <span><strong>4+ lần:</strong> Rất nhiều</span>
                             </div>
                           </div>
@@ -1634,7 +1634,7 @@ export default function Page1() {
                     </div>
 
                     <div className="overflow-x-auto">
-                      <div className="min-w-[500px]">
+                      <div className="min-w-125">
                         {/* Header */}
                         <div className="grid grid-cols-8 gap-1 mb-1">
                           <div className="text-xs text-gray-600 font-medium"></div>
@@ -1737,7 +1737,7 @@ export default function Page1() {
                             <div key={day.key} className="flex-1 flex flex-col items-center gap-2 group">
                               <div className="relative w-full flex flex-col justify-end h-64">
                                 <div
-                                  className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${count === 0 ? 'bg-gray-200' : 'bg-gradient-to-t from-blue-600 to-blue-400 hover:from-blue-700 hover:to-blue-500'
+                                  className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${count === 0 ? 'bg-gray-200' : 'bg-linear-to-t from-blue-600 to-blue-400 hover:from-blue-700 hover:to-blue-500'
                                     }`}
                                   style={{
                                     height: `${heightPx}px`
@@ -1783,7 +1783,7 @@ export default function Page1() {
                             <div key={slot} className="flex-1 flex flex-col items-center gap-2 max-w-32 group">
                               <div className="relative w-full flex flex-col justify-end h-64">
                                 <div
-                                  className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${count === 0 ? 'bg-gray-200' : `bg-gradient-to-t ${colors[idx]}`
+                                  className={`w-full rounded-t transition-all duration-300 hover:scale-105 relative cursor-pointer shadow-md ${count === 0 ? 'bg-gray-200' : `bg-linear-to-t ${colors[idx]}`
                                     }`}
                                   style={{
                                     height: `${heightPx}px`
@@ -1844,7 +1844,7 @@ export default function Page1() {
               className="bg-white rounded-xl shadow-2xl w-full sm:max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden border border-gray-200"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className={`${modalType === "expertise" ? "bg-gradient-to-r from-blue-600 to-blue-800" : "bg-gradient-to-r from-purple-600 to-purple-800"} text-white px-3 sm:px-6 py-3 sm:py-5 flex items-center justify-between gap-2`}>
+              <div className={`${modalType === "expertise" ? "bg-linear-to-r from-blue-600 to-blue-800" : "bg-linear-to-r from-purple-600 to-purple-800"} text-white px-3 sm:px-6 py-3 sm:py-5 flex items-center justify-between gap-2`}>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-base sm:text-xl font-bold truncate">
                     Test T{modalMonth}
@@ -1862,7 +1862,7 @@ export default function Page1() {
                 </div>
                 <button
                   onClick={() => setModalOpen(false)}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 sm:p-2 transition-all flex-shrink-0"
+                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 sm:p-2 transition-all shrink-0"
                   title="Đóng"
                 >
                   <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1872,8 +1872,8 @@ export default function Page1() {
               </div>
 
               <div className="overflow-y-auto max-h-[calc(95vh-150px)] sm:max-h-[calc(90vh-220px)] bg-gray-50 overflow-x-auto">
-                <table className="w-full text-xs sm:text-sm bg-white min-w-[600px]">
-                  <thead className="bg-gradient-to-b from-gray-100 to-gray-50 border-b-2 border-gray-300 sticky top-0 z-10">
+                <table className="w-full text-xs sm:text-sm bg-white min-w-150">
+                  <thead className="bg-linear-to-b from-gray-100 to-gray-50 border-b-2 border-gray-300 sticky top-0 z-10">
                     <tr>
                       <th className="text-left py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700 w-10 sm:w-16">STT</th>
                       <th className="text-left py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700">{modalType === "expertise" ? "Bộ môn" : "Khối"}</th>
@@ -1904,8 +1904,8 @@ export default function Page1() {
                         </td>
                         <td className="py-2 sm:py-4 px-2 sm:px-4">
                           {record.emailExplanation ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-orange-50 text-orange-700 rounded-md text-[10px] sm:text-xs font-medium truncate max-w-[150px] sm:max-w-full">
-                              <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-orange-50 text-orange-700 rounded-md text-[10px] sm:text-xs font-medium truncate max-w-37.5 sm:max-w-full">
+                              <svg className="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
                                 <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
                               </svg>
@@ -1918,14 +1918,14 @@ export default function Page1() {
                         <td className="text-center py-2 sm:py-4 px-2 sm:px-4">
                           {record.isCountedInAverage ? (
                             <span className="inline-flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-3 py-1 sm:py-1.5 bg-green-100 text-green-800 rounded-lg text-[10px] sm:text-xs font-semibold whitespace-nowrap">
-                              <svg className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <svg className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                               </svg>
                               <span className="hidden sm:inline">Tính</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-3 py-1 sm:py-1.5 bg-red-100 text-red-800 rounded-lg text-[10px] sm:text-xs font-semibold whitespace-nowrap">
-                              <svg className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <svg className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                               </svg>
                               <span className="hidden sm:inline">Không</span>
@@ -1938,16 +1938,16 @@ export default function Page1() {
                 </table>
               </div>
 
-              <div className="px-3 sm:px-6 py-3 sm:py-4 bg-gradient-to-b from-gray-50 to-gray-100 border-t border-gray-200">
+              <div className="px-3 sm:px-6 py-3 sm:py-4 bg-linear-to-b from-gray-50 to-gray-100 border-t border-gray-200">
                 <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-6 text-[10px] sm:text-xs text-gray-600">
                   <div className="flex items-center gap-1.5 sm:gap-2">
-                    <svg className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
                     <span><strong>Tính:</strong> Đưa vào TB</span>
                   </div>
                   <div className="flex items-center gap-1.5 sm:gap-2">
-                    <svg className="w-3 h-3 sm:w-4 sm:h-4 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 text-red-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                     </svg>
                     <span><strong>Không:</strong> Điểm 0 + email GT</span>
