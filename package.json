@@ -6,7 +6,8 @@
     "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate": "node scripts/run-all-migrations.js"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",
