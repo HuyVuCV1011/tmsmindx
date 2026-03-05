@@ -8,9 +8,11 @@ import toast from 'react-hot-toast';
 interface User {
   email: string;
   displayName: string;
-  role: 'teacher' | 'manager';
+  role: 'teacher' | 'manager' | 'super_admin' | 'admin';
   localId: string;
   isAdmin?: boolean;
+  isAppUser?: boolean;
+  permissions?: string[];
 }
 
 interface AuthContextType {
@@ -25,8 +27,8 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   token: null,
   isLoading: true,
-  logout: () => {},
-  updateUser: () => {},
+  logout: () => { },
+  updateUser: () => { },
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -42,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check authentication status - only run once on mount
     try {
       logger.info('Initializing auth context...');
-      
+
       const storedToken = localStorage.getItem('token');
       const storedUser = localStorage.getItem('user');
 
@@ -67,15 +69,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     try {
       logger.info('Logging out user', { email: user?.email });
-      
+
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('refreshToken');
       setUser(null);
       setToken(null);
-      
+
       toast.success('Đăng xuất thành công!', { icon: '👋' });
       logger.success('User logged out successfully');
-      
+
       router.push('/login');
     } catch (error: any) {
       logger.error('Error during logout', { error: error.message });
@@ -86,12 +89,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateUser = (newUser: User, newToken: string) => {
     try {
       logger.info('Updating user in auth context', { email: newUser.email });
-      
+
       localStorage.setItem('token', newToken);
       localStorage.setItem('user', JSON.stringify(newUser));
       setUser(newUser);
       setToken(newToken);
-      
+
       logger.success('Auth context updated successfully', { email: newUser.email });
     } catch (error: any) {
       logger.error('Error updating user', { error: error.message });

@@ -3,7 +3,7 @@
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
-import { ChevronDown, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Sparkles, Users, X } from "lucide-react";
+import { ChevronDown, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -30,7 +30,7 @@ export function Sidebar() {
   // Auto-expand submenu if current page is in it
   useEffect(() => {
     const isUserArea = pathname.startsWith('/user');
-    const menuItems = isUserArea ? userMenuItems : adminMenuItems;
+    const menuItems = isUserArea ? userMenuItems : getFilteredAdminMenuItems();
 
     menuItems.forEach((item) => {
       if ('submenu' in item && item.submenu) {
@@ -67,6 +67,7 @@ export function Sidebar() {
     { href: "/admin/giaitrinh", label: "Quản lý Giải trình", icon: MessageSquare },
     { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
     { href: "/admin/database", label: "Database Manager", icon: LayoutDashboard },
+    { href: "/admin/user-management", label: "Quản lý tài khoản", icon: Shield },
   ];
 
   const userMenuItems = [
@@ -77,8 +78,40 @@ export function Sidebar() {
     { href: "/user/giaitrinh", label: "Giải trình kiểm tra", icon: MessageSquare },
   ];
 
+  // Filter admin menu items based on user permissions
+  function getFilteredAdminMenuItems() {
+    if (!user) return [];
 
-  const menuItems = isUserArea ? userMenuItems : adminMenuItems;
+    // Super admin sees everything
+    if (user.role === 'super_admin') return adminMenuItems;
+
+    // App users with permissions — filter items
+    if (user.isAppUser && user.permissions && user.permissions.length > 0) {
+      return adminMenuItems.filter(item => {
+        if ('submenu' in item && item.submenu) {
+          // Filter submenu items
+          const filteredSubmenu = item.submenu.filter(sub =>
+            user.permissions!.some(p => sub.href === p || sub.href.startsWith(p + '/'))
+          );
+          if (filteredSubmenu.length > 0) {
+            item.submenu = filteredSubmenu;
+            return true;
+          }
+          return false;
+        }
+        // Regular menu item
+        return user.permissions!.some(p => item.href === p || item.href!.startsWith(p + '/'));
+      });
+    }
+
+    // Non-app admin users (legacy Firebase admins) — show all except user-management
+    return adminMenuItems.filter(item => {
+      if ('href' in item && item.href === '/admin/user-management') return false;
+      return true;
+    });
+  }
+
+  const menuItems = isUserArea ? userMenuItems : getFilteredAdminMenuItems();
 
   const toggleSubmenu = (label: string) => {
     setExpandedMenus(prev => {
@@ -90,6 +123,18 @@ export function Sidebar() {
       localStorage.setItem('expandedMenus', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  // Get role display text
+  const getRoleDisplay = () => {
+    if (!user) return '';
+    switch (user.role) {
+      case 'super_admin': return 'Super Admin';
+      case 'admin': return 'Admin';
+      case 'manager': return 'Manager';
+      case 'teacher': return 'Teacher';
+      default: return user.role;
+    }
   };
 
   return (
@@ -255,7 +300,7 @@ export function Sidebar() {
                 </div>
                 <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-linear-to-r from-[#a1001f] to-[#c41230] text-white text-xs rounded-full font-semibold shadow-sm">
                   <Sparkles className="h-2.5 w-2.5" />
-                  <span>{user.role === 'teacher' ? 'Teacher' : 'Manager'}</span>
+                  <span>{getRoleDisplay()}</span>
                 </div>
               </Link>
 

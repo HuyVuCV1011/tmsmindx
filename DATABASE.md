@@ -346,7 +346,39 @@
 
 ---
 
-## 🔗 Relationships Diagram
+## � Authorization System (2 tables)
+
+### `app_users`
+> Tài khoản nội bộ app (không qua Firebase).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | SERIAL | PK |
+| email | VARCHAR(255) | UNIQUE, NOT NULL |
+| password_hash | VARCHAR(255) | NOT NULL, bcrypt hash |
+| display_name | VARCHAR(255) | NOT NULL |
+| role | VARCHAR(50) | `super_admin` / `admin` / `manager` |
+| is_active | BOOLEAN | Default true |
+| created_by | VARCHAR(255) | Email người tạo |
+| created_at | TIMESTAMP | |
+| updated_at | TIMESTAMP | |
+
+### `app_permissions`
+> Quyền truy cập route cho app_users.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | SERIAL | PK |
+| user_id | INTEGER | FK → app_users.id |
+| route_path | VARCHAR(255) | e.g. `/admin/dashboard` |
+| can_access | BOOLEAN | Default true |
+| created_at | TIMESTAMP | |
+
+**Constraints**: UNIQUE(user_id, route_path)
+
+---
+
+## �🔗 Relationships Diagram
 
 ```
 communications ──┬──< communication_likes
@@ -363,6 +395,8 @@ training_assignment_questions ──< training_assignment_answers
 
 training_teacher_stats ──┬──< training_teacher_video_scores
                          └──< training_teacher_answers
+
+app_users ──< app_permissions
 ```
 
 ---
@@ -383,6 +417,17 @@ training_teacher_stats ──┬──< training_teacher_video_scores
 - `GET /api/database?action=export&table=X&format=csv|json` — Export
 - `POST /api/database` — SQL query, migrations, CRUD operations
 
+## 🔐 App Auth API
+
+- `POST /api/app-auth/login` — Login bằng app account (fallback Firebase nếu không tìm thấy)
+- `GET /api/app-auth/users` — List all app users
+- `POST /api/app-auth/users` — Tạo user mới
+- `PUT /api/app-auth/users` — Update user
+- `DELETE /api/app-auth/users?id=X` — Soft delete user
+- `GET /api/app-auth/permissions?userId=X` — Lấy permissions
+- `POST /api/app-auth/permissions` — Set permissions cho user
+
 ## 📌 Admin UI
 
 - `/admin/database` — Database Manager (SQL Editor, Table Explorer, Export, CRUD)
+- `/admin/user-management` — Quản lý tài khoản & phân quyền (Super Admin only)

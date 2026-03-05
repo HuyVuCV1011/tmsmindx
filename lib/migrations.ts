@@ -7,9 +7,9 @@ import { Pool } from 'pg';
 // ============================================================
 
 interface Migration {
-    name: string;
-    version: number;
-    sql: string;
+  name: string;
+  version: number;
+  sql: string;
 }
 
 // ========== DANH SÁCH MIGRATIONS ==========
@@ -17,11 +17,11 @@ interface Migration {
 // Version tăng dần: 1, 2, 3, ...
 const migrations: Migration[] = [
 
-    // ─── V1: Bảng tracking migrations ─────────────────────
-    {
-        name: 'create_migrations_table',
-        version: 1,
-        sql: `
+  // ─── V1: Bảng tracking migrations ─────────────────────
+  {
+    name: 'create_migrations_table',
+    version: 1,
+    sql: `
       CREATE TABLE IF NOT EXISTS _migrations (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL UNIQUE,
@@ -29,13 +29,13 @@ const migrations: Migration[] = [
         applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `,
-    },
+  },
 
-    // ─── V2: Updated_at trigger function ──────────────────
-    {
-        name: 'create_updated_at_function',
-        version: 2,
-        sql: `
+  // ─── V2: Updated_at trigger function ──────────────────
+  {
+    name: 'create_updated_at_function',
+    version: 2,
+    sql: `
       CREATE OR REPLACE FUNCTION update_updated_at_column()
       RETURNS TRIGGER AS $$
       BEGIN
@@ -44,13 +44,13 @@ const migrations: Migration[] = [
       END;
       $$ language 'plpgsql';
     `,
-    },
+  },
 
-    // ─── V3: Communications (Truyền thông) ────────────────
-    {
-        name: 'create_communications',
-        version: 3,
-        sql: `
+  // ─── V3: Communications (Truyền thông) ────────────────
+  {
+    name: 'create_communications',
+    version: 3,
+    sql: `
       CREATE TABLE IF NOT EXISTS communications (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -71,13 +71,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_communications_slug ON communications(slug);
       CREATE INDEX IF NOT EXISTS idx_communications_status ON communications(status);
     `,
-    },
+  },
 
-    // ─── V4: Communication Likes ──────────────────────────
-    {
-        name: 'create_communication_likes',
-        version: 4,
-        sql: `
+  // ─── V4: Communication Likes ──────────────────────────
+  {
+    name: 'create_communication_likes',
+    version: 4,
+    sql: `
       CREATE TABLE IF NOT EXISTS communication_likes (
         id SERIAL PRIMARY KEY,
         post_id INTEGER REFERENCES communications(id) ON DELETE CASCADE,
@@ -86,13 +86,13 @@ const migrations: Migration[] = [
         UNIQUE(post_id, user_id)
       );
     `,
-    },
+  },
 
-    // ─── V5: Post Comments ────────────────────────────────
-    {
-        name: 'create_post_comments',
-        version: 5,
-        sql: `
+  // ─── V5: Post Comments ────────────────────────────────
+  {
+    name: 'create_post_comments',
+    version: 5,
+    sql: `
       CREATE TABLE IF NOT EXISTS post_comments (
         id SERIAL PRIMARY KEY,
         post_id INTEGER REFERENCES communications(id) ON DELETE CASCADE,
@@ -108,13 +108,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_post_comments_post_id ON post_comments(post_id);
       CREATE INDEX IF NOT EXISTS idx_post_comments_parent_id ON post_comments(parent_id);
     `,
-    },
+  },
 
-    // ─── V6: Comment Reactions ────────────────────────────
-    {
-        name: 'create_comment_reactions',
-        version: 6,
-        sql: `
+  // ─── V6: Comment Reactions ────────────────────────────
+  {
+    name: 'create_comment_reactions',
+    version: 6,
+    sql: `
       CREATE TABLE IF NOT EXISTS comment_reactions (
         id SERIAL PRIMARY KEY,
         comment_id INTEGER REFERENCES post_comments(id) ON DELETE CASCADE,
@@ -125,13 +125,13 @@ const migrations: Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_comment_reactions_comment_id ON comment_reactions(comment_id);
     `,
-    },
+  },
 
-    // ─── V7: Truyền thông Comments (alternate table) ─────
-    {
-        name: 'create_truyenthong_comments',
-        version: 7,
-        sql: `
+  // ─── V7: Truyền thông Comments (alternate table) ─────
+  {
+    name: 'create_truyenthong_comments',
+    version: 7,
+    sql: `
       CREATE TABLE IF NOT EXISTS truyenthong_comments (
         id SERIAL PRIMARY KEY,
         post_slug VARCHAR(255) NOT NULL,
@@ -156,13 +156,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_comments_created_at ON truyenthong_comments(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_comment_reactions_tt_comment_id ON truyenthong_comment_reactions(comment_id);
     `,
-    },
+  },
 
-    // ─── V8: Explanations (Giải trình) ───────────────────
-    {
-        name: 'create_explanations',
-        version: 8,
-        sql: `
+  // ─── V8: Explanations (Giải trình) ───────────────────
+  {
+    name: 'create_explanations',
+    version: 8,
+    sql: `
       CREATE TABLE IF NOT EXISTS explanations (
         id SERIAL PRIMARY KEY,
         teacher_name VARCHAR(255) NOT NULL,
@@ -183,13 +183,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_explanations_status ON explanations(status);
       CREATE INDEX IF NOT EXISTS idx_explanations_created_at ON explanations(created_at DESC);
     `,
-    },
+  },
 
-    // ─── V9: Teacher Certificates ─────────────────────────
-    {
-        name: 'create_teacher_certificates',
-        version: 9,
-        sql: `
+  // ─── V9: Teacher Certificates ─────────────────────────
+  {
+    name: 'create_teacher_certificates',
+    version: 9,
+    sql: `
       CREATE TABLE IF NOT EXISTS teacher_certificates (
         id SERIAL PRIMARY KEY,
         teacher_email VARCHAR(255) NOT NULL,
@@ -206,13 +206,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_teacher_certificates_email ON teacher_certificates(teacher_email);
       CREATE INDEX IF NOT EXISTS idx_teacher_certificates_created_at ON teacher_certificates(created_at DESC);
     `,
-    },
+  },
 
-    // ─── V10: Teacher Privacy Settings ────────────────────
-    {
-        name: 'create_teacher_privacy_settings',
-        version: 10,
-        sql: `
+  // ─── V10: Teacher Privacy Settings ────────────────────
+  {
+    name: 'create_teacher_privacy_settings',
+    version: 10,
+    sql: `
       CREATE TABLE IF NOT EXISTS teacher_privacy_settings (
         id SERIAL PRIMARY KEY,
         teacher_email VARCHAR(255) NOT NULL UNIQUE,
@@ -225,13 +225,13 @@ const migrations: Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_teacher_privacy_email ON teacher_privacy_settings(teacher_email);
     `,
-    },
+  },
 
-    // ─── V11: Training Videos ────────────────────────────
-    {
-        name: 'create_training_videos',
-        version: 11,
-        sql: `
+  // ─── V11: Training Videos ────────────────────────────
+  {
+    name: 'create_training_videos',
+    version: 11,
+    sql: `
       CREATE TABLE IF NOT EXISTS training_videos (
         id SERIAL PRIMARY KEY,
         title VARCHAR(500) NOT NULL,
@@ -250,13 +250,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_training_videos_status ON training_videos(status);
       CREATE INDEX IF NOT EXISTS idx_training_videos_lesson_number ON training_videos(lesson_number);
     `,
-    },
+  },
 
-    // ─── V12: Training Video Questions ─────────────────────
-    {
-        name: 'create_training_video_questions',
-        version: 12,
-        sql: `
+  // ─── V12: Training Video Questions ─────────────────────
+  {
+    name: 'create_training_video_questions',
+    version: 12,
+    sql: `
       CREATE TABLE IF NOT EXISTS training_video_questions (
         id SERIAL PRIMARY KEY,
         video_id INTEGER NOT NULL REFERENCES training_videos(id) ON DELETE CASCADE,
@@ -273,13 +273,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_training_video_questions_video_id ON training_video_questions(video_id);
       CREATE INDEX IF NOT EXISTS idx_training_video_questions_order ON training_video_questions(order_number);
     `,
-    },
+  },
 
-    // ─── V13: Training Video Assignments ──────────────────
-    {
-        name: 'create_training_video_assignments',
-        version: 13,
-        sql: `
+  // ─── V13: Training Video Assignments ──────────────────
+  {
+    name: 'create_training_video_assignments',
+    version: 13,
+    sql: `
       CREATE TABLE IF NOT EXISTS training_video_assignments (
         id SERIAL PRIMARY KEY,
         video_id INTEGER NOT NULL REFERENCES training_videos(id) ON DELETE CASCADE,
@@ -299,13 +299,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_training_video_assignments_video_id ON training_video_assignments(video_id);
       CREATE INDEX IF NOT EXISTS idx_training_video_assignments_status ON training_video_assignments(status);
     `,
-    },
+  },
 
-    // ─── V14: Training Assignment Questions ────────────────
-    {
-        name: 'create_training_assignment_questions',
-        version: 14,
-        sql: `
+  // ─── V14: Training Assignment Questions ────────────────
+  {
+    name: 'create_training_assignment_questions',
+    version: 14,
+    sql: `
       CREATE TABLE IF NOT EXISTS training_assignment_questions (
         id SERIAL PRIMARY KEY,
         assignment_id INTEGER NOT NULL REFERENCES training_video_assignments(id) ON DELETE CASCADE,
@@ -324,13 +324,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_training_assignment_questions_assignment_id ON training_assignment_questions(assignment_id);
       CREATE INDEX IF NOT EXISTS idx_training_assignment_questions_order ON training_assignment_questions(order_number);
     `,
-    },
+  },
 
-    // ─── V15: Training Assignment Submissions ─────────────
-    {
-        name: 'create_training_assignment_submissions',
-        version: 15,
-        sql: `
+  // ─── V15: Training Assignment Submissions ─────────────
+  {
+    name: 'create_training_assignment_submissions',
+    version: 15,
+    sql: `
       CREATE TABLE IF NOT EXISTS training_assignment_submissions (
         id SERIAL PRIMARY KEY,
         teacher_code VARCHAR(50) NOT NULL,
@@ -353,13 +353,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_training_submissions_assignment ON training_assignment_submissions(assignment_id);
       CREATE INDEX IF NOT EXISTS idx_training_submissions_status ON training_assignment_submissions(status);
     `,
-    },
+  },
 
-    // ─── V16: Training Assignment Answers ─────────────────
-    {
-        name: 'create_training_assignment_answers',
-        version: 16,
-        sql: `
+  // ─── V16: Training Assignment Answers ─────────────────
+  {
+    name: 'create_training_assignment_answers',
+    version: 16,
+    sql: `
       CREATE TABLE IF NOT EXISTS training_assignment_answers (
         id SERIAL PRIMARY KEY,
         submission_id INTEGER NOT NULL REFERENCES training_assignment_submissions(id) ON DELETE CASCADE,
@@ -373,13 +373,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_training_answers_submission ON training_assignment_answers(submission_id);
       CREATE INDEX IF NOT EXISTS idx_training_answers_question ON training_assignment_answers(question_id);
     `,
-    },
+  },
 
-    // ─── V17: Training Teacher Stats ──────────────────────
-    {
-        name: 'create_training_teacher_stats',
-        version: 17,
-        sql: `
+  // ─── V17: Training Teacher Stats ──────────────────────
+  {
+    name: 'create_training_teacher_stats',
+    version: 17,
+    sql: `
       CREATE TABLE IF NOT EXISTS training_teacher_stats (
         id SERIAL PRIMARY KEY,
         teacher_code VARCHAR(50) NOT NULL UNIQUE,
@@ -398,13 +398,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_training_teacher_stats_code ON training_teacher_stats(teacher_code);
       CREATE INDEX IF NOT EXISTS idx_training_teacher_stats_email ON training_teacher_stats(work_email);
     `,
-    },
+  },
 
-    // ─── V18: Training Teacher Video Scores ───────────────
-    {
-        name: 'create_training_teacher_video_scores',
-        version: 18,
-        sql: `
+  // ─── V18: Training Teacher Video Scores ───────────────
+  {
+    name: 'create_training_teacher_video_scores',
+    version: 18,
+    sql: `
       CREATE TABLE IF NOT EXISTS training_teacher_video_scores (
         id SERIAL PRIMARY KEY,
         teacher_code VARCHAR(50) NOT NULL,
@@ -423,13 +423,13 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_training_tvs_teacher ON training_teacher_video_scores(teacher_code);
       CREATE INDEX IF NOT EXISTS idx_training_tvs_video ON training_teacher_video_scores(video_id);
     `,
-    },
+  },
 
-    // ─── V19: Training Teacher Answers ────────────────────
-    {
-        name: 'create_training_teacher_answers',
-        version: 19,
-        sql: `
+  // ─── V19: Training Teacher Answers ────────────────────
+  {
+    name: 'create_training_teacher_answers',
+    version: 19,
+    sql: `
       CREATE TABLE IF NOT EXISTS training_teacher_answers (
         id SERIAL PRIMARY KEY,
         teacher_code VARCHAR(50) NOT NULL,
@@ -443,17 +443,174 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_training_ta_teacher ON training_teacher_answers(teacher_code);
       CREATE INDEX IF NOT EXISTS idx_training_ta_video ON training_teacher_answers(video_id);
     `,
-    },
+  },
 
-    // ═══════════════════════════════════════════════════════
-    // THÊM MIGRATION MỚI Ở ĐÂY
-    // Ví dụ cho chức năng mới:
-    // {
-    //   name: 'create_exam_schedules',
-    //   version: 20,
-    //   sql: `CREATE TABLE IF NOT EXISTS exam_schedules (...);`,
-    // },
-    // ═══════════════════════════════════════════════════════
+  // ─── V20: App Users & Permissions (In-app Authorization) ─
+  {
+    name: 'create_app_users_and_permissions',
+    version: 20,
+    sql: `
+      -- Bảng tài khoản nội bộ app
+      CREATE TABLE IF NOT EXISTS app_users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        display_name VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL DEFAULT 'admin',
+        is_active BOOLEAN DEFAULT true,
+        created_by VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_users_email ON app_users(email);
+      CREATE INDEX IF NOT EXISTS idx_app_users_role ON app_users(role);
+
+      -- Bảng phân quyền route
+      CREATE TABLE IF NOT EXISTS app_permissions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        route_path VARCHAR(255) NOT NULL,
+        can_access BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT unique_user_route UNIQUE (user_id, route_path)
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_permissions_user_id ON app_permissions(user_id);
+
+      -- Seed super admin: HOTeaching@mindx.com.vn / MindX@2024
+      INSERT INTO app_users (email, password_hash, display_name, role, created_by)
+      VALUES (
+        'hoteaching@mindx.com.vn',
+        '$2b$10$wveSDVP2lAmmUVyNuG9foO5olJu.Scj/6Y5c29haEd2aw1SDTYyoG',
+        'HO Teaching',
+        'super_admin',
+        'system'
+      )
+      ON CONFLICT (email) DO NOTHING;
+
+      -- Grant super admin all permissions
+      INSERT INTO app_permissions (user_id, route_path, can_access)
+      SELECT u.id, route.path, true
+      FROM app_users u,
+      (VALUES
+        ('/admin/dashboard'),
+        ('/admin/page1'),
+        ('/admin/page2'),
+        ('/admin/page3'),
+        ('/admin/page4'),
+        ('/admin/page5'),
+        ('/admin/training-dashboard'),
+        ('/admin/assignments'),
+        ('/admin/assignment-questions'),
+        ('/admin/giaitrinh'),
+        ('/admin/truyenthong'),
+        ('/admin/database'),
+        ('/admin/user-management'),
+        ('/admin/video-setup'),
+        ('/admin/video-detail'),
+        ('/admin/baitap'),
+        ('/admin/training-studio')
+      ) AS route(path)
+      WHERE u.email = 'hoteaching@mindx.com.vn'
+      ON CONFLICT (user_id, route_path) DO NOTHING;
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // THÊM MIGRATION MỚI Ở ĐÂY
+  // ═══════════════════════════════════════════════════════
+
+  // ═══════════════════════════════════════════════════════
+  // V21: Support Firebase accounts in permission system
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V21_app_users_auth_type',
+    version: 21,
+    sql: `
+      -- Allow null password for Firebase-authenticated accounts
+      ALTER TABLE app_users ALTER COLUMN password_hash DROP NOT NULL;
+
+      -- Add auth_type to distinguish app vs firebase accounts
+      DO $$ BEGIN
+        ALTER TABLE app_users ADD COLUMN auth_type VARCHAR(20) DEFAULT 'app';
+      EXCEPTION WHEN duplicate_column THEN NULL;
+      END $$;
+
+      -- Update existing records
+      UPDATE app_users SET auth_type = 'app' WHERE auth_type IS NULL;
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V22: Role-based permission system
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V22_role_based_permissions',
+    version: 22,
+    sql: `
+      -- Role → screen permissions
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        id SERIAL PRIMARY KEY,
+        role_code VARCHAR(20) NOT NULL REFERENCES roles(role_code) ON DELETE CASCADE,
+        route_path VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(role_code, route_path)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_role_permissions_role ON role_permissions(role_code);
+
+      -- User → multiple roles
+      CREATE TABLE IF NOT EXISTS user_roles (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        role_code VARCHAR(20) NOT NULL REFERENCES roles(role_code) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, role_code)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_user_roles_user ON user_roles(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_roles_role ON user_roles(role_code);
+
+      -- Seed default: AD (Admin) role gets all admin screens
+      INSERT INTO role_permissions (role_code, route_path) VALUES
+        ('AD', '/admin/dashboard'),
+        ('AD', '/admin/page1'),
+        ('AD', '/admin/page2'),
+        ('AD', '/admin/page3'),
+        ('AD', '/admin/page4'),
+        ('AD', '/admin/page5'),
+        ('AD', '/admin/training-dashboard'),
+        ('AD', '/admin/assignments'),
+        ('AD', '/admin/giaitrinh'),
+        ('AD', '/admin/truyenthong'),
+        ('AD', '/admin/database'),
+        ('AD', '/admin/user-management')
+      ON CONFLICT DO NOTHING;
+
+      -- Seed: TM (Teaching Manager) gets management screens
+      INSERT INTO role_permissions (role_code, route_path) VALUES
+        ('TM', '/admin/dashboard'),
+        ('TM', '/admin/page1'),
+        ('TM', '/admin/page5'),
+        ('TM', '/admin/training-dashboard'),
+        ('TM', '/admin/assignments'),
+        ('TM', '/admin/giaitrinh'),
+        ('TM', '/admin/truyenthong')
+      ON CONFLICT DO NOTHING;
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V23: Add status to centers
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V23_center_status',
+    version: 23,
+    sql: `
+      ALTER TABLE centers ADD COLUMN IF NOT EXISTS status VARCHAR(10) DEFAULT 'Active' NOT NULL;
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========
@@ -461,12 +618,12 @@ const migrations: Migration[] = [
 let migrationRan = false;
 
 export async function runMigrations(pool: Pool): Promise<{ success: boolean; applied: string[]; errors: string[] }> {
-    const applied: string[] = [];
-    const errors: string[] = [];
+  const applied: string[] = [];
+  const errors: string[] = [];
 
-    try {
-        // Bước 1: Tạo bảng _migrations trước (luôn chạy)
-        await pool.query(`
+  try {
+    // Bước 1: Tạo bảng _migrations trước (luôn chạy)
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS _migrations (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL UNIQUE,
@@ -475,59 +632,59 @@ export async function runMigrations(pool: Pool): Promise<{ success: boolean; app
       );
     `);
 
-        // Bước 2: Lấy danh sách migration đã chạy
-        const result = await pool.query('SELECT name FROM _migrations');
-        const appliedMigrations = new Set(result.rows.map((r: { name: string }) => r.name));
+    // Bước 2: Lấy danh sách migration đã chạy
+    const result = await pool.query('SELECT name FROM _migrations');
+    const appliedMigrations = new Set(result.rows.map((r: { name: string }) => r.name));
 
-        // Bước 3: Chạy từng migration chưa applied
-        for (const migration of migrations) {
-            if (appliedMigrations.has(migration.name)) {
-                continue; // Đã chạy rồi, bỏ qua
-            }
+    // Bước 3: Chạy từng migration chưa applied
+    for (const migration of migrations) {
+      if (appliedMigrations.has(migration.name)) {
+        continue; // Đã chạy rồi, bỏ qua
+      }
 
-            try {
-                await pool.query('BEGIN');
-                await pool.query(migration.sql);
-                await pool.query(
-                    'INSERT INTO _migrations (name, version) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING',
-                    [migration.name, migration.version]
-                );
-                await pool.query('COMMIT');
+      try {
+        await pool.query('BEGIN');
+        await pool.query(migration.sql);
+        await pool.query(
+          'INSERT INTO _migrations (name, version) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING',
+          [migration.name, migration.version]
+        );
+        await pool.query('COMMIT');
 
-                applied.push(migration.name);
-                console.log(`  ✅ Migration applied: ${migration.name} (v${migration.version})`);
-            } catch (err: any) {
-                await pool.query('ROLLBACK');
-                const errorMsg = `Migration ${migration.name} failed: ${err.message}`;
-                errors.push(errorMsg);
-                console.error(`  ❌ ${errorMsg}`);
-                // Tiếp tục với migration tiếp theo (không dừng lại)
-            }
-        }
-
-        return { success: errors.length === 0, applied, errors };
-    } catch (err: any) {
-        console.error('❌ Migration system error:', err.message);
-        return { success: false, applied, errors: [err.message] };
+        applied.push(migration.name);
+        console.log(`  ✅ Migration applied: ${migration.name} (v${migration.version})`);
+      } catch (err: any) {
+        await pool.query('ROLLBACK');
+        const errorMsg = `Migration ${migration.name} failed: ${err.message}`;
+        errors.push(errorMsg);
+        console.error(`  ❌ ${errorMsg}`);
+        // Tiếp tục với migration tiếp theo (không dừng lại)
+      }
     }
+
+    return { success: errors.length === 0, applied, errors };
+  } catch (err: any) {
+    console.error('❌ Migration system error:', err.message);
+    return { success: false, applied, errors: [err.message] };
+  }
 }
 
 export async function initDatabase(pool: Pool): Promise<void> {
-    if (migrationRan) return; // Chỉ chạy 1 lần
-    migrationRan = true;
+  if (migrationRan) return; // Chỉ chạy 1 lần
+  migrationRan = true;
 
-    console.log('\n🔄 Running database migrations...');
-    const result = await runMigrations(pool);
+  console.log('\n🔄 Running database migrations...');
+  const result = await runMigrations(pool);
 
-    if (result.applied.length === 0) {
-        console.log('✅ Database is up to date. No new migrations.\n');
-    } else {
-        console.log(`✅ Applied ${result.applied.length} migration(s).\n`);
-    }
+  if (result.applied.length === 0) {
+    console.log('✅ Database is up to date. No new migrations.\n');
+  } else {
+    console.log(`✅ Applied ${result.applied.length} migration(s).\n`);
+  }
 
-    if (result.errors.length > 0) {
-        console.warn(`⚠️ ${result.errors.length} migration(s) had errors (may be already existing tables).\n`);
-    }
+  if (result.errors.length > 0) {
+    console.warn(`⚠️ ${result.errors.length} migration(s) had errors (may be already existing tables).\n`);
+  }
 }
 
 export { migrations };

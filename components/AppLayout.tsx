@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/lib/auth-context";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 interface AppLayoutProps {
@@ -19,6 +19,7 @@ export default function AppLayout({
 }: AppLayoutProps) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const hasRedirected = useRef(false);
 
   useEffect(() => {
@@ -31,18 +32,40 @@ export default function AppLayout({
       return;
     }
 
-    // Redirect to user area if admin required but user is not admin
-    if (requireAdmin && user && !user.isAdmin && !hasRedirected.current) {
-      hasRedirected.current = true;
-      router.replace('/user/thongtingv');
-      return;
+    // Check admin access
+    if (requireAdmin && user && !hasRedirected.current) {
+      const isSuperAdmin = user.role === 'super_admin';
+      const isAdminUser = user.isAdmin || ['super_admin', 'admin'].includes(user.role);
+
+      if (!isAdminUser) {
+        // Not an admin at all — redirect to user area
+        hasRedirected.current = true;
+        router.replace('/user/thongtingv');
+        return;
+      }
+
+      // Super admin bypasses all permission checks
+      if (!isSuperAdmin && user.permissions && user.permissions.length > 0) {
+        // Check if user has permission for current route
+        const hasPermission = user.permissions.some(p =>
+          pathname === p || pathname.startsWith(p + '/')
+        );
+
+        if (!hasPermission) {
+          // Find first allowed route to redirect to
+          const firstAllowed = user.permissions.find(p => p.startsWith('/admin/'));
+          hasRedirected.current = true;
+          router.replace(firstAllowed || '/user/thongtingv');
+          return;
+        }
+      }
     }
 
     // Reset redirect flag when user logs in
     if (user) {
       hasRedirected.current = false;
     }
-  }, [user, isLoading, router, requireAuth, requireAdmin, redirectPath]);
+  }, [user, isLoading, router, requireAuth, requireAdmin, redirectPath, pathname]);
 
   // Show skeleton while checking authentication
   if (isLoading) {
@@ -67,8 +90,11 @@ export default function AppLayout({
     return null;
   }
 
-  if (requireAdmin && (!user || !user.isAdmin)) {
-    return null;
+  if (requireAdmin && user) {
+    const isAdminUser = user.isAdmin || ['super_admin', 'admin'].includes(user.role);
+    if (!isAdminUser) {
+      return null;
+    }
   }
 
   return (
