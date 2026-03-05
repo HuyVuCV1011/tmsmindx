@@ -85,29 +85,35 @@ export function Sidebar() {
     // Super admin sees everything
     if (user.role === 'super_admin') return adminMenuItems;
 
-    // App users with permissions — filter items
-    if (user.isAppUser && user.permissions && user.permissions.length > 0) {
-      return adminMenuItems.filter(item => {
-        if ('submenu' in item && item.submenu) {
-          // Filter submenu items
-          const filteredSubmenu = item.submenu.filter(sub =>
-            user.permissions!.some(p => sub.href === p || sub.href.startsWith(p + '/'))
-          );
-          if (filteredSubmenu.length > 0) {
-            item.submenu = filteredSubmenu;
-            return true;
-          }
-          return false;
-        }
-        // Regular menu item
-        return user.permissions!.some(p => item.href === p || item.href!.startsWith(p + '/'));
-      });
-    }
+    // Filter items based on permissions
+    const permissions = user.permissions || [];
 
-    // Non-app admin users (legacy Firebase admins) — show all except user-management
+    // If no specific permissions, return empty (or common routes if any)
+    if (permissions.length === 0) return [];
+
     return adminMenuItems.filter(item => {
-      if ('href' in item && item.href === '/admin/user-management') return false;
-      return true;
+      if ('submenu' in item && item.submenu) {
+        // Filter submenu items
+        const filteredSubmenu = item.submenu.filter(sub =>
+          permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
+        );
+        if (filteredSubmenu.length > 0) {
+          // Note: We create a shallow copy of the item and deep copy of the submenu to avoid mutating the original adminMenuItems
+          return true;
+        }
+        return false;
+      }
+      // Regular menu item
+      return permissions.some(p => item.href === p || (item.href && item.href.startsWith(p + '/')));
+    }).map(item => {
+      // For items with submenus, we need to return the filtered version
+      if ('submenu' in item && item.submenu) {
+        const filteredSubmenu = item.submenu.filter(sub =>
+          permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
+        );
+        return { ...item, submenu: filteredSubmenu };
+      }
+      return item;
     });
   }
 

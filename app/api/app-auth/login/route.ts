@@ -31,7 +31,20 @@ export async function POST(request: NextRequest) {
 
         const user = userResult.rows[0];
 
+        // If the user is marked as a firebase user in the database, 
+        // fallback to Firebase auth instead of trying to authenticate locally.
+        if (user.auth_type === 'firebase') {
+            return NextResponse.json({ appUser: false });
+        }
+
         // Verify password
+        if (!user.password_hash) {
+            return NextResponse.json(
+                { error: 'Tài khoản không có mật khẩu hợp lệ.' },
+                { status: 401 }
+            );
+        }
+
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
         if (!isValidPassword) {
             return NextResponse.json(

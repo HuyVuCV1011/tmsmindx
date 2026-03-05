@@ -21,6 +21,7 @@ interface AuthContextType {
   isLoading: boolean;
   logout: () => void;
   updateUser: (user: User, token: string) => void;
+  refreshPermissions: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -29,6 +30,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   logout: () => { },
   updateUser: () => { },
+  refreshPermissions: async () => { },
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -102,8 +104,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const refreshPermissions = async () => {
+    if (!user) return;
+
+    try {
+      const response = await fetch(`/api/check-admin?email=${encodeURIComponent(user.email)}`);
+      const data = await response.json();
+
+      if (data.success && data.permissions) {
+        // Compare with current permissions to avoid unnecessary updates
+        const currentPerms = JSON.stringify([...(user.permissions || [])].sort());
+        const newPerms = JSON.stringify([...data.permissions].sort());
+        const currentRole = user.role;
+        const newRole = data.role;
+
+        if (currentPerms !== newPerms || currentRole !== newRole) {
+          const updatedUser = {
+            ...user,
+            role: newRole,
+            permissions: data.permissions,
+            isAdmin: data.isAdmin
+          };
+
+          setUser(updatedUser);
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          logger.success('Permissions refreshed successfully', { email: user.email });
+        }
+      }
+    } catch (error: any) {
+      logger.error('Error refreshing permissions', { error: error.message });
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, token, isLoading, logout, updateUser, refreshPermissions }}>
       {children}
     </AuthContext.Provider>
   );
