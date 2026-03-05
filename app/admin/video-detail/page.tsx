@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
+import toast from 'react-hot-toast';
 
 interface Video {
   id: number;
@@ -25,6 +26,27 @@ interface Video {
   }>;
 }
 
+type TrainingVideoQuestionType = 'multiple_choice' | 'true_false' | 'short_answer' | 'open_ended';
+
+interface InteractiveQuestion {
+  id?: number;
+  time: number;
+  question: string;
+  options: string[];
+  answer: number;
+}
+
+interface CreateTrainingVideoQuestionPayload {
+  video_id: number;
+  question_text: string;
+  question_type: TrainingVideoQuestionType;
+  time_in_video: number;
+  correct_answer: string;
+  options: string[];
+  points: number;
+  order_number: number;
+}
+
 function VideoDetailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -33,7 +55,7 @@ function VideoDetailContent() {
   const [video, setVideo] = useState<Video | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [questions, setQuestions] = useState<Array<{id?: number, time: number, question: string, options: string[], answer: number}>>([]);
+  const [questions, setQuestions] = useState<InteractiveQuestion[]>([]);
   const [tab, setTab] = useState<'student' | 'question'>('student');
   const [newQuestion, setNewQuestion] = useState("");
   const [newOptions, setNewOptions] = useState(["", ""]);
@@ -43,11 +65,26 @@ function VideoDetailContent() {
   const [assigning, setAssigning] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deletingVideo, setDeletingVideo] = useState(false);
   const [msg, setMsg] = useState<string|null>(null);
   const [showQuestionIdx, setShowQuestionIdx] = useState<number|null>(null);
   const [userAnswer, setUserAnswer] = useState<number|null>(null);
   const [previewMode, setPreviewMode] = useState(false);
+  const [loadedDurationSeconds, setLoadedDurationSeconds] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const openAddQuestionModal = () => {
+    if (!video) return;
+    if (video.status === 'active') {
+      toast.error('Video đang Active, chỉ được thêm câu hỏi khi ở trạng thái Draft hoặc Inactive.');
+      return;
+    }
+
+    setShowAdd(true);
+    if (videoRef.current) {
+      setAddTime(Math.floor(videoRef.current.currentTime).toString());
+    }
+  };
 
   // Fetch video data
   useEffect(() => {
@@ -86,11 +123,15 @@ function VideoDetailContent() {
         // Convert from database format to component state format
         const loadedQuestions = data.data.map((q: any) => ({
           id: q.id,
-          time: q.time_in_video,
+          time: Number(q.time_in_video) || 0,
           question: q.question_text,
-          options: typeof q.options === 'string' ? JSON.parse(q.options) : (q.options || []),
-          answer: parseInt(q.correct_answer) || 0
-        }));
+          options: Array.isArray(q.options)
+            ? q.options
+            : (typeof q.options === 'string'
+              ? JSON.parse(q.options || '[]')
+              : []),
+          answer: Number.parseInt(String(q.correct_answer ?? '0'), 10) || 0
+        } as InteractiveQuestion));
         setQuestions(loadedQuestions);
         console.log('[Video Detail] Loaded questions:', loadedQuestions);
       }
@@ -105,23 +146,26 @@ function VideoDetailContent() {
     loadQuestions(videoId);
   }, [videoId]);
 
+  useEffect(() => {
+    if (video?.status === 'active' && showAdd) {
+      setShowAdd(false);
+      toast.error('Video đang Active, không thể thêm câu hỏi.');
+    }
+  }, [video?.status, showAdd]);
+
   // Save question to database
-  const saveQuestionToDb = async (question: {time: number, question: string, options: string[], answer: number}) => {
+  const saveQuestionToDb = async (payload: CreateTrainingVideoQuestionPayload) => {
     if (!videoId) {
       console.error('[Video Detail] No videoId');
       return;
     }
+
+    if (video?.status === 'active') {
+      toast.error('Video đang Active, không thể thêm câu hỏi mới.');
+      return;
+    }
     
     try {
-      const payload = {
-        video_id: parseInt(videoId),
-        question_text: question.question,
-        time_in_video: question.time,
-        correct_answer: question.answer.toString(),
-        options: question.options,
-        question_type: 'multiple_choice',
-        points: 1.00
-      };
       console.log('[Video Detail] Sending payload:', payload);
       
       // Get auth token from localStorage
@@ -183,27 +227,7 @@ function VideoDetailContent() {
   };
 
   // State for interactive questions
-<<<<<<< HEAD
   // Tự động pause video khi đến thời điểm có câu hỏi (chỉ khi bật preview)
-=======
-  const [questions, setQuestions] = useState<Array<{id?: number, time: number, question: string, options: string[], answer: number}>>([]);
-  const [tab, setTab] = useState<'student' | 'question'>('student');
-  const [newQuestion, setNewQuestion] = useState("");
-  const [newOptions, setNewOptions] = useState(["", ""]);
-  const [newAnswer, setNewAnswer] = useState(0);
-  const [addTime, setAddTime] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
-  const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [assigning, setAssigning] = useState(false);
-  const [drafting, setDrafting] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [msg, setMsg] = useState<string|null>(null);
-  const [showQuestionIdx, setShowQuestionIdx] = useState<number|null>(null);
-  const [userAnswer, setUserAnswer] = useState<number|null>(null);
-
-  // Tự động pause video khi đến thời điểm có câu hỏi
->>>>>>> 57865e52314c2e595a82dcd7dc0cb01da7b2bbc2
   useEffect(() => {
     if (!previewMode) {
       setShowQuestionIdx(null);
@@ -299,6 +323,40 @@ function VideoDetailContent() {
     }
   };
 
+  const handleDeleteVideo = async () => {
+    if (!video) return;
+
+    if (!confirm(`Bạn có chắc muốn xóa vĩnh viễn video "${video.title}"?\n\nHành động này không thể hoàn tác.`)) {
+      return;
+    }
+
+    setDeletingVideo(true);
+    setMsg(null);
+
+    try {
+      const response = await fetch('/api/training-videos', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: video.id })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setMsg('Đã xóa video thành công!');
+        setTimeout(() => {
+          router.push('/admin/page5');
+        }, 500);
+      } else {
+        setMsg('Lỗi: ' + data.error);
+      }
+    } catch (err) {
+      console.error('Error deleting video:', err);
+      setMsg('Lỗi khi xóa video');
+    } finally {
+      setDeletingVideo(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-8">
@@ -369,6 +427,16 @@ function VideoDetailContent() {
   // Calculate stats
   const totalStudents = video.students?.length || 0;
   const completedStudents = video.students?.filter(s => s.turnedIn).length || 0;
+  const durationFromDbSeconds = Math.max(0, Math.round((Number(video.duration_minutes) || 0) * 60));
+  const effectiveDurationSeconds = loadedDurationSeconds && loadedDurationSeconds > 0
+    ? loadedDurationSeconds
+    : durationFromDbSeconds;
+  const effectiveDurationMinutes = effectiveDurationSeconds > 0
+    ? Math.max(1, Math.round(effectiveDurationSeconds / 60))
+    : 0;
+  const totalStudentAttempts = video.students?.reduce((sum, s) => sum + Math.max(0, Number(s.attempts) || 0), 0) || 0;
+  const totalActualViewers = video.students?.filter((s) => (Number(s.watched) || 0) > 0).length || 0;
+  const effectiveViewCount = Math.max(Number(video.view_count) || 0, totalStudentAttempts, totalActualViewers);
   const avgWatchPercentage = totalStudents > 0 
     ? Math.round(video.students!.reduce((sum, s) => sum + s.watched, 0) / totalStudents) 
     : 0;
@@ -405,14 +473,14 @@ function VideoDetailContent() {
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                   </svg>
-                  {video.duration_minutes} phút
+                  {effectiveDurationMinutes} phút
                 </span>
                 <span className="flex items-center gap-1">
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
                     <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
                   </svg>
-                  {video.view_count} lượt xem
+                  {effectiveViewCount} lượt xem
                 </span>
               </div>
             </div>
@@ -456,6 +524,12 @@ function VideoDetailContent() {
                   ref={videoRef}
                   src={video.video_link}
                   controls
+                  onLoadedMetadata={(event) => {
+                    const duration = event.currentTarget.duration;
+                    if (Number.isFinite(duration) && duration > 0) {
+                      setLoadedDurationSeconds(Math.round(duration));
+                    }
+                  }}
                   className="w-full h-full"
                   poster={video.thumbnail_url || undefined}
                 />
@@ -466,7 +540,7 @@ function VideoDetailContent() {
                         <div
                           key={idx}
                           className="absolute top-0 bottom-0 w-1 bg-yellow-400 hover:bg-yellow-300 cursor-pointer"
-                          style={{ left: `${(q.time / (video.duration_minutes * 60)) * 100}%` }}
+                          style={{ left: `${effectiveDurationSeconds > 0 ? (q.time / effectiveDurationSeconds) * 100 : 0}%` }}
                           title={`${Math.floor(q.time / 60)}:${String(q.time % 60).padStart(2, '0')} - ${q.question}`}
                           onClick={() => {
                             if (videoRef.current) {
@@ -669,14 +743,9 @@ function VideoDetailContent() {
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold text-gray-900">Câu hỏi tương tác</h3>
                       <button
-                        onClick={() => {
-                          setShowAdd(true);
-                          setEditingQuestionIndex(null);
-                          if (videoRef.current) {
-                            setAddTime(Math.floor(videoRef.current.currentTime).toString());
-                          }
-                        }}
-                        className="flex items-center gap-2 bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white px-4 py-2 rounded-xl hover:shadow-lg hover:from-[#8a0019] hover:to-[#a1001f] transition font-medium"
+                        onClick={openAddQuestionModal}
+                        disabled={video.status === 'active'}
+                        className="flex items-center gap-2 bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white px-4 py-2 rounded-xl hover:shadow-lg hover:from-[#8a0019] hover:to-[#a1001f] transition font-medium disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -695,8 +764,9 @@ function VideoDetailContent() {
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có câu hỏi</h3>
                         <p className="text-gray-600 mb-4">Thêm câu hỏi tương tác để tăng engagement</p>
                         <button
-                          onClick={() => setShowAdd(true)}
-                          className="inline-flex items-center gap-2 bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white px-6 py-3 rounded-xl hover:from-[#8a0019] hover:to-[#a1001f] transition font-medium shadow-lg hover:shadow-xl"
+                          onClick={openAddQuestionModal}
+                          disabled={video.status === 'active'}
+                          className="inline-flex items-center gap-2 bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white px-6 py-3 rounded-xl hover:from-[#8a0019] hover:to-[#a1001f] transition font-medium shadow-lg hover:shadow-xl disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -764,6 +834,11 @@ function VideoDetailContent() {
                               </div>
                               <button
                                 onClick={async () => {
+                                  if (video.status === 'active') {
+                                    toast.error('Video đang Active, không thể xóa câu hỏi tương tác.');
+                                    return;
+                                  }
+
                                   if (confirm('Bạn có chắc muốn xóa câu hỏi này?')) {
                                     if (q.id) {
                                       await deleteQuestionFromDb(q.id);
@@ -771,7 +846,8 @@ function VideoDetailContent() {
                                     setQuestions(questions.filter((_, i) => i !== idx));
                                   }
                                 }}
-                                className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"
+                                disabled={video.status === 'active'}
+                                className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition disabled:text-gray-400 disabled:hover:bg-transparent disabled:cursor-not-allowed"
                                 title="Xóa câu hỏi"
                               >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -933,6 +1009,28 @@ function VideoDetailContent() {
                     )}
                   </button>
                 )}
+
+                <button
+                  onClick={handleDeleteVideo}
+                  disabled={deletingVideo}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-700 to-red-800 text-white px-4 py-3 rounded-xl hover:shadow-lg hover:from-red-800 hover:to-red-900 transition font-medium disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed"
+                >
+                  {deletingVideo ? (
+                    <>
+                      <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Đang xóa...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Xóa video
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
@@ -1105,24 +1203,50 @@ function VideoDetailContent() {
               </button>
               <button
                 onClick={async () => {
+                  if (video.status === 'active') {
+                    toast.error('Video đang Active, không thể thêm câu hỏi mới.');
+                    return;
+                  }
+
                   if (videoRef.current && parseFloat(addTime) > videoRef.current.duration) {
                     setAddTime(videoRef.current.duration.toFixed(0));
                     return;
                   }
-                  const filteredOptions = newOptions.filter(opt => opt.trim());
-                  if (!newQuestion.trim() || filteredOptions.length < 2) {
-                    alert("Vui lòng điền đầy đủ câu hỏi và ít nhất 2 đáp án!");
+                  const parsedTime = Number.parseInt(addTime, 10);
+                  if (Number.isNaN(parsedTime) || parsedTime < 0) {
+                    toast.error("Vui lòng nhập thời điểm hợp lệ!");
                     return;
                   }
-                  const newQ = { 
-                    time: parseInt(addTime), 
-                    question: newQuestion, 
-                    options: filteredOptions, 
-                    answer: newAnswer 
+
+                  const optionEntries = newOptions
+                    .map((value, index) => ({ index, value: value.trim() }))
+                    .filter((item) => item.value.length > 0);
+
+                  if (!newQuestion.trim() || optionEntries.length < 2) {
+                    toast.error("Vui lòng điền đầy đủ câu hỏi và ít nhất 2 đáp án!");
+                    return;
+                  }
+
+                  const correctAnswerIndex = optionEntries.findIndex((item) => item.index === newAnswer);
+                  if (correctAnswerIndex < 0) {
+                    toast.error("Đáp án đúng không hợp lệ. Vui lòng chọn lại đáp án đúng!");
+                    return;
+                  }
+
+                  const payload: CreateTrainingVideoQuestionPayload = {
+                    video_id: Number.parseInt(videoId!, 10),
+                    question_text: newQuestion.trim(),
+                    question_type: 'multiple_choice',
+                    time_in_video: parsedTime,
+                    correct_answer: String(correctAnswerIndex),
+                    options: optionEntries.map((item) => item.value),
+                    points: 1,
+                    order_number: questions.length + 1
                   };
-                  const dbId = await saveQuestionToDb(newQ);
+
+                  const dbId = await saveQuestionToDb(payload);
                   if (dbId) {
-                    setQuestions([...questions, { ...newQ, id: dbId }]);
+                    await loadQuestions(videoId!);
                   }
                   setShowAdd(false);
                   setNewQuestion("");
@@ -1194,124 +1318,6 @@ function VideoDetailContent() {
           </div>
         </div>
       )}
-<<<<<<< HEAD
-      <div>
-        <div className="flex gap-8 border-b mb-4">
-          <button
-            className={`pb-2 border-b-2 font-bold ${tab === 'student' ? 'border-yellow-400' : 'border-transparent'} transition`}
-            onClick={() => setTab('student')}
-          >Students</button>
-          <button
-            className={`pb-2 border-b-2 font-bold ml-4 ${tab === 'question' ? 'border-blue-400' : 'border-transparent'} transition`}
-            onClick={() => setTab('question')}
-          >Câu hỏi tương tác</button>
-        </div>
-        {tab === 'student' && (
-          <div className="overflow-x-auto mb-8">
-            {video.students && video.students.length > 0 ? (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="text-left px-4 py-2">Student Name</th>
-                    <th className="text-left px-4 py-2">Watched</th>
-                    <th className="text-left px-4 py-2">Grade</th>
-                    <th className="text-left px-4 py-2">Attempts</th>
-                    <th className="text-left px-4 py-2">Last watched</th>
-                    <th className="text-left px-4 py-2">Turned in</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {video.students.map((s, idx) => (
-                    <tr key={idx} className="border-b">
-                      <td className="px-4 py-2">{s.name}</td>
-                      <td className="px-4 py-2"><div className="w-32 h-2 bg-gray-200 rounded"><div className="h-2 bg-red-500 rounded" style={{width: s.watched + '%'}}></div></div></td>
-                      <td className="px-4 py-2">{s.grade ?? '-'}</td>
-                      <td className="px-4 py-2">{s.attempts}</td>
-                      <td className="px-4 py-2">{s.lastWatched}</td>
-                      <td className="px-4 py-2">{s.turnedIn ? <span className="text-green-600">✓ Turned in</span> : <span className="text-gray-500">✗ Not turned in</span>}</td>
-                      <td className="px-2 py-2"><button className="p-1 rounded hover:bg-gray-100">⋯</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                Chưa có học sinh nào được assign video này.
-              </div>
-            )}
-          </div>
-        )}
-        {tab === 'question' && (
-          <div className="bg-blue-50 rounded-lg p-4">
-            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-              <h3 className="font-bold">Câu hỏi tương tác đã thêm</h3>
-              <div className="flex items-center gap-2">
-                <button
-                  className="bg-slate-200 text-slate-700 px-3 py-1 rounded hover:bg-slate-300"
-                  onClick={() => {
-                    setPreviewMode(!previewMode);
-                    if (previewMode) {
-                      setShowQuestionIdx(null);
-                      setUserAnswer(null);
-                      if (videoRef.current) videoRef.current.play();
-                    }
-                  }}
-                >
-                  {previewMode ? 'Tắt xem thử câu hỏi' : 'Xem thử câu hỏi'}
-                </button>
-                <button
-                  className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
-                  onClick={() => {
-                    if (videoRef.current) {
-                      setAddTime(videoRef.current.currentTime.toFixed(1));
-                    }
-                    setShowAdd(true);
-                  }}
-                >
-                  + Thêm câu hỏi
-                </button>
-              </div>
-            </div>
-            {questions.length === 0 && <div className="text-gray-500">Chưa có câu hỏi nào.</div>}
-            <ul className="space-y-2">
-              {questions.map((q, idx) => (
-                <li key={idx} className="bg-white rounded shadow p-3 flex flex-col gap-1">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div><span className="font-semibold">Thời điểm:</span> {q.time}s</div>
-                      <div><span className="font-semibold">Câu hỏi:</span> {q.question}</div>
-                      <div>
-                        <span className="font-semibold">Đáp án:</span>
-                        <ol className="list-decimal ml-6">
-                          {q.options.map((opt, i) => (
-                            <li key={i} className={q.answer === i ? "font-bold text-green-600" : ""}>{opt}</li>
-                          ))}
-                        </ol>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={async () => {
-                        if (confirm('Bạn có chắc muốn xóa câu hỏi này?')) {
-                          if (q.id) {
-                            await deleteQuestionFromDb(q.id);
-                          }
-                          setQuestions(questions.filter((_, i) => i !== idx));
-                        }
-                      }}
-                      className="text-red-500 hover:text-red-700 px-2 py-1"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-=======
->>>>>>> 57865e52314c2e595a82dcd7dc0cb01da7b2bbc2
     </div>
   );
 }

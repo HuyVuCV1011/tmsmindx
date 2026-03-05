@@ -1,7 +1,8 @@
 'use client'
 
 import { Filter, Search } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { useMemo, useState, useEffect } from 'react'
 import useSWR from 'swr'
 
 import { PageContainer } from '@/components/PageContainer'
@@ -9,6 +10,7 @@ import PostCard from '@/components/post-card'
 import Slider from '@/components/slider'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { UpcomingEventsSidebar } from '@/components/upcoming-events-sidebar'
 
 // Skeleton Imports (Inline for simplicity or import if available)
 import { PostCardSkeleton } from '@/components/skeletons'
@@ -30,9 +32,18 @@ interface Post {
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 export default function CommunicationsPage() {
+    const searchParams = useSearchParams()
     const { data: posts = [], isLoading } = useSWR<Post[]>('/api/truyenthong/posts?status=published', fetcher)
     const [selectedFilter, setSelectedFilter] = useState<string>('all')
     const [searchQuery, setSearchQuery] = useState('')
+
+    // Handle URL filter parameter
+    useEffect(() => {
+        const filterParam = searchParams.get('filter')
+        if (filterParam) {
+            setSelectedFilter(filterParam)
+        }
+    }, [searchParams])
 
     const filteredPosts = useMemo(() => {
         let result = posts
@@ -98,56 +109,68 @@ export default function CommunicationsPage() {
                     </div>
                 </div>
 
-                <div className="max-w-7xl mx-auto px-1 md:px-2 pt-8 space-y-12">
+                <div className="max-w-7xl mx-auto px-1 md:px-2 pt-8 pb-8 space-y-12">
 
-                    <div className="w-full">
-                        {/* Main Stream (Full Width) */}
-                        <div className="flex flex-col gap-8">
+                    {/* Two Column Layout: Main Content + Sidebar */}
+                    <div className="flex flex-col lg:flex-row gap-6">
+                        
+                        {/* Main Content - Left Side */}
+                        <div className="flex-1 min-w-0">
+                            <div className="flex flex-col gap-8">
 
-                            {/* Sticky Filter Bar */}
-                            <div className="sticky top-20 z-30 bg-white/80 backdrop-blur-xl border border-gray-200/50 p-2 rounded-2xl shadow-sm flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
-                                <div className="flex p-1 gap-1">
-                                    {postTypes.map(type => (
-                                        <button
-                                            key={type.value}
-                                            onClick={() => setSelectedFilter(type.value)}
-                                            className={cn(
-                                                "px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap",
-                                                selectedFilter === type.value
-                                                    ? "bg-gray-900 text-white shadow-md"
-                                                    : "bg-transparent text-gray-600 hover:bg-gray-100"
-                                            )}
-                                        >
-                                            {type.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Posts Grid */}
-                            {isLoading ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {[...Array(6)].map((_, i) => <PostCardSkeleton key={i} />)}
-                                </div>
-                            ) : filteredPosts.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
-                                    {filteredPosts.map(post => (
-                                        <div key={post.id}>
-                                            <PostCard post={post} />
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
-                                    <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-gray-100">
-                                        <Filter className="w-6 h-6 text-gray-300" />
+                                {/* Sticky Filter Bar */}
+                                <div className="sticky top-20 z-30 bg-white/80 backdrop-blur-xl border border-gray-200/50 p-2 rounded-2xl shadow-sm flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
+                                    <div className="flex p-1 gap-1">
+                                        {postTypes.map(type => (
+                                            <button
+                                                key={type.value}
+                                                onClick={() => setSelectedFilter(type.value)}
+                                                className={cn(
+                                                    "px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap",
+                                                    selectedFilter === type.value
+                                                        ? "bg-gray-900 text-white shadow-md"
+                                                        : "bg-transparent text-gray-600 hover:bg-gray-100"
+                                                )}
+                                            >
+                                                {type.label}
+                                            </button>
+                                        ))}
                                     </div>
-                                    <h3 className="text-lg font-bold text-gray-900">Không tìm thấy bài viết</h3>
-                                    <p className="text-gray-500">Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm</p>
                                 </div>
-                            )}
 
+                                {/* Posts Grid */}
+                                {isLoading ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {[...Array(6)].map((_, i) => <PostCardSkeleton key={i} />)}
+                                    </div>
+                                ) : filteredPosts.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-500">
+                                        {filteredPosts.map(post => (
+                                            <div key={post.id}>
+                                                <PostCard post={post} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
+                                        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-gray-100">
+                                            <Filter className="w-6 h-6 text-gray-300" />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-gray-900">Không tìm thấy bài viết</h3>
+                                        <p className="text-gray-500">Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm</p>
+                                    </div>
+                                )}
+
+                            </div>
                         </div>
+
+                        {/* Sidebar - Right Side */}
+                        <aside className="w-full lg:w-80 shrink-0">
+                            <div className="sticky top-24">
+                                <UpcomingEventsSidebar />
+                            </div>
+                        </aside>
+
                     </div>
                 </div>
             </div>

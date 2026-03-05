@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { renderEmailTemplate } from './email-templates';
 
-// Kiểm tra Gmail credentials
-const GMAIL_USER = process.env.GMAIL_USER;
-const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
+// Kiểm tra Gmail credentials - support cả hai naming conventions
+const GMAIL_USER = process.env.GMAIL_USER || process.env.MAILDEV_INCOMING_USER;
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || process.env.MAILDEV_INCOMING_PASS;
 
 // Tạo transporter với Gmail (chỉ khi có credentials)
 let transporter: nodemailer.Transporter | null = null;
@@ -17,9 +17,21 @@ if (GMAIL_USER && GMAIL_APP_PASSWORD) {
       pass: GMAIL_APP_PASSWORD
     }
   });
+  console.log('✅ Gmail transporter configured successfully');
 } else {
-  console.warn('⚠️ Gmail credentials not configured. Email functionality will be disabled.');
-  console.warn('Please set GMAIL_USER and GMAIL_APP_PASSWORD in .env.local');
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.error('❌ GMAIL CREDENTIALS NOT CONFIGURED');
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.error('⚠️  Email functionality is DISABLED');
+  console.error('📧 Giải trình emails will NOT be sent');
+  console.error('');
+  console.error('🛠️  To fix this:');
+  console.error('   1. Create .env.local file in root directory');
+  console.error('   2. Add GMAIL_USER and GMAIL_APP_PASSWORD');
+  console.error('   3. Restart the dev server');
+  console.error('');
+  console.error('📖 See EMAIL_CONFIGURATION_GUIDE.md for details');
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 }
 
 export async function POST(request: Request) {
@@ -29,18 +41,23 @@ export async function POST(request: Request) {
     
     // Nếu không có transporter, log và trả về success (để app vẫn hoạt động)
     if (!transporter) {
-      console.warn('⚠️ Email not sent - Gmail credentials not configured');
-      console.log('Email type:', type);
-      console.log('Explanation details:', {
-        id: explanation.id,
-        teacher: explanation.teacher_name,
-        email: explanation.email
-      });
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('❌ EMAIL NOT SENT - No Gmail Configuration');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('📧 Email type:', type);
+      console.error('👤 Teacher:', explanation.teacher_name);
+      console.error('📨 Email:', explanation.email);
+      console.error('🆔 Explanation ID:', explanation.id);
+      console.error('');
+      console.error('⚠️  Configure Gmail to enable email notifications');
+      console.error('📖 See EMAIL_CONFIGURATION_GUIDE.md');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       
       return NextResponse.json({
         success: true,
-        message: 'Email không được gửi do thiếu cấu hình Gmail (xem console)',
-        warning: 'Gmail credentials not configured'
+        message: 'Yêu cầu đã được xử lý nhưng email chưa được gửi (thiếu cấu hình Gmail)',
+        warning: 'GMAIL_CREDENTIALS_NOT_CONFIGURED',
+        emailNotSent: true
       });
     }
     
@@ -61,7 +78,7 @@ export async function POST(request: Request) {
       
       mailOptions = {
         from: GMAIL_USER,
-        to: 'academick12@mindx.com.vn',
+        to: 'baotc@mindx.com.vn',
         cc: explanation.email,
         subject: '[MindX | Teaching] V/v không tham gia kiểm tra',
         html: htmlContent
@@ -83,7 +100,7 @@ export async function POST(request: Request) {
       mailOptions = {
         from: GMAIL_USER,
         to: explanation.email,
-        cc: 'academick12@mindx.com.vn',
+        cc: 'baotc@mindx.com.vn',
         subject: '[MindX | Teaching] Thông báo: Giải trình được chấp nhận',
         html: htmlContent
       };
@@ -104,7 +121,7 @@ export async function POST(request: Request) {
       mailOptions = {
         from: GMAIL_USER,
         to: explanation.email,
-        cc: 'academick12@mindx.com.vn',
+        cc: 'baotc@mindx.com.vn',
         subject: '[MindX | Teaching] Thông báo: Giải trình không được chấp nhận',
         html: htmlContent
       };

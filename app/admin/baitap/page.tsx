@@ -89,12 +89,20 @@ export default function BaiTapManagementPage() {
         <div className="text-sm text-gray-600">
           Tổng số: <span className="font-semibold">{assignments.length}</span> bài tập
         </div>
-        <Link href="/admin/baitap/tao-moi">
-          <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-md">
-            <Plus className="h-5 w-5" />
-            Tạo bài tập mới
-          </button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/admin/baitap/tao-moi?mode=professional">
+            <button className="flex items-center gap-2 bg-[#a1001f] hover:bg-[#8a0019] text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-md">
+              <Plus className="h-5 w-5" />
+              Tạo đề chuyên môn
+            </button>
+          </Link>
+          <Link href="/admin/baitap/tao-moi">
+            <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-md">
+              <Plus className="h-5 w-5" />
+              Tạo bài tập mới
+            </button>
+          </Link>
+        </div>
       </div>
 
       {/* Table */}

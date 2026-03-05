@@ -15,6 +15,24 @@ interface QuestionBuilderProps {
   assignmentId?: number;
 }
 
+const normalizeDifficulty = (difficulty?: string): QuestionFormData['difficulty'] => {
+  switch (difficulty) {
+    case 'easy':
+    case 'remember':
+    case 'understand':
+      return 'easy';
+    case 'hard':
+    case 'evaluate':
+    case 'create':
+      return 'hard';
+    case 'medium':
+    case 'apply':
+    case 'analyze':
+    default:
+      return 'medium';
+  }
+};
+
 export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }: QuestionBuilderProps) {
   const draftKey = `question_draft_${assignmentId || 'new'}_${initialData?.id || 'new'}`;
 
@@ -42,8 +60,8 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
   const [correctAnswer, setCorrectAnswer] = useState(initData?.correct_answer || '');
   const [explanation, setExplanation] = useState(initData?.explanation || '');
   const [points, setPoints] = useState(initData?.points || 1);
-  const [difficulty, setDifficulty] = useState<'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create'>(
-    initData?.difficulty || 'understand'
+  const [difficulty, setDifficulty] = useState<QuestionFormData['difficulty']>(
+    normalizeDifficulty(initData?.difficulty)
   );
   const [imageUrl, setImageUrl] = useState(initData?.image_url || '');
   const [imagePreview, setImagePreview] = useState(initData?.imagePreview || initData?.image_url || '');
@@ -551,17 +569,14 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Cấp độ tư duy (Bloom's Taxonomy)
+                Độ khó
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {DIFFICULTY_LEVELS.map((level) => {
                   const colorMap: Record<string, string> = {
                     green: 'border-green-500 bg-green-50 text-green-700',
                     blue: 'border-blue-500 bg-blue-50 text-blue-700',
-                    cyan: 'border-cyan-500 bg-cyan-50 text-cyan-700',
-                    yellow: 'border-yellow-500 bg-yellow-50 text-yellow-700',
-                    orange: 'border-orange-500 bg-orange-50 text-orange-700',
-                    purple: 'border-purple-500 bg-purple-50 text-purple-700'
+                    red: 'border-red-500 bg-red-50 text-red-700'
                   };
                   
                   return (

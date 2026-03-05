@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { Suspense, useEffect, useRef, useState } from "react";
+import toast from 'react-hot-toast';
 
 interface Video {
   id: number;
@@ -242,7 +243,7 @@ function VideoSetupContent() {
 
   const handleAddQuestion = async () => {
     if (!newQuestion || newOptions.some(opt => !opt)) {
-      alert("Vui lòng điền đầy đủ câu hỏi và các đáp án!");
+      toast.error("Vui lòng điền đầy đủ câu hỏi và các đáp án!");
       return;
     }
 
@@ -317,18 +318,18 @@ function VideoSetupContent() {
 
       const data = await response.json();
       if (data.success) {
-        alert('Tạo assignment thành công! Chuyển sang trang thêm câu hỏi...');
+        toast.success('Tạo assignment thành công! Chuyển sang trang thêm câu hỏi...');
         // Redirect to assignment questions page
         const assignmentId = data.data?.id || data.id;
         if (assignmentId) {
           router.push(`/admin/assignment-questions?assignment_id=${assignmentId}`);
         }
       } else {
-        alert('Lỗi: ' + data.error);
+        toast.error('Lỗi: ' + data.error);
       }
     } catch (err) {
       console.error('Error creating assignment:', err);
-      alert('Lỗi khi tạo assignment');
+      toast.error('Lỗi khi tạo assignment');
     }
   };
 
@@ -361,12 +362,12 @@ function VideoSetupContent() {
       if (data.success && data.url) {
         return data.url;
       } else {
-        alert('Lỗi khi upload thumbnail: ' + (data.error || 'Unknown error'));
+        toast.error('Lỗi khi upload thumbnail: ' + (data.error || 'Unknown error'));
         return null;
       }
     } catch (err) {
       console.error('Error uploading thumbnail:', err);
-      alert('Lỗi khi upload thumbnail');
+      toast.error('Lỗi khi upload thumbnail');
       return null;
     } finally {
       setUploadingThumbnail(false);
@@ -404,14 +405,14 @@ function VideoSetupContent() {
 
       const data = await response.json();
       if (data.success) {
-        alert(status === 'draft' ? 'Lưu draft thành công!' : 'Giao bài thành công!');
+        toast.success(status === 'draft' ? 'Lưu draft thành công!' : 'Giao bài thành công!');
         router.push('/admin/page5');
       } else {
-        alert('Lỗi: ' + data.error);
+        toast.error('Lỗi: ' + data.error);
       }
     } catch (err) {
       console.error('Error saving video:', err);
-      alert('Lỗi khi lưu video');
+      toast.error('Lỗi khi lưu video');
     } finally {
       setSaving(false);
     }

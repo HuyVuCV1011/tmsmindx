@@ -30,7 +30,7 @@ export interface Question {
   explanation: string;
   points: number;
   order_number: number;
-  difficulty: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+  difficulty: 'easy' | 'medium' | 'hard';
 }
 
 export interface QuestionFormData {

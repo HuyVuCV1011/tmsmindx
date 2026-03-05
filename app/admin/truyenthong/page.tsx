@@ -1,7 +1,5 @@
 'use client'
 
-import { Card } from '@/components/Card'
-import { EmptyState } from '@/components/EmptyState'
 import { PageContainer } from '@/components/PageContainer'
 import { StatCard } from '@/components/StatCard'
 import { StatCardSkeleton } from '@/components/skeletons'

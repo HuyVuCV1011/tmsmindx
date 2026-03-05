@@ -1,10 +1,13 @@
 'use client';
 
 import { PageContainer } from '@/components/PageContainer';
+import { Tabs } from '@/components/Tabs';
 import { useAuth } from '@/lib/auth-context';
 import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send, XCircle } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 
 interface Assignment {
   id: number;
@@ -53,16 +56,42 @@ interface Submission {
   time_spent_seconds: number;
 }
 
+interface ExamAssignment {
+  id: number;
+  teacher_code: string;
+  exam_type: 'expertise' | 'experience';
+  registration_type: 'official' | 'additional';
+  block_code: string;
+  subject_code: string;
+  open_at: string;
+  close_at: string;
+  assignment_status: 'assigned' | 'in_progress' | 'submitted' | 'expired' | 'graded';
+  score: number | null;
+  score_status: 'null' | 'auto_zero' | 'graded';
+  selected_set_id: number;
+  set_code: string;
+  set_name: string;
+  total_points: number;
+  passing_score: number;
+  explanation_status?: 'pending' | 'accepted' | 'rejected';
+  is_open?: boolean;
+  can_take?: boolean;
+}
+
 export default function TeacherAssignmentPage() {
   const { user } = useAuth();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [examAssignments, setExamAssignments] = useState<ExamAssignment[]>([]);
   const [currentAssignment, setCurrentAssignment] = useState<Assignment | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<{ [key: number]: string }>({});
   const [submission, setSubmission] = useState<Submission | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [trainingLoading, setTrainingLoading] = useState(true);
+  const [examLoading, setExamLoading] = useState(true);
   const [error, setError] = useState('');
   const [teacherCode, setTeacherCode] = useState('');
+  const [activeMainTab, setActiveMainTab] = useState<'exam' | 'training'>('exam');
+  const [selectedExamMonth, setSelectedExamMonth] = useState('all');
   const [view, setView] = useState<'list' | 'taking' | 'result'>('list');
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [timerActive, setTimerActive] = useState(false);
@@ -76,7 +105,7 @@ export default function TeacherAssignmentPage() {
 
   // Extract teacher code from email (fallback method)
   const extractCodeFromEmail = (email: string): string | null => {
-    const match = email.match(/^([a-zA-Z0-9]+)@/);
+    const match = email.match(/^([^@]+)@/);
     return match ? match[1] : null;
   };
 
@@ -108,12 +137,13 @@ export default function TeacherAssignmentPage() {
   useEffect(() => {
     if (teacherCode) {
       fetchAvailableAssignments();
+      fetchExamAssignments();
     }
   }, [teacherCode]);
 
   const fetchAvailableAssignments = async () => {
     try {
-      setLoading(true);
+      setTrainingLoading(true);
       const response = await fetch('/api/training-assignments?status=published');
       const data = await response.json();
       if (data.success) {
@@ -150,7 +180,44 @@ export default function TeacherAssignmentPage() {
       console.error('Error fetching assignments:', err);
       setError('Failed to load assignments');
     } finally {
-      setLoading(false);
+      setTrainingLoading(false);
+    }
+  };
+
+  const fetchExamAssignments = async () => {
+    try {
+      setExamLoading(true);
+
+      const candidates = new Set<string>();
+      const normalizedTeacherCode = teacherCode?.trim();
+      if (normalizedTeacherCode) {
+        candidates.add(normalizedTeacherCode);
+        candidates.add(normalizedTeacherCode.toLowerCase());
+        candidates.add(normalizedTeacherCode.toUpperCase());
+      }
+
+      if (user?.email) {
+        const emailCode = extractCodeFromEmail(user.email)?.trim();
+        if (emailCode) {
+          candidates.add(emailCode);
+          candidates.add(emailCode.toLowerCase());
+          candidates.add(emailCode.toUpperCase());
+        }
+      }
+
+      const teacherCodesParam = encodeURIComponent(Array.from(candidates).join(','));
+      const response = await fetch(
+        `/api/exam-assignments?teacher_code=${encodeURIComponent(teacherCode)}&teacher_codes=${teacherCodesParam}`
+      );
+      const data = await response.json();
+      if (data.success) {
+        setExamAssignments(data.data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching exam assignments:', err);
+      setError('Failed to load exam assignments');
+    } finally {
+      setExamLoading(false);
     }
   };
 
@@ -161,7 +228,7 @@ export default function TeacherAssignmentPage() {
       const questionsData = await questionsRes.json();
       
       if (!questionsData.success) {
-        alert('Không thể tải câu hỏi');
+        toast.error('Không thể tải câu hỏi');
         return;
       }
 
@@ -178,7 +245,7 @@ export default function TeacherAssignmentPage() {
 
       const submissionData = await submissionRes.json();
       if (!submissionData.success) {
-        alert('Không thể bắt đầu bài tập: ' + submissionData.error);
+        toast.error('Không thể bắt đầu bài tập: ' + submissionData.error);
         return;
       }
 
@@ -213,7 +280,7 @@ export default function TeacherAssignmentPage() {
       }
     } catch (err) {
       console.error('Error starting assignment:', err);
-      alert('Lỗi khi bắt đầu bài tập');
+      toast.error('Lỗi khi bắt đầu bài tập');
     }
   };
 
@@ -288,7 +355,7 @@ export default function TeacherAssignmentPage() {
       // Ensure score is a valid number
       if (isNaN(totalScore) || totalScore === null || totalScore === undefined) {
         console.error('[Assignment] Invalid total score calculated:', totalScore);
-        alert('Lỗi: Không thể tính điểm. Vui lòng thử lại.');
+        toast.error('Lỗi: Không thể tính điểm. Vui lòng thử lại.');
         return;
       }
 
@@ -316,11 +383,11 @@ export default function TeacherAssignmentPage() {
         
         setView('result');
       } else {
-        alert('Lỗi khi nộp bài: ' + data.error);
+        toast.error('Lỗi khi nộp bài: ' + data.error);
       }
     } catch (err) {
       console.error('Error submitting assignment:', err);
-      alert('Lỗi khi nộp bài');
+      toast.error('Lỗi khi nộp bài');
     }
   };
 
@@ -332,7 +399,7 @@ export default function TeacherAssignmentPage() {
     return Math.round((Object.keys(answers).length / questions.length) * 100);
   };
 
-  if (loading) {
+  if (trainingLoading && examLoading) {
     return (
       <PageContainer>
         {/* Assignment Loading Skeleton */}
@@ -405,7 +472,7 @@ export default function TeacherAssignmentPage() {
                 <div className="p-4 md:p-6">
                   {/* Question Header */}
                   <div className="flex items-start gap-3 md:gap-4 mb-3 md:mb-4">
-                    <div className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-sm md:text-base font-bold ${
+                    <div className={`shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-sm md:text-base font-bold ${
                       answers[question.id] 
                         ? 'bg-green-600 text-white' 
                         : 'bg-gray-200 text-gray-700'
@@ -418,7 +485,7 @@ export default function TeacherAssignmentPage() {
                           className="prose prose-sm max-w-none flex-1"
                           dangerouslySetInnerHTML={{ __html: question.question_text }}
                         />
-                        <span className="self-start px-2 md:px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] md:text-xs font-semibold flex-shrink-0">
+                        <span className="self-start px-2 md:px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] md:text-xs font-semibold shrink-0">
                           {question.points} điểm
                         </span>
                       </div>
@@ -541,7 +608,7 @@ export default function TeacherAssignmentPage() {
         </div>
 
         {/* Sidebar - Desktop only */}
-        <div className="hidden lg:block w-72 flex-shrink-0">
+        <div className="hidden lg:block w-72 shrink-0">
           <div className="sticky top-4 space-y-3">
             {/* Assignment Info Card */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -627,7 +694,7 @@ export default function TeacherAssignmentPage() {
               {answeredCount < questions.length && (
                 <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3">
                   <div className="flex items-start gap-2 text-amber-700">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                     <span className="text-xs font-medium">
                       Còn {questions.length - answeredCount} câu chưa trả lời
                     </span>
@@ -697,7 +764,7 @@ export default function TeacherAssignmentPage() {
             </div>
 
             {/* Score Display */}
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 mb-6">
+            <div className="bg-linear-to-br from-blue-50 to-blue-100 rounded-xl p-8 mb-6">
               <div className="text-center">
                 <p className="text-sm text-gray-600 mb-2">Điểm số của bạn</p>
                 <div className="text-6xl font-bold text-blue-600 mb-2">
@@ -756,7 +823,51 @@ export default function TeacherAssignmentPage() {
     );
   }
 
-  // List view
+  const examMonthOptions = Array.from(
+    new Set(
+      examAssignments
+        .filter(item => item.open_at)
+        .map(item => {
+          const date = new Date(item.open_at);
+          const month = `${date.getMonth() + 1}`.padStart(2, '0');
+          return `${date.getFullYear()}-${month}`;
+        })
+    )
+  ).sort((a, b) => b.localeCompare(a));
+
+  const filteredExamAssignments = selectedExamMonth === 'all'
+    ? examAssignments
+    : examAssignments.filter(item => {
+        const date = new Date(item.open_at);
+        const month = `${date.getMonth() + 1}`.padStart(2, '0');
+        return `${date.getFullYear()}-${month}` === selectedExamMonth;
+      });
+
+  const formatRegistrationType = (type: 'official' | 'additional') =>
+    type === 'official' ? 'Chính thức' : 'Bổ sung';
+
+  const getExamStatusLabel = (item: ExamAssignment) => {
+    const now = new Date();
+    const closeAt = new Date(item.close_at);
+    if (item.assignment_status === 'expired' || closeAt < now) return 'Quá hạn';
+    if (item.assignment_status === 'submitted') return 'Đã nộp';
+    if (item.assignment_status === 'graded') return 'Đã chấm';
+    if (item.assignment_status === 'in_progress') return 'Đang làm';
+    return 'Đang mở';
+  };
+
+  const getExamStatusClass = (item: ExamAssignment) => {
+    const status = getExamStatusLabel(item);
+    if (status === 'Quá hạn') return 'bg-red-100 text-red-700 border-red-300';
+    if (status === 'Đã nộp' || status === 'Đã chấm') return 'bg-green-100 text-green-700 border-green-300';
+    return 'bg-blue-100 text-blue-700 border-blue-300';
+  };
+
+  const mainTabs = [
+    { id: 'exam', label: 'Kiểm tra chuyên môn & Quy trình - kỹ năng trải nghiệm', count: examAssignments.length },
+    { id: 'training', label: 'Đào tạo nâng cao', count: assignments.length },
+  ];
+
   return (
     <PageContainer>
       <div className="max-w-7xl mx-auto">
@@ -765,84 +876,152 @@ export default function TeacherAssignmentPage() {
           <p className="text-gray-600">Danh sách các bài tập được giao cho bạn</p>
         </div>
 
+        <Tabs
+          tabs={mainTabs}
+          activeTab={activeMainTab}
+          onChange={(tabId) => setActiveMainTab(tabId as 'exam' | 'training')}
+        />
+
         {error ? (
-          <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center">
+          <div className="mt-6 bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center">
             <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
             <p className="text-red-700 font-medium">{error}</p>
           </div>
+        ) : activeMainTab === 'exam' ? (
+          <div className="mt-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <h2 className="text-lg font-semibold text-gray-900">Danh sách bài thi đã đăng ký</h2>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Lọc theo tháng:</span>
+                <select
+                  value={selectedExamMonth}
+                  onChange={(e) => setSelectedExamMonth(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+                >
+                  <option value="all">Tất cả</option>
+                  {examMonthOptions.map((month) => (
+                    <option key={month} value={month}>{month}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {examLoading ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-10 text-center text-gray-500">
+                Đang tải danh sách bài thi...
+              </div>
+            ) : filteredExamAssignments.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có bài thi đăng ký</h3>
+                <p className="text-gray-500">Hiện tại chưa có bài thi chuyên môn hoặc quy trình - kỹ năng trải nghiệm.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredExamAssignments.map((item) => {
+                  const now = new Date();
+                  const closeAt = new Date(item.close_at);
+                  const isExpiredZero = (item.assignment_status === 'expired' || closeAt < now) && Number(item.score || 0) === 0;
+
+                  return (
+                    <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h3 className="text-sm font-bold text-gray-900 line-clamp-2">{item.subject_code}</h3>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${getExamStatusClass(item)}`}>
+                          {getExamStatusLabel(item)}
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-gray-600 space-y-1 mb-3">
+                        <p><span className="font-medium">Loại:</span> {formatRegistrationType(item.registration_type)}</p>
+                        <p><span className="font-medium">Bộ đề:</span> {item.set_code} - {item.set_name}</p>
+                        <p><span className="font-medium">Mở:</span> {new Date(item.open_at).toLocaleString('vi-VN')}</p>
+                        <p><span className="font-medium">Đóng:</span> {new Date(item.close_at).toLocaleString('vi-VN')}</p>
+                        <p><span className="font-medium">Điểm:</span> {item.score === null ? 'Chưa có' : item.score}</p>
+                      </div>
+
+                      {item.can_take ? (
+                        <Link
+                          href={`/user/assignments/exam/${item.id}`}
+                          className="w-full inline-flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700"
+                        >
+                          Bắt đầu làm bài
+                        </Link>
+                      ) : isExpiredZero && !item.explanation_status ? (
+                        <Link
+                          href={`/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`}
+                          className="w-full inline-flex items-center justify-center px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700"
+                        >
+                          Giải trình
+                        </Link>
+                      ) : item.explanation_status ? (
+                        <div className="w-full inline-flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold">
+                          Đã giải trình ({item.explanation_status})
+                        </div>
+                      ) : (
+                        <div className="w-full inline-flex items-center justify-center px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold">
+                          {new Date(item.open_at) > now ? 'Chưa tới giờ mở' : 'Thông tin bài thi'}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         ) : assignments.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+          <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
             <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có bài tập</h3>
             <p className="text-gray-500">Hiện tại chưa có bài tập nào được giao cho bạn.</p>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {assignments.map((assignment) => (
-              <div 
-                key={assignment.id} 
+              <div
+                key={assignment.id}
                 className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-all overflow-hidden group"
               >
-                {/* Header - Compact */}
-                <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-3 text-white">
+                <div className="bg-linear-to-br from-blue-500 to-blue-600 p-3 text-white">
                   <div className="flex items-start justify-between mb-1.5">
-                    <BookOpen className="w-5 h-5 flex-shrink-0" />
+                    <BookOpen className="w-5 h-5 shrink-0" />
                     {assignment.status === 'published' && (
-                      <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-semibold">
-                        Mở
-                      </span>
+                      <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-semibold">Mở</span>
                     )}
                   </div>
                   <h3 className="text-sm font-bold mb-1 line-clamp-2 leading-tight">{assignment.assignment_title}</h3>
                   <p className="text-[11px] text-blue-100 line-clamp-1">{assignment.video_title}</p>
                 </div>
 
-                {/* Content - Compact */}
                 <div className="p-3">
-                  {/* Stats Grid - Inline */}
                   <div className="flex items-center gap-2 mb-2.5 text-xs flex-wrap">
                     <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
                       <FileText className="w-3 h-3 text-gray-500" />
                       <span className="font-bold text-gray-900">{assignment.question_count || 0}</span>
                       <span className="text-gray-600">câu</span>
                     </div>
-                    
+
                     <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
                       <Award className="w-3 h-3 text-gray-500" />
                       <span className="font-bold text-gray-900">{assignment.total_points}</span>
                       <span className="text-gray-600">đ</span>
                     </div>
-                    
+
                     <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
                       <CheckCircle className="w-3 h-3 text-gray-500" />
                       <span className="font-bold text-gray-900">{assignment.passing_score}</span>
                     </div>
-                    
+
                     <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
                       <Clock className="w-3 h-3 text-gray-500" />
                       <span className="font-bold text-gray-900">{assignment.time_limit_minutes}p</span>
                     </div>
                   </div>
 
-                  {/* Due Date - Compact */}
-                  {assignment.due_date && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-gray-600 mb-2.5 pb-2.5 border-b border-gray-200">
-                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                      <span className="line-clamp-1">{new Date(assignment.due_date).toLocaleDateString('vi-VN', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}</span>
-                    </div>
-                  )}
-
-                  {/* Recent Score Display - Compact */}
                   {assignment.recent_submission && (
                     <div className={`mb-2.5 p-2.5 rounded-lg border ${
-                      assignment.recent_submission.is_passed 
-                        ? 'bg-green-50 border-green-300' 
+                      assignment.recent_submission.is_passed
+                        ? 'bg-green-50 border-green-300'
                         : 'bg-amber-50 border-amber-300'
                     }`}>
                       <div className="flex items-center justify-between mb-1">
@@ -854,33 +1033,9 @@ export default function TeacherAssignmentPage() {
                           <span className="text-xs text-gray-500">/{assignment.total_points}</span>
                         </span>
                       </div>
-                      
-                      <div className="flex items-center justify-between text-[10px] mb-1">
-                        <span className={`flex items-center gap-1 font-semibold ${
-                          assignment.recent_submission.is_passed ? 'text-green-700' : 'text-amber-700'
-                        }`}>
-                          {assignment.recent_submission.is_passed ? (
-                            <><CheckCircle className="w-2.5 h-2.5" /> Đạt</>
-                          ) : (
-                            <><XCircle className="w-2.5 h-2.5" /> Chưa đạt</>
-                          )}
-                        </span>
-                        <span className="text-gray-600">Lần {assignment.recent_submission.attempt_number}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-1 text-[10px] text-gray-500">
-                        <Clock className="w-2.5 h-2.5" />
-                        <span className="line-clamp-1">{new Date(assignment.recent_submission.submitted_at).toLocaleString('vi-VN', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}</span>
-                      </div>
                     </div>
                   )}
 
-                  {/* Action Button - Compact */}
                   <button
                     onClick={() => startAssignment(assignment)}
                     disabled={assignment.status !== 'published'}

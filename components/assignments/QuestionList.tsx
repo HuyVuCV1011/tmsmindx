@@ -176,9 +176,9 @@ export function QuestionList({
               </div>
               <div>
                 <div className="text-2xl font-bold text-green-600">
-                  {questions.filter(q => q.difficulty === 'remember').length}
+                  {questions.filter(q => q.difficulty === 'easy').length}
                 </div>
-                <div className="text-xs text-gray-600">Cấp Nhớ</div>
+                <div className="text-xs text-gray-600">Mức Dễ</div>
               </div>
             </div>
           </div>

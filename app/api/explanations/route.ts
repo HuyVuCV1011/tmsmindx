@@ -95,8 +95,9 @@ export async function POST(request: Request) {
     const result = await client.query(query, values);
     
     // Gửi email thông báo
+    let emailNotSent = false;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/send-explanation-email`, {
+      const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/send-explanation-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -104,15 +105,23 @@ export async function POST(request: Request) {
           explanation: result.rows[0]
         })
       });
+      
+      const emailData = await emailResponse.json();
+      if (emailData.emailNotSent) {
+        emailNotSent = true;
+        console.warn('⚠️ Email not sent for new explanation:', result.rows[0].id);
+      }
     } catch (emailError) {
       console.error('Error sending email:', emailError);
+      emailNotSent = true;
       // Không throw error, vẫn trả về thành công
     }
     
     return NextResponse.json({
       success: true,
       message: 'Tạo giải thích thành công',
-      data: result.rows[0]
+      data: result.rows[0],
+      emailNotSent
     });
     
   } catch (error: any) {
@@ -171,8 +180,9 @@ export async function PATCH(request: Request) {
     }
     
     // Gửi email thông báo cho giáo viên
+    let emailNotSent = false;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/send-explanation-email`, {
+      const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/send-explanation-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -180,14 +190,22 @@ export async function PATCH(request: Request) {
           explanation: result.rows[0]
         })
       });
+      
+      const emailData = await emailResponse.json();
+      if (emailData.emailNotSent) {
+        emailNotSent = true;
+        console.warn('⚠️ Email not sent for explanation status update:', result.rows[0].id);
+      }
     } catch (emailError) {
       console.error('Error sending email:', emailError);
+      emailNotSent = true;
     }
     
     return NextResponse.json({
       success: true,
       message: `Đã ${status === 'accepted' ? 'chấp nhận' : 'từ chối'} giải thích`,
-      data: result.rows[0]
+      data: result.rows[0],
+      emailNotSent
     });
     
   } catch (error: any) {

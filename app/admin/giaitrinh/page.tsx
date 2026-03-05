@@ -8,6 +8,7 @@ import { Tabs } from '@/components/Tabs';
 import { useAuth } from '@/lib/auth-context';
 import { CheckCircle, Eye, FileText, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 
 interface Explanation {
   id: number;
@@ -97,16 +98,21 @@ export default function AdminGiaiThichPage() {
       const data = await response.json();
       
       if (data.success) {
-        alert(`Đã ${status === 'accepted' ? 'chấp nhận' : 'từ chối'} giải trình. Email đã được gửi đến giáo viên.`);
+        // Check if email was actually sent or not
+        const emailStatus = data.emailNotSent 
+          ? '\n\n⚠️ LUU Ý: Email chưa được gửi do thiếu cấu hình Gmail. Vui lòng kiểm tra file EMAIL_CONFIGURATION_GUIDE.md' 
+          : '';
+        
+        toast.success(`Đã ${status === 'accepted' ? 'chấp nhận' : 'từ chối'} giải trình. Email đã được gửi đến giáo viên.${emailStatus}`);
         setSelectedExplanation(null);
         setAdminNote('');
         fetchExplanations();
       } else {
-        alert('Lỗi: ' + data.error);
+        toast.error('Lỗi: ' + data.error);
       }
     } catch (error) {
       console.error('Error updating explanation:', error);
-      alert('Có lỗi xảy ra khi cập nhật giải trình');
+      toast.error('Có lỗi xảy ra khi cập nhật giải trình');
     } finally {
       setProcessing(false);
     }

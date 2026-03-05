@@ -8,6 +8,33 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
+type DbDifficulty = 'easy' | 'medium' | 'hard';
+
+interface AssignmentQuestionRequestPayload {
+  assignment_id: number;
+  question_text: string;
+  question_type: Question['question_type'];
+  correct_answer: string;
+  options: string[] | null;
+  image_url: string | null;
+  explanation: string;
+  points: number;
+  order_number: number;
+  difficulty: DbDifficulty;
+}
+
+const mapDifficultyToDb = (difficulty?: Question['difficulty'] | string): DbDifficulty => {
+  switch (difficulty) {
+    case 'easy':
+      return 'easy';
+    case 'hard':
+      return 'hard';
+    case 'medium':
+    default:
+      return 'medium';
+  }
+};
+
 function AssignmentQuestionsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -62,21 +89,63 @@ function AssignmentQuestionsContent() {
     try {
       const isEditing = editingQuestion?.id;
       const method = isEditing ? 'PUT' : 'POST';
-      
-      const payload = {
-        ...questionData,
-        assignment_id: Number(assignmentId),
-        order_number: isEditing ? editingQuestion.order_number : questions.length + 1
-      };
+      const questionText = (questionData.question_text || '').trim();
+      const questionType: Question['question_type'] = questionData.question_type || 'multiple_choice';
+      const normalizedOptions = Array.isArray(questionData.options)
+        ? questionData.options.map((option) => option.trim()).filter(Boolean)
+        : null;
+      let correctAnswer = String(questionData.correct_answer || '').trim();
 
-      if (isEditing) {
-        payload.id = editingQuestion.id;
+      if (!questionText) {
+        toast.error('Vui lòng nhập câu hỏi');
+        return;
       }
+
+      if (questionType === 'multiple_choice') {
+        if (!normalizedOptions || normalizedOptions.length < 2) {
+          toast.error('Câu hỏi trắc nghiệm cần ít nhất 2 đáp án');
+          return;
+        }
+
+        if (!correctAnswer) {
+          toast.error('Vui lòng chọn đáp án đúng');
+          return;
+        }
+
+        if (!normalizedOptions.includes(correctAnswer)) {
+          const indexAnswer = Number.parseInt(correctAnswer, 10);
+          if (!Number.isNaN(indexAnswer) && indexAnswer >= 0 && indexAnswer < normalizedOptions.length) {
+            correctAnswer = normalizedOptions[indexAnswer];
+          } else {
+            toast.error('Đáp án đúng phải khớp với một trong các đáp án');
+            return;
+          }
+        }
+      }
+
+      const payload: AssignmentQuestionRequestPayload = {
+        assignment_id: Number(assignmentId),
+        question_text: questionText,
+        question_type: questionType,
+        correct_answer: correctAnswer,
+        options: questionType === 'multiple_choice' || questionType === 'true_false'
+          ? normalizedOptions
+          : null,
+        image_url: questionData.image_url || null,
+        explanation: questionData.explanation || '',
+        points: Number(questionData.points || 1),
+        order_number: isEditing ? editingQuestion.order_number : questions.length + 1,
+        difficulty: mapDifficultyToDb(questionData.difficulty)
+      };
+      
+      const requestPayload = isEditing
+        ? { ...payload, id: editingQuestion.id }
+        : payload;
 
       const response = await fetch('/api/training-assignment-questions', {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(requestPayload)
       });
 
       const data = await response.json();
