@@ -47,6 +47,7 @@ function CentersLeadersPanel() {
 
     // Leader CRUD
     const [editLeader, setEditLeader] = useState<Leader | null>(null);
+    const [editCenter, setEditCenter] = useState<Center | null>(null);
     const [isNew, setIsNew] = useState(false);
     const [saving, setSaving] = useState(false);
 
@@ -57,11 +58,14 @@ function CentersLeadersPanel() {
     // Close modal on escape
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && editLeader) setEditLeader(null);
+            if (e.key === 'Escape') {
+                if (editLeader) setEditLeader(null);
+                if (editCenter) setEditCenter(null);
+            }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [editLeader]);
+    }, [editLeader, editCenter]);
 
     useEffect(() => { loadAll(); }, [fStatus, fArea, fRole]);
 
@@ -136,6 +140,20 @@ function CentersLeadersPanel() {
         setEditLeader({ code: '', full_name: '', role_code: '', role_name: '', center: center || '', courses: '', area: area || '', status: 'Active', joined_date: '' });
     };
     const openEditLeader = (l: Leader) => { setIsNew(false); setEditLeader({ ...l }); };
+
+    // Center CRUD
+    const handleSaveCenter = async (e: React.FormEvent) => {
+        e.preventDefault(); if (!editCenter) return; setSaving(true);
+        try {
+            const r = await fetch('/api/app-auth/data', {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table: 'centers', id: editCenter.id, region: editCenter.region })
+            });
+            const d = await r.json();
+            if (d.success) { toast.success("Đã cập nhật khu vực"); setEditCenter(null); loadAll(); }
+            else toast.error(d.error || "Lỗi cập nhật");
+        } catch { toast.error("Lỗi") } finally { setSaving(false) }
+    };
 
     // Filter data
     const searchLower = search.toLowerCase();
@@ -369,6 +387,10 @@ function CentersLeadersPanel() {
                                                         )}
                                                     </div>
                                                 </div>
+                                                <button onClick={e => { e.stopPropagation(); setEditCenter({ ...center }); }}
+                                                    className="p-1.5 rounded hover:bg-gray-200 text-gray-500 transition-colors flex-shrink-0" title="Đổi khu vực">
+                                                    <Edit2 className="h-3.5 w-3.5" />
+                                                </button>
                                                 <button onClick={e => { e.stopPropagation(); askToggleStatus('center', center) }}
                                                     className={`px-2 py-0.5 rounded-full text-xs font-semibold transition-all cursor-pointer flex-shrink-0 ${center.status === 'Active' ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700' : 'bg-red-100 text-red-700 hover:bg-green-100 hover:text-green-700'}`}>
                                                     {center.status || 'Active'}
@@ -404,6 +426,40 @@ function CentersLeadersPanel() {
             })}
 
             {filteredCenters.length === 0 && <div className="text-center py-12 text-gray-500">Không tìm thấy center nào</div>}
+
+            {/* Edit center form modal */}
+            {editCenter && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto" onClick={() => setEditCenter(null)}>
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-5 border-b pb-3">
+                            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                <Edit2 className="h-5 w-5 text-[#a1001f]" />
+                                Đổi Khu Vực
+                            </h3>
+                            <button onClick={() => setEditCenter(null)} className="text-gray-400 hover:text-gray-600 rounded-full p-1 hover:bg-gray-100 transition-colors">
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <p className="text-sm text-gray-600 font-medium mb-4">Cơ sở: <span className="text-gray-900 font-bold">{editCenter.display_name}</span></p>
+                        <form onSubmit={handleSaveCenter} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Khu vực (Region)</label>
+                                <select value={editCenter.region || ''} onChange={e => setEditCenter({ ...editCenter, region: e.target.value })} required
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f]">
+                                    <option value="">Chọn khu vực</option>
+                                    {filters.areas.map(a => <option key={a} value={a}>{a}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex justify-end gap-3 pt-4 mt-2 border-t font-medium">
+                                <button type="button" onClick={() => setEditCenter(null)} className="px-5 py-2 text-sm border rounded-lg hover:bg-gray-50 transition-colors">Hủy</button>
+                                <button type="submit" disabled={saving} className="px-5 py-2 text-sm text-white bg-[#a1001f] hover:bg-[#c41230] transition-colors rounded-lg shadow disabled:opacity-50 flex items-center gap-2">
+                                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Lưu thay đổi
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* Confirm dialogs */}
             <ConfirmDialog open={statusDlg.open}

@@ -16,14 +16,25 @@ export default function RoleSettingsTab() {
     const [perms, setPerms] = useState<string[]>([]);
     const [saving, setSaving] = useState(false);
 
+    // New role modal state
+    const [showNewRoleDialog, setShowNewRoleDialog] = useState(false);
+    const [newRoleCode, setNewRoleCode] = useState("");
+    const [newRoleName, setNewRoleName] = useState("");
+    const [newRoleDept, setNewRoleDept] = useState("");
+    const [newRoleDesc, setNewRoleDesc] = useState("");
+    const [creatingRole, setCreatingRole] = useState(false);
+
     // Close modal on escape
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && selectedRole) setSelectedRole(null);
+            if (e.key === 'Escape') {
+                if (selectedRole) setSelectedRole(null);
+                if (showNewRoleDialog) setShowNewRoleDialog(false);
+            }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedRole]);
+    }, [selectedRole, showNewRoleDialog]);
 
     useEffect(() => { loadRoles(); }, []);
 
@@ -52,12 +63,36 @@ export default function RoleSettingsTab() {
             });
             const data = await res.json();
             if (data.success) {
-                toast.success(`Đã lưu ${data.count} quyền cho ${selectedRole.role_name}`);
+                toast.success(`Đã lưu ${data.count} quyền cho ${selectedRole.role_code}`);
                 setSelectedRole(null);
                 loadRoles();
             } else toast.error(data.error || "Lỗi");
         } catch { toast.error("Lỗi kết nối"); }
         finally { setSaving(false); }
+    };
+
+    const handleCreateRole = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setCreatingRole(true);
+        try {
+            const res = await fetch('/api/app-auth/role-permissions', {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    roleCode: newRoleCode,
+                    roleName: newRoleName,
+                    department: newRoleDept,
+                    description: newRoleDesc
+                }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success(`Đã tạo Role ${data.roleCode}`);
+                setShowNewRoleDialog(false);
+                setNewRoleCode(""); setNewRoleName(""); setNewRoleDept(""); setNewRoleDesc("");
+                loadRoles();
+            } else toast.error(data.error || "Lỗi");
+        } catch { toast.error("Lỗi kết nối"); }
+        finally { setCreatingRole(false); }
     };
 
     if (loading) return <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#a1001f]" /></div>;
@@ -66,7 +101,14 @@ export default function RoleSettingsTab() {
 
     return (
         <div className="space-y-6">
-            <p className="text-sm text-gray-500">Click vào role để set các màn hình mà role đó được xem. Sau đó gán role cho user ở tab "Quản lý tài khoản".</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <p className="text-sm text-gray-500">Click vào role để set các màn hình mà role đó được xem. Sau đó gán role cho user ở tab "Quản lý tài khoản".</p>
+                <button onClick={() => setShowNewRoleDialog(true)}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg shadow-md hover:bg-black transition-colors text-sm font-medium flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+                    Thêm Role Mới
+                </button>
+            </div>
 
             {/* Role list by department */}
             {depts.map(dept => (
@@ -117,6 +159,47 @@ export default function RoleSettingsTab() {
                                 Lưu cài đặt
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Create Role Modal */}
+            {showNewRoleDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto" onClick={() => setShowNewRoleDialog(false)}>
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4 border-b pb-3">
+                            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                Thêm Role Mới
+                            </h3>
+                            <button onClick={() => setShowNewRoleDialog(false)} className="text-gray-400 hover:text-gray-600 rounded-full p-1 hover:bg-gray-100 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreateRole} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Mã Role</label>
+                                <input type="text" required value={newRoleCode} onChange={e => setNewRoleCode(e.target.value)} placeholder="VD: MKT, HR, AD..." className="w-full border border-gray-300 rounded-lg px-3 py-2 uppercase focus:ring-2 focus:ring-gray-900 focus:border-gray-900 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Tên Role hiển thị</label>
+                                <input type="text" required value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="VD: Marketing, Hành chính nhân sự..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-gray-900 focus:border-gray-900 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Phòng ban (nhóm)</label>
+                                <input type="text" required value={newRoleDept} onChange={e => setNewRoleDept(e.target.value)} placeholder="VD: Back Office, Teaching..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-gray-900 focus:border-gray-900 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả chi tiết</label>
+                                <textarea rows={2} value={newRoleDesc} onChange={e => setNewRoleDesc(e.target.value)} placeholder="Phạm vi công việc của role này..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-gray-900 focus:border-gray-900 outline-none resize-none"></textarea>
+                            </div>
+                            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 mt-2">
+                                <button type="button" onClick={() => setShowNewRoleDialog(false)} className="px-5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Hủy</button>
+                                <button type="submit" disabled={creatingRole} className="px-5 py-2 text-sm font-medium text-white bg-gray-900 hover:bg-black rounded-lg shadow disabled:opacity-50 flex items-center gap-2 transition-colors">
+                                    {creatingRole ? <Loader2 className="h-4 w-4 animate-spin" /> : <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>}
+                                    Khởi tạo Role
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

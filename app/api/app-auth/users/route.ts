@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 // POST: Create new user OR add existing Firebase account
 export async function POST(request: NextRequest) {
     try {
-        const { email, password, displayName, role, permissions, createdBy, authType } = await request.json();
+        const { email, password, displayName, role, permissions, userRoles, createdBy, authType } = await request.json();
 
         const isFirebase = authType === 'firebase';
 
@@ -106,6 +106,18 @@ export async function POST(request: NextRequest) {
                 `INSERT INTO app_permissions (user_id, route_path, can_access) VALUES ${permValues}
          ON CONFLICT (user_id, route_path) DO UPDATE SET can_access = true`,
                 permParams
+            );
+        }
+
+        // Insert user roles if provided
+        if (userRoles && Array.isArray(userRoles) && userRoles.length > 0) {
+            const roleValues = userRoles
+                .map((_: string, i: number) => `($1, $${i + 2})`)
+                .join(', ');
+            const roleParams = [newUser.id, ...userRoles];
+            await pool.query(
+                `INSERT INTO user_roles (user_id, role_code) VALUES ${roleValues} ON CONFLICT DO NOTHING`,
+                roleParams
             );
         }
 

@@ -83,3 +83,34 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Lỗi server: ' + error.message }, { status: 500 });
     }
 }
+
+// PUT: Create a new role
+export async function PUT(request: NextRequest) {
+    try {
+        const { roleCode, roleName, department, description } = await request.json();
+
+        if (!roleCode || !roleName || !department) {
+            return NextResponse.json(
+                { error: 'Mã Role, Tên Role và Phòng Ban là bắt buộc' },
+                { status: 400 }
+            );
+        }
+
+        const normalizedCode = roleCode.trim().toUpperCase();
+
+        const existing = await pool.query('SELECT role_code FROM roles WHERE role_code = $1', [normalizedCode]);
+        if (existing.rows.length > 0) {
+            return NextResponse.json({ error: 'Mã Role này đã tồn tại' }, { status: 409 });
+        }
+
+        await pool.query(
+            `INSERT INTO roles (role_code, role_name, department, description) VALUES ($1, $2, $3, $4)`,
+            [normalizedCode, roleName.trim(), department.trim(), description?.trim() || '']
+        );
+
+        return NextResponse.json({ success: true, roleCode: normalizedCode });
+    } catch (error: any) {
+        console.error('Error creating role:', error);
+        return NextResponse.json({ error: 'Lỗi server: ' + error.message }, { status: 500 });
+    }
+}

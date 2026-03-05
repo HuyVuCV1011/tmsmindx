@@ -4,7 +4,6 @@ import { Check, Eye, EyeOff, Key, Loader2, Lock, Plus, Save, Trash2, UserCheck, 
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import ConfirmDialog from "./ConfirmDialog";
-import PermSelector from "./PermSelector";
 
 interface AppUser {
     id: number; email: string; display_name: string; role: string;
@@ -25,11 +24,11 @@ export default function UsersTab() {
 
     // Create form
     const [newEmail, setNewEmail] = useState(""); const [newPw, setNewPw] = useState("");
-    const [newName, setNewName] = useState(""); const [newRole, setNewRole] = useState("admin");
+    const [newName, setNewName] = useState(""); const [newUserRoles, setNewUserRoles] = useState<string[]>([]);
     const [showPw, setShowPw] = useState(false); const [creating, setCreating] = useState(false);
     // Add existing
     const [exEmail, setExEmail] = useState(""); const [exName, setExName] = useState("");
-    const [exRole, setExRole] = useState("manager"); const [exPerms, setExPerms] = useState<string[]>([]);
+    const [exUserRoles, setExUserRoles] = useState<string[]>([]);
     const [adding, setAdding] = useState(false);
     // Roles assignment
     const [selRoles, setSelRoles] = useState<string[]>([]); const [savingRoles, setSavingRoles] = useState(false);
@@ -68,31 +67,37 @@ export default function UsersTab() {
     const close = () => { setPanel('none'); setSel(null); };
 
     const handleCreate = async (e: React.FormEvent) => {
-        e.preventDefault(); if (!newEmail || !newPw || !newName) { toast.error("Điền đầy đủ"); return; }
+        e.preventDefault();
+        if (!newEmail || !newPw || !newName) { toast.error("Điền đầy đủ"); return; }
         setCreating(true);
         try {
             const r = await fetch("/api/app-auth/users", {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: newEmail, password: newPw, displayName: newName, role: newRole, authType: 'app', createdBy: user?.email })
+                body: JSON.stringify({ email: newEmail, password: newPw, displayName: newName, role: 'manager', userRoles: newUserRoles, authType: 'app', createdBy: user?.email })
             });
             const d = await r.json();
-            if (d.success) { toast.success("Tạo thành công!"); setNewEmail(""); setNewPw(""); setNewName(""); close(); loadUsers(); }
-            else toast.error(d.error || "Lỗi");
-        } catch { toast.error("Lỗi") } finally { setCreating(false) }
+            if (d.success) {
+                toast.success("Tạo thành công");
+                setNewEmail(""); setNewPw(""); setNewName(""); setNewUserRoles([]); close(); loadUsers();
+            } else { toast.error(d.error || "Lỗi tạo tài khoản"); }
+        } catch { toast.error("Lỗi mạng"); } finally { setCreating(false); }
     };
 
     const handleAddExisting = async (e: React.FormEvent) => {
-        e.preventDefault(); if (!exEmail || !exName) { toast.error("Điền email và tên"); return; }
+        e.preventDefault();
+        if (!exEmail || !exName) { toast.error("Điền email và tên"); return; }
         setAdding(true);
         try {
             const r = await fetch("/api/app-auth/users", {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: exEmail, displayName: exName, role: exRole, permissions: exPerms, authType: 'firebase', createdBy: user?.email })
+                body: JSON.stringify({ email: exEmail, displayName: exName, role: 'manager', userRoles: exUserRoles, authType: 'firebase', createdBy: user?.email })
             });
             const d = await r.json();
-            if (d.success) { toast.success("Đã thêm!"); setExEmail(""); setExName(""); setExPerms([]); close(); loadUsers(); }
-            else toast.error(d.error || "Lỗi");
-        } catch { toast.error("Lỗi") } finally { setAdding(false) }
+            if (d.success) {
+                toast.success("Đã phân quyền cho tài khoản Firebase");
+                setExEmail(""); setExName(""); setExUserRoles([]); close(); loadUsers();
+            } else { toast.error(d.error || "Lỗi"); }
+        } catch { toast.error("Lỗi mạng"); } finally { setAdding(false); }
     };
 
     const openRoles = (u: AppUser) => { setSel(u); setSelRoles(u.user_roles || []); setPanel('roles'); };
@@ -172,15 +177,26 @@ export default function UsersTab() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                                     <input type="email" value={exEmail} onChange={e => setExEmail(e.target.value)} placeholder="user@mindx.net.vn" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500" /></div>
-                                <div><label className="block text-sm font-medium text-gray-700 mb-1">Tên</label>
+                                <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Tên</label>
                                     <input type="text" value={exName} onChange={e => setExName(e.target.value)} placeholder="Nguyễn Văn A" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500" /></div>
-                                <div><label className="block text-sm font-medium text-gray-700 mb-1">Vai trò</label>
-                                    <select value={exRole} onChange={e => setExRole(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500">
-                                        <option value="manager">Manager</option><option value="admin">Admin</option></select></div>
                             </div>
-                            <div className="mt-4"><label className="block text-sm font-semibold text-gray-800 mb-2">Phân quyền</label>
-                                <div className="max-h-[300px] overflow-y-auto border rounded-xl p-3 bg-gray-50/50">
-                                    <PermSelector perms={exPerms} setPerms={setExPerms} />
+                            <div className="mt-4"><label className="block text-sm font-semibold text-gray-800 mb-2">Vai trò (Role)</label>
+                                <div className="space-y-4 max-h-[300px] overflow-y-auto border rounded-xl p-3 bg-gray-50/50">
+                                    {depts.map(dept => (
+                                        <div key={dept}>
+                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 border-l-2 border-green-500 pl-2">{dept}</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {allRoles.filter(r => r.department === dept).map(r => (
+                                                    <label key={r.role_code} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-all ${exUserRoles.includes(r.role_code) ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                                                        <input type="checkbox" checked={exUserRoles.includes(r.role_code)}
+                                                            onChange={() => setExUserRoles(prev => prev.includes(r.role_code) ? prev.filter(x => x !== r.role_code) : [...prev, r.role_code])}
+                                                            className="w-4 h-4 rounded text-green-600 focus:ring-green-500 border-gray-300" />
+                                                        <span className="text-sm font-medium">{r.role_code}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                             <div className="flex justify-end gap-3 pt-4 mt-2 border-t font-medium">
@@ -211,9 +227,25 @@ export default function UsersTab() {
                                 <div className="space-y-1"><label className="block text-sm font-medium text-gray-700">Mật khẩu</label>
                                     <div className="relative"><input type={showPw ? "text" : "password"} value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="Tối thiểu 6 ký tự" required minLength={6} className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f]" />
                                         <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 p-1 hover:bg-gray-100 rounded-full transition-colors">{showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div></div>
-                                <div className="space-y-1"><label className="block text-sm font-medium text-gray-700">Vai trò</label>
-                                    <select value={newRole} onChange={e => setNewRole(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f]">
-                                        <option value="admin">Admin</option><option value="manager">Manager</option></select></div>
+                                <div className="md:col-span-2 space-y-1"><label className="block text-sm font-medium text-gray-700">Vai trò (Role)</label>
+                                    <div className="space-y-4 max-h-[300px] overflow-y-auto border border-[#a1001f]/20 rounded-xl p-3 bg-gray-50/50">
+                                        {depts.map(dept => (
+                                            <div key={dept}>
+                                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 border-l-2 border-[#a1001f] pl-2">{dept}</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {allRoles.filter(r => r.department === dept).map(r => (
+                                                        <label key={r.role_code} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-all ${newUserRoles.includes(r.role_code) ? 'border-[#a1001f] bg-red-50 text-[#a1001f]' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                                                            <input type="checkbox" checked={newUserRoles.includes(r.role_code)}
+                                                                onChange={() => setNewUserRoles(prev => prev.includes(r.role_code) ? prev.filter(x => x !== r.role_code) : [...prev, r.role_code])}
+                                                                className="w-4 h-4 rounded text-[#a1001f] focus:ring-[#a1001f] border-gray-300" />
+                                                            <span className="text-sm font-medium">{r.role_code}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                             <div className="flex justify-end gap-3 pt-4 mt-2 border-t font-medium">
                                 <button type="button" onClick={close} className="px-5 py-2 text-sm border rounded-lg hover:bg-gray-50 transition-colors">Hủy</button>
