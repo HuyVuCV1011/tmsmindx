@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { initDatabase } from './migrations';
 
 // Tạo connection pool cho database
 const pool = new Pool({
@@ -16,6 +17,12 @@ const pool = new Pool({
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
   process.exit(-1);
+});
+
+// Auto-init: chạy migrations khi import lần đầu
+// Sử dụng .then() để không block module loading
+initDatabase(pool).catch((err) => {
+  console.error('⚠️ Auto-migration failed (app vẫn chạy bình thường):', err.message);
 });
 
 export default pool;
