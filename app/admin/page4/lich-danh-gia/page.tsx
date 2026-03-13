@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/Card";
 import { PageContainer } from "@/components/PageContainer";
+import { useAuth } from "@/lib/auth-context";
 import {
   CalendarDays,
   ChevronLeft,
@@ -213,6 +214,7 @@ function buildCalendarCells(focusDate: Date, view: CalendarView): CalendarCell[]
 }
 
 export default function ProfessionalEvaluationSchedulePage() {
+  const { user } = useAuth();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [view, setView] = useState<CalendarView>("month");
   const [focusDate, setFocusDate] = useState(new Date());
@@ -223,6 +225,7 @@ export default function ProfessionalEvaluationSchedulePage() {
   const [events, setEvents] = useState<EvaluationEvent[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isSavingEvent, setIsSavingEvent] = useState(false);
+  const calendarPermissionPath = "/admin/page4/lich-danh-gia";
 
   const [formData, setFormData] = useState(() => {
     const start = new Date();
@@ -282,6 +285,14 @@ export default function ProfessionalEvaluationSchedulePage() {
   useEffect(() => {
     fetchEvents();
   }, []);
+
+  const canManageCalendar =
+    user?.role === "super_admin" ||
+    (user?.permissions || []).some(
+      (permission) =>
+        permission === calendarPermissionPath ||
+        calendarPermissionPath.startsWith(`${permission}/`)
+    );
 
   const yearOptions = useMemo(() => {
     const currentYear = currentTime.getFullYear();
@@ -425,12 +436,18 @@ export default function ProfessionalEvaluationSchedulePage() {
   };
 
   const openCreateModal = () => {
+    if (!canManageCalendar) {
+      return;
+    }
     resetForm();
     setEditingEventId(null);
     setShowCreateModal(true);
   };
 
   const openCreateModalForDay = (date: Date) => {
+    if (!canManageCalendar) {
+      return;
+    }
     applyDefaultFormForDate(date);
     setEditingEventId(null);
     setShowDayEventsModal(false);
@@ -438,6 +455,9 @@ export default function ProfessionalEvaluationSchedulePage() {
   };
 
   const openEditEvent = (event: EvaluationEvent) => {
+    if (!canManageCalendar) {
+      return;
+    }
     if (event.eventType === "registration") {
       setFormData((previous) => ({
         ...previous,
@@ -488,6 +508,9 @@ export default function ProfessionalEvaluationSchedulePage() {
   };
 
   const handleDeleteEvent = async (eventId: string) => {
+    if (!canManageCalendar) {
+      return;
+    }
     try {
       const response = await fetch('/api/event-schedules', {
         method: 'DELETE',
@@ -507,6 +530,9 @@ export default function ProfessionalEvaluationSchedulePage() {
   };
 
   const handleCreateEvent = async () => {
+    if (!canManageCalendar) {
+      return;
+    }
     let nextEvents: EvaluationEvent[];
 
     if (formData.eventType === "registration") {
@@ -791,12 +817,14 @@ export default function ProfessionalEvaluationSchedulePage() {
               Hôm nay
             </button>
 
-            <button
-              onClick={openCreateModal}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800"
-            >
-              <Plus className="h-4 w-4" /> Thêm mới
-            </button>
+            {canManageCalendar && (
+              <button
+                onClick={openCreateModal}
+                className="inline-flex items-center gap-1 rounded-md bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800"
+              >
+                <Plus className="h-4 w-4" /> Thêm mới
+              </button>
+            )}
 
             <button
               onClick={exportEvents}
@@ -810,6 +838,12 @@ export default function ProfessionalEvaluationSchedulePage() {
         <div className="px-4 py-2 text-sm font-semibold text-gray-700 border-b border-gray-200 bg-gray-50">
           {periodLabel}
         </div>
+
+        {!canManageCalendar && (
+          <div className="px-4 py-2 text-xs text-amber-800 border-b border-amber-200 bg-amber-50">
+            Bạn đang ở chế độ chỉ xem. Chi tiết sự kiện và thao tác thêm, sửa, xóa chỉ hiển thị cho Super Admin hoặc tài khoản được cấp quyền màn hình này.
+          </div>
+        )}
 
         {isLoadingEvents && (
           <div className="px-4 py-2 text-xs text-blue-700 border-b border-gray-200 bg-blue-50">
@@ -887,6 +921,9 @@ export default function ProfessionalEvaluationSchedulePage() {
                       style={{ top, height }}
                       title={`${eventTitle} (${formatEventTimeRange(event.startAt, event.endAt)})`}
                       onClick={(clickEvent) => {
+                        if (!canManageCalendar) {
+                          return;
+                        }
                         clickEvent.stopPropagation();
                         setSelectedDate(focusDate);
                         setShowDayEventsModal(true);
@@ -937,8 +974,11 @@ export default function ProfessionalEvaluationSchedulePage() {
                       : inCurrentMonth
                         ? "bg-white"
                         : "bg-gray-50"
-                  } cursor-pointer hover:bg-blue-50`}
+                  } ${canManageCalendar ? "cursor-pointer hover:bg-blue-50" : "cursor-default"}`}
                   onClick={() => {
+                    if (!canManageCalendar) {
+                      return;
+                    }
                     setSelectedDate(date);
                     setShowDayEventsModal(true);
                   }}
@@ -1379,12 +1419,14 @@ export default function ProfessionalEvaluationSchedulePage() {
                 Sự kiện ngày {selectedDate.toLocaleDateString("vi-VN")}
               </h3>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => openCreateModalForDay(selectedDate)}
-                  className="inline-flex items-center gap-1 rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800"
-                >
-                  <Plus className="h-4 w-4" /> Thêm sự kiện mới
-                </button>
+                {canManageCalendar && (
+                  <button
+                    onClick={() => openCreateModalForDay(selectedDate)}
+                    className="inline-flex items-center gap-1 rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800"
+                  >
+                    <Plus className="h-4 w-4" /> Thêm sự kiện mới
+                  </button>
+                )}
                 <button
                   onClick={() => setShowDayEventsModal(false)}
                   className="rounded-md p-1 hover:bg-gray-100"
@@ -1414,20 +1456,22 @@ export default function ProfessionalEvaluationSchedulePage() {
                         <div className="text-xs text-gray-600 mt-1">{event.specialty}</div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openEditEvent(event)}
-                          className="rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          onClick={() => handleDeleteEvent(event.id)}
-                          className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
-                        >
-                          Xóa
-                        </button>
-                      </div>
+                      {canManageCalendar && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openEditEvent(event)}
+                            className="rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                          >
+                            Sửa
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEvent(event.id)}
+                            className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                          >
+                            Xóa
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))
