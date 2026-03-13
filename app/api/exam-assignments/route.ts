@@ -145,6 +145,9 @@ export async function GET(request: NextRequest) {
         es.set_name,
         es.total_points,
         es.passing_score,
+        es.status AS set_status,
+        es.valid_from AS set_valid_from,
+        es.valid_to AS set_valid_to,
         ex.status AS explanation_status
       FROM teacher_exam_assignments tea
       LEFT JOIN exam_sets es ON es.id = tea.selected_set_id
@@ -193,11 +196,23 @@ export async function GET(request: NextRequest) {
       const openAt = new Date(row.open_at);
       const closeAt = new Date(row.close_at);
       const isOpen = now >= openAt && now <= closeAt;
-      const canTake = isOpen && ['assigned', 'in_progress'].includes(row.assignment_status);
+      const validFrom = row.set_valid_from ? new Date(row.set_valid_from) : null;
+      const validTo = row.set_valid_to ? new Date(row.set_valid_to) : null;
+
+      const isWithinSetWindow =
+        (!validFrom || now >= validFrom) &&
+        (!validTo || now <= validTo);
+
+      const isSetActiveNow = row.set_status === 'active' && isWithinSetWindow;
+      const canTake =
+        isOpen &&
+        isSetActiveNow &&
+        ['assigned', 'in_progress'].includes(row.assignment_status);
 
       return {
         ...row,
         is_open: isOpen,
+        is_set_active_now: isSetActiveNow,
         can_take: canTake,
       };
     });

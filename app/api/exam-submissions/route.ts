@@ -14,9 +14,11 @@ export async function POST(request: NextRequest) {
     }
 
     const assignmentQuery = `
-      SELECT id, teacher_code, open_at, close_at, assignment_status
-      FROM teacher_exam_assignments
-      WHERE id = $1
+      SELECT tea.id, tea.teacher_code, tea.open_at, tea.close_at, tea.assignment_status,
+             es.status AS set_status, es.valid_from, es.valid_to
+      FROM teacher_exam_assignments tea
+      JOIN exam_sets es ON es.id = tea.selected_set_id
+      WHERE tea.id = $1
       LIMIT 1
     `;
     const assignmentResult = await pool.query(assignmentQuery, [assignment_id]);
@@ -48,6 +50,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Exam time is over' },
         { status: 400 }
+      );
+    }
+
+    const validFrom = assignment.valid_from ? new Date(assignment.valid_from) : null;
+    const validTo = assignment.valid_to ? new Date(assignment.valid_to) : null;
+    const isWithinSetWindow = (!validFrom || now >= validFrom) && (!validTo || now <= validTo);
+    const isSetActiveNow = assignment.set_status === 'active' && isWithinSetWindow;
+
+    if (!isSetActiveNow) {
+      return NextResponse.json(
+        { success: false, error: 'Bộ đề hiện không active trong thời gian lịch cho phép' },
+        { status: 403 }
       );
     }
 

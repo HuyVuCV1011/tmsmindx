@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
 type CalendarView = "day" | "week" | "month";
-type EventCategory = "registration" | "exam";
+type EventCategory = "registration" | "exam" | "workshop_teaching" | "meeting" | "advanced_training_release" | "holiday";
 
 type RegistrationTemplate = "official" | "supplement";
 
@@ -29,7 +29,6 @@ interface ExamSetAvailability {
   subject_code: string;
 }
 
-const STORAGE_KEY = "teacher_evaluation_schedule_events_v1";
 const WEEKDAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 const REGISTER_OPTIONS = [
   "[COD] Scratch",
@@ -262,19 +261,41 @@ export default function MonthlyActivitiesPage() {
   }, []);
 
   useEffect(() => {
-    const loadEvents = () => {
+    (async () => {
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        const parsed: EvaluationEvent[] = raw ? JSON.parse(raw) : [];
-        setEvents(parsed.map((event) => ({ ...event, eventType: event.eventType || "exam" })));
+        const response = await fetch('/api/event-schedules');
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || 'Không thể tải dữ liệu lịch sự kiện');
+        }
+
+        const rows = (data.data || []) as Array<{
+          id: string;
+          title: string;
+          specialty: string | null;
+          start_at: string;
+          end_at: string;
+          note?: string | null;
+          event_type: EventCategory;
+          registration_template?: RegistrationTemplate | null;
+        }>;
+
+        setEvents(
+          rows.map((item) => ({
+            id: item.id,
+            title: item.title,
+            specialty: item.specialty || item.title,
+            startAt: item.start_at,
+            endAt: item.end_at,
+            note: item.note || undefined,
+            eventType: item.event_type,
+            registrationTemplate: item.registration_template || undefined,
+          }))
+        );
       } catch {
         setEvents([]);
       }
-    };
-
-    loadEvents();
-    window.addEventListener("storage", loadEvents);
-    return () => window.removeEventListener("storage", loadEvents);
+    })();
   }, []);
 
   const yearOptions = useMemo(() => {

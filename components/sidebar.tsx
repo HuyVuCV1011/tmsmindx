@@ -3,10 +3,10 @@
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
-import { CalendarDays, ChevronDown, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Sparkles, Users, X } from "lucide-react";
+import { CalendarDays, ChevronDown, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export function Sidebar() {
   const { isOpen, setIsOpen } = useSidebar();
@@ -28,17 +28,17 @@ export function Sidebar() {
 
   // Determine menu items based on current path (admin or user)
   const isUserArea = pathname.startsWith('/user');
-  
+
   const adminMenuItems = [
     { href: "/admin/dashboard", label: "Dashboard", icon: Home },
     { href: "/admin/page1", label: "Thông tin GV", icon: LayoutDashboard },
     { href: "/admin/page2", label: "màn hình 2", icon: Users },
     { href: "/admin/page3", label: "Màn hình 3", icon: Users },
+    { href: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện", icon: CalendarDays },
     {
       label: "Đánh giá năng lực GV",
       icon: Settings,
       submenu: [
-        { href: "/admin/page4/lich-danh-gia", label: "Lịch kiểm tra đánh giá" },
         // { href: "/admin/page4/form-dang-ky", label: "Form đăng ký kiểm tra" }, 
         { href: "/admin/page4/danh-sach-dang-ky", label: "Danh sách đăng ký" },
         { href: "/admin/page4/thu-vien-de", label: "Library đề chuyên môn" },
@@ -55,6 +55,8 @@ export function Sidebar() {
     },
     { href: "/admin/giaitrinh", label: "Quản lý Giải trình", icon: MessageSquare },
     { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
+    { href: "/admin/database", label: "Database Manager", icon: LayoutDashboard },
+    { href: "/admin/user-management", label: "Quản lý tài khoản", icon: Shield },
   ];
 
   const userMenuItems = [
@@ -66,8 +68,42 @@ export function Sidebar() {
     { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra", icon: MessageSquare },
   ];
 
+  // Filter admin menu items based on user permissions
+  const getFilteredAdminMenuItems = () => {
+    if (!user) return [];
 
-  const menuItems = isUserArea ? userMenuItems : adminMenuItems;
+    if (user.role === 'super_admin') return adminMenuItems;
+
+    const permissions = user.permissions || [];
+    if (permissions.length === 0) return [];
+
+    return adminMenuItems
+      .filter(item => {
+        if ('submenu' in item && item.submenu) {
+          const filteredSubmenu = item.submenu.filter(sub =>
+            permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
+          );
+          return filteredSubmenu.length > 0;
+        }
+
+        return permissions.some(p => item.href === p || (item.href && item.href.startsWith(p + '/')));
+      })
+      .map(item => {
+        if ('submenu' in item && item.submenu) {
+          const filteredSubmenu = item.submenu.filter(sub =>
+            permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
+          );
+          return { ...item, submenu: filteredSubmenu };
+        }
+
+        return item;
+      });
+  };
+
+  const menuItems = useMemo(
+    () => (isUserArea ? userMenuItems : getFilteredAdminMenuItems()),
+    [isUserArea, user?.role, user?.permissions]
+  );
 
   // Auto-expand submenu if current page is in it
   useEffect(() => {
@@ -83,7 +119,7 @@ export function Sidebar() {
         }
       }
     });
-  }, [expandedMenus, menuItems, pathname]);
+  }, [menuItems, pathname]);
 
   const toggleSubmenu = (label: string) => {
     setExpandedMenus(prev => {
@@ -95,6 +131,23 @@ export function Sidebar() {
       localStorage.setItem('expandedMenus', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const getRoleDisplay = () => {
+    if (!user) return '';
+
+    switch (user.role) {
+      case 'super_admin':
+        return 'Super Admin';
+      case 'admin':
+        return 'Admin';
+      case 'manager':
+        return 'Manager';
+      case 'teacher':
+        return 'Teacher';
+      default:
+        return user.role;
+    }
   };
 
   return (
@@ -260,7 +313,7 @@ export function Sidebar() {
                 </div>
                 <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-linear-to-r from-[#a1001f] to-[#c41230] text-white text-xs rounded-full font-semibold shadow-sm">
                   <Sparkles className="h-2.5 w-2.5" />
-                  <span>{user.role === 'teacher' ? 'Teacher' : 'Manager'}</span>
+                  <span>{getRoleDisplay()}</span>
                 </div>
               </Link>
               

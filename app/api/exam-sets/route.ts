@@ -222,3 +222,168 @@ export async function POST(request: NextRequest) {
     client.release();
   }
 }
+
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, set_name, total_points, passing_score, status, valid_from, valid_to } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'id is required' },
+        { status: 400 }
+      );
+    }
+
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (typeof set_name === 'string') {
+      updates.push(`set_name = $${values.length + 1}`);
+      values.push(set_name.trim());
+    }
+
+    if (total_points !== undefined) {
+      updates.push(`total_points = $${values.length + 1}`);
+      values.push(Number(total_points));
+    }
+
+    if (passing_score !== undefined) {
+      updates.push(`passing_score = $${values.length + 1}`);
+      values.push(Number(passing_score));
+    }
+
+    if (status !== undefined) {
+      if (!['active', 'inactive'].includes(status)) {
+        return NextResponse.json(
+          { success: false, error: 'status must be active or inactive' },
+          { status: 400 }
+        );
+      }
+      updates.push(`status = $${values.length + 1}`);
+      values.push(status);
+    }
+
+    if (valid_from !== undefined) {
+      updates.push(`valid_from = $${values.length + 1}`);
+      values.push(valid_from || null);
+    }
+
+    if (valid_to !== undefined) {
+      updates.push(`valid_to = $${values.length + 1}`);
+      values.push(valid_to || null);
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No valid fields to update' },
+        { status: 400 }
+      );
+    }
+
+    values.push(id);
+
+    const result = await pool.query(
+      `
+      UPDATE exam_sets
+      SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $${values.length}
+      RETURNING *
+      `,
+      values
+    );
+
+    if (result.rows.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Exam set not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: result.rows[0],
+      message: 'Exam set updated successfully',
+    });
+  } catch (error: any) {
+    console.error('Error updating exam set:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to update exam set' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const client = await pool.connect();
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'set id is required' },
+        { status: 400 }
+      );
+    }
+
+    await client.query('BEGIN');
+
+    const assignedResult = await client.query(
+      'SELECT COUNT(*)::int AS count FROM teacher_exam_assignments WHERE selected_set_id = $1',
+      [id]
+    );
+
+    const assignedCount = Number(assignedResult.rows[0]?.count || 0);
+    if (assignedCount > 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Bộ đề đã được gán cho giáo viên, không thể xóa.',
+          details: `Có ${assignedCount} bản ghi phân công đang tham chiếu bộ đề này.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    const deleteResult = await client.query(
+      'DELETE FROM exam_sets WHERE id = $1 RETURNING id, set_code, set_name',
+      [id]
+    );
+
+    if (deleteResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { success: false, error: 'Không tìm thấy bộ đề để xóa' },
+        { status: 404 }
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return NextResponse.json({
+      success: true,
+      message: 'Đã xóa bộ đề thành công',
+      data: deleteResult.rows[0],
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Error deleting exam set:', error);
+
+    if (error?.code === '23503') {
+      return NextResponse.json(
+        { success: false, error: 'Bộ đề đang được sử dụng nên không thể xóa.' },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to delete exam set' },
+      { status: 500 }
+    );
+  } finally {
+    client.release();
+  }
+}
