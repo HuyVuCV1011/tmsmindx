@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { getCacheKey, isCacheValid, setCacheEntry, getCacheEntry, type BirthdaysCacheEntry } from '@/lib/birthday-cache'
+import { getBirthdayRecordsFromDataCache } from '@/lib/birthday-data-cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -211,31 +212,15 @@ export async function GET(request: Request) {
             // Luôn lấy privacy mới nhất để tránh stale khi user vừa bật/tắt show_birthday.
             hiddenEmails = await fetchHiddenBirthdayEmails()
         } else {
-            console.log(`[Birthdays API] Fetching fresh data from GAS + DB`)
+            console.log(`[Birthdays API] Fetching data from Vercel cache + DB`)
             
             // Fetch birthday list và hidden emails song song (userArea đã fetch ở trên)
-            const [gasResponse, fetchedHiddenEmails] = await Promise.all([
-                fetch(`${BIRTHDAY_GAS_URL}?action=birthday&month=${7}`, { cache: 'no-store' }),
+            const [cachedBirthdayRecords, fetchedHiddenEmails] = await Promise.all([
+                getBirthdayRecordsFromDataCache(currentMonth, currentYear),
                 fetchHiddenBirthdayEmails()
             ])
 
-            if (!gasResponse.ok) {
-                throw new Error(`GAS responded with status: ${gasResponse.status}`)
-            }
-
-            const gasData = await gasResponse.json()
-
-            // Extract array từ response — GAS trả về: { status: "ok", month, total, data: [...] }
-            birthdayRecords = []
-            if (Array.isArray(gasData)) {
-                birthdayRecords = gasData
-            } else if (gasData?.data && Array.isArray(gasData.data)) {
-                birthdayRecords = gasData.data
-            } else if (gasData?.result && Array.isArray(gasData.result)) {
-                birthdayRecords = gasData.result
-            } else if (gasData?.teachers && Array.isArray(gasData.teachers)) {
-                birthdayRecords = gasData.teachers
-            }
+            birthdayRecords = cachedBirthdayRecords
 
             hiddenEmails = fetchedHiddenEmails
 

@@ -3,7 +3,7 @@
 import { ASSIGNMENT_TYPES, TIME_PRESETS } from '@/lib/assignment-constants';
 import { Assignment, AssignmentFormData } from '@/types/assignment';
 import { Check, ChevronRight, FileText, Settings, Video } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface AssignmentWizardProps {
   onSubmit: (data: AssignmentFormData) => void;
@@ -53,11 +53,7 @@ export function AssignmentWizard({ onSubmit, onCancel, initialData, isSubmitting
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onCancel]);
 
-  useEffect(() => {
-    fetchVideos();
-  }, []);
-
-  const fetchVideos = async () => {
+  const fetchVideos = useCallback(async () => {
     try {
       const response = await fetch('/api/training-videos');
       const data = await response.json();
@@ -67,7 +63,11 @@ export function AssignmentWizard({ onSubmit, onCancel, initialData, isSubmitting
     } catch (error) {
       console.error('Error fetching videos:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchVideos();
+  }, [fetchVideos]);
 
   const steps = [
     { number: 1, title: 'Chọn video', icon: Video },

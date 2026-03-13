@@ -17,6 +17,22 @@ interface Post {
     created_at: string
 }
 
+interface EventSchedule {
+    id: string
+    title: string
+    specialty?: string | null
+    event_type: string
+    start_at: string
+    end_at: string
+    note?: string | null
+}
+
+interface EventSchedulesResponse {
+    success: boolean
+    data: EventSchedule[]
+    count: number
+}
+
 interface Birthday {
     id: number
     name: string
@@ -42,12 +58,40 @@ interface BirthdaysResponse {
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 const BIRTHDAY_PRIVACY_SYNC_KEY = 'birthday-privacy-updated-at'
+const VIETNAM_TIMEZONE = 'Asia/Ho_Chi_Minh'
 
 function getCurrentWeek(day: number): number {
     if (day <= 7) return 1
     if (day <= 14) return 2
     if (day <= 21) return 3
     return 4
+}
+
+function getWeekRange(week: number, year: number, month: number): { start: number; end: number } {
+    const daysInMonth = new Date(year, month, 0).getDate()
+    if (week === 1) return { start: 1, end: 7 }
+    if (week === 2) return { start: 8, end: 14 }
+    if (week === 3) return { start: 15, end: 21 }
+    return { start: 22, end: daysInMonth }
+}
+
+function getTimeZoneDateParts(date: Date, timeZone: string): { year: number; month: number; day: number } {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).formatToParts(date)
+
+    const year = Number(parts.find((part) => part.type === 'year')?.value || 0)
+    const month = Number(parts.find((part) => part.type === 'month')?.value || 0)
+    const day = Number(parts.find((part) => part.type === 'day')?.value || 0)
+
+    return { year, month, day }
+}
+
+function toYmdNumber(year: number, month: number, day: number): number {
+    return year * 10000 + month * 100 + day
 }
 
 export function UpcomingEventsSidebar() {
@@ -91,7 +135,24 @@ export function UpcomingEventsSidebar() {
         return () => window.clearTimeout(timer)
     }, [birthdaysApiUrl])
 
-    const { data: posts = [] } = useSWR<Post[]>('/api/truyenthong/posts?status=published', fetcher)
+    const vietnamNow = useMemo(() => getTimeZoneDateParts(new Date(), VIETNAM_TIMEZONE), [])
+    const currentWeekForEvents = getCurrentWeek(vietnamNow.day)
+    const currentMonthForEvents = vietnamNow.month
+    const currentYearForEvents = vietnamNow.year
+    const eventsWeekRange = getWeekRange(currentWeekForEvents, currentYearForEvents, currentMonthForEvents)
+    const weekStartKey = toYmdNumber(currentYearForEvents, currentMonthForEvents, eventsWeekRange.start)
+    const weekEndKey = toYmdNumber(currentYearForEvents, currentMonthForEvents, eventsWeekRange.end)
+
+    const eventsApiUrl = useMemo(() => {
+        const monthString = `${currentYearForEvents}-${String(currentMonthForEvents).padStart(2, '0')}`
+        return `/api/event-schedules?month=${monthString}`
+    }, [currentMonthForEvents, currentYearForEvents])
+
+    const { data: eventSchedulesResponse } = useSWR<EventSchedulesResponse>(eventsApiUrl, fetcher, {
+        dedupingInterval: 60_000,
+        revalidateOnFocus: false,
+    })
+
     const {
         data: birthdaysResponse,
         mutate: mutateBirthdays,
@@ -131,10 +192,16 @@ export function UpcomingEventsSidebar() {
         window.addEventListener('privacy-setting-changed', handlePrivacyChange)
         window.addEventListener('focus', handleWindowFocus)
         document.addEventListener('visibilitychange', handleVisibilityChange)
-        syncBirthdayPrivacyChanges()
+        
+        // Defer initial sync to avoid synchronous setState during render/mount phase
+        const timer = setTimeout(() => {
+            syncBirthdayPrivacyChanges()
+        }, 0)
+        
         console.log('[Birthday Sidebar] Event listener registered')
         
         return () => {
+            clearTimeout(timer)
             window.removeEventListener('privacy-setting-changed', handlePrivacyChange)
             window.removeEventListener('focus', handleWindowFocus)
             document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -146,22 +213,33 @@ export function UpcomingEventsSidebar() {
         if (!privacySyncToken || !birthdaysResponse) return
 
         window.localStorage.removeItem(BIRTHDAY_PRIVACY_SYNC_KEY)
-        setPrivacySyncToken(null)
+        const timer = setTimeout(() => {
+            setPrivacySyncToken(null)
+        }, 0)
+        return () => clearTimeout(timer)
     }, [privacySyncToken, birthdaysResponse])
 
-    // Filter events and get upcoming ones
+    // Lấy lịch sự kiện thuộc tuần hiện tại trong tháng hiện tại (4 tuần/tháng)
     const upcomingEvents = useMemo(() => {
-        const now = new Date()
-        const events = posts
-            .filter(post => {
-                if (post.post_type !== 'sự-kiện') return false
-                const eventDate = new Date(post.published_at)
-                return eventDate >= now // Chỉ lấy sự kiện trong tương lai hoặc đang diễn ra
-            })
-            .sort((a, b) => new Date(a.published_at).getTime() - new Date(b.published_at).getTime())
-        
-        return events.slice(0, 3) // Get next 3 events
-    }, [posts])
+        const rows = eventSchedulesResponse?.data || []
+
+        const filtered = rows.filter((event) => {
+            const start = new Date(event.start_at)
+            const end = new Date(event.end_at)
+
+            const startParts = getTimeZoneDateParts(start, VIETNAM_TIMEZONE)
+            const endParts = getTimeZoneDateParts(end, VIETNAM_TIMEZONE)
+            const startKey = toYmdNumber(startParts.year, startParts.month, startParts.day)
+            const endKey = toYmdNumber(endParts.year, endParts.month, endParts.day)
+
+            // Event overlap tuần hiện tại theo ngày VN: start <= weekEnd && end >= weekStart
+            return startKey <= weekEndKey && endKey >= weekStartKey
+        })
+
+        return filtered
+            .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+            .slice(0, 3)
+    }, [eventSchedulesResponse?.data, weekStartKey, weekEndKey])
 
     // Get birthdays from API
     const upcomingBirthdays = useMemo(() => {
@@ -170,20 +248,32 @@ export function UpcomingEventsSidebar() {
 
     const showBirthdaysLoading = (isBirthdaysLoading || isBirthdaysValidating) && upcomingBirthdays.length === 0
 
-    const currentWeek = birthdaysResponse?.week ?? getCurrentWeek(new Date().getDate())
-    const currentMonth = birthdaysResponse?.month ?? (new Date().getMonth() + 1)
+    const currentWeek = birthdaysResponse?.week ?? getCurrentWeek(vietnamNow.day)
+    const currentMonth = birthdaysResponse?.month ?? vietnamNow.month
     const userArea = birthdaysResponse?.userArea
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString)
-        const day = date.getDate()
-        const month = date.getMonth() + 1
-        return { day, month }
+        const parts = getTimeZoneDateParts(date, VIETNAM_TIMEZONE)
+        return { day: parts.day, month: parts.month }
     }
 
     const formatTime = (dateString: string) => {
         const date = new Date(dateString)
-        return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+        return date.toLocaleTimeString('vi-VN', { timeZone: VIETNAM_TIMEZONE, hour: '2-digit', minute: '2-digit' })
+    }
+
+    const getEventTypeLabel = (eventType: string) => {
+        const labels: Record<string, string> = {
+            registration: 'Đăng ký',
+            exam: 'Kiểm tra',
+            workshop_teaching: 'Workshop',
+            meeting: 'Họp',
+            advanced_training_release: 'Mở đào tạo',
+            holiday: 'Nghỉ lễ'
+        }
+
+        return labels[eventType] || 'Sự kiện'
     }
 
     const getMonthName = (month: number) => {
@@ -207,11 +297,10 @@ export function UpcomingEventsSidebar() {
                     {upcomingEvents.length > 0 ? (
                         <>
                             {upcomingEvents.map(event => {
-                                const { day, month } = formatDate(event.published_at)
+                                const { day, month } = formatDate(event.start_at)
                                 return (
-                                    <Link
+                                    <div
                                         key={event.id}
-                                        href={`/user/truyenthong/${event.slug}`}
                                         className="flex gap-4 group hover:bg-linear-to-r hover:from-red-50 hover:to-orange-50 -mx-3 px-3 py-3 rounded-xl transition-all duration-200 border border-transparent hover:border-red-100 hover:shadow-md"
                                     >
                                         <div className="shrink-0">
@@ -230,15 +319,18 @@ export function UpcomingEventsSidebar() {
                                             </h4>
                                             <div className="flex items-center gap-1.5 text-xs text-gray-500 group-hover:text-red-600 transition-colors">
                                                 <Clock className="w-3.5 h-3.5" />
-                                                <span className="font-medium">{formatTime(event.published_at)}</span>
+                                                <span className="font-medium">{formatTime(event.start_at)} - {formatTime(event.end_at)}</span>
+                                            </div>
+                                            <div className="mt-1 text-[11px] text-gray-500 font-semibold uppercase tracking-wide">
+                                                {getEventTypeLabel(event.event_type)}{event.specialty ? ` • ${event.specialty}` : ''}
                                             </div>
                                         </div>
-                                    </Link>
+                                    </div>
                                 )
                             })}
                             
                             <Link
-                                href="/user/truyenthong?filter=sự-kiện"
+                                href="/user/hoat-dong-hang-thang"
                                 className="flex items-center justify-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-semibold py-3 hover:bg-linear-to-r hover:from-blue-50 hover:to-indigo-50 rounded-xl transition-all duration-200 mt-4 border border-transparent hover:border-blue-200 hover:shadow-md group"
                             >
                                 <span>Xem toàn bộ lịch</span>
