@@ -48,6 +48,7 @@ interface PrivacySettings {
 }
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
+const BIRTHDAY_PRIVACY_SYNC_KEY = 'birthday-privacy-updated-at'
 
 export default function TeacherProfilePage() {
     const { user } = useAuth()
@@ -114,6 +115,23 @@ export default function TeacherProfilePage() {
 
             toast.success('Đã cập nhật cài đặt', { id: toastId })
             mutatePrivacy()
+
+            // Invalidate birthdays cache nếu thay đổi show_birthday
+            if (setting === 'show_birthday') {
+                console.log('[Privacy] show_birthday changed, invalidating cache...')
+                window.localStorage.setItem(BIRTHDAY_PRIVACY_SYNC_KEY, String(Date.now()))
+                
+                try {
+                    await fetch('/api/birthdays/invalidate', { method: 'POST' })
+                    console.log('[Privacy] Cache invalidated successfully')
+                } catch (err) {
+                    console.warn('[Privacy] Failed to invalidate cache:', err)
+                }
+
+                // Dispatch event để sidebar revalidate dữ liệu
+                console.log('[Privacy] Dispatching privacy-setting-changed event')
+                window.dispatchEvent(new CustomEvent('privacy-setting-changed'))
+            }
         } catch (error) {
             console.error('Update privacy error:', error)
             toast.error('Lỗi khi cập nhật', { id: toastId })

@@ -119,7 +119,7 @@ export default function CommunicationsPage() {
                             <div className="flex flex-col gap-8">
 
                                 {/* Sticky Filter Bar */}
-                                <div className="sticky top-20 z-30 bg-white/80 backdrop-blur-xl border border-gray-200/50 p-2 rounded-2xl shadow-sm flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
+                                <div className="top-20 z-30 bg-white/80 backdrop-blur-xl border border-gray-200/50 p-2 rounded-2xl shadow-sm flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
                                     <div className="flex p-1 gap-1">
                                         {postTypes.map(type => (
                                             <button

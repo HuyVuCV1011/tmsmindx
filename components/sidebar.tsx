@@ -19,7 +19,14 @@ export function Sidebar() {
     const saved = localStorage.getItem('expandedMenus');
     if (saved) {
       try {
-        setExpandedMenus(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed)) {
+          // Use setTimeout to avoid synchronous setState during effect execution
+          const timer = setTimeout(() => {
+            setExpandedMenus(parsed);
+          }, 0);
+          return () => clearTimeout(timer);
+        }
       } catch {
         // Ignore parse errors
       }
