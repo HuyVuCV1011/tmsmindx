@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { withApiProtection } from '@/lib/api-protection'
+import { invalidateCurrentAndNeighboringMonths } from '@/lib/birthday-cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,6 +89,9 @@ async function handlePut(req: NextRequest) {
                 show_personal_email ?? false,
             ]
         )
+
+        // Invalidate birthdays cache khi show_birthday thay đổi (realtime update)
+        invalidateCurrentAndNeighboringMonths()
 
         return NextResponse.json({
             success: true,

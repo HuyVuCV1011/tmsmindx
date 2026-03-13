@@ -2,7 +2,7 @@
 
 import { Question } from '@/types/assignment';
 import { CheckCircle, Download, FileText, Filter, Plus, Search, Smile, SortAsc, Target, Upload } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { QuestionCard } from './QuestionCard';
 
 interface QuestionListProps {
@@ -46,6 +46,14 @@ export function QuestionList({
     return matchesSearch && matchesType && matchesDifficulty;
   }).sort((a, b) => a.order_number - b.order_number);
 
+  const toggleSelectAll = useCallback(() => {
+    if (selectedIds.length === filteredQuestions.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredQuestions.map(q => q.id));
+    }
+  }, [selectedIds, filteredQuestions]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -68,7 +76,7 @@ export function QuestionList({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onAddQuestion]);
+  }, [onAddQuestion, toggleSelectAll]);
 
   const handleDragStart = (index: number) => {
     setDraggedItem(index);
@@ -95,14 +103,6 @@ export function QuestionList({
 
   const handleDragEnd = () => {
     setDraggedItem(null);
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.length === filteredQuestions.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredQuestions.map(q => q.id));
-    }
   };
 
   const toggleSelect = (id: number) => {
