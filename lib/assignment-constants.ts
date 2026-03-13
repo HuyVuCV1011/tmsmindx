@@ -31,49 +31,28 @@ export const QUESTION_TEMPLATES = {
   }
 };
 
-// Bloom's Taxonomy - 6 cấp độ tư duy
+// Difficulty levels aligned with DB schema
 export const DIFFICULTY_LEVELS = [
   { 
-    value: 'remember', 
-    label: 'Nhớ', 
+    value: 'easy', 
+    label: 'Dễ', 
     color: 'green', 
-    icon: '🧠',
-    description: 'Nhớ lại thông tin, thuật ngữ, khái niệm cơ bản'
+    icon: '🟢',
+    description: 'Câu hỏi cơ bản, độ khó thấp'
   },
   { 
-    value: 'understand', 
-    label: 'Hiểu', 
+    value: 'medium', 
+    label: 'Trung bình', 
     color: 'blue', 
-    icon: '💡',
-    description: 'Giải thích ý nghĩa, diễn giải thông tin'
+    icon: '🟡',
+    description: 'Câu hỏi ở mức độ vừa phải'
   },
-  { 
-    value: 'apply', 
-    label: 'Áp dụng', 
-    color: 'cyan', 
-    icon: '⚙️',
-    description: 'Sử dụng kiến thức vào tình huống mới'
-  },
-  { 
-    value: 'analyze', 
-    label: 'Phân tích', 
-    color: 'yellow', 
-    icon: '🔍',
-    description: 'Phân tách thông tin, tìm mối liên hệ'
-  },
-  { 
-    value: 'evaluate', 
-    label: 'Đánh giá', 
-    color: 'orange', 
-    icon: '⚖️',
-    description: 'Đưa ra nhận định, phê phán dựa trên tiêu chí'
-  },
-  { 
-    value: 'create', 
-    label: 'Sáng tạo', 
-    color: 'purple', 
-    icon: '✨',
-    description: 'Tạo ra giải pháp, sản phẩm mới'
+  {
+    value: 'hard',
+    label: 'Khó',
+    color: 'red',
+    icon: '🔴',
+    description: 'Câu hỏi nâng cao, độ khó cao'
   }
 ];
 

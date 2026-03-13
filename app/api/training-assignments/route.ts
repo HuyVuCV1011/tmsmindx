@@ -194,6 +194,28 @@ export async function DELETE(request: Request) {
       );
     }
 
+    const assignmentStatusQuery = `
+      SELECT a.id, v.status AS video_status
+      FROM training_video_assignments a
+      JOIN training_videos v ON v.id = a.video_id
+      WHERE a.id = $1
+    `;
+    const assignmentStatusResult = await pool.query(assignmentStatusQuery, [id]);
+
+    if (assignmentStatusResult.rows.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Assignment not found' },
+        { status: 404 }
+      );
+    }
+
+    if (assignmentStatusResult.rows[0].video_status === 'active') {
+      return NextResponse.json(
+        { success: false, error: 'Không thể xóa assignment khi video đang Active' },
+        { status: 403 }
+      );
+    }
+
     const query = 'DELETE FROM training_video_assignments WHERE id = $1 RETURNING *';
     const result = await pool.query(query, [id]);
 

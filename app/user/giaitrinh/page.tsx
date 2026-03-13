@@ -2,6 +2,7 @@
 
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth-context';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
@@ -80,6 +81,7 @@ const SUBJECT_LIST = [
 
 export default function GiaiTrinhPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [explanations, setExplanations] = useState<Explanation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -100,6 +102,11 @@ export default function GiaiTrinhPage() {
     test_date: '',
     reason: ''
   });
+
+  const prefillAssignmentId = searchParams.get('assignment_id');
+  const prefillSubject = searchParams.get('subject');
+  const prefillCampus = searchParams.get('campus');
+  const prefillTestDate = searchParams.get('test_date');
 
   // Filter campus list based on search
   const filteredCampusList = CAMPUS_LIST.filter(campus =>
@@ -180,6 +187,25 @@ export default function GiaiTrinhPage() {
       fetchTeacherInfo();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.email || !prefillAssignmentId) return;
+
+    const normalizedDate = prefillTestDate
+      ? new Date(prefillTestDate).toISOString().slice(0, 10)
+      : '';
+
+    setFormData((prev) => ({
+      ...prev,
+      campus: prefillCampus || prev.campus,
+      subject: prefillSubject || prev.subject,
+      test_date: normalizedDate || prev.test_date,
+      reason: prev.reason || `Giải trình cho bài thi quá hạn (Assignment #${prefillAssignmentId}).`
+    }));
+    setCampusSearch(prefillCampus || '');
+    setSubjectSearch(prefillSubject || '');
+    setShowModal(true);
+  }, [user, prefillAssignmentId, prefillSubject, prefillCampus, prefillTestDate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -478,7 +504,7 @@ export default function GiaiTrinhPage() {
       {/* Danh sách giải trình - Responsive Cards */}
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+          <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-linear-to-r from-gray-50 to-white">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Danh Sách Giải Trình</h2>
               <p className="text-sm text-gray-600">
@@ -564,7 +590,7 @@ export default function GiaiTrinhPage() {
                         <p className="text-sm font-medium text-gray-900 truncate">{explanation.campus}</p>
                         <p className="text-xs text-gray-600 mt-0.5">{explanation.subject}</p>
                       </div>
-                      <div className="ml-3 flex-shrink-0">
+                      <div className="ml-3 shrink-0">
                         {getStatusBadge(explanation.status)}
                       </div>
                     </div>

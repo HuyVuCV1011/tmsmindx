@@ -26,8 +26,15 @@ interface Assignment {
   question_count: number;
 }
 
+interface TrainingVideoOption {
+  id: number;
+  title: string;
+  lesson_number?: number;
+}
+
 export default function AssignmentManagementPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [videos, setVideos] = useState<TrainingVideoOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -50,7 +57,20 @@ export default function AssignmentManagementPage() {
 
   useEffect(() => {
     fetchAssignments();
+    fetchVideos();
   }, []);
+
+  const fetchVideos = async () => {
+    try {
+      const response = await fetch('/api/training-videos');
+      const data = await response.json();
+      if (data.success) {
+        setVideos(data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching videos:', err);
+    }
+  };
 
   const fetchAssignments = async () => {
     try {
@@ -289,13 +309,19 @@ export default function AssignmentManagementPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-sm font-medium">Video ID *</label>
-                  <input
-                    type="number"
+                  <select
                     required
                     value={formData.video_id}
                     onChange={e => setFormData({...formData, video_id: e.target.value})}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
-                  />
+                  >
+                    <option value="">-- Chọn video --</option>
+                    {videos.map((video) => (
+                      <option key={video.id} value={video.id.toString()}>
+                        #{video.id} {video.lesson_number ? `• L${video.lesson_number}` : ''} • {video.title}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block mb-1 text-sm font-medium">Loại *</label>

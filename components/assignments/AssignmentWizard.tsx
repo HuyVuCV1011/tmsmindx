@@ -15,9 +15,18 @@ interface AssignmentWizardProps {
 
 type Step = 1 | 2 | 3;
 
+interface TrainingVideoOption {
+  id: number;
+  title: string;
+  description?: string;
+  start_date?: string;
+  duration_minutes?: number;
+  lesson_number?: number;
+}
+
 export function AssignmentWizard({ onSubmit, onCancel, initialData, isSubmitting = false, isEditing = false }: AssignmentWizardProps) {
   const [currentStep, setCurrentStep] = useState<Step>(1);
-  const [videos, setVideos] = useState<any[]>([]);
+  const [videos, setVideos] = useState<TrainingVideoOption[]>([]);
   
   const [formData, setFormData] = useState<AssignmentFormData>({
     video_id: initialData?.video_id?.toString() || '',
@@ -71,6 +80,8 @@ export function AssignmentWizard({ onSubmit, onCancel, initialData, isSubmitting
     if (currentStep === 2) return formData.assignment_title.trim() !== '';
     return true;
   };
+
+  const selectedVideo = videos.find((video) => video.id.toString() === formData.video_id);
 
   const handleNext = () => {
     if (canProceed() && currentStep < 3) {
@@ -158,41 +169,40 @@ export function AssignmentWizard({ onSubmit, onCancel, initialData, isSubmitting
                 <h3 className="text-lg font-bold text-gray-900 mb-2">Chọn video liên kết</h3>
                 <p className="text-sm text-gray-600">Bài tập này sẽ được gắn với video nào?</p>
               </div>
-              
-              <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto pr-2">
-                {videos.map((video) => (
-                  <label
-                    key={video.id}
-                    className={`flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all hover:shadow-md ${
-                      formData.video_id === video.id.toString()
-                        ? 'border-blue-500 bg-blue-50 shadow-md'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="video"
-                      value={video.id}
-                      checked={formData.video_id === video.id.toString()}
-                      onChange={(e) => setFormData({ ...formData, video_id: e.target.value })}
-                      className="mt-1 w-5 h-5 text-blue-600"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-gray-900">{video.title}</div>
-                      {video.description && (
-                        <div className="text-sm text-gray-600 mt-1 line-clamp-2">
-                          {video.description}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                        <span>📅 {new Date(video.start_date).toLocaleDateString('vi-VN')}</span>
-                        {video.duration_minutes && <span>⏱️ {video.duration_minutes} phút</span>}
-                        <span className="px-2 py-0.5 bg-gray-100 rounded">L{video.lesson_number}</span>
-                      </div>
-                    </div>
-                  </label>
-                ))}
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Video ID <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.video_id}
+                  onChange={(e) => setFormData({ ...formData, video_id: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Chọn video muốn tạo assignment --</option>
+                  {videos.map((video) => (
+                    <option key={video.id} value={video.id}>
+                      #{video.id} {video.lesson_number ? `• L${video.lesson_number}` : ''} • {video.title}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              {selectedVideo && (
+                <div className="p-4 border border-blue-200 bg-blue-50 rounded-lg">
+                  <div className="font-semibold text-gray-900">{selectedVideo.title}</div>
+                  {selectedVideo.description && (
+                    <div className="text-sm text-gray-600 mt-1 line-clamp-2">{selectedVideo.description}</div>
+                  )}
+                  <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 flex-wrap">
+                    {selectedVideo.start_date && (
+                      <span>📅 {new Date(selectedVideo.start_date).toLocaleDateString('vi-VN')}</span>
+                    )}
+                    {!!selectedVideo.duration_minutes && <span>⏱️ {selectedVideo.duration_minutes} phút</span>}
+                    {selectedVideo.lesson_number && <span className="px-2 py-0.5 bg-white rounded">L{selectedVideo.lesson_number}</span>}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

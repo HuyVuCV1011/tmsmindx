@@ -122,7 +122,8 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
                   cyan: { bg: 'bg-cyan-100', text: 'text-cyan-700' },
                   yellow: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
                   orange: { bg: 'bg-orange-100', text: 'text-orange-700' },
-                  purple: { bg: 'bg-purple-100', text: 'text-purple-700' }
+                  purple: { bg: 'bg-purple-100', text: 'text-purple-700' },
+                  red: { bg: 'bg-red-100', text: 'text-red-700' }
                 };
                 return colorMap[difficultyLevel?.color || 'blue'];
               };

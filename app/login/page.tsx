@@ -24,8 +24,8 @@ export default function LoginPage() {
       hasCheckedAuth.current = true;
       if (user) {
         const redirectPath = user.role === 'teacher' ? '/user/truyenthong' : '/admin/dashboard';
-        logger.info('User already logged in, redirecting based on role', { 
-          user: user.email, 
+        logger.info('User already logged in, redirecting based on role', {
+          user: user.email,
           role: user.role,
           path: redirectPath
         });
@@ -70,13 +70,62 @@ export default function LoginPage() {
     logger.info('Đang thực hiện login', { email: trimmedEmail, role });
 
     try {
+      // ─── Step 1: Try app-internal login first ───
+      logger.api('POST', '/api/app-auth/login', { email: trimmedEmail });
+
+      const appAuthResponse = await fetch('/api/app-auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmedEmail, password }),
+      });
+
+      const appAuthData = await appAuthResponse.json();
+
+      if (appAuthData.appUser === true) {
+        // ─── App user login successful ───
+        logger.success('App user login successful', { email: appAuthData.email });
+
+        const userData = {
+          email: appAuthData.email,
+          displayName: appAuthData.displayName,
+          role: appAuthData.role,
+          localId: appAuthData.localId,
+          isAdmin: appAuthData.isAdmin,
+          isAppUser: true,
+          permissions: appAuthData.permissions || [],
+        };
+
+        updateUser(userData, appAuthData.idToken);
+
+        const isAdminRole = ['super_admin', 'admin'].includes(appAuthData.role);
+        const redirectPath = isAdminRole ? '/admin/dashboard' : '/user/truyenthong';
+
+        if (appAuthData.role === 'super_admin') {
+          toast.success(`Chào mừng Super Admin ${appAuthData.displayName}!`, { icon: '👑' });
+        } else if (isAdminRole) {
+          toast.success(`Chào mừng Admin ${appAuthData.displayName}!`, { icon: '👑' });
+        } else {
+          toast.success(`Chào mừng ${appAuthData.displayName}!`, { icon: '👋' });
+        }
+
+        logger.info('Redirecting app user to', { path: redirectPath });
+        setTimeout(() => { router.replace(redirectPath); }, 500);
+        return;
+      }
+
+      if (!appAuthResponse.ok && appAuthData.appUser !== false) {
+        // App auth returned an actual error (wrong password for existing app user)
+        throw new Error(appAuthData.error || 'Đăng nhập thất bại');
+      }
+
+      // ─── Step 2: appUser === false → Fallback to Firebase ───
+      logger.info('Not an app user, trying Firebase login', { email: trimmedEmail });
+
       logger.api('POST', '/api/auth/login', { email, role });
-      
+
       const response = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: trimmedEmail, password, role }),
       });
 
@@ -93,47 +142,49 @@ export default function LoginPage() {
       const userData: {
         email: string;
         displayName: string;
-        role: 'teacher' | 'manager';
+        role: 'teacher' | 'manager' | 'super_admin' | 'admin';
         localId: string;
         isAdmin?: boolean;
+        isAppUser?: boolean;
+        permissions?: string[];
       } = {
         email: data.email,
         displayName: data.displayName,
         role: role,
         localId: data.localId,
+        isAppUser: false,
       };
-      
-      logger.success('Login successful', { email: userData.email, role: userData.role });
-      // Store refresh token for silent refresh on token expiry
+
+      logger.success('Firebase login successful', { email: userData.email, role: userData.role });
+
+      // Store refresh token
       try {
         if (data.refreshToken) {
           localStorage.setItem('refreshToken', data.refreshToken);
         }
       } catch (e) {
         logger.warn('Unable to persist refreshToken', { error: (e as Error).message });
-      }      
+      }
+
       // Nếu chọn Manager, kiểm tra xem có phải admin không
-      let finalRedirectPath = '/user/truyenthong'; // Default là user area
-      
+      let finalRedirectPath = '/user/truyenthong';
+
       if (role === 'manager') {
         logger.info('Checking admin permission for manager login', { email: userData.email });
-        
+
         try {
-          // Gọi API check admin
           const adminCheckResponse = await fetch(`/api/check-admin?email=${encodeURIComponent(userData.email)}`);
           const adminData = await adminCheckResponse.json();
-          
+
           logger.apiResponse('/api/check-admin', adminCheckResponse.status, adminData);
-          
-          // Lưu admin status vào user data
+
           userData.isAdmin = adminData.isAdmin;
-          
+          userData.permissions = adminData.permissions || [];
+
           if (adminData.isAdmin) {
             finalRedirectPath = '/admin/dashboard';
             logger.success('Admin verified', { email: userData.email });
-            toast.success(`Chào mừng Admin ${userData.displayName}!`, {
-              icon: '👑',
-            });
+            toast.success(`Chào mừng Admin ${userData.displayName}!`, { icon: '👑' });
           } else {
             logger.warn('Not an admin, redirecting to user area', { email: userData.email });
             toast.success(`Chào mừng ${userData.displayName}! Bạn không có quyền admin, chuyển đến trang user.`, {
@@ -143,33 +194,27 @@ export default function LoginPage() {
           }
         } catch (adminCheckError) {
           logger.error('Admin check failed, defaulting to user area', { error: adminCheckError });
-          toast.error('Không thể kiểm tra quyền admin, chuyển đến trang user', {
-            icon: '⚠️',
-          });
+          toast.error('Không thể kiểm tra quyền admin, chuyển đến trang user', { icon: '⚠️' });
         }
       } else {
         // Teacher role - go to user area
         userData.isAdmin = false;
-        toast.success(`Chào mừng ${userData.displayName}!`, {
-          icon: '👋',
-        });
+        toast.success(`Chào mừng ${userData.displayName}!`, { icon: '👋' });
       }
-      
-      // Lưu user data với isAdmin flag vào localStorage
+
       updateUser(userData, data.idToken);
-      
+
       logger.info('Redirecting to', { path: finalRedirectPath, isAdmin: userData.isAdmin });
-      
+
       setTimeout(() => {
         router.replace(finalRedirectPath);
-      }, 500); // Delay nhẹ để hiển toast
+      }, 500);
     } catch (err: any) {
       const errorMessage = err.message || 'Có lỗi xảy ra. Vui lòng thử lại.';
       setError(errorMessage);
-      
+
       logger.error('Login error', { error: err.message, stack: err.stack });
-      
-      // Hiển thị toast thông báo lỗi
+
       if (errorMessage.toLowerCase().includes('password') || errorMessage.toLowerCase().includes('mật khẩu')) {
         toast.error('Mật khẩu không chính xác!', { icon: '🔒' });
       } else if (errorMessage.toLowerCase().includes('email') || errorMessage.toLowerCase().includes('tài khoản')) {
@@ -185,11 +230,10 @@ export default function LoginPage() {
   // Memoize button classes to prevent recalculation
   const getRoleButtonClass = useCallback((buttonRole: 'teacher' | 'manager') => {
     const isActive = role === buttonRole;
-    return `px-6 py-2 rounded-full border text-sm font-medium transition-all duration-300 transform hover:scale-105 active:scale-95 ${
-      isActive 
-        ? 'bg-[#800000] text-white border-[#a1001f] shadow-md' 
+    return `px-6 py-2 rounded-full border text-sm font-medium transition-all duration-300 transform hover:scale-105 active:scale-95 ${isActive
+        ? 'bg-[#800000] text-white border-[#a1001f] shadow-md'
         : 'bg-white text-[#800000] border-[#a1001f] hover:border-[#c1122f] hover:shadow-sm'
-    }`;
+      }`;
   }, [role]);
 
   return (
