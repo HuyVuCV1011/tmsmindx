@@ -8,18 +8,34 @@ export async function GET(request: Request) {
     const id = searchParams.get('id');
     const status = searchParams.get('status');
 
-    let query = 'SELECT * FROM training_videos';
+    let query = `
+      SELECT
+        tv.*,
+        COALESCE(SUM(tvs.view_count), 0)::INTEGER AS actual_view_count,
+        COUNT(DISTINCT tvs.teacher_code) FILTER (WHERE COALESCE(tvs.view_count, 0) > 0)::INTEGER AS actual_viewers
+      FROM training_videos tv
+      LEFT JOIN training_teacher_video_scores tvs ON tv.id = tvs.video_id
+    `;
     const params: any[] = [];
+    const conditions: string[] = [];
 
     if (id) {
-      query += ' WHERE id = $1';
+      conditions.push(`tv.id = $${params.length + 1}`);
       params.push(id);
-    } else if (status) {
-      query += ' WHERE status = $1';
+    }
+
+    if (status) {
+      conditions.push(`tv.status = $${params.length + 1}`);
       params.push(status);
     }
 
-    query += ' ORDER BY lesson_number ASC, created_at DESC';
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`;
+    }
+
+    query += ' GROUP BY tv.id';
+
+    query += ' ORDER BY tv.lesson_number ASC, tv.created_at DESC';
 
     const result = await pool.query(query, params);
 

@@ -68,6 +68,23 @@ export const POST = withApiProtection(async (request: NextRequest) => {
       );
     }
 
+    const videoStatusQuery = 'SELECT status FROM training_videos WHERE id = $1';
+    const videoStatusResult = await pool.query(videoStatusQuery, [video_id]);
+
+    if (videoStatusResult.rows.length === 0) {
+      return NextResponse.json(
+        { error: 'Video not found' },
+        { status: 404 }
+      );
+    }
+
+    if (videoStatusResult.rows[0].status === 'active') {
+      return NextResponse.json(
+        { error: 'Cannot modify interactive questions while video is active' },
+        { status: 403 }
+      );
+    }
+
     const query = `
       INSERT INTO training_video_questions 
       (video_id, question_text, question_type, time_in_video, correct_answer, options, points, order_number)
@@ -110,6 +127,25 @@ export const DELETE = withApiProtection(async (request: NextRequest) => {
 
     if (!questionId) {
       return NextResponse.json({ error: 'Question ID is required' }, { status: 400 });
+    }
+
+    const questionVideoQuery = `
+      SELECT tv.status
+      FROM training_video_questions tvq
+      JOIN training_videos tv ON tv.id = tvq.video_id
+      WHERE tvq.id = $1
+    `;
+    const questionVideoResult = await pool.query(questionVideoQuery, [questionId]);
+
+    if (questionVideoResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Question not found' }, { status: 404 });
+    }
+
+    if (questionVideoResult.rows[0].status === 'active') {
+      return NextResponse.json(
+        { error: 'Cannot delete interactive question while video is active' },
+        { status: 403 }
+      );
     }
 
     const query = `DELETE FROM training_video_questions WHERE id = $1 RETURNING *`;

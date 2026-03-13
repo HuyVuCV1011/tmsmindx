@@ -3,15 +3,14 @@
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
-import { ChevronDown, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
+import { CalendarDays, ChevronDown, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export function Sidebar() {
   const { isOpen, setIsOpen } = useSidebar();
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const { user, logout } = useAuth();
   const pathname = usePathname();
 
@@ -20,18 +19,101 @@ export function Sidebar() {
     const saved = localStorage.getItem('expandedMenus');
     if (saved) {
       try {
-        setExpandedMenus(JSON.parse(saved));
-      } catch (e) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed)) {
+          // Use setTimeout to avoid synchronous setState during effect execution
+          const timer = setTimeout(() => {
+            setExpandedMenus(parsed);
+          }, 0);
+          return () => clearTimeout(timer);
+        }
+      } catch {
         // Ignore parse errors
       }
     }
   }, []);
 
+  // Determine menu items based on current path (admin or user)
+  const isUserArea = pathname.startsWith('/user');
+
+  const adminMenuItems = [
+    { href: "/admin/dashboard", label: "Dashboard", icon: Home },
+    { href: "/admin/page1", label: "Thông tin GV", icon: LayoutDashboard },
+    { href: "/admin/page2", label: "màn hình 2", icon: Users },
+    { href: "/admin/page3", label: "Màn hình 3", icon: Users },
+    { href: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện", icon: CalendarDays },
+    {
+      label: "Đánh giá năng lực GV",
+      icon: Settings,
+      submenu: [
+        // { href: "/admin/page4/form-dang-ky", label: "Form đăng ký kiểm tra" }, 
+        { href: "/admin/page4/danh-sach-dang-ky", label: "Danh sách đăng ký" },
+        { href: "/admin/page4/thu-vien-de", label: "Library đề chuyên môn" },
+      ]
+    },
+    { 
+      label: "Đào tạo nâng cao", 
+      icon: FileText,
+      submenu: [
+        { href: "/admin/page5", label: "Quản lý đào tạo nâng cao" },
+        { href: "/admin/assignments", label: "Kiểm tra e-learning" },
+        { href: "/admin/training-dashboard", label: "Thống kê" },
+      ]
+    },
+    { href: "/admin/giaitrinh", label: "Quản lý Giải trình", icon: MessageSquare },
+    { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
+    { href: "/admin/database", label: "Database Manager", icon: LayoutDashboard },
+    { href: "/admin/user-management", label: "Quản lý tài khoản", icon: Shield },
+  ];
+
+  const userMenuItems = [
+    { href: "/user/truyenthong", label: "Thông tin mới", icon: Megaphone },
+    { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
+    { href: "/user/hoat-dong-hang-thang", label: "CÁC HOẠT ĐỘNG HÀNG THÁNG", icon: CalendarDays },
+    { href: "/user/training", label: "Đào tạo nâng cao", icon: GraduationCap },
+    { href: "/user/assignments", label: "My Assignments", icon: FileText },
+    { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra", icon: MessageSquare },
+  ];
+
+  // Filter admin menu items based on user permissions
+  const getFilteredAdminMenuItems = () => {
+    if (!user) return [];
+
+    if (user.role === 'super_admin') return adminMenuItems;
+
+    const permissions = user.permissions || [];
+    if (permissions.length === 0) return [];
+
+    return adminMenuItems
+      .filter(item => {
+        if ('submenu' in item && item.submenu) {
+          const filteredSubmenu = item.submenu.filter(sub =>
+            permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
+          );
+          return filteredSubmenu.length > 0;
+        }
+
+        return permissions.some(p => item.href === p || (item.href && item.href.startsWith(p + '/')));
+      })
+      .map(item => {
+        if ('submenu' in item && item.submenu) {
+          const filteredSubmenu = item.submenu.filter(sub =>
+            permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
+          );
+          return { ...item, submenu: filteredSubmenu };
+        }
+
+        return item;
+      });
+  };
+
+  const menuItems = useMemo(
+    () => (isUserArea ? userMenuItems : getFilteredAdminMenuItems()),
+    [isUserArea, user?.role, user?.permissions]
+  );
+
   // Auto-expand submenu if current page is in it
   useEffect(() => {
-    const isUserArea = pathname.startsWith('/user');
-    const menuItems = isUserArea ? userMenuItems : getFilteredAdminMenuItems();
-
     menuItems.forEach((item) => {
       if ('submenu' in item && item.submenu) {
         const isInSubmenu = item.submenu.some(sub => pathname === sub.href || pathname.startsWith(sub.href + '/'));
@@ -44,102 +126,34 @@ export function Sidebar() {
         }
       }
     });
-  }, [pathname]);
-
-  // Determine menu items based on current path (admin or user)
-  const isUserArea = pathname.startsWith('/user');
-
-  const adminMenuItems = [
-    { href: "/admin/dashboard", label: "Dashboard", icon: Home },
-    { href: "/admin/page1", label: "Thông tin GV", icon: LayoutDashboard },
-    { href: "/admin/page2", label: "màn hình 2", icon: Users },
-    { href: "/admin/page3", label: "Màn hình 3", icon: Users },
-    { href: "/admin/page4", label: "Màn hình 4", icon: Settings },
-    {
-      label: "Đào tạo nâng cao",
-      icon: FileText,
-      submenu: [
-        { href: "/admin/page5", label: "Quản lý đào tạo nâng cao" },
-        { href: "/admin/training-dashboard", label: "Thống kê" },
-        { href: "/admin/assignments", label: "Quản lý Assignments" },
-      ]
-    },
-    { href: "/admin/giaitrinh", label: "Quản lý Giải trình", icon: MessageSquare },
-    { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
-    { href: "/admin/database", label: "Database Manager", icon: LayoutDashboard },
-    { href: "/admin/user-management", label: "Quản lý tài khoản", icon: Shield },
-  ];
-
-  const userMenuItems = [
-    { href: "/user/truyenthong", label: "Thông tin mới", icon: Megaphone },
-    { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
-    { href: "/user/training", label: "Đào tạo nâng cao", icon: GraduationCap },
-    { href: "/user/assignments", label: "My Assignments", icon: FileText },
-    { href: "/user/giaitrinh", label: "Giải trình kiểm tra", icon: MessageSquare },
-  ];
-
-  // Filter admin menu items based on user permissions
-  function getFilteredAdminMenuItems() {
-    if (!user) return [];
-
-    // Super admin sees everything
-    if (user.role === 'super_admin') return adminMenuItems;
-
-    // Filter items based on permissions
-    const permissions = user.permissions || [];
-
-    // If no specific permissions, return empty (or common routes if any)
-    if (permissions.length === 0) return [];
-
-    return adminMenuItems.filter(item => {
-      if ('submenu' in item && item.submenu) {
-        // Filter submenu items
-        const filteredSubmenu = item.submenu.filter(sub =>
-          permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
-        );
-        if (filteredSubmenu.length > 0) {
-          // Note: We create a shallow copy of the item and deep copy of the submenu to avoid mutating the original adminMenuItems
-          return true;
-        }
-        return false;
-      }
-      // Regular menu item
-      return permissions.some(p => item.href === p || (item.href && item.href.startsWith(p + '/')));
-    }).map(item => {
-      // For items with submenus, we need to return the filtered version
-      if ('submenu' in item && item.submenu) {
-        const filteredSubmenu = item.submenu.filter(sub =>
-          permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
-        );
-        return { ...item, submenu: filteredSubmenu };
-      }
-      return item;
-    });
-  }
-
-  const menuItems = isUserArea ? userMenuItems : getFilteredAdminMenuItems();
+  }, [menuItems, pathname]);
 
   const toggleSubmenu = (label: string) => {
     setExpandedMenus(prev => {
-      const updated = prev.includes(label)
+      const updated = prev.includes(label) 
         ? prev.filter(item => item !== label)
         : [...prev, label];
-
+      
       // Save to localStorage
       localStorage.setItem('expandedMenus', JSON.stringify(updated));
       return updated;
     });
   };
 
-  // Get role display text
   const getRoleDisplay = () => {
     if (!user) return '';
+
     switch (user.role) {
-      case 'super_admin': return 'Super Admin';
-      case 'admin': return 'Admin';
-      case 'manager': return 'Manager';
-      case 'teacher': return 'Teacher';
-      default: return user.role;
+      case 'super_admin':
+        return 'Super Admin';
+      case 'admin':
+        return 'Admin';
+      case 'manager':
+        return 'Manager';
+      case 'teacher':
+        return 'Teacher';
+      default:
+        return user.role;
     }
   };
 
@@ -230,7 +244,7 @@ export function Sidebar() {
                           <ChevronDown className="h-3.5 w-3.5" />
                         </div>
                       </button>
-
+                      
                       {/* Submenu with slide animation */}
                       <div className={cn(
                         "overflow-hidden transition-all duration-300 ease-in-out",
@@ -286,7 +300,7 @@ export function Sidebar() {
           {/* User Info and Logout - Modern card design */}
           {user && (
             <div className="border-t border-gray-200 p-3 bg-linear-to-br from-gray-50 to-white">
-              <Link
+              <Link 
                 href="/user/profile"
                 className={cn(
                   "block mb-2 p-2 rounded-lg shadow-sm border transition-all duration-300 hover:shadow-md hover:scale-[1.01] cursor-pointer",
@@ -309,7 +323,7 @@ export function Sidebar() {
                   <span>{getRoleDisplay()}</span>
                 </div>
               </Link>
-
+              
               <button
                 className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold bg-white border-2 border-gray-200 text-gray-700 hover:border-[#a1001f] hover:bg-linear-to-r hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:shadow-md transition-all duration-300 group"
                 onClick={logout}

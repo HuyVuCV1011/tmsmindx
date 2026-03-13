@@ -611,6 +611,42 @@ const migrations: Migration[] = [
   },
 
   // ═══════════════════════════════════════════════════════
+  // V24: Event schedules (Lịch sự kiện tập trung)
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V24_event_schedules',
+    version: 24,
+    sql: `
+      CREATE TABLE IF NOT EXISTS event_schedules (
+        id UUID PRIMARY KEY,
+        title VARCHAR(500) NOT NULL,
+        specialty VARCHAR(255),
+        event_type VARCHAR(50) NOT NULL CHECK (event_type IN ('registration','exam','workshop_teaching','meeting','advanced_training_release','holiday')),
+        registration_template VARCHAR(30) NULL CHECK (registration_template IN ('official','supplement')),
+        start_at TIMESTAMP NOT NULL,
+        end_at TIMESTAMP NOT NULL,
+        note TEXT,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_by VARCHAR(255),
+        updated_by VARCHAR(255),
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT ck_event_schedule_time CHECK (end_at > start_at)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_event_schedules_start_at ON event_schedules(start_at);
+      CREATE INDEX IF NOT EXISTS idx_event_schedules_event_type ON event_schedules(event_type);
+      CREATE INDEX IF NOT EXISTS idx_event_schedules_created_at ON event_schedules(created_at DESC);
+
+      DROP TRIGGER IF EXISTS trg_event_schedules_updated_at ON event_schedules;
+      CREATE TRIGGER trg_event_schedules_updated_at
+      BEFORE UPDATE ON event_schedules
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

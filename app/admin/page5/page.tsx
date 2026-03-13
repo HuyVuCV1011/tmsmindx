@@ -23,6 +23,8 @@ interface Video {
   description: string;
   thumbnail_url: string;
   lesson_number: number;
+  actual_view_count?: number;
+  actual_viewers?: number;
 }
 
 export default function Page5() {
@@ -30,6 +32,7 @@ export default function Page5() {
   const [search, setSearch] = useState("");
   const [uploading, setUploading] = useState(false);
   const [videos, setVideos] = useState<Video[]>([]);
+  const [videoDurations, setVideoDurations] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -320,18 +323,20 @@ export default function Page5() {
                 className="bg-white rounded-lg border border-gray-200 p-2 hover:border-gray-300 hover:shadow-sm transition-all group relative"
               >
                 {/* Action Buttons */}
-                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <div className="absolute top-2 right-2 flex gap-1 z-10">
                   {/* Delete Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteVideo(video.id, video.title);
-                    }}
-                    className="bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
-                    title="Xóa video"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
+                  {video.status !== 'active' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteVideo(video.id, video.title);
+                      }}
+                      className="bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
+                      title="Xóa video"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
                   
                   {/* Lock Button */}
                   {video.status !== 'inactive' && (
@@ -359,6 +364,23 @@ export default function Page5() {
                     ) : (
                       <Video className="h-8 w-8 text-gray-400" />
                     )}
+                    {video.video_link && (
+                      <video
+                        src={video.video_link}
+                        preload="metadata"
+                        className="hidden"
+                        onLoadedMetadata={(event) => {
+                          const duration = event.currentTarget.duration;
+                          if (Number.isFinite(duration) && duration > 0) {
+                            const minutes = Math.max(1, Math.round(duration / 60));
+                            setVideoDurations((prev) => {
+                              if (prev[video.id] === minutes) return prev;
+                              return { ...prev, [video.id]: minutes };
+                            });
+                          }
+                        }}
+                      />
+                    )}
                   </div>
 
                   {/* Info */}
@@ -367,9 +389,9 @@ export default function Page5() {
                       <span className="font-semibold">L{video.lesson_number}</span>
                     )}
                     {video.lesson_number && <span>•</span>}
-                    <span>{video.duration_minutes || 0}p</span>
+                    <span>{videoDurations[video.id] ?? video.duration_minutes ?? 0}p</span>
                     <span>•</span>
-                    <span>👁️ {video.view_count || 0}</span>
+                    <span>👁️ {Math.max(video.view_count || 0, video.actual_view_count || 0, video.actual_viewers || 0)}</span>
                   </div>
 
                   <div className="font-semibold text-xs mb-1 line-clamp-2">{video.title}</div>
