@@ -31,15 +31,16 @@ interface ExamSetAvailability {
 
 const WEEKDAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 const REGISTER_OPTIONS = [
-  "[COD] Scratch",
-  "[COD] GameMaker",
-  "[COD] Web",
-  "[COD] AppProducer",
-  "[COD] ComputerScience",
-  "[ROB] VexGo",
-  "[ROB] VexIQ",
-  "[ART] Test chuyên sâu",
-  "Kiểm tra quy trình - kỹ năng trải nghiệm",
+  "[COD] Scratch (S)",
+  "[COD] GameMaker (G)",
+  "[COD] Python (PT)",
+  "[COD] Web (JS)",
+  "[COD] Computer Science (CS)",
+  "[ROB] Lego 4+",
+  "[ROB] Vex Go",
+  "[ROB] Vex IQ",
+  "[ART] Arts",
+  "Kiểm tra quy trình & kỹ năng trải nghiệm",
 ];
 
 type RegisterPayload = {
@@ -52,77 +53,94 @@ type RegisterPayload = {
 };
 
 const REGISTER_OPTION_MAP: Record<string, RegisterPayload> = {
-  "[COD] Scratch": {
+  "[COD] Scratch (S)": {
     exam_type: "expertise",
     block_code: "CODING",
-    subject_code: "SCRATCH",
-    optionLabel: "[COD] Scratch",
+    subject_code: "[COD] Scratch (S)",
+    optionLabel: "[COD] Scratch (S)",
     specialtyAliases: ["Coding - Scratch", "Scratch"],
-    subjectCodeCandidates: ["SCRATCH", "[COD] Scratch"],
+    subjectCodeCandidates: ["[COD] Scratch (S)", "[COD] Scratch", "SCRATCH"],
   },
-  "[COD] GameMaker": {
+  "[COD] GameMaker (G)": {
     exam_type: "expertise",
     block_code: "CODING",
-    subject_code: "GAMEMAKER",
-    optionLabel: "[COD] GameMaker",
+    subject_code: "[COD] GameMaker (G)",
+    optionLabel: "[COD] GameMaker (G)",
     specialtyAliases: ["Coding - Game", "GameMaker", "Coding - Gamemaker"],
-    subjectCodeCandidates: ["GAMEMAKER", "[COD] GameMaker"],
+    subjectCodeCandidates: ["[COD] GameMaker (G)", "[COD] GameMaker", "GAMEMAKER"],
   },
-  "[COD] Web": {
+  "[COD] Python (PT)": {
     exam_type: "expertise",
     block_code: "CODING",
-    subject_code: "WEB",
-    optionLabel: "[COD] Web",
+    subject_code: "[COD] Python (PT)",
+    optionLabel: "[COD] Python (PT)",
+    specialtyAliases: ["Coding - Python", "Python"],
+    subjectCodeCandidates: ["[COD] Python (PT)", "[COD] Python", "PYTHON"],
+  },
+  "[COD] Web (JS)": {
+    exam_type: "expertise",
+    block_code: "CODING",
+    subject_code: "[COD] Web (JS)",
+    optionLabel: "[COD] Web (JS)",
     specialtyAliases: ["Coding - Web", "Web"],
-    subjectCodeCandidates: ["WEB", "[COD] Web"],
+    subjectCodeCandidates: ["[COD] Web (JS)", "[COD] Web", "WEB"],
   },
-  "[COD] AppProducer": {
+  "[COD] Computer Science (CS)": {
     exam_type: "expertise",
     block_code: "CODING",
-    subject_code: "[COD] AppProducer",
-    optionLabel: "[COD] AppProducer",
-    specialtyAliases: ["Coding - App", "AppProducer", "Coding - AppProducer"],
-    subjectCodeCandidates: ["[COD] AppProducer", "APPPRODUCER"],
-  },
-  "[COD] ComputerScience": {
-    exam_type: "expertise",
-    block_code: "CODING",
-    subject_code: "[COD] ComputerScience",
-    optionLabel: "[COD] ComputerScience",
+    subject_code: "[COD] Computer Science (CS)",
+    optionLabel: "[COD] Computer Science (CS)",
     specialtyAliases: ["Computer Science", "ComputerScience"],
-    subjectCodeCandidates: ["[COD] ComputerScience", "COMPUTERSCIENCE"],
+    subjectCodeCandidates: ["[COD] Computer Science (CS)", "[COD] ComputerScience", "COMPUTERSCIENCE"],
   },
-  "[ROB] VexGo": {
+  "[ROB] Lego 4+": {
     exam_type: "expertise",
     block_code: "ROBOTICS",
-    subject_code: "VEXGO",
-    optionLabel: "[ROB] VexGo",
+    subject_code: "[ROB] Lego 4+",
+    optionLabel: "[ROB] Lego 4+",
+    specialtyAliases: ["Robotics Lego Spike 4+", "Lego", "Lego Spike"],
+    subjectCodeCandidates: ["[ROB] Lego 4+", "[ROB] Lego Spike", "LEGO"],
+  },
+  "[ROB] Vex Go": {
+    exam_type: "expertise",
+    block_code: "ROBOTICS",
+    subject_code: "[ROB] Vex Go",
+    optionLabel: "[ROB] Vex Go",
     specialtyAliases: ["Robotics VexGo", "VexGo", "Robotics - VexGo"],
-    subjectCodeCandidates: ["VEXGO", "[ROB] VexGo"],
+    subjectCodeCandidates: ["[ROB] Vex Go", "[ROB] VexGo", "VEXGO"],
   },
-  "[ROB] VexIQ": {
+  "[ROB] Vex IQ": {
     exam_type: "expertise",
     block_code: "ROBOTICS",
-    subject_code: "VEXIQ",
-    optionLabel: "[ROB] VexIQ",
+    subject_code: "[ROB] Vex IQ",
+    optionLabel: "[ROB] Vex IQ",
     specialtyAliases: ["Robotics Vex IQ", "VexIQ", "Vex IQ", "Robotics - VexIQ"],
-    subjectCodeCandidates: ["VEXIQ", "[ROB] VexIQ"],
+    subjectCodeCandidates: ["[ROB] Vex IQ", "[ROB] VexIQ", "VEXIQ"],
   },
-  "[ART] Test chuyên sâu": {
+  "[ART] Arts": {
     exam_type: "expertise",
     block_code: "ART",
-    subject_code: "TEST_CHUY_N_S_U",
-    optionLabel: "[ART] Test chuyên sâu",
-    specialtyAliases: ["Art", "Test chuyên sâu"],
-    subjectCodeCandidates: ["TEST_CHUY_N_S_U", "[ART] Test chuyên sâu"],
+    subject_code: "[ART] Arts",
+    optionLabel: "[ART] Arts",
+    specialtyAliases: ["Art", "Test chuyên sâu", "Arts"],
+    subjectCodeCandidates: ["[ART] Arts", "[ART] Test chuyên sâu", "TEST_CHUY_N_S_U", "[ART]"],
   },
-  "Kiểm tra quy trình - kỹ năng trải nghiệm": {
+  "Kiểm tra quy trình & kỹ năng trải nghiệm": {
     exam_type: "experience",
-    block_code: "TRIAL",
-    subject_code: "QUY_TR_NH_TRAI_NGHI_M",
-    optionLabel: "Kiểm tra quy trình - kỹ năng trải nghiệm",
-    specialtyAliases: ["Quy trình quy định", "Quy trình - kỹ năng trải nghiệm"],
-    subjectCodeCandidates: ["QUY_TR_NH_TRAI_NGHI_M", "[Trial] Quy Trình Trai nghiệm"],
+    block_code: "PROCESS",
+    subject_code: "Kiểm tra quy trình & kỹ năng trải nghiệm",
+    optionLabel: "Kiểm tra quy trình & kỹ năng trải nghiệm",
+    specialtyAliases: [
+      "Quy trình quy định",
+      "Quy trình - kỹ năng trải nghiệm",
+      "Kiểm tra quy trình - kỹ năng trải nghiệm bổ sung",
+    ],
+    subjectCodeCandidates: [
+      "Kiểm tra quy trình & kỹ năng trải nghiệm",
+      "[Trial] Quy Trình Trai nghiệm",
+      "QUY_TR_NH_TRAI_NGHI_M",
+      "quytrinh",
+    ],
   },
 };
 
@@ -263,7 +281,11 @@ export default function MonthlyActivitiesPage() {
   useEffect(() => {
     (async () => {
       try {
-        const response = await fetch('/api/event-schedules');
+        const response = await fetch('/api/event-schedules', {
+          headers: {
+            'x-api-key': process.env.NEXT_PUBLIC_API_SECRET || '',
+          },
+        });
         const data = await response.json();
         if (!response.ok || !data?.success) {
           throw new Error(data?.error || 'Không thể tải dữ liệu lịch sự kiện');
@@ -292,7 +314,8 @@ export default function MonthlyActivitiesPage() {
             registrationTemplate: item.registration_template || undefined,
           }))
         );
-      } catch {
+      } catch (error) {
+        console.error('Failed to load event_schedules for teacher calendar:', error);
         setEvents([]);
       }
     })();
@@ -308,7 +331,7 @@ export default function MonthlyActivitiesPage() {
   const eventsByDateKey = useMemo(() => {
     const map = new Map<string, EvaluationEvent[]>();
     events.forEach((event) => {
-      if (event.eventType === "registration") {
+      if (event.eventType === "registration" || event.eventType === "holiday") {
         const startDate = startOfDay(new Date(event.startAt));
         const endDate = startOfDay(new Date(event.endAt));
         const cursor = new Date(startDate);
