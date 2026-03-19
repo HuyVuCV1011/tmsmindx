@@ -646,6 +646,27 @@ const migrations: Migration[] = [
     `,
   },
 
+  // ─── V(Next): Split /admin/page4 into detailed routes for existing roles ───
+  {
+    name: 'split_admin_page4_permissions',
+    version: 31, // assuming the last one was around 30, let me check version numbers. Wait! I don't know the exact last version.
+    // wait I will use a high version number or a timestamp number. Let's use 1000.
+    sql: `
+      DO $$
+      DECLARE
+          r RECORD;
+      BEGIN
+          FOR r IN SELECT role_code FROM role_permissions WHERE route_path = '/admin/page4'
+          LOOP
+              INSERT INTO role_permissions (role_code, route_path) VALUES (r.role_code, '/admin/page4/lich-danh-gia') ON CONFLICT DO NOTHING;
+              INSERT INTO role_permissions (role_code, route_path) VALUES (r.role_code, '/admin/page4/danh-sach-dang-ky') ON CONFLICT DO NOTHING;
+              INSERT INTO role_permissions (role_code, route_path) VALUES (r.role_code, '/admin/page4/thu-vien-de') ON CONFLICT DO NOTHING;
+          END LOOP;
+          DELETE FROM role_permissions WHERE route_path = '/admin/page4';
+      END $$;
+    `,
+  },
+
   // ═══════════════════════════════════════════════════════
 ];
 

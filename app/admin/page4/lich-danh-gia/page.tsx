@@ -73,7 +73,7 @@ interface CalendarCell {
   inCurrentMonth: boolean;
 }
 
-const WEEKDAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+const WEEKDAY_LABELS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 const DAY_HOURS = 24;
 const HOUR_BLOCK_HEIGHT = 56;
 const VIEW_OPTIONS: Array<{ value: CalendarView; label: string }> = [
@@ -97,10 +97,12 @@ function isSameDate(first: Date, second: Date) {
   );
 }
 
-function getWeekStartSunday(date: Date) {
+function getWeekStartMonday(date: Date) {
   const current = startOfDay(date);
   const start = new Date(current);
-  start.setDate(current.getDate() - current.getDay());
+  const day = current.getDay();
+  const diff = current.getDate() - day + (day === 0 ? -6 : 1);
+  start.setDate(diff);
   return start;
 }
 
@@ -192,7 +194,7 @@ function buildCalendarCells(focusDate: Date, view: CalendarView): CalendarCell[]
   }
 
   if (view === "week") {
-    const start = getWeekStartSunday(focusDate);
+    const start = getWeekStartMonday(focusDate);
     return Array.from({ length: 7 }, (_, index) => {
       const date = new Date(start);
       date.setDate(start.getDate() + index);
@@ -202,7 +204,9 @@ function buildCalendarCells(focusDate: Date, view: CalendarView): CalendarCell[]
 
   const monthStart = new Date(focusDate.getFullYear(), focusDate.getMonth(), 1);
   const gridStart = new Date(monthStart);
-  gridStart.setDate(monthStart.getDate() - monthStart.getDay());
+  const monthStartDay = monthStart.getDay();
+  const diff = monthStartDay === 0 ? -6 : 1 - monthStartDay;
+  gridStart.setDate(monthStart.getDate() + diff);
 
   const totalCells = view === "month" ? 35 : 42;
 
@@ -286,18 +290,16 @@ export default function ProfessionalEvaluationSchedulePage() {
     fetchEvents();
   }, []);
 
-  const canManageCalendar =
-    user?.role === "super_admin" ||
-    (user?.permissions || []).some(
-      (permission) =>
-        permission === calendarPermissionPath ||
-        calendarPermissionPath.startsWith(`${permission}/`)
-    );
+  const canManageCalendar = user?.role === "super_admin";
 
   const yearOptions = useMemo(() => {
     const currentYear = currentTime.getFullYear();
-    return Array.from({ length: 9 }, (_, index) => currentYear - 3 + index);
-  }, [currentTime]);
+    const focusYear = focusDate.getFullYear();
+    const minYear = Math.min(currentYear - 5, focusYear - 5);
+    const maxYear = Math.max(currentYear + 5, focusYear + 5);
+    const length = maxYear - minYear + 1;
+    return Array.from({ length }, (_, index) => minYear + index);
+  }, [currentTime, focusDate]);
 
   const calendarCells = useMemo(
     () => buildCalendarCells(focusDate, view),
@@ -352,7 +354,7 @@ export default function ProfessionalEvaluationSchedulePage() {
     }
 
     if (view === "week") {
-      const start = getWeekStartSunday(focusDate);
+      const start = getWeekStartMonday(focusDate);
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
       return `${start.toLocaleDateString("vi-VN")} - ${end.toLocaleDateString("vi-VN")}`;
@@ -732,6 +734,17 @@ export default function ProfessionalEvaluationSchedulePage() {
     URL.revokeObjectURL(url);
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closeCreateModal();
+        setShowDayEventsModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showCreateModal, showDayEventsModal]);
+
   const dayTimelineHeight = DAY_HOURS * HOUR_BLOCK_HEIGHT;
   const dayIsToday = isSameDate(startOfDay(focusDate), startOfDay(currentTime));
   const currentMinuteOfDay = currentTime.getHours() * 60 + currentTime.getMinutes();
@@ -841,7 +854,7 @@ export default function ProfessionalEvaluationSchedulePage() {
 
         {!canManageCalendar && (
           <div className="px-4 py-2 text-xs text-amber-800 border-b border-amber-200 bg-amber-50">
-            Bạn đang ở chế độ chỉ xem. Chi tiết sự kiện và thao tác thêm, sửa, xóa chỉ hiển thị cho Super Admin hoặc tài khoản được cấp quyền màn hình này.
+            Bạn đang ở chế độ chỉ xem. Các chức năng Thêm mới, Sửa và Xóa sự kiện chỉ dành cho Super Admin.
           </div>
         )}
 
@@ -921,9 +934,6 @@ export default function ProfessionalEvaluationSchedulePage() {
                       style={{ top, height }}
                       title={`${eventTitle} (${formatEventTimeRange(event.startAt, event.endAt)})`}
                       onClick={(clickEvent) => {
-                        if (!canManageCalendar) {
-                          return;
-                        }
                         clickEvent.stopPropagation();
                         setSelectedDate(focusDate);
                         setShowDayEventsModal(true);
@@ -974,11 +984,8 @@ export default function ProfessionalEvaluationSchedulePage() {
                       : inCurrentMonth
                         ? "bg-white"
                         : "bg-gray-50"
-                  } ${canManageCalendar ? "cursor-pointer hover:bg-blue-50" : "cursor-default"}`}
+                  } cursor-pointer hover:bg-blue-50`}
                   onClick={() => {
-                    if (!canManageCalendar) {
-                      return;
-                    }
                     setSelectedDate(date);
                     setShowDayEventsModal(true);
                   }}
