@@ -64,7 +64,8 @@ export default function AppLayout({
         }
 
         // Check if user has permission for current route
-        if (pathname.startsWith('/admin') && pathname !== '/admin') {
+        // Allow bypass for universal admin routes like /admin/profile
+        if (pathname.startsWith('/admin') && pathname !== '/admin' && !pathname.startsWith('/admin/profile')) {
           const hasPermission = user.permissions.some(p =>
             pathname === p || pathname.startsWith(p + '/')
           );

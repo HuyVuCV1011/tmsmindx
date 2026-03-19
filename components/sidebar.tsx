@@ -301,20 +301,20 @@ export function Sidebar() {
           {user && (
             <div className="border-t border-gray-200 p-3 bg-linear-to-br from-gray-50 to-white">
               <Link 
-                href="/user/profile"
+                href={user.isAdmin ? '/admin/profile' : '/user/profile'}
                 className={cn(
                   "block mb-2 p-2 rounded-lg shadow-sm border transition-all duration-300 hover:shadow-md hover:scale-[1.01] cursor-pointer",
-                  pathname === "/user/profile"
+                  pathname === "/user/profile" || pathname === "/admin/profile"
                     ? "bg-linear-to-br from-[#a1001f]/5 to-[#c41230]/5 border-[#a1001f]"
                     : "bg-white border-gray-100 hover:border-[#a1001f]/30"
                 )}
               >
                 <div className="flex items-center gap-2 mb-1.5">
                   <div className="h-8 w-8 rounded-full bg-linear-to-br from-[#a1001f] to-[#c41230] flex items-center justify-center text-white font-bold text-xs shadow-md">
-                    {user.displayName?.charAt(0).toUpperCase()}
+                    {user.displayName ? user.displayName.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : '')}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-gray-900 truncate">{user.displayName}</p>
+                    <p className="text-xs font-bold text-gray-900 truncate">{user.displayName || user.email?.split('@')[0]}</p>
                     <p className="text-xs text-gray-500 truncate">{user.email}</p>
                   </div>
                 </div>

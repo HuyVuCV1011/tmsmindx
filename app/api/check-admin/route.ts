@@ -21,7 +21,6 @@ export async function GET(request: Request) {
 
       if (dbResult.rows.length > 0) {
         const appUser = dbResult.rows[0];
-        const isAdmin = appUser.is_active && ['super_admin', 'admin', 'manager'].includes(appUser.role);
 
         // Get direct permissions
         const directPerms = await pool.query(
@@ -47,6 +46,10 @@ export async function GET(request: Request) {
         const allPerms = new Set<string>();
         directPerms.rows.forEach((r: { route_path: string }) => allPerms.add(r.route_path));
         rolePerms.rows.forEach((r: { route_path: string }) => allPerms.add(r.route_path));
+
+        const permissions = Array.from(allPerms);
+        const hasAdminPerms = permissions.some(p => p.startsWith('/admin'));
+        const isAdmin = appUser.is_active && (['super_admin', 'admin', 'manager'].includes(appUser.role) || hasAdminPerms);
 
         return NextResponse.json({
           success: true,

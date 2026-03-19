@@ -1,3 +1,4 @@
+import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || '';
@@ -59,12 +60,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Fallback to our local database's display_name if Firebase doesn't provide one
+    let finalDisplayName = data.displayName;
+    if (!finalDisplayName) {
+      try {
+        const dbUser = await pool.query('SELECT display_name FROM app_users WHERE email = $1 LIMIT 1', [email.trim().toLowerCase()]);
+        if (dbUser.rows.length > 0 && dbUser.rows[0].display_name) {
+          finalDisplayName = dbUser.rows[0].display_name;
+        }
+      } catch (dbErr) {
+        console.error('Lỗi lấy tên hiển thị từ local db:', dbErr);
+      }
+    }
+
     // Return user data and token
     return NextResponse.json({
       idToken: data.idToken,
       email: data.email,
       localId: data.localId,
-      displayName: data.displayName,
+      displayName: finalDisplayName || email.split('@')[0],
       expiresIn: data.expiresIn,
       refreshToken: data.refreshToken,
       role: role,

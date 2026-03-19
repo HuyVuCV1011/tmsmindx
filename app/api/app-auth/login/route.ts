@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
         rolePerms.rows.forEach((r: { route_path: string }) => allPerms.add(r.route_path));
         const permissions = Array.from(allPerms);
 
+        const hasAdminPerms = permissions.some(p => p.startsWith('/admin'));
+        const isAdmin = ['super_admin', 'admin', 'manager'].includes(user.role) || hasAdminPerms;
+
         // Generate JWT token
         const token = jwt.sign(
             { userId: user.id, email: user.email, role: user.role },
@@ -87,7 +90,7 @@ export async function POST(request: NextRequest) {
             localId: `app_${user.id}`,
             displayName: user.display_name,
             role: user.role,
-            isAdmin: ['super_admin', 'admin', 'manager'].includes(user.role),
+            isAdmin,
             permissions,
         });
     } catch (error: any) {
