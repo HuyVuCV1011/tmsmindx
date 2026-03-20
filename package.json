@@ -26,6 +26,7 @@
     "@tiptap/starter-kit": "^3.17.1",
     "@types/nodemailer": "^7.0.4",
     "@types/pg": "^8.16.0",
+    "@vercel/analytics": "^2.0.1",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.8.0",
