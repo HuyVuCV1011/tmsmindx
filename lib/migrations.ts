@@ -668,6 +668,81 @@ const migrations: Migration[] = [
   },
 
   // ═══════════════════════════════════════════════════════
+  // V32: Salary Deals (Deal Lương / Hạ Lương / Bonus)
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V32_salary_deals',
+    version: 32,
+    sql: `
+      CREATE TABLE IF NOT EXISTS salary_deals (
+        id SERIAL PRIMARY KEY,
+        deal_type VARCHAR(20) NOT NULL CHECK (deal_type IN ('bonus','salary_reduction','salary_deal')),
+
+        -- Người gửi (Leader/TE/TC)
+        submitter_email VARCHAR(255) NOT NULL,
+        submitter_name VARCHAR(255) NOT NULL,
+
+        -- Thông tin GV
+        teacher_name VARCHAR(255) NOT NULL,
+        teacher_codename VARCHAR(100),
+        teacher_email VARCHAR(255),
+
+        -- Bonus fields
+        class_code VARCHAR(100),
+        bonus_amount INTEGER,
+        bonus_reason TEXT,
+
+        -- Salary deal fields
+        deal_salary_amount INTEGER,
+        teacher_experience TEXT,
+        teacher_certificates TEXT,
+
+        -- Salary reduction fields
+        current_rate VARCHAR(10),
+        new_rate VARCHAR(10),
+
+        -- Trạng thái duyệt
+        status VARCHAR(30) DEFAULT 'pending'
+          CHECK (status IN ('pending','tegl_approved','tegl_rejected','admin_approved','admin_rejected')),
+
+        -- TEGL review
+        tegl_note TEXT,
+        tegl_email VARCHAR(255),
+        tegl_name VARCHAR(255),
+        tegl_decided_at TIMESTAMP,
+
+        -- Admin review
+        admin_note TEXT,
+        admin_email VARCHAR(255),
+        admin_name VARCHAR(255),
+        admin_decided_at TIMESTAMP,
+
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_salary_deals_type ON salary_deals(deal_type);
+      CREATE INDEX IF NOT EXISTS idx_salary_deals_status ON salary_deals(status);
+      CREATE INDEX IF NOT EXISTS idx_salary_deals_submitter ON salary_deals(submitter_email);
+      CREATE INDEX IF NOT EXISTS idx_salary_deals_created ON salary_deals(created_at DESC);
+
+      -- Grant super_admin permission for admin deal-luong page
+      INSERT INTO app_permissions (user_id, route_path, can_access)
+      SELECT u.id, '/admin/deal-luong', true
+      FROM app_users u
+      WHERE u.role = 'super_admin'
+      ON CONFLICT (user_id, route_path) DO NOTHING;
+
+      -- Grant role-based permissions
+      INSERT INTO role_permissions (role_code, route_path)
+      VALUES ('AD', '/admin/deal-luong')
+      ON CONFLICT DO NOTHING;
+
+      -- Only AD and super_admin can access /admin/deal-luong
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

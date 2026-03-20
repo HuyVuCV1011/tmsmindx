@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 export default function CourseLinksTestPage() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any[]>([]);
@@ -136,36 +136,36 @@ export default function CourseLinksTestPage() {
               
               {/* Table */}
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-300 text-sm">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="border border-gray-300 px-3 py-2 text-left">#</th>
-                      <th className="border border-gray-300 px-3 py-2 text-left">STT</th>
-                      <th className="border border-gray-300 px-3 py-2 text-left">Chuyên đề</th>
-                      <th className="border border-gray-300 px-3 py-2 text-left">Chủ đề</th>
-                      <th className="border border-gray-300 px-3 py-2 text-left">Trạng thái</th>
-                      <th className="border border-gray-300 px-3 py-2 text-left">Mã lớp</th>
-                      <th className="border border-gray-300 px-3 py-2 text-left">Video</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table className="w-full text-sm">
+                  <TableHeader className="bg-gray-100">
+                    <TableRow>
+                      <TableHead className="px-3 py-2 text-left">#</TableHead>
+                      <TableHead className="px-3 py-2 text-left">STT</TableHead>
+                      <TableHead className="px-3 py-2 text-left">Chuyên đề</TableHead>
+                      <TableHead className="px-3 py-2 text-left">Chủ đề</TableHead>
+                      <TableHead className="px-3 py-2 text-left">Trạng thái</TableHead>
+                      <TableHead className="px-3 py-2 text-left">Mã lớp</TableHead>
+                      <TableHead className="px-3 py-2 text-left">Video</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {data.map((row, idx) => (
-                      <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="border border-gray-300 px-3 py-2 text-gray-500">{row.line}</td>
-                        <td className="border border-gray-300 px-3 py-2">{row.stt}</td>
-                        <td className="border border-gray-300 px-3 py-2">{row.chuyenDe}</td>
-                        <td className="border border-gray-300 px-3 py-2 font-medium">{row.chuDe}</td>
-                        <td className="border border-gray-300 px-3 py-2">
+                      <TableRow key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <TableCell className="px-3 py-2 text-gray-500">{row.line}</TableCell>
+                        <TableCell className="px-3 py-2">{row.stt}</TableCell>
+                        <TableCell className="px-3 py-2">{row.chuyenDe}</TableCell>
+                        <TableCell className="px-3 py-2 font-medium">{row.chuDe}</TableCell>
+                        <TableCell className="px-3 py-2">
                           <span className={`px-2 py-0.5 rounded text-xs ${
                             row.trangThai === 'Release' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                           }`}>
                             {row.trangThai}
                           </span>
-                        </td>
-                        <td className="border border-gray-300 px-3 py-2 font-mono text-xs">
+                        </TableCell>
+                        <TableCell className="px-3 py-2 font-mono text-xs">
                           {row.maLop || '—'}
-                        </td>
-                        <td className="border border-gray-300 px-3 py-2">
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
                           {row.link && row.link.startsWith('http') ? (
                             <a 
                               href={row.link} 
@@ -178,11 +178,11 @@ export default function CourseLinksTestPage() {
                           ) : (
                             <span className="text-gray-400 text-xs">{row.link || '—'}</span>
                           )}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </div>
 

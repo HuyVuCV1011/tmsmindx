@@ -11,6 +11,8 @@ interface IndexInfo { indexname: string; indexdef: string; }
 interface MigrationInfo { id: number; name: string; version: number; applied_at: string; }
 interface ForeignKeyInfo { column_name: string; foreign_table: string; foreign_column: string; }
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
 export default function DatabasePage() {
     const [tables, setTables] = useState<TableInfo[]>([]);
     const [dbSize, setDbSize] = useState('');
@@ -418,22 +420,22 @@ export default function DatabasePage() {
                                     </div>
                                     {sqlResult.rows?.length > 0 && (
                                         <div className="overflow-x-auto max-h-[400px]">
-                                            <table className="w-full text-xs">
-                                                <thead className="bg-gray-50 sticky top-0">
-                                                    <tr>{Object.keys(sqlResult.rows[0]).map(k => (
-                                                        <th key={k} className="text-left px-2 py-1.5 font-semibold text-gray-700 whitespace-nowrap">{k}</th>
-                                                    ))}</tr>
-                                                </thead>
-                                                <tbody>{sqlResult.rows.map((row: any, i: number) => (
-                                                    <tr key={i} className="border-t border-gray-100 hover:bg-blue-50/30">
+                                            <Table className="text-xs">
+                                                <TableHeader className="bg-gray-50 sticky top-0">
+                                                    <TableRow>{Object.keys(sqlResult.rows[0]).map(k => (
+                                                        <TableHead key={k} className="text-left py-1.5 px-2 text-gray-700 whitespace-nowrap">{k}</TableHead>
+                                                    ))}</TableRow>
+                                                </TableHeader>
+                                                <TableBody>{sqlResult.rows.map((row: any, i: number) => (
+                                                    <TableRow key={i} className="hover:bg-blue-50/30">
                                                         {Object.values(row).map((val: any, j: number) => (
-                                                            <td key={j} onClick={() => copyCell(val)} className="px-2 py-1.5 text-gray-700 whitespace-nowrap max-w-[250px] truncate cursor-pointer hover:bg-yellow-50" title="Click to copy">
+                                                            <TableCell key={j} onClick={() => copyCell(val)} className="py-1.5 px-2 text-gray-700 whitespace-nowrap max-w-[250px] truncate cursor-pointer hover:bg-yellow-50" title="Click to copy">
                                                                 {val === null ? <span className="text-gray-400 italic">null</span> : String(val)}
-                                                            </td>
+                                                            </TableCell>
                                                         ))}
-                                                    </tr>
-                                                ))}</tbody>
-                                            </table>
+                                                    </TableRow>
+                                                ))}</TableBody>
+                                            </Table>
                                         </div>
                                     )}
                                 </>
@@ -536,30 +538,30 @@ export default function DatabasePage() {
                                         {/* Data table */}
                                         <div className="overflow-x-auto max-h-[55vh]">
                                             {previewData.length > 0 ? (
-                                                <table className="w-full text-xs">
-                                                    <thead className="bg-gray-50 sticky top-0 z-10">
-                                                        <tr>
-                                                            <th className="px-2 py-1.5 text-gray-400 text-[10px] w-8">#</th>
+                                                <Table className="text-xs">
+                                                    <TableHeader className="bg-gray-50 sticky top-0 z-10">
+                                                        <TableRow>
+                                                            <TableHead className="px-2 py-1.5 text-[10px] w-8">#</TableHead>
                                                             {Object.keys(previewData[0]).map((key) => (
-                                                                <th key={key} onClick={() => handleSort(key)}
-                                                                    className="text-left px-2 py-1.5 font-semibold text-gray-700 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none">
+                                                                <TableHead key={key} onClick={() => handleSort(key)}
+                                                                    className="text-left px-2 py-1.5 text-gray-700 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none">
                                                                     <span className="flex items-center gap-1">
                                                                         {primaryKeys.includes(key) && <Key className="w-3 h-3 text-amber-500" />}
                                                                         {foreignKeys.some(fk => fk.column_name === key) && <Link2 className="w-3 h-3 text-blue-400" />}
                                                                         {key}
                                                                         {sortCol === key && <ChevronDown className={`w-3 h-3 transition-transform ${sortOrder === 'asc' ? 'rotate-180' : ''}`} />}
                                                                     </span>
-                                                                </th>
+                                                                </TableHead>
                                                             ))}
-                                                            {primaryKeys.length > 0 && <th className="px-2 py-1.5 w-8"></th>}
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
+                                                            {primaryKeys.length > 0 && <TableHead className="px-2 py-1.5 w-8"></TableHead>}
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
                                                         {previewData.map((row, i) => (
-                                                            <tr key={i} className="border-t border-gray-100 hover:bg-blue-50/20 group">
-                                                                <td className="px-2 py-1.5 text-gray-400 text-[10px]">{dataPage * PAGE_SIZE + i + 1}</td>
+                                                            <TableRow key={i} className="hover:bg-blue-50/20 group">
+                                                                <TableCell className="px-2 py-1.5 text-gray-400 text-[10px]">{dataPage * PAGE_SIZE + i + 1}</TableCell>
                                                                 {Object.entries(row).map(([key, val]: [string, any], j) => (
-                                                                    <td key={j} onClick={() => copyCell(val)}
+                                                                    <TableCell key={j} onClick={() => copyCell(val)}
                                                                         className="px-2 py-1.5 whitespace-nowrap max-w-[200px] truncate cursor-pointer hover:bg-yellow-50/50"
                                                                         title={val === null ? 'null' : String(val)}>
                                                                         {val === null
@@ -568,20 +570,20 @@ export default function DatabasePage() {
                                                                                 ? <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${val ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{String(val)}</span>
                                                                                 : <span className="text-gray-700">{String(val)}</span>
                                                                         }
-                                                                    </td>
+                                                                    </TableCell>
                                                                 ))}
                                                                 {primaryKeys.length > 0 && (
-                                                                    <td className="px-1 py-1">
+                                                                    <TableCell className="px-1 py-1">
                                                                         <button onClick={() => deleteRow(row)}
                                                                             className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-100 text-red-400 hover:text-red-600 transition-all">
                                                                             <Trash2 className="w-3 h-3" />
                                                                         </button>
-                                                                    </td>
+                                                                    </TableCell>
                                                                 )}
-                                                            </tr>
+                                                            </TableRow>
                                                         ))}
-                                                    </tbody>
-                                                </table>
+                                                    </TableBody>
+                                                </Table>
                                             ) : (
                                                 <div className="p-8 text-center text-gray-400 text-sm">No data</div>
                                             )}
@@ -597,39 +599,39 @@ export default function DatabasePage() {
                                             <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
                                                 <h3 className="text-xs font-bold text-gray-700">Columns ({columns.length})</h3>
                                             </div>
-                                            <table className="w-full text-xs">
-                                                <thead className="bg-gray-50/50">
-                                                    <tr>
-                                                        <th className="text-left px-3 py-1.5 font-semibold text-gray-600">Column</th>
-                                                        <th className="text-left px-3 py-1.5 font-semibold text-gray-600">Type</th>
-                                                        <th className="text-left px-3 py-1.5 font-semibold text-gray-600">Nullable</th>
-                                                        <th className="text-left px-3 py-1.5 font-semibold text-gray-600">Default</th>
-                                                        <th className="text-left px-3 py-1.5 font-semibold text-gray-600">Key</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>{columns.map((col) => {
+                                            <Table className="text-xs">
+                                                <TableHeader className="bg-gray-50/50">
+                                                    <TableRow>
+                                                        <TableHead className="px-3 py-1.5 text-gray-600">Column</TableHead>
+                                                        <TableHead className="px-3 py-1.5 text-gray-600">Type</TableHead>
+                                                        <TableHead className="px-3 py-1.5 text-gray-600">Nullable</TableHead>
+                                                        <TableHead className="px-3 py-1.5 text-gray-600">Default</TableHead>
+                                                        <TableHead className="px-3 py-1.5 text-gray-600">Key</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>{columns.map((col) => {
                                                     const isPK = primaryKeys.includes(col.column_name);
                                                     const fk = foreignKeys.find(f => f.column_name === col.column_name);
                                                     return (
-                                                        <tr key={col.column_name} className="border-t border-gray-100 hover:bg-gray-50">
-                                                            <td className="px-3 py-2 font-mono text-xs font-medium text-gray-900">{col.column_name}</td>
-                                                            <td className="px-3 py-2 text-blue-600 font-mono text-[11px]">
+                                                        <TableRow key={col.column_name} className="hover:bg-gray-50">
+                                                            <TableCell className="px-3 py-2 font-mono text-xs font-medium text-gray-900">{col.column_name}</TableCell>
+                                                            <TableCell className="px-3 py-2 text-blue-600 font-mono text-[11px]">
                                                                 {col.data_type}{col.character_maximum_length ? `(${col.character_maximum_length})` : ''}
-                                                            </td>
-                                                            <td className="px-3 py-2">
+                                                            </TableCell>
+                                                            <TableCell className="px-3 py-2">
                                                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${col.is_nullable === 'YES' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
                                                                     {col.is_nullable === 'YES' ? 'NULLABLE' : 'REQUIRED'}
                                                                 </span>
-                                                            </td>
-                                                            <td className="px-3 py-2 text-gray-500 font-mono text-[10px] max-w-[150px] truncate">{col.column_default || '—'}</td>
-                                                            <td className="px-3 py-2">
+                                                            </TableCell>
+                                                            <TableCell className="px-3 py-2 text-gray-500 font-mono text-[10px] max-w-[150px] truncate">{col.column_default || '—'}</TableCell>
+                                                            <TableCell className="px-3 py-2">
                                                                 {isPK && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold"><Key className="w-2.5 h-2.5" /> PK</span>}
                                                                 {fk && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-semibold ml-1"><Link2 className="w-2.5 h-2.5" /> → {fk.foreign_table}</span>}
-                                                            </td>
-                                                        </tr>
+                                                            </TableCell>
+                                                        </TableRow>
                                                     );
-                                                })}</tbody>
-                                            </table>
+                                                })}</TableBody>
+                                            </Table>
                                         </div>
 
                                         {/* Indexes */}

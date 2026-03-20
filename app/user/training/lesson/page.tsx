@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 interface Question {
   id: number;
@@ -607,20 +608,20 @@ function LessonContent() {
                   </div>
                 </div>
                 {!showResult ? (
-                  <button
+                  <Button
                     onClick={handleAnswerQuestion}
                     disabled={userAnswer === null}
-                    className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-300 text-white font-bold py-2 rounded-lg transition"
+                    className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-300 text-white font-bold py-2 h-auto text-base"
                   >
                     Trả lời
-                  </button>
+                  </Button>
                 ) : (
-                  <button
+                  <Button
                     onClick={handleContinue}
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-lg transition"
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 h-auto text-base"
                   >
                     Tiếp tục
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -638,15 +639,15 @@ function LessonContent() {
                   <p className="text-xs opacity-90">Bạn đã xem xong bài học này</p>
                 </div>
                 {hasNextLesson && nextLessonData && (
-                  <button
+                  <Button
                     onClick={() => router.push(`/user/training/lesson?id=${nextLessonData.id}&url=${encodeURIComponent(nextLessonData.video_url)}&title=${encodeURIComponent(nextLessonData.title)}`)}
-                    className="bg-white text-green-600 hover:bg-green-50 px-4 py-2 rounded-lg font-semibold text-sm transition flex items-center gap-2"
+                    className="bg-white text-green-600 hover:bg-green-50 px-4 py-2 font-semibold text-sm transition flex items-center gap-2 h-auto"
                   >
                     <span>Bài tiếp theo</span>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -678,16 +679,17 @@ function LessonContent() {
             </div>
             <div className="flex-1" />
             {videoCompleted && (
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => router.push(`/user/assignments?lesson_id=${lessonId}`)}
-                className="bg-white/10 hover:bg-white/20 px-4 py-1.5 rounded-lg font-semibold transition flex items-center gap-2"
+                className="bg-white/10 hover:bg-white/20 hover:text-white px-4 py-1.5 font-semibold transition flex items-center gap-2 h-auto text-white"
               >
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
                   <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
                 </svg>
                 <span>Làm bài tập</span>
-              </button>
+              </Button>
             )}
           </div>
         )}

@@ -1,5 +1,6 @@
 "use client";
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Calendar, Filter, User, X } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
@@ -22,9 +23,24 @@ interface TeacherAvailability {
   notes: string;
 }
 
+interface Center {
+  id: number;
+  region: string;
+  short_code: string;
+  full_name: string;
+  display_name: string;
+  status: string;
+}
+
 interface AvailabilityCount {
   count: number;
   teachers: TeacherAvailability[];
+}
+
+interface RegionGroup {
+  region: string;
+  centers: Center[];
+  aliases: string[];
 }
 
 type DayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
@@ -44,13 +60,29 @@ const TIME_SLOTS: TimeSlot[] = ['Sáng', 'Chiều', 'Tối'];
 
 const PROGRAMS = ['Tất cả', 'Coding', 'Robotics', 'Art'];
 
-const REGIONS = {
-  'Tất cả': [],
-  'HCM01': ['1. Phan Văn Trị', '2. Quang Trung', '3. Tô Ký', '4. Phan Xích Long'],
-  'HCM04': ['5.Trường Chinh', '6. Tây Thạnh', '7. Lũy Bán Bích', '8. Tên Lửa'],
+const normalizeText = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+
+const buildCenterAliases = (center: Center) => {
+  const values = [center.full_name, center.display_name, center.short_code, center.region];
+  return Array.from(new Set(values.filter(Boolean).map((value) => value.trim()).filter(Boolean)));
 };
 
-const REGION_OPTIONS = ['Tất cả', 'HCM01', 'HCM04'];
+const matchesAnyAlias = (teacherBranch: string, aliases: string[]) => {
+  const normalizedTeacherBranch = normalizeText(teacherBranch);
+  return aliases.some((alias) => {
+    const normalizedAlias = normalizeText(alias);
+    return (
+      normalizedTeacherBranch === normalizedAlias ||
+      normalizedTeacherBranch.includes(normalizedAlias) ||
+      normalizedAlias.includes(normalizedTeacherBranch)
+    );
+  });
+};
 
 // Fetcher với cache
 const fetcher = async (url: string) => {
@@ -82,7 +114,7 @@ const CalendarCell = memo(({
                   'bg-blue-50';
 
   return (
-    <td className={`border border-gray-300 p-2 align-top ${bgColor}`}>
+    <TableCell className={`border border-gray-300 p-2 align-top ${bgColor}`}>
       {count === 0 ? (
         <div className="text-center text-gray-400 text-xs py-2">Không có</div>
       ) : (
@@ -102,7 +134,7 @@ const CalendarCell = memo(({
           ))}
         </div>
       )}
-    </td>
+    </TableCell>
   );
 });
 CalendarCell.displayName = 'CalendarCell';
@@ -110,6 +142,8 @@ CalendarCell.displayName = 'CalendarCell';
 export default function Page2() {
   const [selectedPrograms, setSelectedPrograms] = useState<string[]>([]);
   const [selectedRegion, setSelectedRegion] = useState<string>('Tất cả');
+  const [centers, setCenters] = useState<Center[]>([]);
+  const [centersLoading, setCentersLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalData, setModalData] = useState<{
     teacher: TeacherAvailability;
@@ -128,6 +162,77 @@ export default function Page2() {
   
   const [fromDate, setFromDate] = useState(defaultFromDate);
   const [toDate, setToDate] = useState(defaultToDate);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadCenters = async () => {
+      try {
+        const response = await fetch('/api/app-auth/data?table=centers&status=Active');
+        const data = await response.json();
+
+        if (!isActive) return;
+
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        setCenters(rows.map((row: any) => ({
+          id: Number(row.id),
+          region: String(row.region || ''),
+          short_code: String(row.short_code || ''),
+          full_name: String(row.full_name || ''),
+          display_name: String(row.display_name || ''),
+          status: String(row.status || ''),
+        })));
+      } catch (error) {
+        console.error('Error loading centers:', error);
+        if (isActive) {
+          setCenters([]);
+        }
+      } finally {
+        if (isActive) {
+          setCentersLoading(false);
+        }
+      }
+    };
+
+    loadCenters();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const regionGroups = useMemo<RegionGroup[]>(() => {
+    const grouped = new Map<string, Center[]>();
+
+    centers.forEach((center) => {
+      const region = center.region?.trim() || 'Khác';
+      const current = grouped.get(region) || [];
+      current.push(center);
+      grouped.set(region, current);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([region, items]) => ({
+        region,
+        centers: items.sort((a, b) => a.display_name.localeCompare(b.display_name, 'vi')),
+        aliases: Array.from(new Set(items.flatMap(buildCenterAliases))),
+      }))
+      .sort((a, b) => a.region.localeCompare(b.region, 'vi'));
+  }, [centers]);
+
+  const regionOptions = useMemo(() => ['Tất cả', ...regionGroups.map((group) => group.region)], [regionGroups]);
+
+  const selectedRegionGroup = useMemo(
+    () => regionGroups.find((group) => group.region === selectedRegion) || null,
+    [regionGroups, selectedRegion]
+  );
+
+  const selectedRegionSummary = useMemo(() => {
+    if (!selectedRegionGroup) return '';
+
+    const names = selectedRegionGroup.centers.map((center) => center.display_name || center.full_name).filter(Boolean);
+    return names.length <= 4 ? names.join(', ') : `${names.slice(0, 4).join(', ')} +${names.length - 4}`;
+  }, [selectedRegionGroup]);
 
   // Build API URL với date params
   const apiUrl = useMemo(() => {
@@ -173,19 +278,16 @@ export default function Page2() {
     }
     
     // Filter by region
-    if (selectedRegion !== 'Tất cả') {
-      const regionBranches = REGIONS[selectedRegion as keyof typeof REGIONS];
+    if (selectedRegion !== 'Tất cả' && selectedRegionGroup) {
       filtered = filtered.filter(t => {
         // Check if teacher's main branch or any available branch is in the region
-        const branches = [t.mainBranch, ...t.branches.split(',').map(b => b.trim())];
-        return branches.some(branch => 
-          regionBranches.some(rb => branch.includes(rb) || rb.includes(branch))
-        );
+        const branches = [t.mainBranch, ...t.branches.split(',').map(b => b.trim())].filter(Boolean);
+        return branches.some(branch => matchesAnyAlias(branch, selectedRegionGroup.aliases));
       });
     }
     
     return filtered;
-  }, [teachers, selectedPrograms, selectedRegion]);
+  }, [teachers, selectedPrograms, selectedRegion, selectedRegionGroup]);
 
   // Calculate availability counts
   const availabilityMatrix = useMemo(() => {
@@ -289,7 +391,7 @@ export default function Page2() {
           <Filter className="w-5 h-5 text-gray-600" />
           <span className="text-gray-700 font-medium min-w-24">Khu vực:</span>
           <div className="flex gap-2">
-            {REGION_OPTIONS.map(region => (
+            {regionOptions.map(region => (
               <button
                 key={region}
                 onClick={() => setSelectedRegion(region)}
@@ -303,9 +405,9 @@ export default function Page2() {
               </button>
             ))}
           </div>
-          {selectedRegion !== 'Tất cả' && (
+          {selectedRegion !== 'Tất cả' && selectedRegionGroup && (
             <div className="ml-4 text-xs text-gray-600 bg-purple-50 px-3 py-1 rounded-full">
-              {REGIONS[selectedRegion as keyof typeof REGIONS].join(', ')}
+              {centersLoading ? 'Đang tải cơ sở...' : selectedRegionSummary}
             </div>
           )}
         </div>
@@ -382,29 +484,29 @@ export default function Page2() {
       ) : (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
-                  <th className="border border-blue-700 p-3 text-left sticky left-0 bg-blue-700 z-10">
+            <Table className="w-full border-collapse">
+              <TableHeader>
+                <TableRow className="bg-gradient-to-r from-blue-600 to-blue-800 hover:bg-blue-800 text-white">
+                  <TableHead className="border border-blue-700 p-3 text-left sticky left-0 bg-blue-700 z-10 text-white">
                     Khung giờ
-                  </th>
+                  </TableHead>
                   {DAYS.map(day => (
-                    <th key={day.key} className="border border-blue-700 p-3 text-center min-w-32">
+                    <TableHead key={day.key} className="border border-blue-700 p-3 text-center min-w-32 text-white">
                       <div className="font-bold">{day.label}</div>
                       <div className="text-xs font-normal opacity-90">({day.short})</div>
-                    </th>
+                    </TableHead>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {TIME_SLOTS.map(slot => (
-                  <tr key={slot}>
-                    <td className="border border-gray-300 p-3 font-semibold bg-gray-50 sticky left-0 z-10">
+                  <TableRow key={slot}>
+                    <TableCell className="border border-gray-300 p-3 font-semibold bg-gray-50 sticky left-0 z-10">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-blue-600"></div>
                         {slot}
                       </div>
-                    </td>
+                    </TableCell>
                     {DAYS.map(day => (
                       <CalendarCell
                         key={`${day.key}-${slot}`}
@@ -415,10 +517,10 @@ export default function Page2() {
                         onTeacherClick={handleTeacherClick}
                       />
                     ))}
-                  </tr>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}

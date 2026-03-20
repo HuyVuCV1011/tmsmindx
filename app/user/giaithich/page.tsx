@@ -1,8 +1,11 @@
 'use client';
 
 import Modal from '@/components/Modal';
+import { Button } from '@/components/ui/button';
+import { Stepper } from '@/components/ui/stepper';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/lib/auth-context';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface Explanation {
@@ -20,68 +23,37 @@ interface Explanation {
   updated_at: string;
 }
 
-const CAMPUS_LIST = [
-  'HCM - 01 Quang Trung',
-  'HCM - 01 Tô Ký',
-  'HCM - Phan Văn Trị',
-  'HCM - 01 Trường Chinh',
-  'HCM - 261-263 Phan Xích Long',
-  'HCM - 322 Tây Thạnh',
-  'HCM - 414 Lũy Bán Bích',
-  'HCM - 624 Lạc Long Quân',
-  'HCM - Khu Tên Lửa',
-  'HCM - 02 Song Hành',
-  'HCM - 223 Nguyễn Xí',
-  'Thủ Đức - 120-122 Phạm Văn Đồng',
-  'Thủ Đức - 99 Lê Văn Việt',
-  'HCM - 165-167 Nguyễn Thị Thập',
-  'HCM - 343 Phạm Ngũ Lão',
-  'HCM - 39 Hải Thượng Lãn Ông',
-  'HCM - 618 Đường 3/2',
-  'HCM - Phú Mỹ Hưng',
-  'Cần Thơ - 153Q Trần Hưng Đạo',
-  'Dĩ An - Bình Dương',
-  'Đồng Nai - 253 Phạm Văn Thuận',
-  'MindX - Online',
-  'MindX Digital Art',
-  'Thủ Dầu Một - Bình Dương',
-  'Vũng Tàu - 205A Lê Hồng Phong',
-  'HN - 107 Nguyễn Phong Sắc',
-  'HN - 29T1 Hoàng Đạo Thúy',
-  'HN - 71 Nguyễn Chí Thanh',
-  'HN - A3 VinHomes Gardenia Hàm Nghi',
-  'HN - 06 Nguyễn Hữu Thọ',
-  'HN - 10 Trần Phú',
-  'HN - 505 Minh Khai',
-  'HN - 98 Nguyễn Văn Cừ',
-  'HN - Văn Phú Victoria',
-  'Nghệ An - 67 Đại Lộ Lê Nin',
-  'Thanh Hóa - Đại Lộ Lê Lợi',
-  'Đà Nẵng - 255-257 Hùng Vương',
-  'Bắc Ninh - 09 Lê Thái Tổ',
-  'Hải Phòng - 268 Trần Nguyên Hãn',
-  'Phú Thọ - 1606A Hùng Vương',
-  'Quảng Ninh - 70 Nguyễn Văn Cừ',
-  'Thái Nguyên - 04 Hoàng Văn Thụ',
-  'Vĩnh Phúc - 01 Trần Phú'
-];
+interface CenterOption {
+  id: number;
+  region: string;
+  short_code: string;
+  full_name: string;
+  display_name: string;
+}
 
-const SUBJECT_LIST = [
-  '[COD] Scratch',
-  '[COD] Web',
-  '[COD] ComputerScience',
-  '[COD] GameMaker',
-  '[COD] AppProducer',
-  '[ART] Test chuyên sâu',
-  '[ROB] VexIQ',
-  '[ROB] VexGo',
-  '[Trial] Quy Trình Trai nghiệm'
-];
+interface SubjectOption {
+  id: number;
+  exam_type: string;
+  block_code: string;
+  subject_code: string;
+  subject_name: string;
+  is_active: boolean;
+}
+
+const normalizeText = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
 
 export default function GiaiTrinhPage() {
   const { user } = useAuth();
   const [explanations, setExplanations] = useState<Explanation[]>([]);
+  const [centers, setCenters] = useState<CenterOption[]>([]);
+  const [subjects, setSubjects] = useState<SubjectOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingReferenceData, setLoadingReferenceData] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [campusSearch, setCampusSearch] = useState('');
@@ -101,15 +73,23 @@ export default function GiaiTrinhPage() {
     reason: ''
   });
 
-  // Filter campus list based on search
-  const filteredCampusList = CAMPUS_LIST.filter(campus =>
-    campus.toLowerCase().includes(campusSearch.toLowerCase())
-  );
+  const filteredCampusList = useMemo(() => {
+    const normalizedSearch = normalizeText(campusSearch);
 
-  // Filter subject list based on search
-  const filteredSubjectList = SUBJECT_LIST.filter(subject =>
-    subject.toLowerCase().includes(subjectSearch.toLowerCase())
-  );
+    return centers
+      .map((center) => center.full_name || center.display_name)
+      .filter(Boolean)
+      .filter((campus) => normalizeText(campus).includes(normalizedSearch));
+  }, [campusSearch, centers]);
+
+  const filteredSubjectList = useMemo(() => {
+    const normalizedSearch = normalizeText(subjectSearch);
+
+    return subjects
+      .map((subject) => subject.subject_name)
+      .filter(Boolean)
+      .filter((subject) => normalizeText(subject).includes(normalizedSearch));
+  }, [subjectSearch, subjects]);
 
   // Close modal when clicking outside
   useEffect(() => {
@@ -180,6 +160,61 @@ export default function GiaiTrinhPage() {
       fetchTeacherInfo();
     }
   }, [user]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadReferenceData = async () => {
+      try {
+        const [centersResponse, subjectsResponse] = await Promise.all([
+          fetch('/api/app-auth/data?table=centers&status=Active'),
+          fetch('/api/database?action=preview&table=exam_subject_catalog&limit=200&sort=subject_name&order=asc'),
+        ]);
+
+        const centersData = await centersResponse.json();
+        const subjectsData = await subjectsResponse.json();
+
+        if (!isActive) return;
+
+        const centerRows = Array.isArray(centersData.rows) ? centersData.rows : [];
+        setCenters(centerRows.map((row: any) => ({
+          id: Number(row.id),
+          region: String(row.region || ''),
+          short_code: String(row.short_code || ''),
+          full_name: String(row.full_name || ''),
+          display_name: String(row.display_name || ''),
+        })));
+
+        const subjectRows = Array.isArray(subjectsData.rows) ? subjectsData.rows : [];
+        setSubjects(subjectRows
+          .filter((row: any) => row.is_active !== false)
+          .map((row: any) => ({
+            id: Number(row.id),
+            exam_type: String(row.exam_type || ''),
+            block_code: String(row.block_code || ''),
+            subject_code: String(row.subject_code || ''),
+            subject_name: String(row.subject_name || ''),
+            is_active: Boolean(row.is_active),
+          })));
+      } catch (error) {
+        console.error('Error loading reference data:', error);
+        if (isActive) {
+          setCenters([]);
+          setSubjects([]);
+        }
+      } finally {
+        if (isActive) {
+          setLoadingReferenceData(false);
+        }
+      }
+    };
+
+    loadReferenceData();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -272,15 +307,16 @@ export default function GiaiTrinhPage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Giải Trình Không Tham Gia Kiểm Tra</h1>
             <p className="mt-1 text-sm text-gray-600">Quản lý và theo dõi các giải trình của bạn</p>
           </div>
-          <button
+          <Button
             onClick={() => setShowModal(true)}
-            className="inline-flex items-center justify-center px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap"
+            size="lg"
+            className="whitespace-nowrap shadow-sm"
           >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Tạo Giải Trình Mới
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -360,10 +396,15 @@ export default function GiaiTrinhPage() {
                   onFocus={() => setShowCampusList(true)}
                   onBlur={() => setTimeout(() => setShowCampusList(false), 200)}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="Nhập hoặc chọn cơ sở"
+                  placeholder={loadingReferenceData ? 'Đang tải danh sách cơ sở...' : 'Nhập hoặc chọn cơ sở'}
                   autoComplete="off"
                 />
-                {showCampusList && filteredCampusList.length > 0 && (
+                {showCampusList && loadingReferenceData && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-sm text-gray-500">
+                    Đang tải danh sách cơ sở...
+                  </div>
+                )}
+                {showCampusList && !loadingReferenceData && filteredCampusList.length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                     {filteredCampusList.map((campus, index) => (
                       <div
@@ -398,10 +439,15 @@ export default function GiaiTrinhPage() {
                   onFocus={() => setShowSubjectList(true)}
                   onBlur={() => setTimeout(() => setShowSubjectList(false), 200)}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="Nhập hoặc chọn bộ môn"
+                  placeholder={loadingReferenceData ? 'Đang tải danh sách bộ môn...' : 'Nhập hoặc chọn bộ môn'}
                   autoComplete="off"
                 />
-                {showSubjectList && filteredSubjectList.length > 0 && (
+                {showSubjectList && loadingReferenceData && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-sm text-gray-500">
+                    Đang tải danh sách bộ môn...
+                  </div>
+                )}
+                {showSubjectList && !loadingReferenceData && filteredSubjectList.length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                     {filteredSubjectList.map((subject, index) => (
                       <div
@@ -452,17 +498,18 @@ export default function GiaiTrinhPage() {
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row gap-3 mt-6 pt-6 border-t border-gray-200">
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => setShowModal(false)}
-              className="w-full sm:w-auto px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              className="w-full sm:w-auto font-medium"
             >
               Hủy
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={submitting}
-              className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium shadow-sm"
+              className="w-full sm:w-auto font-medium shadow-sm"
             >
               {submitting ? (
                 <span className="flex items-center justify-center">
@@ -470,7 +517,7 @@ export default function GiaiTrinhPage() {
                   <span className="ml-2">Đang gửi...</span>
                 </span>
               ) : 'Gửi Giải Trình'}
-            </button>
+            </Button>
           </div>
         </form>
       </Modal>
@@ -494,64 +541,42 @@ export default function GiaiTrinhPage() {
               </svg>
               <h3 className="mt-4 text-lg font-medium text-gray-900">Chưa có giải trình nào</h3>
               <p className="mt-2 text-sm text-gray-600">Bắt đầu bằng cách tạo giải trình mới</p>
-              <button
-                onClick={() => setShowModal(true)}
-                className="mt-6 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
+              <Button onClick={() => setShowModal(true)} className="mt-6">
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
                 Tạo Giải Trình Mới
-              </button>
+              </Button>
             </div>
           ) : (
             <div>
-              {/* Desktop Table View - Hidden on mobile */}
               <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Ngày tạo</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Ngày KT</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Cơ sở</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Bộ môn</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Trạng thái</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Chi tiết</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {explanations.map((explanation) => (
-                      <tr key={explanation.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Date(explanation.created_at).toLocaleDateString('vi-VN')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Date(explanation.test_date).toLocaleDateString('vi-VN')}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
-                          <div className="max-w-xs truncate">{explanation.campus}</div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
-                          <div className="max-w-xs truncate">{explanation.subject}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          {getStatusBadge(explanation.status)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <button
-                            onClick={() => setSelectedExplanation(explanation)}
-                            className="text-blue-600 hover:text-blue-800 font-medium transition-colors"
-                          >
-                            Xem chi tiết →
-                          </button>
-                        </td>
-                      </tr>
+                <Table>
+                  <TableHeader className="bg-gray-50">
+                    <TableRow>
+                      <TableHead className="uppercase tracking-wider">Created</TableHead>
+                      <TableHead className="uppercase tracking-wider">Test Date</TableHead>
+                      <TableHead className="uppercase tracking-wider">Campus</TableHead>
+                      <TableHead className="uppercase tracking-wider">Subject</TableHead>
+                      <TableHead className="uppercase tracking-wider">Status</TableHead>
+                      <TableHead className="uppercase tracking-wider">Details</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {explanations && explanations.map((explanation) => (
+                      <TableRow key={explanation.id} className="hover:bg-gray-50 transition-colors">
+                        <TableCell className="whitespace-nowrap text-gray-900">{new Date(explanation.created_at).toLocaleDateString('vi-VN')}</TableCell>
+                        <TableCell className="whitespace-nowrap text-gray-900">{new Date(explanation.test_date).toLocaleDateString('vi-VN')}</TableCell>
+                        <TableCell className="text-gray-900"><div className="max-w-xs truncate">{explanation.campus}</div></TableCell>
+                        <TableCell className="text-gray-900"><div className="max-w-xs truncate">{explanation.subject}</div></TableCell>
+                        <TableCell className="whitespace-nowrap">{getStatusBadge(explanation.status)}</TableCell>
+                        <TableCell className="whitespace-nowrap"><Button variant="link" onClick={() => setSelectedExplanation(explanation)} className="p-0 h-auto font-medium">Xem chi tiết →</Button></TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
 
-              {/* Mobile Card View - Visible on mobile and tablet */}
               <div className="lg:hidden divide-y divide-gray-200">
                 {explanations.map((explanation) => (
                   <div
@@ -564,9 +589,7 @@ export default function GiaiTrinhPage() {
                         <p className="text-sm font-medium text-gray-900 truncate">{explanation.campus}</p>
                         <p className="text-xs text-gray-600 mt-0.5">{explanation.subject}</p>
                       </div>
-                      <div className="ml-3 flex-shrink-0">
-                        {getStatusBadge(explanation.status)}
-                      </div>
+                      <div className="ml-3 flex-shrink-0">{getStatusBadge(explanation.status)}</div>
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div>
@@ -603,20 +626,44 @@ export default function GiaiTrinhPage() {
         title="Chi Tiết Giải Trình"
         maxWidth="2xl"
         footer={
-          <button
+          <Button
+            variant="secondary"
             onClick={() => setSelectedExplanation(null)}
-            className="w-full sm:w-auto px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+            className="w-full sm:w-auto bg-gray-600 text-white hover:bg-gray-700 font-medium hover:text-white"
           >
             Đóng
-          </button>
+          </Button>
         }
       >
         {selectedExplanation && (
           <div className="space-y-4">
-            {/* Status Badge */}
-            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
-              <span className="text-sm font-medium text-gray-700">Trạng thái:</span>
-              {getStatusBadge(selectedExplanation.status)}
+            {/* Status Stepper */}
+            <div className="pb-6 pt-2 border-b border-gray-200">
+              <span className="text-sm font-medium text-gray-700 block mb-4">Tiến trình xử lý:</span>
+              <div className="px-4">
+                <Stepper 
+                  steps={[
+                    {
+                      id: 1,
+                      label: 'Gửi yêu cầu',
+                      description: 'Mới tạo',
+                      status: 'completed'
+                    },
+                    {
+                      id: 2,
+                      label: 'Tiếp nhận',
+                      description: 'Đang xử lý',
+                      status: selectedExplanation.status === 'pending' ? 'current' : 'completed'
+                    },
+                    {
+                      id: 3,
+                      label: 'Kết quả',
+                      description: selectedExplanation.status === 'accepted' ? 'Đã duyệt' : selectedExplanation.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt',
+                      status: selectedExplanation.status === 'accepted' ? 'completed' : selectedExplanation.status === 'rejected' ? 'error' : 'upcoming'
+                    }
+                  ]} 
+                />
+              </div>
             </div>
 
             {/* Info Grid */}

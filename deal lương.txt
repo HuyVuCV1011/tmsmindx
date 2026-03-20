@@ -1,0 +1,134 @@
+Thực hiện chức năng deal lương. 
+note: admin là leader được phân quyền xử lý deal lương dựa trên quyền để diền form, tegl hay các role mà super admin phân quyền khác có thể xem danh sách để duyệt những mục mà leader đã điền, 
+thực hiện 2 màn hình điền form và màn hình danh sách, update phân quyền cho role super admin
+làm step: điền dữ liệu -> tegl duyệt -> admin duyệt (tất cả điều có ghi chú)
+Bên màn hình leader thì hiện danh sách đã điền để xem trạng thái còn admin và tegl sẽ xem được full trạng thái 
+[Teaching|MindX] Danh sách Deal lương, Hạ lương, Bonus
+Xin chào, Bảo. Khi bạn gửi biểu mẫu này, chủ sở hữu sẽ thấy tên và địa chỉ email của bạn.
+Bắt buộc
+1
+Tên Leader/TE/TC ( tài khoản admin tự động fill vào)
+Trần Chí Bảo
+2
+Leader/TE/TC muốn chọn mục nào?
+ Bonus
+
+Màn hình bonus:
+[Teaching|MindX] Danh sách Deal lương, Hạ lương, Bonus
+Bắt buộc
+Danh sách Bonus
+•  Vui lòng điền thông tin chính xác và đầy đủ. 
+•  Các trường hợp điền sai, thiếu thông tin hoặc không đúng quy định sẽ không được ghi nhận/không được xử lý. 
+•  Hệ thống sẽ không chịu trách nhiệm với các sai sót do nhập liệu không chính xác
+3
+Họ và tên giáo viên (VD Nguyễn Văn Minh)
+ 
+4
+Mã codename giáo viên (VD: minhnv)
+ 
+5
+Email MindX của giáo viên (đuôi @mindx.net.vn)
+ 
+6
+Mã lớp xin Bonus
+Leader/TE/TC ghi mã lớp đúng theo trên lms (VD: BH-C4K-GB41)
+ 
+7
+Mức bonus đề xuất
+Nhập số tiền bonus ( VD: 20000)
+ 
+8
+Chi tiết lý do xin Bonus
+ 
+
+ Hạ lương
+Màn hình hạ lương:
+Danh sách Hạ lương
+1. Trường hợp Hạ lương 
+•	Khi áp dụng hạ lương, giáo viên sẽ bị giảm 1 bậc rate chuẩn. 
+•	Ví dụ: 
+o	Giáo viên đang ở rate T4 
+o	Nếu lớp bị áp dụng hạ lương → lương lớp đó sẽ tính theo T3 
+•	Chỉ áp dụng giảm đúng 1 bậc liền kề, không giảm nhiều bậc
+2. Không chấp nhận deal lương lẻ
+•	Hệ thống không xử lý các mức lương deal riêng lẻ như: 80.000, 110.000
+•	chỉ áp dụng theo khung rate chuẩn (T1,T2,T3,T4..) như hình bên dưới
+[
+  "Rank",
+  "Mức lương giáo viên",
+  "Số lượng học viên (giáo viên chính)",
+  "Mức lương trợ giảng (75%)",
+  "Số lượng học viên (trợ giảng)"
+]
+
+[
+  ["T0", 70000, "1-5", 52500, 3.75, "#C94C4C"],
+  ["T1", 90000, 6, 67500, 4.5, "#C94C4C"],
+
+  ["T2", 100000, 7, 75000, 5.25, "#D46A5A"],
+  ["T3", 120000, 8, 90000, 6, "#D46A5A"],
+  ["T4", 140000, 9, 105000, 6.75, "#D46A5A"],
+  ["T5", 150000, 9, 112500, 6.75, "#D46A5A"],
+
+  ["T6", 160000, 10, 120000, 7.5, "#E08A5C"],
+  ["T7", 170000, 10, 127500, 7.5, "#E08A5C"],
+  ["T8", 180000, 10, 135000, 7.5, "#E08A5C"],
+  ["T9", 190000, 10, 142500, 7.5, "#E08A5C"],
+  ["T10", 200000, 10, 150000, 7.5, "#E08A5C"],
+
+  ["T11", 210000, 11, 157500, 8.25, "#E8A75C"],
+  ["T12", 220000, 11, 165000, 8.25, "#E8A75C"],
+  ["T13", 230000, 11, 172500, 8.25, "#E8A75C"],
+
+  ["T14", 240000, 12, 180000, 9, "#EDB75E"],
+  ["T15", 250000, 12, 187500, 9, "#EDB75E"],
+
+  ["T16", 260000, 13, 195000, 9.75, "#F2C35E"],
+  ["T17", 270000, 13, 202500, 9.75, "#F2C35E"],
+
+  ["T18", 280000, 14, 210000, 10.5, "#F6CF63"],
+  ["T19", 290000, 14, 217500, 10.5, "#F6CF63"],
+
+  ["T20", 300000, 15, 225000, 11.25, "#F9D976"]
+]
+3
+Lớp deal Hạ lương
+Leader/TE/TC ghi mã lớp đúng theo trên lms (VD: BH-C4K-GB41)
+ 
+4
+Mã codename giáo viên (VD: minhnv)
+ 
+5
+Email MindX của giáo viên (đuôi @mindx.net.vn)
+ 
+Quay lạiGửi
+
+
+ Deal lương
+Màn hình deal lương:
+Bắt buộc
+Danh sách Deal lương
+3
+Họ và tên giáo viên (VD Nguyễn Văn Minh)
+ 
+4
+Mã codename giáo viên (VD: minhnv)
+ 
+5
+Email MindX của giáo viên (đuôi @mindx.net.vn)
+ 
+6
+Kinh nghiệm làm việc của giáo viên
+ 
+7
+Chứng chỉ sư phạm và bằng cấp liên quan (nếu có)
+(Câu hỏi không ẩn danh)
+)
+Tải lên tệp
+Giới hạn số lượng tệp: 3Giới hạn kích thước tệp đơn: 100MBLoại tệp được phép: Word, Excel, PPT, PDF, Hình ảnh, Video, Âm thanh
+8
+Mức deal lương đề xuất cho giáo viên
+
+Ví dụ: 100000
+ 
+

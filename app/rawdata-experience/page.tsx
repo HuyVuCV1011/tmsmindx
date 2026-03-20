@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 interface TestRecord {
   area: string;
   name: string;
@@ -168,31 +168,31 @@ function RawDataExperienceContent() {
                   <h3 className="text-sm font-bold">Chi tiết tất cả bài test</h3>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-100 border-b-2 border-gray-300">
-                      <tr>
-                        <th className="text-left py-3 px-3 font-bold">STT</th>
-                        <th className="text-left py-3 px-3 font-bold">Tháng/Năm</th>
-                        <th className="text-left py-3 px-3 font-bold">Khối giảng dạy</th>
-                        <th className="text-center py-3 px-3 font-bold">Câu đúng</th>
-                        <th className="text-center py-3 px-3 font-bold">Điểm</th>
-                        <th className="text-left py-3 px-3 font-bold">Email giải trình</th>
-                        <th className="text-center py-3 px-3 font-bold">Tính điểm</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table className="w-full text-xs">
+                    <TableHeader className="bg-gray-100 border-b-2 border-gray-300">
+                      <TableRow>
+                        <TableHead className="text-left py-3 px-3 font-bold">STT</TableHead>
+                        <TableHead className="text-left py-3 px-3 font-bold">Tháng/Năm</TableHead>
+                        <TableHead className="text-left py-3 px-3 font-bold">Khối giảng dạy</TableHead>
+                        <TableHead className="text-center py-3 px-3 font-bold">Câu đúng</TableHead>
+                        <TableHead className="text-center py-3 px-3 font-bold">Điểm</TableHead>
+                        <TableHead className="text-left py-3 px-3 font-bold">Email giải trình</TableHead>
+                        <TableHead className="text-center py-3 px-3 font-bold">Tính điểm</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {records.map((record, index) => (
-                        <tr
+                        <TableRow
                           key={index}
                           className={`border-b border-gray-200 ${
                             !record.isCountedInAverage ? "bg-red-50" : "hover:bg-gray-50"
                           }`}
                         >
-                          <td className="py-3 px-3 text-gray-500 font-medium">{index + 1}</td>
-                          <td className="py-3 px-3 font-medium">{record.date}</td>
-                          <td className="py-3 px-3 font-medium">{record.teachingLevel}</td>
-                          <td className="text-center py-3 px-3">{record.correct}</td>
-                          <td className="text-center py-3 px-3">
+                          <TableCell className="py-3 px-3 text-gray-500 font-medium">{index + 1}</TableCell>
+                          <TableCell className="py-3 px-3 font-medium">{record.date}</TableCell>
+                          <TableCell className="py-3 px-3 font-medium">{record.teachingLevel}</TableCell>
+                          <TableCell className="text-center py-3 px-3">{record.correct}</TableCell>
+                          <TableCell className="text-center py-3 px-3">
                             <span
                               className={`font-bold text-base ${
                                 parseFloat(record.score.replace(",", ".")) >= 4
@@ -204,8 +204,8 @@ function RawDataExperienceContent() {
                             >
                               {record.score}
                             </span>
-                          </td>
-                          <td className="py-3 px-3">
+                          </TableCell>
+                          <TableCell className="py-3 px-3">
                             {record.emailExplanation ? (
                               <span className="text-orange-600 font-medium">
                                 {record.emailExplanation}
@@ -213,8 +213,8 @@ function RawDataExperienceContent() {
                             ) : (
                               <span className="text-gray-400">-</span>
                             )}
-                          </td>
-                          <td className="text-center py-3 px-3">
+                          </TableCell>
+                          <TableCell className="text-center py-3 px-3">
                             {record.isCountedInAverage ? (
                               <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
                                 ✓ Tính
@@ -224,11 +224,11 @@ function RawDataExperienceContent() {
                                 ✗ Không tính
                               </span>
                             )}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             )}
@@ -264,29 +264,29 @@ function RawDataExperienceContent() {
               </div>
 
               <div className="overflow-y-auto max-h-[calc(90vh-180px)] bg-white">
-                <table className="w-full text-xs bg-white">
-                  <thead className="bg-gray-100 border-b-2 border-gray-300 sticky top-0">
-                    <tr>
-                      <th className="text-left py-3 px-3 font-bold">STT</th>
-                      <th className="text-left py-3 px-3 font-bold">Khối giảng dạy</th>
-                      <th className="text-center py-3 px-3 font-bold">Câu đúng</th>
-                      <th className="text-center py-3 px-3 font-bold">Điểm</th>
-                      <th className="text-left py-3 px-3 font-bold">Email giải trình</th>
-                      <th className="text-center py-3 px-3 font-bold">Tính điểm</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table className="w-full text-xs">
+                  <TableHeader className="bg-gray-100 border-b-2 border-gray-300 sticky top-0 z-10">
+                    <TableRow>
+                      <TableHead className="text-left py-3 px-3 font-bold">STT</TableHead>
+                      <TableHead className="text-left py-3 px-3 font-bold">Khối giảng dạy</TableHead>
+                      <TableHead className="text-center py-3 px-3 font-bold">Câu đúng</TableHead>
+                      <TableHead className="text-center py-3 px-3 font-bold">Điểm</TableHead>
+                      <TableHead className="text-left py-3 px-3 font-bold">Email giải trình</TableHead>
+                      <TableHead className="text-center py-3 px-3 font-bold">Tính điểm</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {selectedMonth.records.map((record, index) => (
-                      <tr
+                      <TableRow
                         key={index}
                         className={`border-b border-gray-200 ${
                           !record.isCountedInAverage ? "bg-red-50" : "hover:bg-gray-50"
                         }`}
                       >
-                        <td className="py-3 px-3 text-gray-500 font-medium">{index + 1}</td>
-                        <td className="py-3 px-3 font-medium">{record.teachingLevel}</td>
-                        <td className="text-center py-3 px-3">{record.correct}</td>
-                        <td className="text-center py-3 px-3">
+                        <TableCell className="py-3 px-3 text-gray-500 font-medium">{index + 1}</TableCell>
+                        <TableCell className="py-3 px-3 font-medium">{record.teachingLevel}</TableCell>
+                        <TableCell className="text-center py-3 px-3">{record.correct}</TableCell>
+                        <TableCell className="text-center py-3 px-3">
                           <span
                             className={`font-bold text-base ${
                               parseFloat(record.score.replace(",", ".")) >= 4
@@ -298,8 +298,8 @@ function RawDataExperienceContent() {
                           >
                             {record.score}
                           </span>
-                        </td>
-                        <td className="py-3 px-3">
+                        </TableCell>
+                        <TableCell className="py-3 px-3">
                           {record.emailExplanation ? (
                             <span className="text-orange-600 font-medium">
                               {record.emailExplanation}
@@ -307,8 +307,8 @@ function RawDataExperienceContent() {
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
-                        </td>
-                        <td className="text-center py-3 px-3">
+                        </TableCell>
+                        <TableCell className="text-center py-3 px-3">
                           {record.isCountedInAverage ? (
                             <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
                               ✓ Tính
@@ -318,11 +318,11 @@ function RawDataExperienceContent() {
                               ✗ Không tính
                             </span>
                           )}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
 
               <div className="p-4 bg-gray-50 border-t border-gray-200 text-xs text-gray-600 space-y-1">

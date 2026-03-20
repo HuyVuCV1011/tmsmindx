@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 interface Teacher {
   [key: string]: any;
 }
@@ -100,31 +100,31 @@ export default function TestTeachersPage() {
                     📝 Dữ liệu Teachers (Hiển thị tối đa 50 bản ghi)
                   </h3>
                   <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-100 border-b">
-                        <tr>
+                    <Table className="w-full">
+                      <TableHeader className="bg-gray-100 border-b">
+                        <TableRow>
                           {Object.keys(response.data[0]).map((key) => (
-                            <th key={key} className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                            <TableHead key={key} className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
                               {key}
-                            </th>
+                            </TableHead>
                           ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody className="divide-y divide-gray-200">
                         {response.data.map((teacher, index) => (
-                          <tr key={index} className="hover:bg-gray-50">
+                          <TableRow key={index} className="hover:bg-gray-50">
                             {Object.values(teacher).map((value, idx) => (
-                              <td key={idx} className="px-4 py-3 text-sm text-gray-600">
+                              <TableCell key={idx} className="px-4 py-3 text-sm text-gray-600">
                                 {value !== null && value !== undefined 
                                   ? String(value) 
                                   : <span className="text-gray-400 italic">null</span>
                                 }
-                              </td>
+                              </TableCell>
                             ))}
-                          </tr>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                 </div>
               )}

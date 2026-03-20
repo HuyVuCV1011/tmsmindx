@@ -8,6 +8,7 @@ import { Edit, List, Plus, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface Assignment {
   id: number;
@@ -219,35 +220,35 @@ export default function AssignmentManagementPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-y border-gray-200">
-                <tr>
-                  <th className="px-3 py-2 text-left font-semibold">#</th>
-                  <th className="px-3 py-2 text-left font-semibold">Video</th>
-                  <th className="px-3 py-2 text-left font-semibold">Tên Assignment</th>
-                  <th className="px-3 py-2 text-left font-semibold">Loại</th>
-                  <th className="px-3 py-2 text-center font-semibold">Câu hỏi</th>
-                  <th className="px-3 py-2 text-center font-semibold">Điểm</th>
-                  <th className="px-3 py-2 text-center font-semibold">Điểm đạt</th>
-                  <th className="px-3 py-2 text-center font-semibold">Trạng thái</th>
-                  <th className="px-3 py-2 text-center font-semibold">Hành động</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">#</TableHead>
+                  <TableHead>Video</TableHead>
+                  <TableHead>Tên Assignment</TableHead>
+                  <TableHead>Loại</TableHead>
+                  <TableHead className="text-center">Câu hỏi</TableHead>
+                  <TableHead className="text-center">Điểm</TableHead>
+                  <TableHead className="text-center">Điểm đạt</TableHead>
+                  <TableHead className="text-center">Trạng thái</TableHead>
+                  <TableHead className="text-center">Hành động</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {assignments.map((assignment, idx) => (
-                  <tr key={assignment.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2">{idx + 1}</td>
-                    <td className="px-3 py-2 text-xs max-w-xs truncate">{assignment.video_title}</td>
-                    <td className="px-3 py-2 font-medium">{assignment.assignment_title}</td>
-                    <td className="px-3 py-2">
+                  <TableRow key={assignment.id}>
+                    <TableCell>{idx + 1}</TableCell>
+                    <TableCell className="max-w-xs truncate">{assignment.video_title}</TableCell>
+                    <TableCell className="font-medium">{assignment.assignment_title}</TableCell>
+                    <TableCell>
                       <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
                         {assignment.assignment_type}
                       </span>
-                    </td>
-                    <td className="px-3 py-2 text-center">{assignment.question_count || 0}</td>
-                    <td className="px-3 py-2 text-center font-medium">{assignment.total_points}</td>
-                    <td className="px-3 py-2 text-center">{assignment.passing_score}</td>
-                    <td className="px-3 py-2 text-center">
+                    </TableCell>
+                    <TableCell className="text-center">{assignment.question_count || 0}</TableCell>
+                    <TableCell className="text-center font-medium">{assignment.total_points}</TableCell>
+                    <TableCell className="text-center">{assignment.passing_score}</TableCell>
+                    <TableCell className="text-center">
                       <span className={`px-2 py-0.5 rounded text-xs ${
                         assignment.status === 'published' 
                           ? 'bg-green-100 text-green-800' 
@@ -255,8 +256,8 @@ export default function AssignmentManagementPage() {
                       }`}>
                         {assignment.status}
                       </span>
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell>
                       <div className="flex gap-1 justify-center">
                         <button
                           onClick={() => handleManageQuestions(assignment.id)}
@@ -280,11 +281,11 @@ export default function AssignmentManagementPage() {
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </Card>
