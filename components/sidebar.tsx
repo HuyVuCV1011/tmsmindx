@@ -69,6 +69,7 @@ export function Sidebar() {
       ]
     },
     { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
+    { href: "/admin/giaitrinh", label: "Quản lý Giải trình", icon: MessageSquare },
     { href: "/admin/database", label: "Database Manager", icon: LayoutDashboard },
     { href: "/admin/user-management", label: "Quản lý tài khoản", icon: Shield },
   ];
