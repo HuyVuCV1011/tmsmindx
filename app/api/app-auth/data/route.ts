@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
         const area = searchParams.get('area');
         const roleCode = searchParams.get('roleCode');
 
-        let query = ''; let params: any[] = []; let idx = 1;
+        let query = ''; const params: any[] = []; let idx = 1;
 
         if (table === 'teaching_leaders') {
             query = 'SELECT * FROM teaching_leaders WHERE 1=1';
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
         const result = await pool.query(query, params);
 
         // For teaching_leaders, also get aggregated areas per leader (some leaders manage multiple centers)
-        let leaderAreas: Record<string, string[]> = {};
+        const leaderAreas: Record<string, string[]> = {};
         if (table === 'teaching_leaders') {
             const areasResult = await pool.query(
                 `SELECT code, array_agg(DISTINCT area) as areas, array_agg(DISTINCT center) as centers
