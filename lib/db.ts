@@ -1,28 +1,34 @@
 import { Pool } from 'pg';
 import { initDatabase } from './migrations';
 
-// Tạo connection pool cho database
-const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
+// Prevent creating multiple pools during hot reloads in development (Next.js specific fix for serverless/HMR)
+if (!global.pool) {
+  global.pool = new Pool({
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT || '5432'),
+    database: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    max: 20, // Limit maximum connections to avoid exhausting Postgres connection slots
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
 
-// Xử lý lỗi pool
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
-});
+  // Handle pool errors
+  global.pool.on('error', (err) => {
+    console.error('Unexpected error on idle client', err);
+    // Don't exit process in serverless, let it log and reconnect
+  });
 
-// Auto-init: chạy migrations khi import lần đầu
-// Sử dụng .then() để không block module loading
-initDatabase(pool).catch((err) => {
-  console.error('⚠️ Auto-migration failed (app vẫn chạy bình thường):', err.message);
-});
+  // Auto-init only once
+  initDatabase(global.pool).catch((err) => {
+    console.error('⚠️ Auto-migration failed (app vẫn chạy bình thường):', err.message);
+  });
+}
+
+const pool = global.pool;
 
 export default pool;

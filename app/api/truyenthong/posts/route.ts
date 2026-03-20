@@ -36,13 +36,13 @@ export async function GET(request: Request) {
         const client = await pool.connect();
         try {
             const result = await client.query(queryText, queryParams);
-            return NextResponse.json(result.rows);
+            return NextResponse.json(result.rows, { headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } });
         } finally {
             client.release();
         }
     } catch (error) {
         console.error('Error fetching posts:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } });
     }
 }
 
@@ -98,12 +98,12 @@ export async function POST(request: Request) {
                     post_type, audience, status, published_at || new Date()
                 ]
             );
-            return NextResponse.json(result.rows[0], { status: 201 });
+            return NextResponse.json(result.rows[0], { status: 201, headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } });
         } finally {
             client.release();
         }
     } catch (error) {
         console.error('Error creating post:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } });
     }
 }
