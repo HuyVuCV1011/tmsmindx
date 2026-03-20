@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/next"
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PersistentLayout } from "@/components/PersistentLayout";
 import { AuthProvider } from "@/lib/auth-context";
@@ -56,6 +57,7 @@ export default function RootLayout({
             },
           }}
         />
+        <Analytics />
       </body>
     </html>
   );
