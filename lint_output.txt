@@ -1,0 +1,524 @@
+
+> teachingms@0.1.0 lint
+> eslint
+
+
+/app/app/admin/assignment-questions/page.tsx
+   48:56  warning  Unexpected any. Specify a different type                                                                                                       @typescript-eslint/no-explicit-any
+   58:6   warning  React Hook useEffect has missing dependencies: 'fetchAssignmentInfo' and 'fetchQuestions'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  491:37  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  491:46  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  495:37  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  495:44  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  507:32  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  507:68  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  515:32  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  515:41  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  516:39  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  516:44  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  516:51  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  516:55  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+
+/app/app/admin/baitap/[id]/cau-hoi/page.tsx
+   48:56  warning  Unexpected any. Specify a different type                                                                                                       @typescript-eslint/no-explicit-any
+   58:6   warning  React Hook useEffect has missing dependencies: 'fetchAssignmentInfo' and 'fetchQuestions'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  456:37  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  456:50  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  460:37  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  460:48  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  472:32  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  472:68  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  480:32  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  480:41  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  481:39  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  481:44  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  481:51  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+  481:55  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                react/no-unescaped-entities
+
+/app/app/admin/baitap/[id]/chinh-sua/page.tsx
+  15:48  warning  Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+  23:6   warning  React Hook useEffect has a missing dependency: 'fetchAssignment'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  45:57  warning  Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+
+/app/app/admin/baitap/page.tsx
+  13:40  warning  'Eye' is defined but never used              @typescript-eslint/no-unused-vars
+  21:9   warning  'router' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/app/app/admin/baitap/tao-moi/page.tsx
+   10:11  warning  'SubjectOption' is defined but never used  @typescript-eslint/no-unused-vars
+   66:27  warning  Unexpected any. Specify a different type   @typescript-eslint/no-explicit-any
+   67:24  warning  Unexpected any. Specify a different type   @typescript-eslint/no-explicit-any
+  138:57  warning  Unexpected any. Specify a different type   @typescript-eslint/no-explicit-any
+
+/app/app/admin/database-migration/page.tsx
+   6:33  warning  'XCircle' is defined but never used                              @typescript-eslint/no-unused-vars
+  14:44  warning  Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  94:42  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  94:47  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/app/app/admin/database/page.tsx
+   31:52   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+   41:48   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+   69:23   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+   93:23   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  110:23   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  160:23   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  169:35   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  176:37   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  193:23   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  199:41   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  223:23   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  246:23   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  250:28   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  269:23   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  283:8    warning  React Hook useEffect has a missing dependency: 'runSQL'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  429:86   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  431:87   warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+  563:92   warning  'key' is defined but never used                                                                            @typescript-eslint/no-unused-vars
+  563:112  warning  Unexpected any. Specify a different type                                                                   @typescript-eslint/no-explicit-any
+
+/app/app/admin/deal-luong/page.tsx
+  10:11  warning  'Filter' is defined but never used       @typescript-eslint/no-unused-vars
+  10:41  warning  'Eye' is defined but never used          @typescript-eslint/no-unused-vars
+  11:24  warning  'ChevronDown' is defined but never used  @typescript-eslint/no-unused-vars
+
+/app/app/admin/giaitrinh/page.tsx
+    9:10  warning  'Badge' is defined but never used         @typescript-eslint/no-unused-vars
+   12:19  warning  'StepItem' is defined but never used      @typescript-eslint/no-unused-vars
+   14:23  warning  'Eye' is defined but never used           @typescript-eslint/no-unused-vars
+  268:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  268:90  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  273:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  274:33  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  274:45  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  293:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  293:90  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  298:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  299:33  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  299:45  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/admin/page1/page.tsx
+    56:11  warning  'Teacher' is defined but never used                                                                                                                                                                               @typescript-eslint/no-unused-vars
+    79:11  warning  'TrainingData' is defined but never used                                                                                                                                                                          @typescript-eslint/no-unused-vars
+   192:9   warning  The 'expertiseData' logical expression could make the dependencies of useCallback Hook (at line 412) change on every render. To fix this, wrap the initialization of 'expertiseData' in its own useMemo() Hook    react-hooks/exhaustive-deps
+   192:9   warning  The 'expertiseData' logical expression could make the dependencies of useMemo Hook (at line 479) change on every render. To fix this, wrap the initialization of 'expertiseData' in its own useMemo() Hook        react-hooks/exhaustive-deps
+   193:9   warning  The 'experienceData' logical expression could make the dependencies of useCallback Hook (at line 412) change on every render. To fix this, wrap the initialization of 'experienceData' in its own useMemo() Hook  react-hooks/exhaustive-deps
+   193:9   warning  The 'experienceData' logical expression could make the dependencies of useMemo Hook (at line 504) change on every render. To fix this, wrap the initialization of 'experienceData' in its own useMemo() Hook      react-hooks/exhaustive-deps
+   448:14  warning  'error' is defined but never used                                                                                                                                                                                 @typescript-eslint/no-unused-vars
+  1130:76  warning  Unexpected any. Specify a different type                                                                                                                                                                          @typescript-eslint/no-explicit-any
+  1135:85  warning  Unexpected any. Specify a different type                                                                                                                                                                          @typescript-eslint/no-explicit-any
+  1145:64  warning  Unexpected any. Specify a different type                                                                                                                                                                          @typescript-eslint/no-explicit-any
+  1149:29  warning  'needsImprovement' is assigned a value but never used                                                                                                                                                             @typescript-eslint/no-unused-vars
+  1252:69  warning  Unexpected any. Specify a different type                                                                                                                                                                          @typescript-eslint/no-explicit-any
+
+/app/app/admin/page4/danh-sach-dang-ky/page.tsx
+   5:10  warning  'Badge' is defined but never used                                                                             @typescript-eslint/no-unused-vars
+  74:6   warning  React Hook useEffect has a missing dependency: 'fetchRows'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/app/app/admin/page4/lich-danh-gia/page.tsx
+  131:37  warning  '_eventType' is defined but never used                       @typescript-eslint/no-unused-vars
+  232:9   warning  'calendarPermissionPath' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  280:21  warning  Unexpected any. Specify a different type                     @typescript-eslint/no-explicit-any
+  529:21  warning  Unexpected any. Specify a different type                     @typescript-eslint/no-explicit-any
+  718:21  warning  Unexpected any. Specify a different type                     @typescript-eslint/no-explicit-any
+
+/app/app/admin/page4/thu-vien-de/page.tsx
+  531:6  warning  React Hook useEffect has a missing dependency: 'handleAutoCreateEvents'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/app/app/admin/page4/thu-vien-de/questions/page.tsx
+  63:6  warning  React Hook useEffect has missing dependencies: 'fetchQuestions' and 'fetchSetInfo'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+/app/app/admin/page5/page.tsx
+  363:23  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/app/app/admin/profile/page.tsx
+  27:43  warning  Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  28:37  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  28:56  warning  Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+
+/app/app/admin/tao-deal-luong/page.tsx
+  136:38  warning  React Hook useEffect has a missing dependency: 'fetchDeals'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  245:9   warning  'currentRateIndex' is assigned a value but never used                                                          @typescript-eslint/no-unused-vars
+
+/app/app/admin/training-dashboard/page.tsx
+  141:27  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/app/app/admin/truyenthong/page.tsx
+  33:11  warning  'stats' is assigned a value but never used                                                                   @typescript-eslint/no-unused-vars
+  83:25  warning  Image elements must have an alt prop, either with meaningful text, or an empty string for decorative images  jsx-a11y/alt-text
+
+/app/app/admin/truyenthong/posts/create/page.tsx
+  34:20  warning  'setColors' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/app/app/admin/user-management/components/DataTab.tsx
+   55:98  warning  Unexpected any. Specify a different type                                                                    @typescript-eslint/no-explicit-any
+   70:37  warning  React Hook useEffect has a missing dependency: 'loadAll'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+   89:9   warning  Expected an assignment or function call and instead saw an expression                                       @typescript-eslint/no-unused-expressions
+   99:63  warning  Unexpected any. Specify a different type                                                                    @typescript-eslint/no-explicit-any
+  481:40  warning  Unexpected any. Specify a different type                                                                    @typescript-eslint/no-explicit-any
+
+/app/app/admin/user-management/components/LeadersPanel.tsx
+  22:34  warning  React Hook useEffect has a missing dependency: 'load'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/app/app/admin/user-management/components/RoleSettingsTab.tsx
+  105:141  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  105:159  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/app/app/admin/user-management/components/UsersTab.tsx
+  50:55  warning  React Hook useEffect has a missing dependency: 'loadUsers'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/app/app/admin/video-detail/page.tsx
+   74:23  warning  'setPreviewMode' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  126:51  warning  Unexpected any. Specify a different type             @typescript-eslint/no-explicit-any
+
+/app/app/admin/video-setup/page.tsx
+  148:51  warning  Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  580:25  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  658:49  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                                                                                                                                                          react/no-unescaped-entities
+  658:62  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                                                                                                                                                          react/no-unescaped-entities
+
+/app/app/analytics/page.tsx
+    5:38  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  158:43  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  209:59  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/app-auth/data/route.ts
+   14:39  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   41:42  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   45:22  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   52:44  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   54:48  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   55:48  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   60:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   83:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  116:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  133:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/app-auth/login/route.ts
+  96:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/app-auth/permissions/route.ts
+  16:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  39:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  85:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/app-auth/role-permissions/route.ts
+   37:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   81:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  112:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/app-auth/user-roles/route.ts
+  23:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  64:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/app-auth/users/route.ts
+   40:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  125:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  141:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  180:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  208:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/auth/login/route.ts
+  87:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/auth/logout/route.ts
+   3:28  warning  'request' is defined but never used  @typescript-eslint/no-unused-vars
+  12:12  warning  'error' is defined but never used    @typescript-eslint/no-unused-vars
+
+/app/app/api/birthdays/invalidate/route.ts
+  7:28  warning  'request' is defined but never used  @typescript-eslint/no-unused-vars
+
+/app/app/api/birthdays/route.ts
+  3:72  warning  'BirthdaysCacheEntry' is defined but never used  @typescript-eslint/no-unused-vars
+
+/app/app/api/database/route.ts
+   55:39  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+   98:59  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  143:56  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  152:36  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  161:66  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  172:23  warning  'totalRes' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  221:48  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  245:21  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  310:33  warning  '_' is defined but never used                  @typescript-eslint/no-unused-vars
+  375:21  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+
+/app/app/api/debug/birthdays/route.ts
+   17:37  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   55:33  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   67:56  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  153:57  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/event-schedules/route.ts
+   53:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   85:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  183:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  230:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  232:44  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  309:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  347:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/exam-assignment-questions/route.ts
+  73:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/exam-assignments/expire/route.ts
+   5:46  warning  '_request' is defined but never used      @typescript-eslint/no-unused-vars
+  15:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/exam-assignments/route.ts
+  158:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  225:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/exam-registrations/route.ts
+   51:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   78:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  192:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/exam-set-questions/export/route.ts
+  49:41  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/exam-set-questions/import/route.ts
+  148:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  161:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/exam-set-questions/route.ts
+  151:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/exam-sets/route.ts
+   41:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   97:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  214:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  239:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  308:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  371:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/exam-submissions/route.ts
+  104:19  warning  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  116:49  warning  'total_points' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  185:19  warning  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+
+/app/app/api/explanations/route.ts
+   18:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   47:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  127:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  211:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/salary-deals/route.ts
+   17:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   41:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  100:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  133:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  169:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/send-explanation-email/route.ts
+  146:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/test-teachers/route.ts
+  26:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/training-assignment-questions/bulk/route.ts
+   56:24  warning  'err' is defined but never used           @typescript-eslint/no-unused-vars
+   95:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  123:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/training-assignment-questions/export/route.ts
+  54:41  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/training-assignment-questions/import/route.ts
+   72:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   83:20  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  172:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  186:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/training-assignment-questions/route.ts
+  142:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/training-assignments/route.ts
+   17:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   67:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  122:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  175:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  234:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/training-submissions/route.ts
+   26:19  warning  Unexpected any. Specify a different type             @typescript-eslint/no-explicit-any
+   77:7   warning  'attempt_number' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  147:19  warning  Unexpected any. Specify a different type             @typescript-eslint/no-explicit-any
+  180:17  warning  Unexpected any. Specify a different type             @typescript-eslint/no-explicit-any
+  297:27  warning  Unexpected any. Specify a different type             @typescript-eslint/no-explicit-any
+
+/app/app/api/training-teacher-stats-db/route.ts
+  34:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/training-teacher-stats/route.ts
+  32:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  57:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/training-videos/route.ts
+   19:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   47:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  104:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  158:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  195:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/training/route.ts
+  55:13  warning  'chuyenDe' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  57:13  warning  'trangThai' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  58:13  warning  'maLop' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  59:13  warning  'linkText' is assigned a value but never used   @typescript-eslint/no-unused-vars
+
+/app/app/api/truyenthong/migrate-comments/route.ts
+   7:27  warning  'request' is defined but never used       @typescript-eslint/no-unused-vars
+  11:28  warning  'request' is defined but never used       @typescript-eslint/no-unused-vars
+  28:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/api/truyenthong/posts/route.ts
+  13:28  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/course-links-test/page.tsx
+    7:36  warning  Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  199:64  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  199:77  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/app/app/lichgiaovien/page.tsx
+  177:35  warning  Unexpected any. Specify a different type                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  254:9   warning  The 'teachers' logical expression could make the dependencies of useMemo Hook (at line 290) change on every render. Move it inside the useMemo callback. Alternatively, wrap the initialization of 'teachers' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/app/app/login/page.tsx
+  212:19  warning  Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  245:13  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/app/app/rawdata-experience/page.tsx
+  51:6   warning  React Hook useEffect has a missing dependency: 'handleSearch'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  77:14  warning  'err' is defined but never used                                                                                  @typescript-eslint/no-unused-vars
+
+/app/app/rawdata/page.tsx
+  52:6   warning  React Hook useEffect has a missing dependency: 'handleSearch'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  78:14  warning  'err' is defined but never used                                                                                  @typescript-eslint/no-unused-vars
+
+/app/app/test-teachers/page.tsx
+   6:18  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  31:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/app/training-test/page.tsx
+    8:36  warning  Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  110:49  warning  Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  147:25  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  147:36  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/app/app/user/assignments/exam/[id]/page.tsx
+    4:60  warning  'XCircle' is defined but never used                                                                              @typescript-eslint/no-unused-vars
+  145:6   warning  React Hook useEffect has a missing dependency: 'handleSubmit'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/app/app/user/assignments/page.tsx
+   39:12  warning  Unexpected any. Specify a different type                                                                                                                   @typescript-eslint/no-explicit-any
+  125:18  warning  'err' is defined but never used                                                                                                                            @typescript-eslint/no-unused-vars
+  143:6   warning  React Hook useEffect has missing dependencies: 'fetchAvailableAssignments' and 'fetchExamAssignments'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  172:22  warning  'err' is defined but never used                                                                                                                            @typescript-eslint/no-unused-vars
+  312:6   warning  React Hook useEffect has a missing dependency: 'submitAssignment'. Either include it or remove the dependency array                                        react-hooks/exhaustive-deps
+
+/app/app/user/deal-luong/page.tsx
+  129:38  warning  React Hook useEffect has a missing dependency: 'fetchDeals'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  215:9   warning  'newRateOptions' is assigned a value but never used                                                            @typescript-eslint/no-unused-vars
+
+/app/app/user/giaithich/page.tsx
+  162:6   warning  React Hook useEffect has missing dependencies: 'fetchExplanations' and 'fetchTeacherInfo'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  180:41  warning  Unexpected any. Specify a different type                                                                                                       @typescript-eslint/no-explicit-any
+  190:25  warning  Unexpected any. Specify a different type                                                                                                       @typescript-eslint/no-explicit-any
+  191:22  warning  Unexpected any. Specify a different type                                                                                                       @typescript-eslint/no-explicit-any
+
+/app/app/user/giaitrinh/page.tsx
+  192:6  warning  React Hook useEffect has missing dependencies: 'fetchExplanations' and 'fetchTeacherInfo'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+/app/app/user/thongtingv/page.tsx
+    61:11  warning  'Teacher' is defined but never used                                                                                                                                                                               @typescript-eslint/no-unused-vars
+    84:11  warning  'TrainingData' is defined but never used                                                                                                                                                                          @typescript-eslint/no-unused-vars
+   265:20  warning  Unexpected any. Specify a different type                                                                                                                                                                          @typescript-eslint/no-explicit-any
+   268:16  warning  'e' is defined but never used                                                                                                                                                                                     @typescript-eslint/no-unused-vars
+   297:18  warning  'err' is defined but never used                                                                                                                                                                                   @typescript-eslint/no-unused-vars
+   381:9   warning  The 'expertiseData' logical expression could make the dependencies of useCallback Hook (at line 682) change on every render. To fix this, wrap the initialization of 'expertiseData' in its own useMemo() Hook    react-hooks/exhaustive-deps
+   381:9   warning  The 'expertiseData' logical expression could make the dependencies of useMemo Hook (at line 752) change on every render. To fix this, wrap the initialization of 'expertiseData' in its own useMemo() Hook        react-hooks/exhaustive-deps
+   382:9   warning  The 'experienceData' logical expression could make the dependencies of useCallback Hook (at line 682) change on every render. To fix this, wrap the initialization of 'experienceData' in its own useMemo() Hook  react-hooks/exhaustive-deps
+   382:9   warning  The 'experienceData' logical expression could make the dependencies of useMemo Hook (at line 777) change on every render. To fix this, wrap the initialization of 'experienceData' in its own useMemo() Hook      react-hooks/exhaustive-deps
+   512:41  warning  Unexpected any. Specify a different type                                                                                                                                                                          @typescript-eslint/no-explicit-any
+   721:14  warning  'error' is defined but never used                                                                                                                                                                                 @typescript-eslint/no-unused-vars
+  1389:76  warning  Unexpected any. Specify a different type                                                                                                                                                                          @typescript-eslint/no-explicit-any
+  1394:85  warning  Unexpected any. Specify a different type                                                                                                                                                                          @typescript-eslint/no-explicit-any
+  1404:64  warning  Unexpected any. Specify a different type                                                                                                                                                                          @typescript-eslint/no-explicit-any
+  1408:29  warning  'needsImprovement' is assigned a value but never used                                                                                                                                                             @typescript-eslint/no-unused-vars
+  1511:69  warning  Unexpected any. Specify a different type                                                                                                                                                                          @typescript-eslint/no-explicit-any
+
+/app/app/user/training/lesson/page.tsx
+   23:10  warning  'showQuiz' is assigned a value but never used                                                                @typescript-eslint/no-unused-vars
+   23:20  warning  'setShowQuiz' is assigned a value but never used                                                             @typescript-eslint/no-unused-vars
+   36:56  warning  Unexpected any. Specify a different type                                                                     @typescript-eslint/no-explicit-any
+   37:10  warning  'maxWatchedTime' is assigned a value but never used                                                          @typescript-eslint/no-unused-vars
+   62:53  warning  Unexpected any. Specify a different type                                                                     @typescript-eslint/no-explicit-any
+  103:53  warning  Unexpected any. Specify a different type                                                                     @typescript-eslint/no-explicit-any
+  152:6   warning  React Hook useEffect has a missing dependency: 'duration'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  193:29  warning  Unexpected any. Specify a different type                                                                     @typescript-eslint/no-explicit-any
+  396:38  warning  'idx' is defined but never used                                                                              @typescript-eslint/no-unused-vars
+
+/app/app/user/training/page.tsx
+   22:11  warning  'TrainingData' is defined but never used                                                                                                                                                                                                                                                 @typescript-eslint/no-unused-vars
+   37:11  warning  'Teacher' is defined but never used                                                                                                                                                                                                                                                      @typescript-eslint/no-unused-vars
+  112:20  warning  Unexpected any. Specify a different type                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  115:16  warning  'e' is defined but never used                                                                                                                                                                                                                                                            @typescript-eslint/no-unused-vars
+  139:18  warning  'err' is defined but never used                                                                                                                                                                                                                                                          @typescript-eslint/no-unused-vars
+  302:33  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/app/app/user/truyenthong/[slug]/page.tsx
+  68:11  warning  'handleLike' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/app/components/AuthModal.tsx
+  28:13  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/app/components/LoadingSpinner.tsx
+  35:34  warning  'size' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/app/components/assignments/AssignmentPreview.tsx
+  22:51  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/components/assignments/AssignmentWizard.tsx
+  237:104  warning  Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+  334:29   warning  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+  396:91   warning  Unexpected any. Specify a different type                         @typescript-eslint/no-explicit-any
+
+/app/components/assignments/QuestionBuilder.tsx
+   82:6   warning  React Hook useEffect has a missing dependency: 'clearDraft'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  258:23  warning  Unexpected any. Specify a different type                                                                       @typescript-eslint/no-explicit-any
+
+/app/components/delete-confirmation-modal.tsx
+  3:25  warning  'X' is defined but never used             @typescript-eslint/no-unused-vars
+  9:5   warning  'DialogFooter' is defined but never used  @typescript-eslint/no-unused-vars
+
+/app/components/sidebar.tsx
+  120:5  warning  React Hook useMemo has missing dependencies: 'getFilteredAdminMenuItems' and 'userMenuItems'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  137:6  warning  React Hook useEffect has a missing dependency: 'expandedMenus'. Either include it or remove the dependency array                                  react-hooks/exhaustive-deps
+
+/app/components/upcoming-events-sidebar.tsx
+   10:11  warning  'Post' is defined but never used                   @typescript-eslint/no-unused-vars
+  279:11  warning  'getMonthName' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/app/lib/auth-context.tsx
+   43:9   warning  'pathname' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   61:21  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+   85:21  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  101:21  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  134:21  warning  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+
+/app/lib/logger.ts
+  38:65  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  64:34  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  68:34  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  72:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  76:37  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  80:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  85:45  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  96:53  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/lib/migrations.ts
+  788:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  798:17  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 334 problems (0 errors, 334 warnings)

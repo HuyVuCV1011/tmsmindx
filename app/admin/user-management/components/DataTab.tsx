@@ -259,8 +259,8 @@ function CentersLeadersPanel() {
 
             {/* Edit leader form modal */}
             {editLeader && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto" onClick={() => setEditLeader(null)}>
-                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl" onClick={e => e.stopPropagation()}>
+                <div className="cursor-pointer fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto" onClick={() => setEditLeader(null)}>
+                    <div className="cursor-pointer bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-5 border-b pb-3">
                             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                                 {isNew ? <Plus className="h-5 w-5 text-[#a1001f]" /> : <Edit2 className="h-5 w-5 text-[#a1001f]" />}
@@ -354,7 +354,7 @@ function CentersLeadersPanel() {
                             </div>
                         )}
                         {regionLeaders.length === 0 && (
-                            <div className="px-2"><button onClick={() => openNewLeader('', region)} className="text-sm font-medium text-[#a1001f] hover:underline flex items-center gap-1.5"><Plus className="h-4 w-4" />Thêm quản lý khu vực</button></div>
+                            <div className="cursor-pointer px-2"><button onClick={() => openNewLeader('', region)} className="text-sm font-medium text-[#a1001f] hover:underline flex items-center gap-1.5"><Plus className="h-4 w-4" />Thêm quản lý khu vực</button></div>
                         )}
 
                         {/* Centers */}
@@ -429,8 +429,8 @@ function CentersLeadersPanel() {
 
             {/* Edit center form modal */}
             {editCenter && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto" onClick={() => setEditCenter(null)}>
-                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                <div className="cursor-pointer fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto" onClick={() => setEditCenter(null)}>
+                    <div className="cursor-pointer bg-white rounded-xl shadow-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-5 border-b pb-3">
                             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                                 <Edit2 className="h-5 w-5 text-[#a1001f]" />
