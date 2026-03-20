@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface TrainingLesson {
   id: number;
@@ -395,36 +396,36 @@ export default function TrainingPage() {
                 <h2 className="text-xl font-bold mb-4 text-yellow-700">Thống kê điểm số các bài học</h2>
                 
                 <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-white border-b-2 border-gray-200">
-                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Lesson</th>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Tên bài học</th>
-                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase">Điểm số</th>
-                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase">Trạng thái</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-b-2 border-gray-200">
+                        <TableHead className="uppercase font-bold text-gray-700">Lesson</TableHead>
+                        <TableHead className="uppercase font-bold text-gray-700">Tên bài học</TableHead>
+                        <TableHead className="text-center uppercase font-bold text-gray-700">Điểm số</TableHead>
+                        <TableHead className="text-center uppercase font-bold text-gray-700">Trạng thái</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {trainingData.lessons.map((lesson: TrainingLesson, idx: number) => {
                         const notStarted = lesson.score === 0;
                         const passed = lesson.score >= 7;
                         
                         return (
-                          <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-4 py-3 text-sm font-medium text-purple-600">
+                          <TableRow key={idx} className="hover:bg-gray-50 transition-colors">
+                            <TableCell className="font-medium text-purple-600">
                               {idx + 1}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">
+                            </TableCell>
+                            <TableCell className="text-gray-900">
                               {lesson.name.replace(/^Lesson \d+:\s*/, '')}
-                            </td>
-                            <td className="px-4 py-3 text-center">
+                            </TableCell>
+                            <TableCell className="text-center">
                               <span className={`text-lg font-bold ${
                                 notStarted ? 'text-gray-400' : passed ? 'text-green-600' : 'text-yellow-600'
                               }`}>
                                 {notStarted ? '—' : lesson.score.toFixed(1)}
                               </span>
-                            </td>
-                            <td className="px-4 py-3 text-center">
+                            </TableCell>
+                            <TableCell className="text-center">
                               <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
                                 notStarted 
                                   ? 'bg-gray-100 text-gray-700'
@@ -434,12 +435,12 @@ export default function TrainingPage() {
                               }`}>
                                 {notStarted ? 'Chưa học' : passed ? 'Đạt' : 'Cần cải thiện'}
                               </span>
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
 
                 {/* Stats Summary */}

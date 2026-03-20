@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import { Button } from '@/components/ui/button';
 
 interface ExamQuestion {
   id: number;
@@ -297,14 +298,14 @@ export default function ExamAssignmentTakingPage() {
           Còn {unansweredCount} câu chưa trả lời
         </div>
 
-        <button
+        <Button
           onClick={() => handleSubmit(false)}
           disabled={submitting}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 h-auto"
         >
           <Send className="w-4 h-4" />
           {submitting ? 'Đang nộp...' : 'Nộp bài'}
-        </button>
+        </Button>
       </div>
 
       <div className="mt-4">

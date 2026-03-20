@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { PageContainer } from '@/components/PageContainer'
+import { Button } from '@/components/ui/button'
 import { 
     User, 
     Mail, 
@@ -459,12 +460,14 @@ export default function TeacherProfilePage() {
                                 </p>
                             </div>
                         </div>
-                        <button
+                        <Button
+                            size="lg"
                             onClick={() => setShowCertModal(true)}
-                            className="flex items-center gap-2 px-5 py-3 bg-linear-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:shadow-xl hover:scale-105 transition-all duration-200">
+                            className="flex items-center gap-2 bg-linear-to-r from-blue-600 to-indigo-600 hover:shadow-xl hover:scale-105 transition-all duration-200 rounded-xl"
+                        >
                             <Plus className="w-5 h-5" />
                             <span>Thêm chứng chỉ</span>
-                        </button>
+                        </Button>
                     </div>
 
                     {/* Certificates Grid */}
@@ -476,13 +479,14 @@ export default function TeacherProfilePage() {
                                 </div>
                                 <h3 className="text-lg font-bold text-gray-900 mb-2">Chưa có chứng chỉ</h3>
                                 <p className="text-gray-500 mb-4">Thêm chứng chỉ đầu tiên của bạn</p>
-                                <button
+                                <Button
+                                    size="lg"
                                     onClick={() => setShowCertModal(true)}
-                                    className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
+                                    className="inline-flex items-center gap-2 rounded-xl"
                                 >
                                     <Plus className="w-5 h-5" />
                                     <span>Thêm ngay</span>
-                                </button>
+                                </Button>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

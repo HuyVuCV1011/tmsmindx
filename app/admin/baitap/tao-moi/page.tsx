@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import { PageContainer } from '@/components/PageContainer';
 import { AssignmentWizard } from '@/components/assignments';
 import { ArrowLeft, PlusCircle } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface SubjectOption {
@@ -15,76 +15,28 @@ interface SubjectOption {
   subjectName: string;
 }
 
-const PROFESSIONAL_SUBJECTS: SubjectOption[] = [
-  {
-    examType: 'expertise',
-    blockCode: 'CODING',
-    blockLabel: 'Coding',
-    subjectCode: '[COD] Scratch',
-    subjectName: '[COD] Scratch',
-  },
-  {
-    examType: 'expertise',
-    blockCode: 'CODING',
-    blockLabel: 'Coding',
-    subjectCode: '[COD] GameMaker',
-    subjectName: '[COD] GameMaker',
-  },
-  {
-    examType: 'expertise',
-    blockCode: 'CODING',
-    blockLabel: 'Coding',
-    subjectCode: '[COD] Web',
-    subjectName: '[COD] Web',
-  },
-  {
-    examType: 'expertise',
-    blockCode: 'CODING',
-    blockLabel: 'Coding',
-    subjectCode: '[COD] AppProducer',
-    subjectName: '[COD] AppProducer',
-  },
-  {
-    examType: 'expertise',
-    blockCode: 'CODING',
-    blockLabel: 'Coding',
-    subjectCode: '[COD] ComputerScience',
-    subjectName: '[COD] ComputerScience',
-  },
-  {
-    examType: 'expertise',
-    blockCode: 'ROBOTICS',
-    blockLabel: 'Robotics',
-    subjectCode: '[ROB] VexGo',
-    subjectName: '[ROB] VexGo',
-  },
-  {
-    examType: 'expertise',
-    blockCode: 'ROBOTICS',
-    blockLabel: 'Robotics',
-    subjectCode: '[ROB] VexIQ',
-    subjectName: '[ROB] VexIQ',
-  },
-  {
-    examType: 'expertise',
-    blockCode: 'ART',
-    blockLabel: 'Art',
-    subjectCode: '[ART] Test chuyên sâu',
-    subjectName: '[ART] Test chuyên sâu',
-  },
-  {
-    examType: 'experience',
-    blockCode: 'PROCESS',
-    blockLabel: 'Kiểm tra quy trình, kỹ năng trải nghiệm',
-    subjectCode: '[Trial] Quy Trình Trai nghiệm',
-    subjectName: 'Kiểm tra quy trình, kỹ năng trải nghiệm',
-  },
-];
+interface ExamSubjectCatalogRow {
+  id: number;
+  exam_type: 'expertise' | 'experience';
+  block_code: string;
+  subject_code: string;
+  subject_name: string;
+  is_active: boolean;
+}
+
+const BLOCK_LABELS: Record<string, string> = {
+  CODING: 'Coding',
+  ROBOTICS: 'Robotics',
+  ART: 'Art',
+  PROCESS: 'Kiểm tra quy trình, kỹ năng trải nghiệm',
+};
 
 export default function CreateAssignmentPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [catalogSubjects, setCatalogSubjects] = useState<ExamSubjectCatalogRow[]>([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(true);
 
   const mode = searchParams.get('mode');
   const specialty = searchParams.get('specialty');
@@ -98,14 +50,80 @@ export default function CreateAssignmentPage() {
   const [passingScore, setPassingScore] = useState(7);
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
 
-  const blockOptions = Array.from(
-    new Map(PROFESSIONAL_SUBJECTS.map((item) => [item.blockCode, item.blockLabel])).entries()
-  ).map(([blockCode, blockLabel]) => ({ blockCode, blockLabel }));
+  useEffect(() => {
+    let isActive = true;
 
-  const subjectOptions = PROFESSIONAL_SUBJECTS.filter((item) => item.blockCode === selectedBlockCode);
-  const selectedSubject = PROFESSIONAL_SUBJECTS.find(
-    (item) => item.blockCode === selectedBlockCode && item.subjectCode === selectedSubjectCode
+    const loadCatalog = async () => {
+      try {
+        const response = await fetch('/api/database?action=preview&table=exam_subject_catalog&limit=200&sort=block_code&order=asc');
+        const data = await response.json();
+
+        if (!isActive) return;
+
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        setCatalogSubjects(
+          rows
+            .filter((row: any) => row.is_active !== false)
+            .map((row: any) => ({
+              id: Number(row.id),
+              exam_type: row.exam_type,
+              block_code: String(row.block_code || ''),
+              subject_code: String(row.subject_code || ''),
+              subject_name: String(row.subject_name || ''),
+              is_active: Boolean(row.is_active),
+            }))
+        );
+      } catch (error) {
+        console.error('Error loading exam subject catalog:', error);
+        if (isActive) {
+          setCatalogSubjects([]);
+        }
+      } finally {
+        if (isActive) {
+          setLoadingCatalog(false);
+        }
+      }
+    };
+
+    loadCatalog();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const blockOptions = useMemo(
+    () => Array.from(new Map(catalogSubjects.map((item) => [item.block_code, BLOCK_LABELS[item.block_code] || item.block_code])).entries())
+      .map(([blockCode, blockLabel]) => ({ blockCode, blockLabel })),
+    [catalogSubjects]
   );
+
+  const subjectOptions = useMemo(
+    () => catalogSubjects.filter((item) => item.block_code === selectedBlockCode),
+    [catalogSubjects, selectedBlockCode]
+  );
+
+  const selectedSubject = useMemo(
+    () => subjectOptions.find((item) => item.subject_code === selectedSubjectCode),
+    [subjectOptions, selectedSubjectCode]
+  );
+
+  useEffect(() => {
+    if (!isProfessionalMode || blockOptions.length === 0) return;
+
+    if (!blockOptions.some((block) => block.blockCode === selectedBlockCode)) {
+      const firstBlock = blockOptions[0];
+      setSelectedBlockCode(firstBlock.blockCode);
+    }
+  }, [isProfessionalMode, blockOptions, selectedBlockCode]);
+
+  useEffect(() => {
+    if (!isProfessionalMode || subjectOptions.length === 0) return;
+
+    if (!subjectOptions.some((subject) => subject.subject_code === selectedSubjectCode)) {
+      setSelectedSubjectCode(subjectOptions[0].subject_code);
+    }
+  }, [isProfessionalMode, subjectOptions, selectedSubjectCode]);
 
   const initialData = isProfessionalMode
     ? {
@@ -164,10 +182,10 @@ export default function CreateAssignmentPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          exam_type: selectedSubject.examType,
-          block_code: selectedSubject.blockCode,
-          subject_code: selectedSubject.subjectCode,
-          subject_name: selectedSubject.subjectName,
+          exam_type: selectedSubject.exam_type,
+          block_code: selectedSubject.block_code,
+          subject_code: selectedSubject.subject_code,
+          subject_name: selectedSubject.subject_name,
           set_name: setName.trim(),
           total_points: totalPoints,
           passing_score: passingScore,
@@ -214,6 +232,11 @@ export default function CreateAssignmentPage() {
       {isProfessionalMode ? (
         <div className="max-w-2xl bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-bold text-gray-900 mb-4">Tạo đề kiểm tra chuyên môn</h2>
+          {loadingCatalog && (
+            <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+              Đang tải danh sách môn từ database...
+            </div>
+          )}
           <form onSubmit={handleCreateProfessionalExamSet} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Khối</label>
@@ -222,12 +245,13 @@ export default function CreateAssignmentPage() {
                 onChange={(e) => {
                   const nextBlock = e.target.value;
                   setSelectedBlockCode(nextBlock);
-                  const firstSubject = PROFESSIONAL_SUBJECTS.find((item) => item.blockCode === nextBlock);
+                  const firstSubject = catalogSubjects.find((item) => item.block_code === nextBlock);
                   if (firstSubject) {
-                    setSelectedSubjectCode(firstSubject.subjectCode);
+                    setSelectedSubjectCode(firstSubject.subject_code);
                   }
                 }}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                disabled={loadingCatalog}
               >
                 {blockOptions.map((block) => (
                   <option key={block.blockCode} value={block.blockCode}>
@@ -243,10 +267,11 @@ export default function CreateAssignmentPage() {
                 value={selectedSubjectCode}
                 onChange={(e) => setSelectedSubjectCode(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                disabled={loadingCatalog || subjectOptions.length === 0}
               >
                 {subjectOptions.map((subject) => (
-                  <option key={subject.subjectCode} value={subject.subjectCode}>
-                    {subject.subjectName}
+                  <option key={subject.subject_code} value={subject.subject_code}>
+                    {subject.subject_name}
                   </option>
                 ))}
               </select>

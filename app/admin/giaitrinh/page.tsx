@@ -2,12 +2,18 @@
 
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import Modal from '@/components/Modal';
 import { PageContainer } from '@/components/PageContainer';
 import { SkeletonPage } from '@/components/skeletons';
 import { Tabs } from '@/components/Tabs';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Stepper, StepItem } from '@/components/ui/stepper';
 import { useAuth } from '@/lib/auth-context';
-import { CheckCircle, Eye, FileText, XCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { CheckCircle, Eye, FileText, Search, Filter, XCircle } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import Select from 'react-select';
 import toast from 'react-hot-toast';
 
 interface Explanation {
@@ -29,10 +35,15 @@ interface Explanation {
 
 export default function AdminGiaiThichPage() {
   const { user } = useAuth();
-  const [explanations, setExplanations] = useState<Explanation[]>([]);
   const [allExplanations, setAllExplanations] = useState<Explanation[]>([]); // Lưu tất cả để tính số thống kê
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  
+  // Advanced filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCampuses, setFilterCampuses] = useState<string[]>([]);
+  const [filterSubjects, setFilterSubjects] = useState<string[]>([]);
+
   const [selectedExplanation, setSelectedExplanation] = useState<Explanation | null>(null);
   const [adminNote, setAdminNote] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -52,17 +63,11 @@ export default function AdminGiaiThichPage() {
   // Fetch tất cả giải trình
   const fetchExplanations = async () => {
     try {
-      // Luôn fetch tất cả để có số thống kê
+      setLoading(true);
       const response = await fetch('/api/explanations');
       const data = await response.json();
       if (data.success) {
         setAllExplanations(data.data);
-        // Filter cho hiển thị
-        if (filterStatus === 'all') {
-          setExplanations(data.data);
-        } else {
-          setExplanations(data.data.filter((e: Explanation) => e.status === filterStatus));
-        }
       }
     } catch (error) {
       console.error('Error fetching explanations:', error);
@@ -73,7 +78,47 @@ export default function AdminGiaiThichPage() {
 
   useEffect(() => {
     fetchExplanations();
-  }, [filterStatus]);
+  }, []);
+
+  const uniqueCampuses = useMemo(() => {
+    const campuses = new Set(allExplanations.map(e => e.campus).filter(Boolean));
+    return Array.from(campuses).sort();
+  }, [allExplanations]);
+
+  const uniqueSubjects = useMemo(() => {
+    const subjects = new Set(allExplanations.map(e => e.subject).filter(Boolean));
+    return Array.from(subjects).sort();
+  }, [allExplanations]);
+
+  const campusOptions = useMemo(() => uniqueCampuses.map(c => ({ value: c, label: c })), [uniqueCampuses]);
+  const selectedCampuses = useMemo(() => filterCampuses.map(c => ({ value: c, label: c })), [filterCampuses]);
+
+  const subjectOptions = useMemo(() => uniqueSubjects.map(s => ({ value: s, label: s })), [uniqueSubjects]);
+  const selectedSubjects = useMemo(() => filterSubjects.map(s => ({ value: s, label: s })), [filterSubjects]);
+
+  const explanations = useMemo(() => {
+    return allExplanations.filter(e => {
+      // 1. Status filter
+      if (filterStatus !== 'all' && e.status !== filterStatus) return false;
+      
+      // 2. Campus filter (empty array means NO FILTER, i.e. ALL)
+      if (filterCampuses.length > 0 && !filterCampuses.includes(e.campus)) return false;
+      
+      // 3. Subject filter
+      if (filterSubjects.length > 0 && !filterSubjects.includes(e.subject)) return false;
+      
+      // 4. Search filter
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const matchSearch = e.teacher_name.toLowerCase().includes(q) 
+          || e.lms_code.toLowerCase().includes(q) 
+          || e.email.toLowerCase().includes(q);
+        if (!matchSearch) return false;
+      }
+      
+      return true;
+    });
+  }, [allExplanations, filterStatus, filterCampuses, filterSubjects, searchQuery]);
 
   const handleUpdateStatus = async (id: number, status: 'accepted' | 'rejected') => {
     if (!confirm(`Bạn có chắc muốn ${status === 'accepted' ? 'chấp nhận' : 'từ chối'} giải trình này?`)) {
@@ -119,20 +164,29 @@ export default function AdminGiaiThichPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    const badges = {
-      pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      accepted: 'bg-green-100 text-green-800 border-green-300',
-      rejected: 'bg-red-100 text-red-800 border-red-300'
-    };
-    const labels = {
-      pending: 'Đang chờ',
-      accepted: 'Đã chấp nhận',
-      rejected: 'Đã từ chối'
-    };
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${badges[status as keyof typeof badges]}`}>
-        {labels[status as keyof typeof labels]}
-      </span>
+      <div className="min-w-[240px] px-2 py-1 mx-auto">
+        <Stepper 
+          compact
+          steps={[
+            {
+              id: 1,
+              label: 'Gửi yêu cầu',
+              status: 'completed'
+            },
+            {
+              id: 2,
+              label: 'Tiếp nhận',
+              status: status === 'pending' ? 'current' : 'completed'
+            },
+            {
+              id: 3,
+              label: 'Kết quả',
+              status: status === 'accepted' ? 'success' : status === 'rejected' ? 'error' : 'upcoming'
+            }
+          ]} 
+        />
+      </div>
     );
   };
 
@@ -168,6 +222,96 @@ export default function AdminGiaiThichPage() {
         onChange={setFilterStatus}
       />
 
+      {/* Advanced Filters */}
+      <Card className="mb-6 border border-slate-200/60 shadow-sm overflow-hidden rounded-xl">
+        <div className="bg-slate-50/50 border-b border-slate-100 px-5 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 font-semibold text-slate-800">
+            <Filter className="h-4 w-4 text-slate-500" />
+            <h3 className="text-sm tracking-tight text-slate-900">Bộ lọc nâng cao</h3>
+          </div>
+          {(searchQuery || filterCampuses.length > 0 || filterSubjects.length > 0) && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-8 px-3 text-xs text-slate-500 hover:text-slate-900 hover:bg-slate-200/50 rounded-md transition-all"
+              onClick={() => {
+                setSearchQuery('');
+                setFilterCampuses([]);
+                setFilterSubjects([]);
+                setFilterStatus('all');
+              }}
+            >
+              Xoá bộ lọc
+            </Button>
+          )}
+        </div>
+        <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-5 bg-white">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">Tìm kiếm</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
+              <input 
+                type="text" 
+                placeholder="Tên GV, mã LMS, email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 min-h-[42px] border border-slate-200 rounded-lg text-sm outline-none focus:ring-[3px] focus:ring-[#a1001f]/10 focus:border-[#a1001f] transition-all bg-white shadow-sm placeholder:text-slate-400 text-slate-700"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">Cơ sở</label>
+            <Select 
+              isMulti
+              options={campusOptions}
+              value={selectedCampuses}
+              onChange={(newValue: any) => setFilterCampuses(newValue ? newValue.map((v: any) => v.value) : [])}
+              placeholder="Chọn cơ sở..." 
+              className="text-sm"
+              menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+              styles={{
+                menuPortal: (base: any) => ({ ...base, zIndex: 9999 }),
+                control: (base: any, state: any) => ({
+                  ...base,
+                  borderColor: state.isFocused ? '#a1001f' : '#e2e8f0',
+                  boxShadow: state.isFocused ? '0 0 0 3px rgba(161, 0, 31, 0.1)' : 'none',
+                  minHeight: '42px',
+                  borderRadius: '0.5rem',
+                  '&:hover': {
+                    borderColor: state.isFocused ? '#a1001f' : '#cbd5e1'
+                  }
+                })
+              }}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">Bộ môn</label>
+            <Select 
+              isMulti
+              options={subjectOptions}
+              value={selectedSubjects}
+              onChange={(newValue: any) => setFilterSubjects(newValue ? newValue.map((v: any) => v.value) : [])}
+              placeholder="Chọn bộ môn..." 
+              className="text-sm"
+              menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+              styles={{
+                menuPortal: (base: any) => ({ ...base, zIndex: 9999 }),
+                control: (base: any, state: any) => ({
+                  ...base,
+                  borderColor: state.isFocused ? '#a1001f' : '#e2e8f0',
+                  boxShadow: state.isFocused ? '0 0 0 3px rgba(161, 0, 31, 0.1)' : 'none',
+                  minHeight: '42px',
+                  borderRadius: '0.5rem',
+                  '&:hover': {
+                    borderColor: state.isFocused ? '#a1001f' : '#cbd5e1'
+                  }
+                })
+              }}
+            />
+          </div>
+        </div>
+      </Card>
+
       <Card>
         {explanations.length === 0 ? (
           <EmptyState
@@ -179,46 +323,49 @@ export default function AdminGiaiThichPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-y border-gray-200">
-                <tr>
-                  <th className="px-3 py-2 text-left font-semibold">#</th>
-                  <th className="px-3 py-2 text-left font-semibold">Giáo viên</th>
-                  <th className="px-3 py-2 text-left font-semibold">Cơ sở</th>
-                  <th className="px-3 py-2 text-left font-semibold">Bộ môn</th>
-                  <th className="px-3 py-2 text-left font-semibold">Ngày KT</th>
-                  <th className="px-3 py-2 text-left font-semibold">Ngày tạo</th>
-                  <th className="px-3 py-2 text-center font-semibold">Trạng thái</th>
-                  <th className="px-3 py-2 text-center font-semibold">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Giáo viên</TableHead>
+                  <TableHead>Cơ sở</TableHead>
+                  <TableHead>Bộ môn</TableHead>
+                  <TableHead>Ngày KT</TableHead>
+                  <TableHead>Ngày tạo</TableHead>
+                  <TableHead className="text-center">Trạng thái</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {explanations.map((explanation, idx) => (
-                  <tr key={explanation.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2">{idx + 1}</td>
-                    <td className="px-3 py-2">
+                  <TableRow 
+                    key={explanation.id}
+                    className="group cursor-pointer transition-all duration-200 hover:bg-blue-50/80 hover:shadow-md relative z-0 hover:z-10"
+                    onClick={() => setSelectedExplanation(explanation)}
+                  >
+                    <TableCell>{idx + 1}</TableCell>
+                    <TableCell>
                       <div className="font-medium">{explanation.teacher_name}</div>
                       <div className="text-xs text-gray-500">{explanation.lms_code}</div>
                       <div className="text-xs text-gray-500 truncate max-w-[150px]">{explanation.email}</div>
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell>
                       <div className="max-w-[180px] truncate" title={explanation.campus}>
                         {explanation.campus}
                       </div>
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell>
                       <div className="max-w-[150px] truncate" title={explanation.subject}>
                         {explanation.subject}
                       </div>
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell>
                       {new Date(explanation.test_date).toLocaleDateString('vi-VN', {
                         day: '2-digit',
                         month: '2-digit',
                         year: 'numeric'
                       })}
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell>
                       <div>
                         {new Date(explanation.created_at).toLocaleDateString('vi-VN', {
                           day: '2-digit',
@@ -231,182 +378,185 @@ export default function AdminGiaiThichPage() {
                           minute: '2-digit'
                         })}
                       </div>
-                    </td>
-                    <td className="px-3 py-2 text-center">
+                    </TableCell>
+                    <TableCell className="text-center">
                       {getStatusBadge(explanation.status)}
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <button
-                        onClick={() => setSelectedExplanation(explanation)}
-                        className="p-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                        title="Xem chi tiết"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </Card>
 
       {/* Detail Modal */}
-      {selectedExplanation && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="max-w-3xl w-full my-8 max-h-[90vh] overflow-y-auto">
-            <Card>
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h2 className="text-xl font-bold">Chi tiết Giải trình #{selectedExplanation.id}</h2>
-                <p className="text-sm text-gray-600">{selectedExplanation.teacher_name}</p>
+      <Modal
+        isOpen={!!selectedExplanation}
+        onClose={() => { setSelectedExplanation(null); setAdminNote(''); }}
+        title={selectedExplanation ? `Chi tiết Giải trình #${selectedExplanation.id}` : ''}
+        subtitle={selectedExplanation?.teacher_name}
+        maxWidth="3xl"
+      >
+        {selectedExplanation && (
+          <div className="space-y-4">
+            {/* Status Stepper */}
+            <div className="pb-6 pt-2 border-b">
+              <span className="text-sm font-medium block mb-4">Tiến trình xử lý:</span>
+              <div className="px-4">
+                <Stepper 
+                  steps={[
+                    {
+                      id: 1,
+                      label: 'Gửi yêu cầu',
+                      description: 'Mới tạo',
+                      status: 'completed'
+                    },
+                    {
+                      id: 2,
+                      label: 'Tiếp nhận',
+                      description: 'Đang xử lý',
+                      status: selectedExplanation.status === 'pending' ? 'current' : 'completed'
+                    },
+                    {
+                      id: 3,
+                      label: 'Kết quả',
+                      description: selectedExplanation.status === 'accepted' ? 'Đã duyệt' : selectedExplanation.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt',
+                      status: selectedExplanation.status === 'accepted' ? 'success' : selectedExplanation.status === 'rejected' ? 'error' : 'upcoming'
+                    }
+                  ]} 
+                />
               </div>
-              <button
-                onClick={() => { setSelectedExplanation(null); setAdminNote(''); }}
-                className="p-2 hover:bg-gray-100 rounded"
-              >
-                <XCircle className="h-5 w-5" />
-              </button>
             </div>
 
-            <div className="space-y-4">
-              {/* Status Badge */}
-              <div className="flex items-center justify-between pb-3 border-b">
-                <span className="text-sm font-medium">Trạng thái:</span>
-                {getStatusBadge(selectedExplanation.status)}
+            {/* Teacher Info */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gray-50 rounded p-3">
+                <p className="text-xs text-gray-600 mb-1">Họ và tên</p>
+                <p className="text-sm font-semibold">{selectedExplanation.teacher_name}</p>
               </div>
-
-              {/* Teacher Info */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-50 rounded p-3">
-                  <p className="text-xs text-gray-600 mb-1">Họ và tên</p>
-                  <p className="text-sm font-semibold">{selectedExplanation.teacher_name}</p>
-                </div>
-                <div className="bg-gray-50 rounded p-3">
-                  <p className="text-xs text-gray-600 mb-1">Mã LMS</p>
-                  <p className="text-sm font-semibold">{selectedExplanation.lms_code}</p>
-                </div>
-                <div className="bg-gray-50 rounded p-3 col-span-2">
-                  <p className="text-xs text-gray-600 mb-1">Email</p>
-                  <p className="text-sm font-semibold break-all">{selectedExplanation.email}</p>
-                </div>
-                <div className="bg-gray-50 rounded p-3">
-                  <p className="text-xs text-gray-600 mb-1">Cơ sở</p>
-                  <p className="text-sm font-semibold">{selectedExplanation.campus}</p>
-                </div>
-                <div className="bg-gray-50 rounded p-3">
-                  <p className="text-xs text-gray-600 mb-1">Bộ môn</p>
-                  <p className="text-sm font-semibold">{selectedExplanation.subject}</p>
-                </div>
+              <div className="bg-gray-50 rounded p-3">
+                <p className="text-xs text-gray-600 mb-1">Mã LMS</p>
+                <p className="text-sm font-semibold">{selectedExplanation.lms_code}</p>
               </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-50 rounded p-3">
-                  <p className="text-xs text-gray-600 mb-1">Ngày kiểm tra</p>
-                  <p className="text-sm font-semibold">
-                    {new Date(selectedExplanation.test_date).toLocaleDateString('vi-VN', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric'
-                    })}
-                  </p>
-                </div>
-                <div className="bg-gray-50 rounded p-3">
-                  <p className="text-xs text-gray-600 mb-1">Ngày tạo</p>
-                  <p className="text-sm font-semibold">
-                    {new Date(selectedExplanation.created_at).toLocaleDateString('vi-VN', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric'
-                    })}
-                  </p>
-                </div>
+              <div className="bg-gray-50 rounded p-3 col-span-2">
+                <p className="text-xs text-gray-600 mb-1">Email</p>
+                <p className="text-sm font-semibold break-all">{selectedExplanation.email}</p>
               </div>
-
-              {/* Reason */}
-              <div>
-                <p className="text-sm font-semibold mb-2">Lý do không tham gia:</p>
-                <div className="bg-blue-50 border-l-4 border-blue-500 rounded-r p-3">
-                  <p className="text-sm whitespace-pre-wrap">{selectedExplanation.reason}</p>
-                </div>
+              <div className="bg-gray-50 rounded p-3">
+                <p className="text-xs text-gray-600 mb-1">Cơ sở</p>
+                <p className="text-sm font-semibold">{selectedExplanation.campus}</p>
               </div>
-
-              {/* Existing Admin Note */}
-              {selectedExplanation.admin_note && (
-                <div>
-                  <p className="text-sm font-semibold mb-2">Ghi chú từ quản lý:</p>
-                  <div className={`border-l-4 rounded-r p-3 ${
-                    selectedExplanation.status === 'accepted' 
-                      ? 'bg-green-50 border-green-500' 
-                      : 'bg-red-50 border-red-500'
-                  }`}>
-                    <p className="text-sm whitespace-pre-wrap">{selectedExplanation.admin_note}</p>
-                    {selectedExplanation.admin_name && (
-                      <p className="text-xs text-gray-600 mt-2 pt-2 border-t">
-                        <span className="font-medium">Người xử lý:</span> {selectedExplanation.admin_name}
-                        {selectedExplanation.admin_email && ` (${selectedExplanation.admin_email})`}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Section - Only for Pending */}
-              {selectedExplanation.status === 'pending' && (
-                <div className="pt-3 border-t">
-                  <div className="bg-amber-50 border border-amber-200 rounded p-3 mb-4">
-                    <p className="text-sm text-amber-800">Giải trình này đang chờ xét duyệt. Vui lòng xem xét và quyết định.</p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-semibold mb-2">Ghi chú (không bắt buộc)</label>
-                      <textarea
-                        value={adminNote}
-                        onChange={(e) => setAdminNote(e.target.value)}
-                        rows={3}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
-                        placeholder="Nhập ghi chú hoặc lý do từ chối..."
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Ghi chú sẽ được gửi qua email cho giáo viên</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => handleUpdateStatus(selectedExplanation.id, 'accepted')}
-                        disabled={processing}
-                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-medium"
-                      >
-                        {processing ? 'Đang xử lý...' : (
-                          <>
-                            <CheckCircle className="h-4 w-4" />
-                            Chấp nhận
-                          </>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleUpdateStatus(selectedExplanation.id, 'rejected')}
-                        disabled={processing}
-                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 font-medium"
-                      >
-                        {processing ? 'Đang xử lý...' : (
-                          <>
-                            <XCircle className="h-4 w-4" />
-                            Từ chối
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <div className="bg-gray-50 rounded p-3">
+                <p className="text-xs text-gray-600 mb-1">Bộ môn</p>
+                <p className="text-sm font-semibold">{selectedExplanation.subject}</p>
+              </div>
             </div>
-          </Card>
+
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gray-50 rounded p-3">
+                <p className="text-xs text-gray-600 mb-1">Ngày kiểm tra</p>
+                <p className="text-sm font-semibold">
+                  {new Date(selectedExplanation.test_date).toLocaleDateString('vi-VN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                  })}
+                </p>
+              </div>
+              <div className="bg-gray-50 rounded p-3">
+                <p className="text-xs text-gray-600 mb-1">Ngày tạo</p>
+                <p className="text-sm font-semibold">
+                  {new Date(selectedExplanation.created_at).toLocaleDateString('vi-VN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                  })}
+                </p>
+              </div>
+            </div>
+
+            {/* Reason */}
+            <div>
+              <p className="text-sm font-semibold mb-2">Lý do không tham gia:</p>
+              <div className="bg-blue-50 border-l-4 border-blue-500 rounded-r p-3">
+                <p className="text-sm whitespace-pre-wrap">{selectedExplanation.reason}</p>
+              </div>
+            </div>
+
+            {/* Existing Admin Note */}
+            {selectedExplanation.admin_note && (
+              <div>
+                <p className="text-sm font-semibold mb-2">Ghi chú từ quản lý:</p>
+                <div className={`border-l-4 rounded-r p-3 ${
+                  selectedExplanation.status === 'accepted' 
+                    ? 'bg-green-50 border-green-500' 
+                    : 'bg-red-50 border-red-500'
+                }`}>
+                  <p className="text-sm whitespace-pre-wrap">{selectedExplanation.admin_note}</p>
+                  {selectedExplanation.admin_name && (
+                    <p className="text-xs text-gray-600 mt-2 pt-2 border-t">
+                      <span className="font-medium">Người xử lý:</span> {selectedExplanation.admin_name}
+                      {selectedExplanation.admin_email && ` (${selectedExplanation.admin_email})`}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Action Section - Only for Pending */}
+            {selectedExplanation.status === 'pending' && (
+              <div className="pt-3 border-t">
+                <div className="bg-amber-50 border border-amber-200 rounded p-3 mb-4">
+                  <p className="text-sm text-amber-800">Giải trình này đang chờ xét duyệt. Vui lòng xem xét và quyết định.</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2">Ghi chú (không bắt buộc)</label>
+                    <textarea
+                      value={adminNote}
+                      onChange={(e) => setAdminNote(e.target.value)}
+                      rows={3}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
+                      placeholder="Nhập ghi chú hoặc lý do từ chối..."
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Ghi chú sẽ được gửi qua email cho giáo viên</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button
+                      variant="success"
+                      onClick={() => handleUpdateStatus(selectedExplanation.id, 'accepted')}
+                      disabled={processing}
+                    >
+                      {processing ? 'Đang xử lý...' : (
+                        <>
+                          <CheckCircle className="h-4 w-4" />
+                          Chấp nhận
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => handleUpdateStatus(selectedExplanation.id, 'rejected')}
+                      disabled={processing}
+                    >
+                      {processing ? 'Đang xử lý...' : (
+                        <>
+                          <XCircle className="h-4 w-4" />
+                          Từ chối
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </PageContainer>
   );
 }

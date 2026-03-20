@@ -2,6 +2,9 @@
 
 import { Card } from "@/components/Card";
 import { PageContainer } from "@/components/PageContainer";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Stepper } from "@/components/ui/stepper";
 import { ClipboardList, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
@@ -82,19 +85,38 @@ export default function ExamRegistrationListPage() {
   }, [rows]);
 
   const getAssignmentBadge = (row: RegistrationRow) => {
-    if (!row.assignment_id) {
-      return <span className="px-2 py-1 rounded bg-amber-100 text-amber-700 text-xs font-semibold">Chưa tạo assignment</span>;
-    }
+    const assigned = !!row.assignment_id;
+    const submitted = row.assignment_status === "submitted" || row.assignment_status === "graded";
+    const graded = row.assignment_status === "graded";
+    const expired = row.assignment_status === "expired";
 
-    if (row.assignment_status === "expired") {
-      return <span className="px-2 py-1 rounded bg-red-100 text-red-700 text-xs font-semibold">Quá hạn</span>;
-    }
-
-    if (row.assignment_status === "submitted" || row.assignment_status === "graded") {
-      return <span className="px-2 py-1 rounded bg-green-100 text-green-700 text-xs font-semibold">Đã nộp/đã chấm</span>;
-    }
-
-    return <span className="px-2 py-1 rounded bg-blue-100 text-blue-700 text-xs font-semibold">{row.assignment_status || "assigned"}</span>;
+    return (
+      <div className="w-[300px]">
+        <Stepper
+          compact
+          steps={[
+            {
+              id: 1,
+              label: 'Giao đề',
+              description: assigned ? 'Đã giao' : 'Chưa giao',
+              status: assigned ? 'completed' : 'upcoming'
+            },
+            {
+              id: 2,
+              label: 'Nộp bài',
+              description: expired ? 'Quá hạn' : submitted ? 'Đã nộp' : assigned ? 'Đang làm' : 'Chưa',
+              status: expired ? 'error' : submitted ? 'completed' : assigned ? 'current' : 'upcoming'
+            },
+            {
+              id: 3,
+              label: 'Chấm điểm',
+              description: graded ? 'Hoàn tất' : submitted ? 'Chờ chấm' : 'Chưa',
+              status: graded ? 'success' : submitted ? 'current' : 'upcoming'
+            }
+          ]}
+        />
+      </div>
+    );
   };
 
   return (
@@ -148,41 +170,41 @@ export default function ExamRegistrationListPage() {
         ) : rows.length === 0 ? (
           <div className="py-10 text-center text-gray-500 text-sm">Chưa có dữ liệu đăng ký.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-325 text-sm">
-              <thead className="bg-gray-50 border-y border-gray-200">
-                <tr>
-                  <th className="px-3 py-2 text-left font-semibold">#</th>
-                  <th className="px-3 py-2 text-left font-semibold">Mã GV</th>
-                  <th className="px-3 py-2 text-left font-semibold">Loại đăng ký</th>
-                  <th className="px-3 py-2 text-left font-semibold">Khối / Môn</th>
-                  <th className="px-3 py-2 text-left font-semibold">Lịch thi</th>
-                  <th className="px-3 py-2 text-left font-semibold">Bộ đề random</th>
-                  <th className="px-3 py-2 text-left font-semibold">Trạng thái assignment</th>
-                  <th className="px-3 py-2 text-left font-semibold">Điểm</th>
-                  <th className="px-3 py-2 text-left font-semibold">Nguồn form</th>
-                  <th className="px-3 py-2 text-left font-semibold">Ngày tạo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Mã GV</TableHead>
+                  <TableHead>Loại đăng ký</TableHead>
+                  <TableHead>Khối / Môn</TableHead>
+                  <TableHead>Lịch thi</TableHead>
+                  <TableHead>Bộ đề random</TableHead>
+                  <TableHead>Trạng thái assignment</TableHead>
+                  <TableHead>Điểm</TableHead>
+                  <TableHead>Nguồn form</TableHead>
+                  <TableHead>Ngày tạo</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {rows.map((row, index) => (
-                  <tr key={row.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 text-gray-600">{index + 1}</td>
-                    <td className="px-3 py-2 font-semibold text-gray-900">{row.teacher_code}</td>
-                    <td className="px-3 py-2">
-                      <div className="text-gray-900">{row.registration_type === "official" ? "Chính thức" : "Bổ sung"}</div>
+                  <TableRow key={row.id}>
+                    <TableCell className="text-gray-600">{index + 1}</TableCell>
+                    <TableCell className="font-semibold text-gray-900">{row.teacher_code}</TableCell>
+                    <TableCell>
+                      <div className="text-gray-900 font-medium">{row.registration_type === "official" ? "Chính thức" : "Bổ sung"}</div>
                       <div className="text-xs text-gray-500">{row.exam_type}</div>
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell>
                       <div className="font-medium text-gray-900">{row.block_code}</div>
                       <div className="text-xs text-gray-600">{row.subject_name || row.subject_code}</div>
-                    </td>
-                    <td className="px-3 py-2 text-xs text-gray-700">
+                    </TableCell>
+                    <TableCell className="text-xs text-gray-700">
                       <div>Scheduled: {new Date(row.scheduled_at).toLocaleString("vi-VN")}</div>
                       {row.open_at && <div>Mở: {new Date(row.open_at).toLocaleString("vi-VN")}</div>}
                       {row.close_at && <div>Đóng: {new Date(row.close_at).toLocaleString("vi-VN")}</div>}
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell>
                       {row.set_code ? (
                         <>
                           <div className="text-gray-900 font-medium">{row.set_code}</div>
@@ -191,20 +213,20 @@ export default function ExamRegistrationListPage() {
                       ) : (
                         <span className="text-xs text-gray-500">Chưa có</span>
                       )}
-                    </td>
-                    <td className="px-3 py-2">{getAssignmentBadge(row)}</td>
-                    <td className="px-3 py-2 text-xs text-gray-700">
+                    </TableCell>
+                    <TableCell>{getAssignmentBadge(row)}</TableCell>
+                    <TableCell className="text-xs text-gray-700">
                       <div>{row.score === null ? "Chưa có" : row.score}</div>
                       <div className="text-gray-500">{row.score_status || "-"}</div>
-                    </td>
-                    <td className="px-3 py-2 text-xs text-gray-700">{row.source_form}</td>
-                    <td className="px-3 py-2 text-xs text-gray-600">
+                    </TableCell>
+                    <TableCell className="text-xs text-gray-700 capitalize">{row.source_form.replace("_", " ")}</TableCell>
+                    <TableCell className="text-xs text-gray-600">
                       {new Date(row.created_at).toLocaleString("vi-VN")}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </Card>

@@ -1,6 +1,9 @@
 'use client';
 
 import Modal from '@/components/Modal';
+import { Button } from '@/components/ui/button';
+import { Stepper } from '@/components/ui/stepper';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/lib/auth-context';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -245,20 +248,29 @@ export default function GiaiTrinhPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    const badges = {
-      pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      accepted: 'bg-green-100 text-green-800 border-green-300',
-      rejected: 'bg-red-100 text-red-800 border-red-300'
-    };
-    const labels = {
-      pending: 'Đang chờ',
-      accepted: 'Đã chấp nhận',
-      rejected: 'Đã từ chối'
-    };
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${badges[status as keyof typeof badges]}`}>
-        {labels[status as keyof typeof labels]}
-      </span>
+      <div className="min-w-[240px] px-2 py-1 mx-auto">
+        <Stepper 
+          compact
+          steps={[
+            {
+              id: 1,
+              label: 'Gửi yêu cầu',
+              status: 'completed'
+            },
+            {
+              id: 2,
+              label: 'Tiếp nhận',
+              status: status === 'pending' ? 'current' : 'completed'
+            },
+            {
+              id: 3,
+              label: 'Kết quả',
+              status: status === 'accepted' ? 'success' : status === 'rejected' ? 'error' : 'upcoming'
+            }
+          ]} 
+        />
+      </div>
     );
   };
 
@@ -298,15 +310,16 @@ export default function GiaiTrinhPage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Giải Trình Không Tham Gia Kiểm Tra</h1>
             <p className="mt-1 text-sm text-gray-600">Quản lý và theo dõi các giải trình của bạn</p>
           </div>
-          <button
+          <Button
             onClick={() => setShowModal(true)}
-            className="inline-flex items-center justify-center px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap"
+            size="lg"
+            className="whitespace-nowrap shadow-sm"
           >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Tạo Giải Trình Mới
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -478,17 +491,18 @@ export default function GiaiTrinhPage() {
               </div>
               
               <div className="flex flex-col-reverse sm:flex-row gap-3 mt-6 pt-6 border-t border-gray-200">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setShowModal(false)}
-                  className="w-full sm:w-auto px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                  className="w-full sm:w-auto font-medium"
                 >
                   Hủy
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   disabled={submitting}
-                  className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium shadow-sm"
+                  className="w-full sm:w-auto font-medium shadow-sm"
                 >
                   {submitting ? (
                     <span className="flex items-center justify-center">
@@ -496,7 +510,7 @@ export default function GiaiTrinhPage() {
                       Đang gửi...
                     </span>
                   ) : 'Gửi Giải Trình'}
-                </button>
+                </Button>
               </div>
         </form>
       </Modal>
@@ -520,61 +534,56 @@ export default function GiaiTrinhPage() {
               </svg>
               <h3 className="mt-4 text-lg font-medium text-gray-900">Chưa có giải trình nào</h3>
               <p className="mt-2 text-sm text-gray-600">Bắt đầu bằng cách tạo giải trình mới</p>
-              <button
+              <Button
                 onClick={() => setShowModal(true)}
-                className="mt-6 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="mt-6"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
                 Tạo Giải Trình Mới
-              </button>
+              </Button>
             </div>
           ) : (
             <div>
               {/* Desktop Table View - Hidden on mobile */}
               <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Ngày tạo</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Ngày KT</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Cơ sở</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Bộ môn</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Trạng thái</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Chi tiết</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                <Table>
+                  <TableHeader className="bg-gray-50">
+                    <TableRow>
+                      <TableHead className="uppercase tracking-wider">Created Date</TableHead>
+                      <TableHead className="uppercase tracking-wider">Test Date</TableHead>
+                      <TableHead className="uppercase tracking-wider">Campus</TableHead>
+                      <TableHead className="uppercase tracking-wider">Subject</TableHead>
+                      <TableHead className="uppercase tracking-wider">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {explanations.map((explanation) => (
-                      <tr key={explanation.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <TableRow 
+                        key={explanation.id} 
+                        className="group cursor-pointer transition-all duration-200 hover:bg-blue-50/80 hover:shadow-md relative z-0 hover:z-10"
+                        onClick={() => setSelectedExplanation(explanation)}
+                      >
+                        <TableCell className="whitespace-nowrap text-gray-900">
                           {new Date(explanation.created_at).toLocaleDateString('vi-VN')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-gray-900">
                           {new Date(explanation.test_date).toLocaleDateString('vi-VN')}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
+                        </TableCell>
+                        <TableCell className="text-gray-900">
                           <div className="max-w-xs truncate">{explanation.campus}</div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
+                        </TableCell>
+                        <TableCell className="text-gray-900">
                           <div className="max-w-xs truncate">{explanation.subject}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
                           {getStatusBadge(explanation.status)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <button
-                            onClick={() => setSelectedExplanation(explanation)}
-                            className="text-blue-600 hover:text-blue-800 font-medium transition-colors"
-                          >
-                            Xem chi tiết →
-                          </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
 
               {/* Mobile Card View - Visible on mobile and tablet */}
@@ -629,20 +638,44 @@ export default function GiaiTrinhPage() {
         title="Chi Tiết Giải Trình"
         maxWidth="2xl"
         footer={
-          <button
+          <Button
+            variant="secondary"
             onClick={() => setSelectedExplanation(null)}
-            className="w-full sm:w-auto px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+            className="w-full sm:w-auto bg-gray-600 text-white hover:bg-gray-700 font-medium hover:text-white"
           >
             Đóng
-          </button>
+          </Button>
         }
       >
         {selectedExplanation && (
             <div className="space-y-4">
-                {/* Status Badge */}
-                <div className="flex items-center justify-between pb-4 border-b border-gray-200">
-                  <span className="text-sm font-medium text-gray-700">Trạng thái:</span>
-                  {getStatusBadge(selectedExplanation.status)}
+                {/* Status Stepper */}
+                <div className="pb-6 pt-2 border-b border-gray-200">
+                  <span className="text-sm font-medium text-gray-700 block mb-4">Tiến trình xử lý:</span>
+                  <div className="px-4">
+                    <Stepper 
+                      steps={[
+                        {
+                          id: 1,
+                          label: 'Gửi yêu cầu',
+                          description: 'Mới tạo',
+                          status: 'completed'
+                        },
+                        {
+                          id: 2,
+                          label: 'Tiếp nhận',
+                          description: 'Đang xử lý',
+                          status: selectedExplanation.status === 'pending' ? 'current' : 'completed'
+                        },
+                        {
+                          id: 3,
+                          label: 'Kết quả',
+                          description: selectedExplanation.status === 'accepted' ? 'Đã duyệt' : selectedExplanation.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt',
+                          status: selectedExplanation.status === 'accepted' ? 'success' : selectedExplanation.status === 'rejected' ? 'error' : 'upcoming'
+                        }
+                      ]} 
+                    />
+                  </div>
                 </div>
 
                 {/* Info Grid */}

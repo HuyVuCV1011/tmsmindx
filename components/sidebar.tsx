@@ -3,7 +3,7 @@
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
-import { CalendarDays, ChevronDown, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
+import { CalendarDays, ChevronDown, DollarSign, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -60,7 +60,14 @@ export function Sidebar() {
         { href: "/admin/training-dashboard", label: "Thống kê" },
       ]
     },
-    { href: "/admin/giaitrinh", label: "Quản lý Giải trình", icon: MessageSquare },
+    {
+      label: "Quản lý Deal Lương",
+      icon: DollarSign,
+      submenu: [
+        { href: "/admin/tao-deal-luong", label: "Tạo Deal Lương" },
+        { href: "/admin/deal-luong", label: "Danh sách Deal Lương" },
+      ]
+    },
     { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
     { href: "/admin/database", label: "Database Manager", icon: LayoutDashboard },
     { href: "/admin/user-management", label: "Quản lý tài khoản", icon: Shield },

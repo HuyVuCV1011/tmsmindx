@@ -8,6 +8,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import { Button } from '@/components/ui/button';
 
 interface Assignment {
   id: number;
@@ -572,18 +573,19 @@ export default function TeacherAssignmentPage() {
           {/* Submit Footer */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6 sticky bottom-0 lg:hidden">
             <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 md:gap-4">
-              <button
+              <Button
+                variant="outline"
                 onClick={() => {
                   if (confirm('Bạn có chắc muốn hủy bài làm? Dữ liệu sẽ không được lưu.')) {
                     setView('list');
                     setTimerActive(false);
                   }
                 }}
-                className="flex items-center justify-center gap-2 px-4 md:px-6 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700 text-sm md:text-base"
+                className="flex items-center justify-center gap-2 px-4 md:px-6 py-3 font-medium text-gray-700 text-sm md:text-base h-auto"
               >
                 <ArrowLeft className="w-4 md:w-5 h-4 md:h-5" />
                 Hủy bài làm
-              </button>
+              </Button>
               
               <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-4">
                 {answeredCount < questions.length && (
@@ -595,13 +597,13 @@ export default function TeacherAssignmentPage() {
                   </div>
                 )}
                 
-                <button
+                <Button
                   onClick={submitAssignment}
-                  className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow-md text-sm md:text-base"
+                  className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 font-semibold shadow-md text-sm md:text-base h-auto"
                 >
                   <Send className="w-4 md:w-5 h-4 md:h-5" />
                   Nộp bài
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -702,15 +704,16 @@ export default function TeacherAssignmentPage() {
                 </div>
               )}
               
-              <button
+              <Button
                 onClick={submitAssignment}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow-md text-sm"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-semibold shadow-md h-auto"
               >
                 <Send className="w-4 h-4" />
                 Nộp bài
-              </button>
+              </Button>
               
-              <button
+              <Button
+                variant="outline"
                 onClick={() => {
                   if (confirm('Bạn có chắc muốn hủy bài làm? Dữ liệu sẽ không được lưu.')) {
                     if (currentAssignment) {
@@ -720,11 +723,11 @@ export default function TeacherAssignmentPage() {
                     setTimerActive(false);
                   }
                 }}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700 text-sm"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-gray-700 h-auto"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Hủy bài làm
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -810,13 +813,13 @@ export default function TeacherAssignmentPage() {
             </div>
 
             {/* Action Button */}
-            <button
+            <Button
               onClick={() => { setView('list'); fetchAvailableAssignments(); }}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto"
             >
               <ArrowLeft className="w-5 h-5" />
               Quay lại danh sách
-            </button>
+            </Button>
           </div>
         </div>
       </PageContainer>
@@ -1036,17 +1039,17 @@ export default function TeacherAssignmentPage() {
                     </div>
                   )}
 
-                  <button
+                  <Button
                     onClick={() => startAssignment(assignment)}
                     disabled={assignment.status !== 'published'}
-                    className={`w-full py-2 rounded-lg text-sm font-semibold transition-all ${
+                    className={`w-full py-2 text-sm font-semibold h-auto ${
                       assignment.status === 'published'
-                        ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
-                        : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        ? 'shadow-sm hover:shadow-md'
+                        : 'bg-gray-200 text-gray-500 hover:bg-gray-200'
                     }`}
                   >
                     {assignment.status === 'published' ? 'Bắt đầu' : 'Chưa mở'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}

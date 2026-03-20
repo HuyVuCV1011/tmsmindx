@@ -1,12 +1,16 @@
 'use client'
 
 import { Card } from '@/components/Card'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { PageContainer } from '@/components/PageContainer'
 import { SearchBar } from '@/components/SearchBar'
 import { TableSkeleton } from '@/components/skeletons'
 import { Tabs } from '@/components/Tabs'
 import TruyenThongStats from '@/components/truyenthong-stats'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Edit, FileText, Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
@@ -41,20 +45,20 @@ export default function PostsManagementPage() {
     )
 
     const getStatusBadge = (status: string) => {
-        const styles = {
-            draft: 'bg-amber-100 text-amber-700',
-            published: 'bg-green-100 text-green-700',
-            hidden: 'bg-gray-100 text-gray-700',
+        const variantMap: Record<string, 'warning' | 'success' | 'secondary'> = {
+            draft: 'warning',
+            published: 'success',
+            hidden: 'secondary',
         }
-        const labels = {
+        const labels: Record<string, string> = {
             draft: 'Nháp',
             published: 'Đã công bố',
             hidden: 'Ẩn',
         }
         return (
-            <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[status as keyof typeof styles] || 'bg-gray-100 text-gray-700'}`}>
-                {labels[status as keyof typeof labels] || status}
-            </span>
+            <Badge variant={variantMap[status] || 'secondary'}>
+                {labels[status] || status}
+            </Badge>
         )
     }
 
@@ -119,10 +123,10 @@ export default function PostsManagementPage() {
                     placeholder="Tìm kiếm bài viết..."
                 />
                 <Link href="/admin/truyenthong/posts/create">
-                    <button className="cursor-pointer flex items-center gap-2 bg-[#a1001f] hover:bg-[#c41230] text-white px-4 py-2 rounded-lg font-semibold transition-colors ml-4">
+                    <Button variant="mindx">
                         <Plus className="h-4 w-4" />
                         Tạo bài viết
-                    </button>
+                    </Button>
                 </Link>
             </div>
 
@@ -149,89 +153,66 @@ export default function PostsManagementPage() {
                     />
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead className="bg-gray-50 border-y border-gray-200">
-                                <tr>
-                                    <th className="px-3 py-2 text-left font-semibold">#</th>
-                                    <th className="px-3 py-2 text-left font-semibold">Tiêu đề</th>
-                                    <th className="px-3 py-2 text-left font-semibold">Loại</th>
-                                    <th className="px-3 py-2 text-center font-semibold">Trạng thái</th>
-                                    <th className="px-3 py-2 text-left font-semibold">Ngày đăng</th>
-                                    <th className="px-3 py-2 text-left font-semibold">Đối tượng</th>
-                                    <th className="px-3 py-2 text-center font-semibold">Lượt xem</th>
-                                    <th className="px-3 py-2 text-center font-semibold">Thao tác</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>#</TableHead>
+                                    <TableHead>Tiêu đề</TableHead>
+                                    <TableHead>Loại</TableHead>
+                                    <TableHead className="text-center">Trạng thái</TableHead>
+                                    <TableHead>Ngày đăng</TableHead>
+                                    <TableHead>Đối tượng</TableHead>
+                                    <TableHead className="text-center">Lượt xem</TableHead>
+                                    <TableHead className="text-center">Thao tác</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
                                 {posts.map((post, idx) => (
-                                    <tr key={post.id} className="hover:bg-gray-50">
-                                        <td className="px-3 py-2">{idx + 1}</td>
-                                        <td className="px-3 py-2 font-medium max-w-xs truncate">
+                                    <TableRow key={post.id}>
+                                        <TableCell>{idx + 1}</TableCell>
+                                        <TableCell className="font-medium max-w-xs truncate">
                                             {post.title}
-                                        </td>
-                                        <td className="px-3 py-2">{post.post_type}</td>
-                                        <td className="px-3 py-2 text-center">{getStatusBadge(post.status)}</td>
-                                        <td className="px-3 py-2">
+                                        </TableCell>
+                                        <TableCell>{post.post_type}</TableCell>
+                                        <TableCell className="text-center">{getStatusBadge(post.status)}</TableCell>
+                                        <TableCell>
                                             {post.published_at ? new Date(post.published_at).toLocaleDateString('vi-VN') : '-'}
-                                        </td>
-                                        <td className="px-3 py-2 text-xs text-gray-600">
+                                        </TableCell>
+                                        <TableCell className="text-xs text-gray-600">
                                             {post.audience}
-                                        </td>
-                                        <td className="px-3 py-2 text-center">{post.view_count?.toLocaleString('vi-VN') || 0}</td>
-                                        <td className="px-3 py-2">
+                                        </TableCell>
+                                        <TableCell className="text-center">{post.view_count?.toLocaleString('vi-VN') || 0}</TableCell>
+                                        <TableCell>
                                             <div className="flex gap-1 justify-center">
                                                 <Link href={`/admin/truyenthong/posts/${post.slug}/edit`}>
-                                                    <button
-                                                        className="cursor-pointer p-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                                                        title="Sửa"
-                                                    >
+                                                    <Button variant="ghost" size="icon-sm" title="Sửa" className="text-blue-700 hover:bg-blue-100">
                                                         <Edit className="h-4 w-4" />
-                                                    </button>
+                                                    </Button>
                                                 </Link>
-                                                <button
-                                                    onClick={() => handleDeleteClick(post.slug)}
-                                                    className="cursor-pointer p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                                                    title="Xóa"
-                                                >
+                                                <Button variant="ghost" size="icon-sm" onClick={() => handleDeleteClick(post.slug)} title="Xóa" className="text-red-700 hover:bg-red-100">
                                                     <Trash2 className="h-4 w-4" />
-                                                </button>
+                                                </Button>
                                             </div>
-                                        </td>
-                                    </tr>
+                                        </TableCell>
+                                    </TableRow>
                                 ))}
-                            </tbody>
-                        </table>
+                            </TableBody>
+                        </Table>
                     </div>
                 )}
             </Card>
 
-            {/* Delete Confirmation Modal */}
-            {deleteConfirmOpen && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <Card className="max-w-md w-full">
-                        <h3 className="text-lg font-bold mb-2">Xóa bài viết</h3>
-                        <p className="text-sm text-gray-600 mb-4">
-                            Bạn có chắc chắn muốn xóa bài viết này? Hành động này không thể hoàn tác.
-                        </p>
-                        <div className="flex gap-2 justify-end">
-                            <button
-                                onClick={() => { setDeleteConfirmOpen(false); setPostToDelete(null); }}
-                                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                                disabled={isDeleting}
-                            >
-                                Hủy
-                            </button>
-                            <button
-                                onClick={confirmDelete}
-                                disabled={isDeleting}
-                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400"
-                            >
-                                {isDeleting ? 'Đang xóa...' : 'Xóa'}
-                            </button>
-                        </div>
-                    </Card>
-                </div>
-            )}
+            {/* Delete Confirmation */}
+            <ConfirmDialog
+                isOpen={deleteConfirmOpen}
+                onClose={() => { setDeleteConfirmOpen(false); setPostToDelete(null); }}
+                onConfirm={confirmDelete}
+                title="Xóa bài viết"
+                message="Bạn có chắc chắn muốn xóa bài viết này? Hành động này không thể hoàn tác."
+                type="danger"
+                confirmText={isDeleting ? 'Đang xóa...' : 'Xóa'}
+                cancelText="Hủy"
+            />
         </PageContainer>
     )
 }
