@@ -6,6 +6,7 @@ import { StepItem, Stepper } from '@/components/ui/stepper';
 import { useAuth } from '@/lib/auth-context';
 import { Award, ChevronDown, DollarSign, FileText, Info, Plus, Send, TrendingDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import toast from 'react-hot-toast';
 
 // ─── Types ───────────────────────────────────────────
@@ -92,10 +93,12 @@ function getSteps(deal: SalaryDeal): StepItem[] {
 }
 
 // ─── Component ──────────────────────────────────────
+const fetcher = (url: string) => fetch(url).then(res => res.json());
+
 export default function DealLuongPage() {
   const { user } = useAuth();
-  const [deals, setDeals] = useState<SalaryDeal[]>([]);
-  const [loading, setLoading] = useState(true);
+
+
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<DealTab>('bonus');
@@ -117,16 +120,15 @@ export default function DealLuongPage() {
   });
 
   // ─── Fetch data ──────────────────────────────────
-  const fetchDeals = async () => {
-    if (!user?.email) return;
-    try {
-      const res = await fetch(`/api/salary-deals?email=${encodeURIComponent(user.email)}`);
-      const data = await res.json();
-      if (data.success) setDeals(data.data);
-    } catch { /* ignore */ } finally { setLoading(false); }
-  };
 
-  useEffect(() => { fetchDeals(); }, [user?.email]);
+  const { data: dealsResponse, error: dealsError, mutate: fetchDeals } = useSWR(
+    user?.email ? `/api/salary-deals?email=${encodeURIComponent(user.email)}` : null,
+    fetcher
+  );
+
+  const deals = dealsResponse?.success ? dealsResponse.data : [];
+  const loading = !dealsResponse && !dealsError && !!user?.email;
+
 
   // ─── Auto-fill ──────────────────────────────────
   useEffect(() => {
@@ -206,7 +208,7 @@ export default function DealLuongPage() {
 
   // ─── Filter deals by tab ─────────────────────────
   const filteredDeals = useMemo(() =>
-    deals.filter(d => d.deal_type === activeTab),
+    deals.filter((d: any) => d.deal_type === activeTab),
     [deals, activeTab]
   );
 
@@ -243,7 +245,7 @@ export default function DealLuongPage() {
         {(Object.keys(DEAL_TYPE_LABELS) as DealTab[]).map(tab => {
           const t = DEAL_TYPE_LABELS[tab];
           const isActive = activeTab === tab;
-          const count = deals.filter(d => d.deal_type === tab).length;
+          const count = deals.filter((d: any) => d.deal_type === tab).length;
           return (
             <button
               key={tab}
@@ -292,7 +294,7 @@ export default function DealLuongPage() {
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {filteredDeals.map(deal => (
+            {filteredDeals.map((deal: any) => (
               <div
                 key={deal.id}
                 className="p-5 hover:bg-slate-50/50 transition-colors cursor-pointer"
