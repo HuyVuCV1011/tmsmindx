@@ -42,6 +42,7 @@ interface RichTextEditorProps {
   error?: string
   textColor?: string
   showToolbar?: boolean
+  minHeight?: string
 }
 
 function ResizableImageNodeView(props: NodeViewProps) {
@@ -218,7 +219,8 @@ export default function RichTextEditor({
   onChange,
   error,
   textColor = '#000000',
-  showToolbar = true
+  showToolbar = true,
+  minHeight = 'min-h-[300px]'
 }: RichTextEditorProps) {
   const [selectedImageWidth, setSelectedImageWidth] = useState<string>('100%')
   const [selectedImageAlign, setSelectedImageAlign] = useState<string>('top')
@@ -255,7 +257,7 @@ export default function RichTextEditor({
     content: content || '',
     editorProps: {
       attributes: {
-        class: `prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none min-h-[300px] px-4 py-3 ${
+        class: `prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none ${minHeight} px-4 py-3 ${
           error ? 'border-red-500' : ''
         }`
       }

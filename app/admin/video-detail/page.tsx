@@ -5,6 +5,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import toast from 'react-hot-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface Video {
   id: number;
@@ -73,6 +74,13 @@ function VideoDetailContent() {
   const [userAnswer, setUserAnswer] = useState<number|null>(null);
   const [previewMode, setPreviewMode] = useState(false);
   const [loadedDurationSeconds, setLoadedDurationSeconds] = useState<number | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<any>({
+    isOpen: false,
+    title: "",
+    message: "",
+    type: "info",
+    onConfirm: () => {},
+  });
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const openAddQuestionModal = () => {
@@ -255,6 +263,27 @@ function VideoDetailContent() {
 
   const handleUpdateStatus = async (newStatus: string) => {
     if (!video) return;
+
+    if (newStatus === 'active') {
+      try {
+        const assignmentRes = await fetch(`/api/training-assignments?video_id=${video.id}`);
+        const assignmentData = await assignmentRes.json();
+        
+        if (!assignmentData.success || !assignmentData.data || assignmentData.data.length === 0) {
+            setConfirmDialog({
+                isOpen: true,
+                title: "Yêu cầu Assignment",
+                message: "Video này chưa có Assignment (bài tập). Bạn không được phép Giao bài (Active) khi không có Assignment kèm theo. Vui lòng liên kết bài tập trước.",
+                type: "warning",
+                onConfirm: () => setConfirmDialog((p: any) => ({...p, isOpen: false}))
+            });
+            return;
+        }
+      } catch (e) {
+        console.error("Failed to check assignment", e);
+        // Fallback or alert
+      }
+    }
     
     const isAssigning = newStatus === 'active';
     if (isAssigning) setAssigning(true);
@@ -1326,6 +1355,15 @@ function VideoDetailContent() {
           </div>
         </div>
       )}
+      
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog((prev: any) => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm || (() => {})}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+      />
     </div>
   );
 }

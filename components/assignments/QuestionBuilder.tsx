@@ -138,9 +138,13 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
   };
 
   const updateOption = (index: number, value: string) => {
+    const oldVal = options[index];
     const newOptions = [...options];
     newOptions[index] = value;
     setOptions(newOptions);
+    if (correctAnswer === oldVal) {
+      setCorrectAnswer(value);
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -216,7 +220,7 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
     }
 
     if (questionType === 'multiple_choice') {
-      const validOptions = options.filter(opt => opt.trim());
+      const validOptions = options.filter(opt => opt.replace(/<[^>]*>/g, '').trim());
       if (validOptions.length < 2) {
         toast.error('Cần ít nhất 2 đáp án');
         return;
@@ -271,7 +275,7 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
       question_type: questionType,
       correct_answer: correctAnswer,
       options: questionType === 'multiple_choice' || questionType === 'true_false' 
-        ? options.filter(opt => opt.trim()) 
+        ? options.filter(opt => opt.replace(/<[^>]*>/g, '').trim()) 
         : null,
       image_url: finalImageUrl || null,
       explanation,
@@ -444,13 +448,14 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
                       onChange={() => setCorrectAnswer(option)}
                       className="w-5 h-5 text-blue-600"
                     />
-                    <input
-                      type="text"
-                      value={option}
-                      onChange={(e) => updateOption(index, e.target.value)}
-                      placeholder={`Đáp án ${index + 1}`}
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
+                    <div className="flex-1 min-w-0 border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
+                      <RichTextEditor
+                        content={option}
+                        onChange={(html) => updateOption(index, html)}
+                        minHeight="min-h-[100px]"
+                        showToolbar={true}
+                      />
+                    </div>
                     {options.length > 2 && (
                       <button
                         onClick={() => removeOption(index)}

@@ -738,11 +738,21 @@ const migrations: Migration[] = [
       VALUES ('AD', '/admin/deal-luong')
       ON CONFLICT DO NOTHING;
 
+
       -- Only AD and super_admin can access /admin/deal-luong
     `,
   },
 
   // ═══════════════════════════════════════════════════════
+  // V33: Make video_id nullable in training_video_assignments
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V33_make_video_id_nullable',
+    version: 33,
+    sql: `
+      ALTER TABLE training_video_assignments ALTER COLUMN video_id DROP NOT NULL;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

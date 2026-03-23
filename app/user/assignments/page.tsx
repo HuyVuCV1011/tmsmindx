@@ -1,14 +1,16 @@
-'use client';
+ 'use client';
 
 import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
 import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send, XCircle } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Button } from '@/components/ui/button';
 
 interface Assignment {
   id: number;
@@ -81,6 +83,7 @@ interface ExamAssignment {
 
 export default function TeacherAssignmentPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [examAssignments, setExamAssignments] = useState<ExamAssignment[]>([]);
   const [currentAssignment, setCurrentAssignment] = useState<Assignment | null>(null);
@@ -96,6 +99,23 @@ export default function TeacherAssignmentPage() {
   const [view, setView] = useState<'list' | 'taking' | 'result'>('list');
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [timerActive, setTimerActive] = useState(false);
+  
+  const searchParams = useSearchParams();
+  const startId = searchParams.get('start_assignment_id');
+
+  // Auto-start assignment logic
+  useEffect(() => {
+    if (startId) {
+      if (activeMainTab !== 'training') {
+        setActiveMainTab('training');
+      } else if (assignments.length > 0 && view === 'list') {
+        const target = assignments.find(a => a.id.toString() === startId);
+        if (target) {
+          startAssignment(target);
+        }
+      }
+    }
+  }, [startId, activeMainTab, assignments, view]);
 
   // Helper function to safely parse percentage
   const formatPercentage = (percentage: number | string | undefined): string => {
@@ -317,12 +337,25 @@ export default function TeacherAssignmentPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const submitAssignment = async () => {
+  const submitAssignment = async (skipConfirm?: boolean | React.MouseEvent) => {
     if (!submission) return;
 
+    const isConfirmed = typeof skipConfirm === 'boolean' ? skipConfirm : false;
+
     const unansweredCount = questions.length - Object.keys(answers).length;
-    if (unansweredCount > 0) {
+    if (!isConfirmed && unansweredCount > 0) {
       if (!confirm(`Bạn còn ${unansweredCount} câu chưa trả lời. Bạn có chắc muốn nộp bài?`)) {
+        // Scroll to the first unanswered question
+        const firstUnansweredQuestion = questions.find(q => !answers[q.id]);
+        if (firstUnansweredQuestion) {
+          const element = document.getElementById(`question-${firstUnansweredQuestion.id}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('ring-2', 'ring-red-500', 'ring-offset-2');
+            setTimeout(() => element.classList.remove('ring-2', 'ring-red-500', 'ring-offset-2'), 2000);
+            toast('Đã chuyển đến câu hỏi chưa hoàn thành', { icon: '👇' });
+          }
+        }
         return;
       }
     }
@@ -399,6 +432,22 @@ export default function TeacherAssignmentPage() {
   const getProgress = () => {
     return Math.round((Object.keys(answers).length / questions.length) * 100);
   };
+
+  // Loading state when auto-starting assignment
+  if (startId && view === 'list') {
+    const target = assignments.find(a => a.id.toString() === startId);
+    // Show loading if still fetching OR if target found (waiting for redirect effect)
+    if (trainingLoading || target) {
+      return (
+        <PageContainer>
+          <div className="flex flex-col items-center justify-center p-12 h-64">
+            <LoadingSpinner />
+            <p className="mt-4 text-gray-500 font-medium">Đang chuẩn bị bài làm...</p>
+          </div>
+        </PageContainer>
+      );
+    }
+  }
 
   if (trainingLoading && examLoading) {
     return (
@@ -576,9 +625,8 @@ export default function TeacherAssignmentPage() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  if (confirm('Bạn có chắc muốn hủy bài làm? Dữ liệu sẽ không được lưu.')) {
-                    setView('list');
-                    setTimerActive(false);
+                  if (confirm('Bạn có chắc muốn dừng và nộp bài luôn không? Kết quả hiện tại sẽ được lưu.')) {
+                    submitAssignment(true);
                   }
                 }}
                 className="flex items-center justify-center gap-2 px-4 md:px-6 py-3 font-medium text-gray-700 text-sm md:text-base h-auto"
@@ -715,12 +763,8 @@ export default function TeacherAssignmentPage() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  if (confirm('Bạn có chắc muốn hủy bài làm? Dữ liệu sẽ không được lưu.')) {
-                    if (currentAssignment) {
-                      localStorage.removeItem(`assignment_${currentAssignment.id}_endTime`);
-                    }
-                    setView('list');
-                    setTimerActive(false);
+                  if (confirm('Bạn có chắc muốn dừng và nộp bài luôn không? Kết quả hiện tại sẽ được lưu.')) {
+                    submitAssignment(true);
                   }
                 }}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-gray-700 h-auto"
@@ -814,11 +858,18 @@ export default function TeacherAssignmentPage() {
 
             {/* Action Button */}
             <Button
-              onClick={() => { setView('list'); fetchAvailableAssignments(); }}
+              onClick={() => {
+                if (startId) {
+                  router.push('/user/training');
+                } else {
+                  setView('list'); 
+                  fetchAvailableAssignments();
+                }
+              }}
               className="w-full flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto"
             >
               <ArrowLeft className="w-5 h-5" />
-              Quay lại danh sách
+              {startId ? 'Quay lại bài học' : 'Quay lại danh sách'}
             </Button>
           </div>
         </div>
@@ -866,9 +917,9 @@ export default function TeacherAssignmentPage() {
     return 'bg-blue-100 text-blue-700 border-blue-300';
   };
 
+
   const mainTabs = [
     { id: 'exam', label: 'Kiểm tra chuyên môn & Quy trình - kỹ năng trải nghiệm', count: examAssignments.length },
-    { id: 'training', label: 'Đào tạo nâng cao', count: assignments.length },
   ];
 
   return (
@@ -940,7 +991,12 @@ export default function TeacherAssignmentPage() {
                         <p><span className="font-medium">Bộ đề:</span> {item.set_code} - {item.set_name}</p>
                         <p><span className="font-medium">Mở:</span> {new Date(item.open_at).toLocaleString('vi-VN')}</p>
                         <p><span className="font-medium">Đóng:</span> {new Date(item.close_at).toLocaleString('vi-VN')}</p>
-                        <p><span className="font-medium">Điểm:</span> {item.score === null ? 'Chưa có' : item.score}</p>
+                        <p>
+                          <span className="font-medium">Điểm:</span>{' '}
+                          <span className={item.score !== null ? (item.score >= item.passing_score ? 'text-green-600 font-bold' : 'text-red-600 font-bold') : ''}>
+                            {item.score === null ? 'Chưa có' : item.score}
+                          </span>
+                        </p>
                       </div>
 
                       {item.can_take ? (
@@ -948,7 +1004,7 @@ export default function TeacherAssignmentPage() {
                           href={`/user/assignments/exam/${item.id}`}
                           className="w-full inline-flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700"
                         >
-                          Bắt đầu làm bài
+                          {item.score !== null || item.assignment_status === 'submitted' ? 'Làm lại bài' : 'Bắt đầu làm bài'}
                         </Link>
                       ) : isExpiredZero && !item.explanation_status ? (
                         <Link
@@ -1048,7 +1104,7 @@ export default function TeacherAssignmentPage() {
                         : 'bg-gray-200 text-gray-500 hover:bg-gray-200'
                     }`}
                   >
-                    {assignment.status === 'published' ? 'Bắt đầu' : 'Chưa mở'}
+                    {assignment.status === 'published' ? (assignment.recent_submission ? 'Làm lại' : 'Bắt đầu') : 'Chưa mở'}
                   </Button>
                 </div>
               </div>
