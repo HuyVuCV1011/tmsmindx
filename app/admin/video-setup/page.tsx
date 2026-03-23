@@ -1,8 +1,10 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { Suspense, useEffect, useRef, useState } from "react";
-import toast from 'react-hot-toast';
+import { useToast } from "@/lib/use-toast";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface Video {
   id: number;
@@ -29,9 +31,23 @@ interface Question {
 function VideoSetupContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const toast = useToast();
   const videoId = searchParams.get("id");
   const videoRef = useRef<HTMLVideoElement>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type?: "danger" | "warning" | "info";
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
 
   const [video, setVideo] = useState<Video | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,18 +77,37 @@ function VideoSetupContent() {
   const [addTime, setAddTime] = useState("");
   const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
 
-  // Bài tập state
-  const [assignmentForm, setAssignmentForm] = useState({
-    assignment_title: "",
-    assignment_type: "quiz",
-    description: "",
-    total_points: "10",
-    passing_score: "7",
-    time_limit_minutes: "30",
-    max_attempts: "0",
-    is_required: true,
-    status: "published"
-  });
+  // Assignment selection state
+  const [allAssignments, setAllAssignments] = useState<any[]>([]);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>("");
+  const [currentAssignment, setCurrentAssignment] = useState<any>(null);
+
+  useEffect(() => {
+    // Fetch all assignments for selection
+    const fetchAssignments = async () => {
+        try {
+            const res = await fetch('/api/training-assignments');
+            const data = await res.json();
+            if (data.success) {
+                setAllAssignments(data.data);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+    fetchAssignments();
+  }, []);
+
+  useEffect(() => {
+    if (allAssignments.length > 0 && videoId) {
+        // Check if there is already an assignment for this video
+        const linked = allAssignments.find((a: any) => a.video_id === parseInt(videoId!));
+        if (linked) {
+            setCurrentAssignment(linked);
+            setSelectedAssignmentId(linked.id.toString());
+        }
+    }
+  }, [allAssignments, videoId]);
 
   useEffect(() => {
     if (!videoId) {
@@ -117,12 +152,6 @@ function VideoSetupContent() {
             setThumbnailPreview(currentVideo.thumbnail_url);
           }
           
-          // Tự động điền tiêu đề bài tập từ tiêu đề video
-          setAssignmentForm(prev => ({
-            ...prev,
-            assignment_title: `Bài tập - ${currentVideo.title}`
-          }));
-
           // Load questions from database
           await loadQuestions(videoId);
         } else {
@@ -241,6 +270,34 @@ function VideoSetupContent() {
     }
   };
 
+
+  // Auto-sync time from video when form is open
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (!videoElement || !showQuestionForm) return;
+
+    const handleTimeUpdate = () => {
+        // Only update if user is strictly seeking or pausing, 
+        // but 'timeupdate' fires too often. 
+        // User asked: "click on timeline". 
+        // Standard video clicking timeline fires 'seeking' -> 'seeked'.
+    };
+
+    const handleSeeked = () => {
+        // Round to 1 decimal place or integer
+        setAddTime(Math.floor(videoElement.currentTime).toString());
+    };
+
+    videoElement.addEventListener('seeked', handleSeeked);
+    // Also update on pause? helpful if they pause to pick a time
+    videoElement.addEventListener('pause', handleSeeked);
+
+    return () => {
+        videoElement.removeEventListener('seeked', handleSeeked);
+        videoElement.removeEventListener('pause', handleSeeked);
+    };
+  }, [showQuestionForm]);
+
   const handleAddQuestion = async () => {
     if (!newQuestion || newOptions.some(opt => !opt)) {
       toast.error("Vui lòng điền đầy đủ câu hỏi và các đáp án!");
@@ -290,46 +347,54 @@ function VideoSetupContent() {
   };
 
   const handleDeleteQuestion = async (index: number) => {
-    if (confirm("Bạn có chắc muốn xóa câu hỏi này?")) {
-      const question = questions[index];
-      if (question.id) {
-        await deleteQuestionFromDb(question.id);
+    setConfirmDialog({
+      isOpen: true,
+      title: "Xóa câu hỏi",
+      message: "Bạn có chắc muốn xóa câu hỏi này?",
+      type: "danger",
+      onConfirm: async () => {
+        const question = questions[index];
+        if (question.id) {
+          await deleteQuestionFromDb(question.id);
+        }
+        setQuestions(questions.filter((_, i) => i !== index));
+        toast.success("Đã xóa câu hỏi");
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
       }
-      setQuestions(questions.filter((_, i) => i !== index));
-    }
+    });
   };
 
-  const handleSaveAssignment = async () => {
-    if (!video) return;
+  const handleLinkAssignment = async () => {
+    if (!selectedAssignmentId || !video) return;
 
     try {
-      const response = await fetch('/api/training-assignments', {
-        method: 'POST',
+      const response = await fetch(`/api/training-assignments?id=${selectedAssignmentId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          video_id: video.id,
-          ...assignmentForm,
-          total_points: parseFloat(assignmentForm.total_points),
-          passing_score: parseFloat(assignmentForm.passing_score),
-          time_limit_minutes: parseInt(assignmentForm.time_limit_minutes),
-          max_attempts: parseInt(assignmentForm.max_attempts)
+          video_id: video.id
         })
       });
 
       const data = await response.json();
       if (data.success) {
-        toast.success('Tạo assignment thành công! Chuyển sang trang thêm câu hỏi...');
-        // Redirect to assignment questions page
-        const assignmentId = data.data?.id || data.id;
-        if (assignmentId) {
-          router.push(`/admin/assignment-questions?assignment_id=${assignmentId}`);
-        }
+        toast.success('Đã liên kết assignment thành công!');
+        // Refresh assignments list
+        try {
+            const res = await fetch('/api/training-assignments');
+            const assignmentsData = await res.json();
+            if (assignmentsData.success) {
+                setAllAssignments(assignmentsData.data);
+                const updated = assignmentsData.data.find((a: any) => a.id.toString() === selectedAssignmentId);
+                if (updated) setCurrentAssignment(updated);
+            }
+        } catch(e) {}
       } else {
         toast.error('Lỗi: ' + data.error);
       }
     } catch (err) {
-      console.error('Error creating assignment:', err);
-      toast.error('Lỗi khi tạo assignment');
+      console.error('Error linking assignment:', err);
+      toast.error('Lỗi khi liên kết assignment');
     }
   };
 
@@ -374,9 +439,8 @@ function VideoSetupContent() {
     }
   };
 
-  const handleSaveVideo = async (status: 'draft' | 'active') => {
-    if (!video) return;
-    
+
+  const executeSaveVideo = async (status: 'draft' | 'active') => {
     setSaving(true);
     try {
       // Upload thumbnail first if there's a new file
@@ -392,7 +456,7 @@ function VideoSetupContent() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: video.id,
+          id: video!.id, // video is checked before calling
           title: videoForm.title,
           lesson_number: parseInt(videoForm.lesson_number) || null,
           duration_minutes: parseInt(videoForm.duration_minutes) || 30,
@@ -418,26 +482,76 @@ function VideoSetupContent() {
     }
   };
 
+  const handleSaveVideo = async (status: 'draft' | 'active') => {
+    if (!video) return;
+    
+    if (status === 'active' && !currentAssignment && questions.length === 0) {
+        // If neither assignment nor questions, warn user it's just a raw video
+        setConfirmDialog({
+            isOpen: true,
+            title: "Xác nhận công khai",
+            message: "Video này chưa có Assignment (bài tập) và chưa có câu hỏi pop-up nào. Học viên sẽ được tính hoàn thành ngay sau khi xem xong video. Bạn có chắc muốn tiếp tục?",
+            type: "warning",
+            onConfirm: () => {
+                setConfirmDialog(p => ({...p, isOpen: false}));
+                executeSaveVideo(status);
+            }
+        });
+        return;
+    }
+
+
+    if (status === 'active' && !currentAssignment) {
+        setConfirmDialog({
+            isOpen: true,
+            title: "Yêu cầu Assignment",
+            message: "Video này chưa có Assignment (bài tập). Bạn không được phép Giao bài (Active) khi không có Assignment kèm theo. Vui lòng liên kết bài tập trước.",
+            type: "warning",
+            onConfirm: () => {
+                setConfirmDialog(p => ({...p, isOpen: false}));
+            }
+        });
+        return;
+    }
+    
+    executeSaveVideo(status);
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-white p-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-8">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Header Skeleton */}
-          <div className="flex justify-between items-center">
-            <div className="h-8 bg-gray-200 rounded w-64 animate-pulse"></div>
-            <div className="h-10 bg-gray-200 rounded w-32 animate-pulse"></div>
-          </div>
-          {/* Video Player Skeleton */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="w-full aspect-video bg-gray-200 rounded animate-pulse mb-6"></div>
-            {/* Form Fields Skeleton */}
-            <div className="space-y-4">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
-                  <div className="h-10 bg-gray-200 rounded w-full animate-pulse"></div>
+          <div className="h-8 bg-white/50 backdrop-blur rounded-lg w-64 animate-pulse"></div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-6">
+              <div className="bg-white rounded-2xl shadow-lg shadow-blue-100/50 p-6 space-y-4">
+                <div className="w-full aspect-video bg-gradient-to-br from-gray-200 to-gray-300 rounded-xl animate-pulse"></div>
+                <div className="space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-1/3 animate-pulse"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/4 animate-pulse"></div>
                 </div>
-              ))}
+              </div>
+              <div className="bg-white rounded-2xl shadow-lg shadow-blue-100/50 p-6 space-y-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-1/4 animate-pulse"></div>
+                    <div className="h-10 bg-gray-100 rounded w-full animate-pulse"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-2xl shadow-lg shadow-blue-100/50 p-6 space-y-4">
+              <div className="flex gap-4 border-b">
+                <div className="h-10 bg-gray-200 rounded w-32 animate-pulse"></div>
+                <div className="h-10 bg-gray-200 rounded w-32 animate-pulse"></div>
+              </div>
+              <div className="space-y-4 mt-6">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse"></div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -447,62 +561,91 @@ function VideoSetupContent() {
 
   if (error || !video) {
     return (
-      <div className="min-h-screen bg-white p-8">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded mb-4">
-            {error || "Không tìm thấy video"}
-          </div>
-          <button
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-8">
+        <div className="max-w-2xl mx-auto">
+          <button 
+            className="mb-6 flex items-center gap-2 text-[#a1001f] hover:text-[#c41230] font-medium transition group" 
             onClick={() => router.push('/admin/page5')}
-            className="px-4 py-2 bg-gray-600 text-white rounded"
           >
-            Quay lại danh sách video
+            <svg className="w-5 h-5 group-hover:-translate-x-1 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Quay lại dashboard
           </button>
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Không tìm thấy video</h2>
+            <p className="text-gray-600 mb-6">{error || "Video này không tồn tại hoặc đã bị xóa"}</p>
+            <Button
+              variant="mindx"
+              onClick={() => router.push('/admin/page5')}
+              className="px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl"
+            >
+              Về danh sách video
+            </Button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white p-2">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <button
+            <button 
+              className="mb-3 flex items-center gap-2 text-[#a1001f] hover:text-[#c41230] font-medium transition group" 
               onClick={() => router.push('/admin/page5')}
-              className="text-blue-600 hover:underline mb-2"
             >
-              ← Quay lại danh sách video
+              <svg className="w-5 h-5 group-hover:-translate-x-1 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Danh sách video
             </button>
-            <h1 className="text-3xl font-bold">Setup Video: {videoForm.title}</h1>
-            <p className="text-gray-600 mt-1">Chỉnh sửa thông tin video, thêm câu hỏi và tạo assignment</p>
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Setup Video: {videoForm.title}</h1>
+            <p className="text-gray-600 flex items-center gap-2">
+              <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide">Edit Mode</span>
+              Chỉnh sửa thông tin video, thêm câu hỏi và tạo assignment
+            </p>
           </div>
-          <div className="flex gap-3">
-            <button
+          <div className="flex gap-3 w-full md:w-auto">
+            <Button
+              variant="secondary"
               onClick={() => handleSaveVideo('draft')}
               disabled={saving}
-              className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 font-medium disabled:bg-gray-400"
+              className="flex-1 md:flex-none shadow-sm hover:shadow-md transition-all"
             >
               {saving ? 'Đang lưu...' : 'Lưu Draft'}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="success"
               onClick={() => handleSaveVideo('active')}
               disabled={saving}
-              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium disabled:bg-green-400"
+              className="flex-1 md:flex-none shadow-md hover:shadow-lg transition-all"
             >
-              {saving ? 'Đang lưu...' : 'Giao bài'}
-            </button>
+              {saving ? 'Đang lưu...' : 'Giao bài (Active)'}
+            </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Left: Video Preview & Info */}
-          <div className="space-y-4">
+          <div className="space-y-6">
             {/* Video Player */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-bold mb-4">Preview Video</h2>
-              <div className="aspect-video bg-gray-900 rounded overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-lg shadow-blue-100/50 p-6 border border-blue-50">
+              <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
+                <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </span>
+                Preview Video
+              </h2>
+              <div className="aspect-video bg-gray-900 rounded-xl overflow-hidden shadow-inner ring-1 ring-gray-200">
                 <video
                   ref={videoRef}
                   src={video.video_link}
@@ -511,62 +654,78 @@ function VideoSetupContent() {
                 />
               </div>
               {/* Video info display below video */}
-              <div className="mt-3 flex gap-4 text-sm text-gray-600">
+              <div className="mt-4 flex gap-6 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-100">
                 <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="font-medium">Thời lượng:</span>
+                  <span className="font-medium text-gray-700">Thời lượng:</span>
                   <span>{videoForm.duration_minutes} phút</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z" />
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                   </svg>
-                  <span className="font-medium">Lesson:</span>
+                  <span className="font-medium text-gray-700">Lesson:</span>
                   <span>#{videoForm.lesson_number}</span>
                 </div>
               </div>
             </div>
 
             {/* Video Info Form */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-bold mb-4">Thông tin Video</h2>
-              <div className="space-y-4">
+            <div className="bg-white rounded-2xl shadow-lg shadow-blue-100/50 p-6 border border-blue-50">
+              <h2 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <span className="w-8 h-8 rounded-lg bg-green-100 text-green-600 flex items-center justify-center">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                </span>
+                Thông tin Video
+              </h2>
+              <div className="space-y-5">
                 <div>
-                  <label className="block mb-1 font-medium text-sm">Tên video *</label>
+                  <label className="block mb-2 font-medium text-sm text-gray-700">Tên video <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={videoForm.title}
                     onChange={(e) => setVideoForm({...videoForm, title: e.target.value})}
-                    className="w-full border rounded px-3 py-2"
+                    className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm"
                     placeholder="Ví dụ: LESSON 01: Kỹ năng trao đổi với PHHS"
                   />
                 </div>
 
-                <div>
-                  <label className="block mb-1 font-medium text-sm">Ngày bắt đầu</label>
-                  <input
-                    type="date"
-                    value={videoForm.start_date}
-                    onChange={(e) => setVideoForm({...videoForm, start_date: e.target.value})}
-                    className="w-full border rounded px-3 py-2"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block mb-2 font-medium text-sm text-gray-700">Ngày bắt đầu</label>
+                    <input
+                      type="date"
+                      value={videoForm.start_date}
+                      onChange={(e) => setVideoForm({...videoForm, start_date: e.target.value})}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-2 font-medium text-sm text-gray-700">Số thứ tự bài học</label>
+                    <input
+                      type="number"
+                      value={videoForm.lesson_number}
+                      onChange={(e) => setVideoForm({...videoForm, lesson_number: e.target.value})}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm"
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block mb-1 font-medium text-sm">Mô tả</label>
+                  <label className="block mb-2 font-medium text-sm text-gray-700">Mô tả</label>
                   <textarea
                     value={videoForm.description}
                     onChange={(e) => setVideoForm({...videoForm, description: e.target.value})}
-                    className="w-full border rounded px-3 py-2"
+                    className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm"
                     rows={3}
                     placeholder="Mô tả về video..."
                   />
                 </div>
 
                 <div>
-                  <label className="block mb-1 font-medium text-sm">Thumbnail</label>
+                  <label className="block mb-2 font-medium text-sm text-gray-700">Thumbnail</label>
                   <input
                     type="file"
                     ref={thumbnailInputRef}
@@ -574,34 +733,48 @@ function VideoSetupContent() {
                     accept="image/*"
                     className="hidden"
                   />
-                  <div className="flex gap-3 items-center">
+                  <div className="flex gap-4 items-center p-4 border border-dashed border-gray-300 rounded-xl bg-gray-50">
                     {thumbnailPreview ? (
-                      <div className="relative w-32 h-20 bg-gray-100 rounded overflow-hidden">
+                      <div className="relative w-40 h-24 bg-white rounded-lg overflow-hidden shadow-sm border border-gray-200 group">
                         <img src={thumbnailPreview} alt="Thumbnail" className="w-full h-full object-cover" />
-                        <button
-                          onClick={() => {
-                            setThumbnailPreview("");
-                            setThumbnailFile(null);
-                            setVideoForm({...videoForm, thumbnail_url: ""});
-                          }}
-                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-                        >
-                          ×
-                        </button>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setThumbnailPreview("");
+                              setThumbnailFile(null);
+                              setVideoForm({...videoForm, thumbnail_url: ""});
+                            }}
+                            className="bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      <div className="w-32 h-20 bg-gray-200 rounded flex items-center justify-center text-gray-400">
-                        <span className="text-2xl">🖼️</span>
+                      <div className="w-40 h-24 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400 border border-gray-300">
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                       </div>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => thumbnailInputRef.current?.click()}
-                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                      disabled={uploadingThumbnail}
-                    >
-                      {uploadingThumbnail ? 'Đang tải...' : thumbnailPreview ? 'Đổi ảnh' : 'Chọn ảnh'}
-                    </button>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-700 mb-1">Video Thumbnail</p>
+                      <p className="text-xs text-gray-500 mb-3">Kích thước khuyến nghị 16:9, JPG hoặc PNG</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => thumbnailInputRef.current?.click()}
+                        disabled={uploadingThumbnail}
+                        className="bg-white"
+                      >
+                        {uploadingThumbnail ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            Đang tải lên...
+                          </>
+                        ) : thumbnailPreview ? 'Thay đổi ảnh' : 'Tải ảnh lên'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -609,25 +782,25 @@ function VideoSetupContent() {
           </div>
 
           {/* Right: Tabs for Questions and Assignment */}
-          <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="bg-white rounded-2xl shadow-lg shadow-blue-100/50 p-6 border border-blue-50 h-fit">
             {/* Tab Headers */}
-            <div className="flex border-b mb-4">
+            <div className="flex border-b border-gray-100 mb-6 bg-slate-50 p-1 rounded-xl">
               <button
                 onClick={() => setActiveTab('questions')}
-                className={`px-4 py-2 font-medium border-b-2 transition ${
+                className={`flex-1 px-4 py-2.5 rounded-lg font-medium text-sm transition-all text-center ${
                   activeTab === 'questions'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'bg-white text-blue-700 shadow-sm ring-1 ring-black/5'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/50'
                 }`}
               >
                 Câu hỏi trong video ({questions.length})
               </button>
               <button
                 onClick={() => setActiveTab('assignment')}
-                className={`px-4 py-2 font-medium border-b-2 transition ${
+                className={`flex-1 px-4 py-2.5 rounded-lg font-medium text-sm transition-all text-center ${
                   activeTab === 'assignment'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'bg-white text-blue-700 shadow-sm ring-1 ring-black/5'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/50'
                 }`}
               >
                 Tạo Assignment
@@ -637,132 +810,131 @@ function VideoSetupContent() {
             {/* Tab Content */}
             {activeTab === 'questions' ? (
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-semibold">Interactive Questions</h3>
-                  <button
+                <div className="flex justify-between items-center bg-blue-50/50 p-4 rounded-xl border border-blue-100 mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-800">Q & A</h3>
+                    <p className="text-xs text-blue-600 font-medium">Câu hỏi pop-up khi xem video</p>
+                  </div>
+                  <Button
                     onClick={() => {
                       setShowQuestionForm(true);
                       setEditingQuestionIndex(null);
                       getCurrentTime();
                     }}
-                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+                    variant="outline"
+                    className="border-dashed border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 bg-white"
                   >
                     + Thêm câu hỏi
-                  </button>
+                  </Button>
                 </div>
 
-                {/* Questions List */}
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {questions.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      Chưa có câu hỏi nào. Nhấn "Thêm câu hỏi" để bắt đầu.
-                    </div>
-                  ) : (
-                    questions.map((q, idx) => (
-                      <div key={idx} className="border rounded p-3 hover:bg-gray-50">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
-                                {Math.floor(q.time / 60)}:{String(q.time % 60).padStart(2, '0')}
-                              </span>
-                              <span className="font-medium text-sm">{q.question}</span>
-                            </div>
-                            <div className="space-y-1">
-                              {q.options.map((opt, i) => (
-                                <div key={i} className={`text-sm pl-4 ${i === q.answer ? 'text-green-600 font-medium' : 'text-gray-600'}`}>
-                                  {i === q.answer ? '✓ ' : '○ '}{opt}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleEditQuestion(idx)}
-                              className="text-blue-600 hover:text-blue-700 text-sm"
-                            >
-                              Sửa
-                            </button>
-                            <button
-                              onClick={() => handleDeleteQuestion(idx)}
-                              className="text-red-600 hover:text-red-700 text-sm"
-                            >
-                              Xóa
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Question Form Modal */}
+                {/* Question Form - Inline instead of Modal */}
                 {showQuestionForm && (
-                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-                      <h3 className="text-xl font-bold mb-4">
-                        {editingQuestionIndex !== null ? 'Chỉnh sửa câu hỏi' : 'Thêm câu hỏi mới'}
-                      </h3>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block mb-1 font-medium text-sm">Thời điểm (giây)</label>
+                  <div className="bg-white rounded-2xl shadow-xl border-2 border-blue-200 p-6 animate-in fade-in slide-in-from-top-4 duration-300">
+                      <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                          <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                            {editingQuestionIndex !== null ? (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            ) : (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                            )}
+                          </span>
+                          {editingQuestionIndex !== null ? 'Chỉnh sửa câu hỏi' : 'Thêm câu hỏi mới'}
+                        </h3>
+                        <Button 
+                          variant="ghost"
+                          onClick={() => setShowQuestionForm(false)}
+                          className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                        >
+                          ✕
+                        </Button>
+                      </div>
+                      
+                      <div className="space-y-6">
+                        <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                          <label className="block mb-2 font-medium text-sm text-gray-700 flex justify-between">
+                              <span>Thời điểm hiển thị (giây)</span>
+                              <span className="text-xs text-blue-600 font-normal">
+                                  💡 Mẹo: Bấm lên timeline video bên trái để chọn thời gian
+                              </span>
+                          </label>
                           <div className="flex gap-2">
-                            <input
-                              type="number"
-                              value={addTime}
-                              onChange={(e) => setAddTime(e.target.value)}
-                              className="flex-1 border rounded px-3 py-2"
-                              placeholder="Ví dụ: 30"
-                            />
-                            <button
+                            <div className="relative flex-1">
+                              <span className="absolute left-3 top-2.5 text-gray-400">⏱</span>
+                              <input
+                                type="number"
+                                value={addTime}
+                                onChange={(e) => setAddTime(e.target.value)}
+                                className="w-full border border-gray-300 rounded-lg pl-9 pr-4 py-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm font-mono text-lg font-bold text-blue-700"
+                                placeholder="0"
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
                               onClick={getCurrentTime}
-                              className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+                              className="whitespace-nowrap bg-white hover:bg-gray-50 text-gray-700 border-gray-300"
+                              title="Lấy thời điểm hiện tại của video"
                             >
-                              Lấy thời điểm hiện tại
-                            </button>
+                              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                              Lấy hiện tại
+                            </Button>
                           </div>
                         </div>
 
                         <div>
-                          <label className="block mb-1 font-medium text-sm">Câu hỏi *</label>
+                          <label className="block mb-2 font-medium text-sm text-gray-700">Câu hỏi <span className="text-red-500">*</span></label>
                           <input
                             type="text"
                             value={newQuestion}
                             onChange={(e) => setNewQuestion(e.target.value)}
-                            className="w-full border rounded px-3 py-2"
-                            placeholder="Nhập câu hỏi..."
+                            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm"
+                            placeholder="Nhập nội dung câu hỏi..."
+                            autoFocus
                           />
                         </div>
 
-                        <div>
-                          <label className="block mb-2 font-medium text-sm">Các đáp án</label>
-                          {newOptions.map((opt, i) => (
-                            <div key={i} className="flex gap-2 mb-2">
-                              <input
-                                type="radio"
-                                name="answer"
-                                checked={newAnswer === i}
-                                onChange={() => setNewAnswer(i)}
-                                className="mt-2"
-                              />
-                              <input
-                                type="text"
-                                value={opt}
-                                onChange={(e) => {
-                                  const updated = [...newOptions];
-                                  updated[i] = e.target.value;
-                                  setNewOptions(updated);
-                                }}
-                                className="flex-1 border rounded px-3 py-2"
-                                placeholder={`Đáp án ${i + 1}`}
-                              />
-                            </div>
-                          ))}
-                          <p className="text-xs text-gray-500 mt-1">Chọn radio button để đánh dấu đáp án đúng</p>
+                        <div className="bg-gray-50 p-5 rounded-xl border border-gray-100">
+                          <label className="block mb-3 font-medium text-sm text-gray-700">Các đáp án</label>
+                          <div className="space-y-3">
+                            {newOptions.map((opt, i) => (
+                              <div key={i} className="flex gap-3 items-center group">
+                                <div className="relative flex items-center justify-center">
+                                  <input
+                                    type="radio"
+                                    name="answer"
+                                    checked={newAnswer === i}
+                                    onChange={() => setNewAnswer(i)}
+                                    className="w-5 h-5 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                                  />
+                                </div>
+                                <input
+                                  type="text"
+                                  value={opt}
+                                  onChange={(e) => {
+                                    const updated = [...newOptions];
+                                    updated[i] = e.target.value;
+                                    setNewOptions(updated);
+                                  }}
+                                  className={`flex-1 border rounded-lg px-4 py-2.5 outline-none transition-all shadow-sm ${
+                                    newAnswer === i 
+                                      ? 'border-blue-300 ring-2 ring-blue-50 bg-white font-medium text-blue-900' 
+                                      : 'border-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500'
+                                  }`}
+                                  placeholder={`Đáp án ${i + 1}`}
+                                />
+                                {newAnswer === i && (
+                                  <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100">ĐÚNG</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
 
-                        <div className="flex gap-3 justify-end">
-                          <button
+                        <div className="flex gap-3 justify-end pt-4 border-t border-gray-100">
+                          <Button
+                            variant="secondary"
                             onClick={() => {
                               setShowQuestionForm(false);
                               setEditingQuestionIndex(null);
@@ -771,143 +943,245 @@ function VideoSetupContent() {
                               setNewAnswer(0);
                               setAddTime("");
                             }}
-                            className="px-4 py-2 border rounded hover:bg-gray-100"
+                            className="bg-gray-100 hover:bg-gray-200 text-gray-700"
                           >
-                            Hủy
-                          </button>
-                          <button
+                            Hủy bỏ
+                          </Button>
+                          <Button
+                            variant="mindx"
                             onClick={handleAddQuestion}
-                            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg text-white"
                           >
-                            {editingQuestionIndex !== null ? 'Cập nhật' : 'Thêm'}
-                          </button>
+                            {editingQuestionIndex !== null ? 'Cập nhật' : 'Thêm câu hỏi'}
+                          </Button>
                         </div>
                       </div>
-                    </div>
                   </div>
+                )}
+                
+                {/* List - only show when form is NOT open */}
+                {!showQuestionForm && (
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1 custom-scrollbar">
+                  {questions.length === 0 ? (
+                    <div className="text-center py-12 px-4 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400">?</div>
+                      <p className="text-gray-500 font-medium">Chưa có câu hỏi nào</p>
+                      <p className="text-sm text-gray-400 mt-1">Video sẽ chạy liên tục từ đầu đến cuối</p>
+                    </div>
+                  ) : (
+                    questions.map((q, idx) => (
+                      <div key={idx} className="border border-gray-100 rounded-xl p-4 hover:shadow-md hover:border-blue-100 hover:bg-white transition-all bg-gray-50/30 group">
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-3">
+                              <span className="bg-blue-100 text-blue-800 px-2.5 py-1 rounded-md text-xs font-mono font-bold flex items-center gap-1 cursor-pointer hover:bg-blue-200 transition-colors"
+                                  onClick={() => {
+                                      if (videoRef.current) {
+                                          videoRef.current.currentTime = q.time;
+                                          videoRef.current.pause(); // Optional: pause to let them see
+                                      }
+                                  }}
+                                  title="Click để xem tại thời điểm này"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                {Math.floor(q.time / 60)}:{String(q.time % 60).padStart(2, '0')}
+                              </span>
+                              <span className="font-semibold text-gray-900 text-sm line-clamp-1">{q.question}</span>
+                            </div>
+                            <div className="space-y-1.5 pl-1">
+                              {q.options.map((opt, i) => (
+                                <div key={i} className={`flex items-center gap-2 text-sm px-2 py-1 rounded ${i === q.answer ? 'bg-green-50 text-green-700 font-medium' : 'text-gray-500'}`}>
+                                  {i === q.answer ? (
+                                    <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                  ) : (
+                                    <div className="w-4 h-4 rounded-full border border-gray-300 flex-shrink-0"></div>
+                                  )}
+                                  <span className="line-clamp-1">{opt}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => {
+                                  // Pre-seek to the question time
+                                  if (videoRef.current) {
+                                      videoRef.current.currentTime = q.time;
+                                      videoRef.current.pause();
+                                  }
+                                  handleEditQuestion(idx);
+                              }}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
+                              title="Sửa"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteQuestion(idx)}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-red-600 transition-colors"
+                              title="Xóa"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold mb-4">Tạo Assignment cho video</h3>
+                <div className="space-y-6">
                 
-                <div>
-                  <label className="block mb-1 font-medium text-sm">Tên Assignment *</label>
-                  <input
-                    type="text"
-                    value={assignmentForm.assignment_title}
-                    onChange={(e) => setAssignmentForm({...assignmentForm, assignment_title: e.target.value})}
-                    className="w-full border rounded px-3 py-2"
-                  />
+                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                    <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      Assignment hiện tại
+                    </h4>
+                    {currentAssignment ? (
+                        <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                            <div className="font-bold text-lg text-blue-900 mb-1">{currentAssignment.assignment_title}</div>
+                            <div className="flex flex-wrap gap-4 text-sm text-gray-600 mt-2 mb-4">
+                                <span className="bg-white px-2 py-1 rounded border border-blue-100 shadow-sm flex items-center gap-1">
+                                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+                                  {currentAssignment.assignment_type}
+                                </span>
+                                <span className="bg-white px-2 py-1 rounded border border-blue-100 shadow-sm flex items-center gap-1">
+                                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>
+                                  {currentAssignment.total_points} điểm
+                                </span>
+                                <span className="bg-white px-2 py-1 rounded border border-blue-100 shadow-sm flex items-center gap-1">
+                                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                  {currentAssignment.time_limit_minutes} phút
+                                </span>
+                            </div>
+                            <div className="flex gap-3 pt-3 border-t border-blue-200">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => router.push(`/admin/assignment-questions?assignment_id=${currentAssignment.id}`)}
+                                    className="bg-white hover:bg-blue-50 text-blue-700 border-blue-200"
+                                >
+                                    Quản lý câu hỏi
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => {
+                                        setConfirmDialog({
+                                          isOpen: true,
+                                          title: "Hủy liên kết",
+                                          message: "Bạn có chắc muốn hủy liên kết assignment này?",
+                                          type: "warning",
+                                          onConfirm: async () => {
+                                              const res = await fetch(`/api/training-assignments?id=${currentAssignment.id}`, {
+                                                  method: 'PUT',
+                                                  headers: {'Content-Type': 'application/json'},
+                                                  body: JSON.stringify({ video_id: null })
+                                              });
+                                              const data = await res.json();
+                                              if(data.success) {
+                                                  setCurrentAssignment(null);
+                                                  toast.success('Đã hủy liên kết');
+                                                  setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+                                                  // Refresh list
+                                                  const d = await fetch('/api/training-assignments').then(r=>r.json());
+                                                  if(d.success) setAllAssignments(d.data);
+                                              } else {
+                                                  toast.error('Lỗi khi hủy liên kết: ' + data.error);
+                                                  setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+                                              }
+                                          }
+                                        });
+                                    }}
+                                    className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 shadow-none"
+                                >
+                                    Hủy liên kết
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-amber-50 rounded-xl p-6 border border-amber-100 text-center space-y-3">
+                          <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                          </div>
+                          <div>
+                            <h3 className="text-amber-800 font-bold text-lg">Chưa có Assignment</h3>
+                            <p className="text-amber-700 text-sm mt-1 max-w-sm mx-auto">
+                              Video này chưa được liên kết với bài tập nào. Vui lòng chọn Assignment bên dưới để có thể Giao bài (Active).
+                            </p>
+                          </div>
+                        </div>
+                    )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1 font-medium text-sm">Loại</label>
-                    <select
-                      value={assignmentForm.assignment_type}
-                      onChange={(e) => setAssignmentForm({...assignmentForm, assignment_type: e.target.value})}
-                      className="w-full border rounded px-3 py-2"
-                    >
-                      <option value="quiz">Quiz</option>
-                      <option value="test">Test</option>
-                      <option value="homework">Homework</option>
-                      <option value="project">Project</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block mb-1 font-medium text-sm">Trạng thái</label>
-                    <select
-                      value={assignmentForm.status}
-                      onChange={(e) => setAssignmentForm({...assignmentForm, status: e.target.value})}
-                      className="w-full border rounded px-3 py-2"
-                    >
-                      <option value="published">Published</option>
-                      <option value="draft">Draft</option>
-                      <option value="archived">Archived</option>
-                    </select>
-                  </div>
-                </div>
+                <div className="pt-4 mt-4 border-t border-gray-100">
+                    <label className="block mb-3 font-medium text-sm text-gray-700">Chọn Assignment từ danh sách có sẵn</label>
+                    <div className="flex flex-col sm:flex-row gap-3 mb-2">
+                        <div className="relative flex-1">
+                          <select 
+                              className="w-full appearance-none border border-gray-300 rounded-lg pl-4 pr-10 py-2.5 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm"
+                              value={selectedAssignmentId}
+                              onChange={(e) => setSelectedAssignmentId(e.target.value)}
+                          >
+                              <option value="">-- Chọn một Assignment --</option>
+                              {allAssignments.filter(a => !currentAssignment || a.id !== currentAssignment.id).map(a => (
+                                  <option key={a.id} value={a.id}>
+                                      {a.assignment_title} {a.video_id ? `(⚠️ Đang dùng cho video #${a.video_id})` : '(✅ Có sẵn)'}
+                                  </option>
+                              ))}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                          </div>
+                        </div>
+                        <Button 
+                            onClick={handleLinkAssignment}
+                            disabled={!selectedAssignmentId}
+                            className="bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                        >
+                            Lưu liên kết
+                        </Button>
+                    </div>
+                    {selectedAssignmentId && (() => {
+                      const selected = allAssignments.find(a => a.id.toString() === selectedAssignmentId);
+                      if (selected?.video_id) {
+                        return (
+                          <p className="text-xs text-amber-600 mt-2 flex items-center gap-1 bg-amber-50 p-2 rounded border border-amber-100">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                            Lưu ý: Assignment này đang được dùng cho video khác. Nếu lưu, nó sẽ được chuyển sang video này.
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
 
-                <div>
-                  <label className="block mb-1 font-medium text-sm">Mô tả</label>
-                  <textarea
-                    value={assignmentForm.description}
-                    onChange={(e) => setAssignmentForm({...assignmentForm, description: e.target.value})}
-                    className="w-full border rounded px-3 py-2"
-                    rows={3}
-                  />
+                    <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-5 rounded-xl text-center mt-6 border border-gray-200">
+                        <p className="text-sm text-gray-600 mb-3 font-medium">Chưa có form phù hợp?</p>
+                        <Button 
+                            onClick={() => router.push('/admin/assignments')}
+                            variant="secondary"
+                            className="bg-white border hover:bg-gray-50 shadow-sm"
+                        >
+                            Đến trang Quản lý Assignments để tạo mới
+                        </Button>
+                    </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1 font-medium text-sm">Điểm tối đa</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={assignmentForm.total_points}
-                      onChange={(e) => setAssignmentForm({...assignmentForm, total_points: e.target.value})}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block mb-1 font-medium text-sm">Điểm đạt</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={assignmentForm.passing_score}
-                      onChange={(e) => setAssignmentForm({...assignmentForm, passing_score: e.target.value})}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1 font-medium text-sm">Thời gian (phút)</label>
-                    <input
-                      type="number"
-                      value={assignmentForm.time_limit_minutes}
-                      onChange={(e) => setAssignmentForm({...assignmentForm, time_limit_minutes: e.target.value})}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block mb-1 font-medium text-sm">Số lần làm tối đa</label>
-                    <input
-                      type="number"
-                      value={assignmentForm.max_attempts}
-                      onChange={(e) => setAssignmentForm({...assignmentForm, max_attempts: e.target.value})}
-                      className="w-full border rounded px-3 py-2"
-                      placeholder="0 = không giới hạn"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Để 0 để không giới hạn số lần nộp</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={assignmentForm.is_required}
-                    onChange={(e) => setAssignmentForm({...assignmentForm, is_required: e.target.checked})}
-                    className="mr-2"
-                  />
-                  <label className="text-sm">Bắt buộc hoàn thành</label>
-                </div>
-
-                <div className="flex gap-3 justify-end pt-4">
-                  <button
-                    onClick={handleSaveAssignment}
-                    className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
-                  >
-                    Tạo Assignment
-                  </button>
-                </div>
-              </div>
+            </div>
             )}
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+      />
     </div>
   );
 }

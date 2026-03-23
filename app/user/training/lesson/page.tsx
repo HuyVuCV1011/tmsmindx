@@ -1,8 +1,9 @@
 'use client';
 
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth-context";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 
 interface Question {
   id: number;
@@ -14,6 +15,7 @@ interface Question {
 
 function LessonContent() {
   const router = useRouter();
+  const { user } = useAuth();
   const searchParams = useSearchParams();
   const lessonId = searchParams.get('id');
   const videoUrl = searchParams.get('url');
@@ -43,6 +45,54 @@ function LessonContent() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
+
+  // Save progress periodically (every 10 seconds)
+  useEffect(() => {
+    if (!isPlaying || !lessonId || !user?.email) return;
+
+    const teacherCode = user.email.split('@')[0];
+    const interval = setInterval(async () => {
+      // Get current time directly from video element for accuracy
+      const time = videoRef.current ? videoRef.current.currentTime : 0;
+      if (time <= 0) return;
+
+      try {
+        await fetch('/api/training-progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            teacherCode,
+            videoId: lessonId,
+            timeSpent: time,
+            isCompleted: false
+          })
+        });
+      } catch (err) {
+        console.error('[Lesson] Failed to save progress:', err);
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, lessonId, user]);
+
+  // Save progress on completion
+  useEffect(() => {
+    if (videoCompleted && lessonId && user?.email) {
+      const teacherCode = user.email.split('@')[0];
+      const time = videoRef.current ? videoRef.current.duration : 0; // Use duration for completion
+
+      fetch('/api/training-progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teacherCode,
+          videoId: lessonId, // Use lessonId (which is videoId)
+          timeSpent: time,
+          isCompleted: true
+        })
+      }).catch(err => console.error('[Lesson] Failed to save completion:', err));
+    }
+  }, [videoCompleted, lessonId, user]);
 
   // Load questions from database
   useEffect(() => {

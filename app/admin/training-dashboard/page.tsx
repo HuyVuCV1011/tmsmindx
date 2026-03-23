@@ -46,6 +46,32 @@ export default function TrainingDashboardPage() {
   const [dashboardData, setDashboardData] = useState<TeacherStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const [selectedTeacherCode, setSelectedTeacherCode] = useState<string | null>(null);
+  const [teacherDetail, setTeacherDetail] = useState<any>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+
+  // Detail Modal Helper
+  const openDetail = async (code: string) => {
+    setSelectedTeacherCode(code);
+    setIsLoadingDetail(true);
+    setTeacherDetail(null);
+    try {
+        const response = await fetch(`/api/training-db?code=${code}`);
+        const data = await response.json();
+        setTeacherDetail(data);
+    } catch (e) {
+        console.error("Failed to load details", e);
+    } finally {
+        setIsLoadingDetail(false);
+    }
+  };
+
+  const closeDetail = () => {
+    setSelectedTeacherCode(null);
+    setTeacherDetail(null);
+  };
+
   
   const [centerFilter, setCenterFilter] = useState('');
   const centers = useMemo(() => Array.from(new Set(dashboardData.map(d => d.center))), [dashboardData]);
@@ -237,6 +263,7 @@ export default function TrainingDashboardPage() {
                       <TableHead className="text-center">ĐTB Video</TableHead>
                       <TableHead className="text-center">Bài tập</TableHead>
                       <TableHead className="text-center">ĐTB BT</TableHead>
+                      <TableHead className="text-center">Chi tiết</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -263,6 +290,11 @@ export default function TrainingDashboardPage() {
                         </TableCell>
                         <TableCell className="text-center">
                           {row.avg_assignment_score ? Number(row.avg_assignment_score).toFixed(2) : '-'}
+                        </TableCell>
+                        <TableCell className="text-center">
+                              <button onClick={() => openDetail(row.teacher_code)} className="text-blue-600 hover:underline">
+                                Xem
+                            </button>
                         </TableCell>
                       </TableRow>
                     ))}
