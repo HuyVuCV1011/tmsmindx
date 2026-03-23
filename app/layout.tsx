@@ -1,4 +1,6 @@
+import { Analytics } from "@vercel/analytics/next"
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { PersistentLayout } from "@/components/PersistentLayout";
 import { AuthProvider } from "@/lib/auth-context";
 import type { Metadata } from "next";
 import { Exo } from "next/font/google";
@@ -26,7 +28,9 @@ export default function RootLayout({
       <body className={`${exo.variable} font-exo bg-white text-gray-900`}>
         <ErrorBoundary>
           <AuthProvider>
-            {children}
+            <PersistentLayout>
+              {children}
+            </PersistentLayout>
           </AuthProvider>
         </ErrorBoundary>
         <Toaster 
@@ -53,6 +57,7 @@ export default function RootLayout({
             },
           }}
         />
+        <Analytics />
       </body>
     </html>
   );

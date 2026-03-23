@@ -1,9 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [role, setRole] = useState<'teacher' | 'manager'>('teacher');
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    if (!open) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
