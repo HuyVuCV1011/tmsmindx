@@ -324,10 +324,6 @@ export default function TeacherProfilePage() {
                                 <p className="font-bold text-gray-900 truncate" title={teacherInfo.code}>{teacherInfo.code || '---'}</p>
                             </div>
                             <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
-                                <p className="text-sm text-gray-500 font-medium mb-1">STT</p>
-                                <p className="font-bold text-gray-900 truncate" title={teacherInfo.stt}>{teacherInfo.stt || '---'}</p>
-                            </div>
-                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
                                 <p className="text-sm text-gray-500 font-medium mb-1">Chức vụ</p>
                                 <p className="font-bold text-gray-900 truncate" title={teacherInfo.position}>{teacherInfo.position || '---'}</p>
                             </div>
