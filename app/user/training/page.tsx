@@ -358,8 +358,8 @@ export default function TrainingPage() {
                                 </div>
                               )}
                             </div>
-                            {/* Duration badge */}
-                            {lesson.duration_minutes && (
+                            {/* Duration badge - Hide default 30 min placeholder */}
+                            {lesson.duration_minutes && lesson.duration_minutes !== 30 && (
                               <div className="absolute bottom-1 right-1 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
                                 {lesson.duration_minutes} phút
                               </div>

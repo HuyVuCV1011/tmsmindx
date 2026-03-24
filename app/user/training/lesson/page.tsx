@@ -64,7 +64,8 @@ function LessonContent() {
             teacherCode,
             videoId: id,
             timeSpent: time,
-            isCompleted: true
+            isCompleted: true,
+            totalDuration: time, // Send total duration to update metadata
         })
         });
         console.log(`[Lesson] Saved completion for ${id}`);
@@ -170,6 +171,7 @@ function LessonContent() {
     const interval = setInterval(async () => {
       // Get current time directly from video element for accuracy
       const time = videoRef.current ? videoRef.current.currentTime : 0;
+      const duration = videoRef.current ? videoRef.current.duration : 0;
       if (time <= 0) return;
 
       try {
@@ -180,7 +182,8 @@ function LessonContent() {
             teacherCode,
             videoId: lessonId,
             timeSpent: time,
-            isCompleted: false
+            isCompleted: false,
+            totalDuration: duration > 0 ? duration : undefined 
           })
         });
       } catch (err) {
@@ -356,7 +359,8 @@ function LessonContent() {
                     teacherCode,
                     videoId: lessonIdRef.current,
                     timeSpent: video.currentTime,
-                    isCompleted: false
+                    isCompleted: false,
+                    totalDuration: video.duration // Update duration
                 })
             }).catch(err => console.error('[Lesson] Failed to save on pause:', err));
         }

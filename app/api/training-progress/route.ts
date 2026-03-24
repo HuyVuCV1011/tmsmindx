@@ -4,10 +4,28 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const POST = withApiProtection(async (request: NextRequest) => {
   try {
-    const { teacherCode, videoId, timeSpent, isCompleted } = await request.json();
+    const { teacherCode, videoId, timeSpent, isCompleted, totalDuration } = await request.json();
 
     if (!teacherCode || !videoId) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+    }
+
+    // Step 0: If totalDuration is provided, update the video metadata
+    if (totalDuration && typeof totalDuration === 'number' && totalDuration > 0) {
+        // Calculate minutes (rounded up, at least 1)
+        const durationMinutes = Math.max(1, Math.ceil(totalDuration / 60));
+        
+        // Update video duration if it's different or NULL
+        // We use a separate try-catch to not block progress saving if this fails
+        try {
+            await pool.query(`
+                UPDATE training_videos 
+                SET duration_minutes = $1 
+                WHERE id = $2 AND (duration_minutes IS NULL OR duration_minutes != $1)
+            `, [durationMinutes, videoId]);
+        } catch (err) {
+            console.error('Failed to update video duration:', err);
+        }
     }
 
     // Determine status
