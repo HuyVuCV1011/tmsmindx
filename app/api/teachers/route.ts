@@ -362,7 +362,8 @@ export const GET = withApiProtection(async (request: NextRequest) => {
   ]);
 
   // Initialize với "3T" cho tất cả các tháng
-  const months = ["1/2025", "2/2025", "3/2025", "4/2025", "5/2025", "6/2025", "7/2025", "8/2025", "9/2025", "10/2025", "11/2025", "12/2025"];
+  const currentYear = new Date().getFullYear();
+  const months = Array.from({ length: 12 }, (_, i) => `${i + 1}/${currentYear}`);
   
   teacher.monthlyMetrics = {
     expertise: {},

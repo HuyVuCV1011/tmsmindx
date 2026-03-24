@@ -48,3 +48,28 @@ export const POST = withApiProtection(async (request: NextRequest) => {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 });
+
+export const GET = withApiProtection(async (request: NextRequest) => {
+  const teacherCode = request.nextUrl.searchParams.get('teacherCode');
+  const videoId = request.nextUrl.searchParams.get('videoId');
+
+  if (!teacherCode || !videoId) {
+    return NextResponse.json({ error: 'Missing teacherCode or videoId' }, { status: 400 });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT time_spent_seconds, completion_status FROM training_teacher_video_scores WHERE teacher_code = $1 AND video_id = $2',
+      [teacherCode, videoId]
+    );
+
+    if (result.rows.length === 0) {
+      return NextResponse.json({ success: true, data: null });
+    }
+
+    return NextResponse.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching progress:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+});

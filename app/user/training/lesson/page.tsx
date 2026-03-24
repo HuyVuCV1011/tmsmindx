@@ -36,7 +36,68 @@ function LessonContent() {
   const [isCorrectAnswer, setIsCorrectAnswer] = useState(false);
   const [hasNextLesson, setHasNextLesson] = useState<boolean>(true);
   const [nextLessonData, setNextLessonData] = useState<any>(null);
+  const [currentAssignment, setCurrentAssignment] = useState<any>(null); // Trạng thái bài tập của video hiện tại
   const [maxWatchedTime, setMaxWatchedTime] = useState(0);
+   
+  // Ref to track user for event handlers
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  // Ref to track current lesson ID for event handlers to access latest value
+  const lessonIdRef = useRef(lessonId);
+  useEffect(() => {
+    lessonIdRef.current = lessonId;
+  }, [lessonId]);
+  
+  // Helper to save progress
+  const saveCompletion = async (id: string | null, time: number) => {
+    const currentUser = userRef.current;
+    if (!id || !currentUser?.email) return;
+    try {
+        const teacherCode = currentUser.email.split('@')[0];
+        await fetch('/api/training-progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            teacherCode,
+            videoId: id,
+            timeSpent: time,
+            isCompleted: true
+        })
+        });
+        console.log(`[Lesson] Saved completion for ${id}`);
+    } catch (err) {
+        console.error('[Lesson] Failed to save completion:', err);
+    }
+  };
+
+  // Load assignment for the current video
+  useEffect(() => {
+    const loadAssignment = async () => {
+      if (!lessonId) return;
+      try {
+        // Fetch assignment linked to this video
+        const res = await fetch(`/api/training-assignments?video_id=${lessonId}&status=published`);
+        const data = await res.json();
+        
+        if (data.success && data.data && data.data.length > 0) {
+          // Lấy bài tập đầu tiên (hoặc có thể thêm logic chọn bài tập phù hợp)
+          setCurrentAssignment(data.data[0]); 
+          console.log('[Lesson] Found assignment:', data.data[0]);
+        } else {
+             setCurrentAssignment(null);
+        }
+      } catch (err) {
+        console.error('[Lesson] Failed to load assignment:', err);
+      }
+    };
+    loadAssignment();
+  }, [lessonId]);
+  
+  // (Rest of the component code...)
+
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const lastValidTimeRef = useRef(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -45,6 +106,61 @@ function LessonContent() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
+
+  // Reset state when lesson changes
+  useEffect(() => {
+    setProgress(0);
+    setVideoCompleted(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setQuestions([]);
+    setCurrentQuestionIdx(null);
+    setUserAnswer(null);
+    setAnsweredQuestions(new Set());
+    setVideoPaused(false);
+    setShowResult(false);
+    setIsCorrectAnswer(false);
+    setMaxWatchedTime(0);
+    setIsPlaying(false);
+    
+    // Reset video element
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.load();
+    }
+  }, [lessonId]);
+
+  // Load saved progress
+  useEffect(() => {
+    const loadProgress = async () => {
+      if (!lessonId || !user?.email) return;
+      
+      try {
+        const teacherCode = user.email.split('@')[0];
+        const res = await fetch(`/api/training-progress?teacherCode=${teacherCode}&videoId=${lessonId}`);
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+          const { time_spent_seconds, completion_status } = data.data;
+          
+          if (time_spent_seconds > 0 && videoRef.current) {
+            videoRef.current.currentTime = time_spent_seconds;
+            setCurrentTime(time_spent_seconds);
+            console.log(`[Lesson] Resumed at ${time_spent_seconds}s`);
+          }
+          
+          if (completion_status === 'completed') {
+            setVideoCompleted(true);
+            setProgress(100);
+          }
+        }
+      } catch (err) {
+        console.error('[Lesson] Failed to load progress:', err);
+      }
+    };
+    
+    loadProgress();
+  }, [lessonId, user]);
 
   // Save progress periodically (every 10 seconds)
   useEffect(() => {
@@ -75,24 +191,12 @@ function LessonContent() {
     return () => clearInterval(interval);
   }, [isPlaying, lessonId, user]);
 
-  // Save progress on completion
+  // Save progress on completion (removed)
   useEffect(() => {
-    if (videoCompleted && lessonId && user?.email) {
-      const teacherCode = user.email.split('@')[0];
-      const time = videoRef.current ? videoRef.current.duration : 0; // Use duration for completion
-
-      fetch('/api/training-progress', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          teacherCode,
-          videoId: lessonId, // Use lessonId (which is videoId)
-          timeSpent: time,
-          isCompleted: true
-        })
-      }).catch(err => console.error('[Lesson] Failed to save completion:', err));
-    }
-  }, [videoCompleted, lessonId, user]);
+    // Only run when lessonId changes to reset state
+    // Old implementation was causing auto-complete on next video
+    // Keeping this comment for context, but effect is effectively removed
+  }, []);
 
   // Load questions from database
   useEffect(() => {
@@ -230,6 +334,11 @@ function LessonContent() {
       setProgress(100);
       setVideoCompleted(true);
       console.log('[Lesson] Video ended');
+      
+      // Save completion immediately using the current lesson ID and user
+      if (lessonIdRef.current && userRef.current?.email) {
+         saveCompletion(lessonIdRef.current, video.duration);
+      }
     };
 
     const handlePlaying = () => {
@@ -237,7 +346,20 @@ function LessonContent() {
     };
 
     const handlePause = () => {
-      console.log('[Lesson] Video paused at', video.currentTime.toFixed(2) + 's');
+        console.log('[Lesson] Video paused at', video.currentTime.toFixed(2) + 's');
+        if (lessonIdRef.current && userRef.current?.email) {
+            const teacherCode = userRef.current.email.split('@')[0];
+            fetch('/api/training-progress', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    teacherCode,
+                    videoId: lessonIdRef.current,
+                    timeSpent: video.currentTime,
+                    isCompleted: false
+                })
+            }).catch(err => console.error('[Lesson] Failed to save on pause:', err));
+        }
     };
 
     const handleError = (e: any) => {
@@ -679,26 +801,62 @@ function LessonContent() {
 
           {/* Completion overlay */}
           {videoCompleted && (
-            <div className="absolute top-4 left-4 right-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-lg shadow-lg animate-bounce z-40">
-              <div className="flex items-center gap-3">
-                <svg className="w-6 h-6 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                <div className="flex-1">
-                  <p className="font-bold text-sm">🎉 Hoàn thành!</p>
-                  <p className="text-xs opacity-90">Bạn đã xem xong bài học này</p>
+            <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-40">
+              <div className="bg-white rounded-xl p-8 max-w-md w-full text-center space-y-6 animate-fade-in">
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
                 </div>
-                {hasNextLesson && nextLessonData && (
+                
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Chúc mừng bạn đã hoàn thành!</h2>
+                  <p className="text-gray-600">Bạn đã xem hết nội dung bài học này.</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 w-full">
                   <Button
-                    onClick={() => router.push(`/user/training/lesson?id=${nextLessonData.id}&url=${encodeURIComponent(nextLessonData.video_url)}&title=${encodeURIComponent(nextLessonData.title)}`)}
-                    className="bg-white text-green-600 hover:bg-green-50 px-4 py-2 font-semibold text-sm transition flex items-center gap-2 h-auto"
+                    onClick={() => {
+                        if (currentAssignment) {
+                            // User requested to keep flow in /user/training
+                            router.push(`/user/training?start_assignment_id=${currentAssignment.id}`);
+                        } else {
+                            // Fallback to training list if no assignment found
+                            router.push(`/user/training`); 
+                        }
+                    }}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 h-auto text-lg rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1"
                   >
-                    <span>Bài tiếp theo</span>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
+                    <div className="flex items-center justify-center gap-2">
+
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                      </svg>
+                      Làm bài tập & Kiểm tra
+                    </div>
                   </Button>
-                )}
+                  
+                  {hasNextLesson && nextLessonData && (
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push(`/user/training/lesson?id=${nextLessonData.id}&url=${encodeURIComponent(nextLessonData.video_url)}&title=${encodeURIComponent(nextLessonData.title)}`)}
+                      className="w-full border-2 border-gray-200 hover:border-purple-200 hover:bg-purple-50 text-gray-700 font-semibold py-3 h-auto"
+                    >
+                       Bài học tiếp theo
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                       setVideoCompleted(false);
+                       videoRef.current?.play();
+                    }}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    Xem lại video
+                  </Button>
+                </div>
               </div>
             </div>
           )}
