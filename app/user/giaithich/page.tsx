@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Stepper } from '@/components/ui/stepper';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/lib/auth-context';
+import { useTeacher } from '@/lib/teacher-context';
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
@@ -47,8 +48,11 @@ const normalizeText = (value: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]/g, '');
 
+const STORAGE_KEY = 'teacher_auto_fill_data';
+
 export default function GiaiTrinhPage() {
   const { user } = useAuth();
+  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
   const [explanations, setExplanations] = useState<Explanation[]>([]);
   const [centers, setCenters] = useState<CenterOption[]>([]);
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
@@ -60,7 +64,6 @@ export default function GiaiTrinhPage() {
   const [subjectSearch, setSubjectSearch] = useState('');
   const [showCampusList, setShowCampusList] = useState(false);
   const [showSubjectList, setShowSubjectList] = useState(false);
-  const [fetchingTeacher, setFetchingTeacher] = useState(false);
   const [selectedExplanation, setSelectedExplanation] = useState<Explanation | null>(null);
 
   const [formData, setFormData] = useState({
@@ -103,42 +106,6 @@ export default function GiaiTrinhPage() {
     return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
-  // Fetch teacher info to get LMS code
-  const fetchTeacherInfo = async () => {
-    if (!user?.email) return;
-
-    setFetchingTeacher(true);
-    try {
-      const response = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}`);
-      const data = await response.json();
-
-      if (data.success && data.teacher) {
-        const teacher = data.teacher;
-        setFormData(prev => ({
-          ...prev,
-          teacher_name: teacher.name || user.displayName || '',
-          lms_code: teacher.code || '',
-          email: teacher.emailMindx || user.email
-        }));
-      } else {
-        setFormData(prev => ({
-          ...prev,
-          teacher_name: user.displayName || '',
-          email: user.email
-        }));
-      }
-    } catch (error) {
-      console.error('Error fetching teacher info:', error);
-      setFormData(prev => ({
-        ...prev,
-        teacher_name: user.displayName || '',
-        email: user.email
-      }));
-    } finally {
-      setFetchingTeacher(false);
-    }
-  };
-
   // Fetch danh sách giải thích của user
   const fetchExplanations = async () => {
     try {
@@ -157,9 +124,78 @@ export default function GiaiTrinhPage() {
   useEffect(() => {
     if (user?.email) {
       fetchExplanations();
-      fetchTeacherInfo();
     }
   }, [user]);
+
+  // Load from local storage on mount
+  useEffect(() => {
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData);
+        // Only update if formData is empty (to avoid overwriting user input if they navigated back)
+        setFormData(prev => ({
+          ...prev,
+          teacher_name: parsed.teacher_name || prev.teacher_name,
+          lms_code: parsed.lms_code || prev.lms_code,
+          email: parsed.email || prev.email,
+          campus: parsed.campus || prev.campus
+        }));
+        if (parsed.campus) {
+          setCampusSearch(parsed.campus);
+        }
+      } catch (error) {
+        console.error('Error loading detailed explanation data from localStorage:', error);
+      }
+    }
+  }, []);
+
+  // Handle center auto-fill
+  useEffect(() => {
+    if (teacherProfile && centers.length > 0) {
+      const branchToMatch = teacherProfile.branchCurrent || teacherProfile.branchIn || '';
+      if (!branchToMatch) return;
+
+      const normalizedBranch = normalizeText(branchToMatch);
+      const match = centers.find(c => {
+         const name = c.full_name || c.display_name || '';
+         return normalizeText(name).includes(normalizedBranch);
+      });
+      
+      const newData = {
+        teacher_name: teacherProfile.name || user?.displayName || '',
+        lms_code: teacherProfile.code || '',
+        email: teacherProfile.emailMindx || user?.email || '',
+        campus: match ? (match.full_name || match.display_name) : ''
+      };
+
+      setFormData(prev => {
+        // Create new state by merging
+        const updated = {
+          ...prev,
+          teacher_name: newData.teacher_name || prev.teacher_name,
+          lms_code: newData.lms_code || prev.lms_code,
+          email: newData.email || prev.email,
+          campus: newData.campus || prev.campus
+        };
+        
+        // Save identity fields to local storage
+        const dataToSave = {
+          teacher_name: updated.teacher_name,
+          lms_code: updated.lms_code,
+          email: updated.email,
+          campus: updated.campus
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+        
+        return updated;
+      });
+      
+      if (match) {
+         setCampusSearch(match.full_name || match.display_name); 
+      }
+    }
+  }, [teacherProfile, centers, user]);
 
   useEffect(() => {
     let isActive = true;
@@ -342,8 +378,8 @@ export default function GiaiTrinhPage() {
                   value={formData.teacher_name}
                   onChange={(e) => setFormData({ ...formData, teacher_name: e.target.value })}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition-all"
-                  placeholder={fetchingTeacher ? 'Đang tải...' : 'Tên giáo viên'}
-                  readOnly={fetchingTeacher}
+                  placeholder={isTeacherLoading ? 'Đang tải...' : 'Tên giáo viên'}
+                  readOnly={isTeacherLoading}
                 />
               </div>
 
@@ -357,8 +393,8 @@ export default function GiaiTrinhPage() {
                   value={formData.lms_code}
                   onChange={(e) => setFormData({ ...formData, lms_code: e.target.value })}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition-all"
-                  placeholder={fetchingTeacher ? 'Đang tải...' : 'Mã LMS'}
-                  readOnly={fetchingTeacher}
+                  placeholder={isTeacherLoading ? 'Đang tải...' : 'Mã LMS'}
+                  readOnly={isTeacherLoading}
                 />
               </div>
             </div>

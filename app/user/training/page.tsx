@@ -2,6 +2,8 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from "@/lib/auth-context";
+import { useAppDispatch } from "@/lib/redux/hooks";
+import { setVideo } from "@/lib/redux/features/trainingSlice";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
@@ -66,6 +68,7 @@ function extractCodeFromEmail(email: string): string {
 export default function TrainingPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const searchParams = useSearchParams();
   const startAssignmentId = searchParams.get('start_assignment_id');
 
@@ -212,7 +215,13 @@ export default function TrainingPage() {
   const handleLessonClick = (lesson: TrainingLesson, index: number) => {
     if (lesson.link) {
       console.log('[Training] Opening lesson:', { id: lesson.id, name: lesson.name, index: index + 1 });
-      router.push(`/user/training/lesson?id=${lesson.id}&url=${encodeURIComponent(lesson.link)}&title=${encodeURIComponent(lesson.name)}`);
+      dispatch(setVideo({
+        id: lesson.id,
+        link: lesson.link,
+        duration: lesson.duration_minutes || 0,
+        title: lesson.name
+      }));
+      router.push(`/user/training/lesson?id=${lesson.id}`);
     }
   };
 

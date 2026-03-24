@@ -2,6 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
+import { useAppSelector, useAppDispatch } from "@/lib/redux/hooks";
+import { setVideo } from "@/lib/redux/features/trainingSlice";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
@@ -15,11 +17,20 @@ interface Question {
 
 function LessonContent() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const { user } = useAuth();
   const searchParams = useSearchParams();
-  const lessonId = searchParams.get('id');
-  const videoUrl = searchParams.get('url');
-  const title = searchParams.get('title');
+  const lessonIdParam = searchParams.get('id');
+  
+  // Get video details from Redux
+  const { currentVideoId, videoLink, title: reduxTitle } = useAppSelector((state) => state.training);
+
+  // If IDs don't match or no video link, session is invalid (e.g. refresh)
+  const isSessionValid = currentVideoId?.toString() === lessonIdParam && !!videoLink;
+
+  const lessonId = isSessionValid ? currentVideoId!.toString() : null;
+  const videoUrl = isSessionValid ? videoLink : null;
+  const title = isSessionValid ? reduxTitle : null;
 
   const [progress, setProgress] = useState(0);
   const [showQuiz, setShowQuiz] = useState(false);
@@ -151,7 +162,7 @@ function LessonContent() {
           }
           
           if (completion_status === 'completed') {
-            setVideoCompleted(true);
+            // setVideoCompleted(true); // Don't show overlay immediately
             setProgress(100);
           }
         }
@@ -501,6 +512,15 @@ function LessonContent() {
     };
   }, []);
 
+  // Handle invalid session (e.g. refresh) by redirecting
+  useEffect(() => {
+    if (!videoUrl) {
+      router.push('/user/training');
+    }
+  }, [videoUrl, router]);
+
+  if (!videoUrl) return null; // Render nothing while redirecting
+
   return (
     <div className="bg-black h-screen overflow-hidden">
       <div className="flex flex-col h-full">
@@ -514,7 +534,7 @@ function LessonContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-sm font-bold text-white truncate flex-1">{title ? decodeURIComponent(title) : 'Bài học'}</h1>
+          <h1 className="text-sm font-bold text-white truncate flex-1">{title || 'Bài học'}</h1>
           <div className="text-xs text-white/80">
             {Math.floor(currentTime / 60)}:{String(Math.floor(currentTime % 60)).padStart(2, '0')} / {Math.floor(duration / 60)}:{String(Math.floor(duration % 60)).padStart(2, '0')}
           </div>
@@ -530,7 +550,7 @@ function LessonContent() {
           {/* Video element - NO CONTROLS */}
           <video
             ref={videoRef}
-            src={videoUrl ? decodeURIComponent(videoUrl) : ''}
+            src={videoUrl || ''}
             className="w-full h-full object-contain"
             onClick={togglePlayPause}
             onContextMenu={(e) => e.preventDefault()}
@@ -840,15 +860,7 @@ function LessonContent() {
                     </div>
                   </Button>
                   
-                  {hasNextLesson && nextLessonData && (
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push(`/user/training/lesson?id=${nextLessonData.id}&url=${encodeURIComponent(nextLessonData.video_url)}&title=${encodeURIComponent(nextLessonData.title)}`)}
-                      className="w-full border-2 border-gray-200 hover:border-purple-200 hover:bg-purple-50 text-gray-700 font-semibold py-3 h-auto"
-                    >
-                       Bài học tiếp theo
-                    </Button>
-                  )}
+                   {/* Next Lesson button removed */}
 
                   <Button
                     variant="ghost"

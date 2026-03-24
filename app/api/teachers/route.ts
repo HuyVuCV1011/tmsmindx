@@ -1,21 +1,49 @@
 import { withApiProtection } from "@/lib/api-protection";
 import { NextRequest, NextResponse } from "next/server";
+import { Teacher } from "@/types/teacher";
 
 const TEACHER_PROFILE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_PROFILE_CSV_URL || "";
 const TEACHER_EXPERTISE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERTISE_CSV_URL || "";
 const TEACHER_EXPERIENCE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERIENCE_CSV_URL || "";
 
-// In-memory cache
+// In-memory cache with global persistence for dev mode and pending promise tracking
 interface CacheEntry<T> {
   data: T;
   timestamp: number;
 }
 
-const cache = {
-  teachers: null as CacheEntry<Teacher[]> | null,
-  expertiseRaw: null as CacheEntry<string> | null,
-  experienceRaw: null as CacheEntry<string> | null,
-};
+interface CacheStore {
+  teachers: CacheEntry<Teacher[]> | null;
+  expertiseRaw: CacheEntry<string> | null;
+  experienceRaw: CacheEntry<string> | null;
+  pendingRequests: {
+    teachers: Promise<Teacher[]> | null;
+    expertiseRaw: Promise<string> | null;
+    experienceRaw: Promise<string> | null;
+  };
+}
+
+const globalForCache = global as unknown as { teacherCache: CacheStore };
+
+// Ensure cache structure is valid (handle migration from old cache structure in dev)
+let cache: CacheStore;
+
+if (globalForCache.teacherCache && globalForCache.teacherCache.pendingRequests) {
+  cache = globalForCache.teacherCache;
+} else {
+  cache = {
+    teachers: null,
+    expertiseRaw: null,
+    experienceRaw: null,
+    pendingRequests: {
+      teachers: null,
+      expertiseRaw: null,
+      experienceRaw: null,
+    }
+  };
+}
+
+if (process.env.NODE_ENV !== "production") globalForCache.teacherCache = cache;
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 phút
 
@@ -24,85 +52,88 @@ function isCacheValid<T>(entry: CacheEntry<T> | null): boolean {
   return Date.now() - entry.timestamp < CACHE_TTL;
 }
 
-interface Teacher {
-  stt: string;
-  name: string;
-  code: string;
-  emailMindx: string;
-  emailPersonal: string;
-  status: string;
-  branchIn: string;
-  programIn: string;
-  branchCurrent: string;
-  programCurrent: string;
-  manager: string;
-  responsible: string;
-  position: string;
-  startDate: string;
-  onboardBy: string;
-  monthlyMetrics?: {
-    expertise: { [key: string]: string }; // Chuyên môn chuyên sâu
-    experience: { [key: string]: string }; // Kỹ năng - Trải nghiệm
-  };
-}
-
 // Fetch data từ Google Sheets với caching
 async function fetchTeachersFromSheet(): Promise<Teacher[]> {
+  // Ensure cache is initialized
+  if (!cache || !cache.pendingRequests) {
+    console.error("Cache was not initialized correctly, re-initializing...");
+    cache = {
+      teachers: null,
+      expertiseRaw: null,
+      experienceRaw: null,
+      pendingRequests: {
+        teachers: null,
+        expertiseRaw: null,
+        experienceRaw: null,
+      }
+    };
+    globalForCache.teacherCache = cache;
+  }
+  
   // Kiểm tra cache
   if (isCacheValid(cache.teachers)) {
     console.log("📦 Using cached teachers data");
     return cache.teachers!.data;
   }
 
-  try {
-    console.log("🔄 Fetching fresh teachers data from Google Sheets...");
-    const response = await fetch(TEACHER_PROFILE_CSV_URL, { 
-      cache: 'no-store' // Không dùng Next.js cache vì đã có memory cache
-    });
-    
-    if (!response.ok) {
-      throw new Error("Cannot fetch sheet data");
-    }
-
-    const csvText = await response.text();
-    const lines = csvText.split("\n");
-    
-    // Skip first 2 rows (title row + header row)
-    const dataLines = lines.slice(2).filter(line => line.trim());
-    
-    const teachers: Teacher[] = dataLines.map(line => {
-      // Parse CSV line (simple approach, may need improvement for quoted fields)
-      const columns = line.split(",").map(col => col.trim().replace(/^"|"$/g, ""));
+  // Deduplicate
+  if (!cache.pendingRequests.teachers) {
+    console.log("🔄 Starting fresh fetch for teachers data...");
+    cache.pendingRequests.teachers = (async () => {
+      const response = await fetch(TEACHER_PROFILE_CSV_URL, { 
+        cache: 'no-store' 
+      });
       
-      return {
-        stt: columns[0] || "",
-        name: columns[1] || "",
-        code: columns[2] || "",
-        emailMindx: columns[3] || "",
-        emailPersonal: columns[4] || "",
-        status: columns[5] || "",
-        branchIn: columns[6] || "",
-        programIn: columns[7] || "",
-        branchCurrent: columns[8] || "",
-        programCurrent: columns[9] || "",
-        manager: columns[10] || "",
-        responsible: columns[11] || "",
-        position: columns[12] || "",
-        startDate: columns[13] || "",
-        onboardBy: columns[14] || ""
-      };
-    });
+      if (!response.ok) {
+        throw new Error("Cannot fetch sheet data");
+      }
 
-    const filteredTeachers = teachers.filter(t => t.code);
+      const csvText = await response.text();
+      const lines = csvText.split("\n");
+      
+      // Skip first 2 rows (title row + header row)
+      const dataLines = lines.slice(2).filter(line => line.trim());
+      
+      const teachers: Teacher[] = dataLines.map(line => {
+        // Parse CSV line (simple approach, may need improvement for quoted fields)
+        const columns = line.split(",").map(col => col.trim().replace(/^"|"$/g, ""));
+        
+        return {
+          stt: columns[0] || "",
+          name: columns[1] || "",
+          code: columns[2] || "",
+          emailMindx: columns[3] || "",
+          emailPersonal: columns[4] || "",
+          status: columns[5] || "",
+          branchIn: columns[6] || "",
+          programIn: columns[7] || "",
+          branchCurrent: columns[8] || "",
+          programCurrent: columns[9] || "",
+          manager: columns[10] || "",
+          responsible: columns[11] || "",
+          position: columns[12] || "",
+          startDate: columns[13] || "",
+          onboardBy: columns[14] || ""
+        };
+      });
+
+      return teachers.filter(t => t.code);
+    })();
+  } else {
+    console.log("⏳ Waiting for pending teachers fetch...");
+  }
+
+  try {
+    const data = await cache.pendingRequests.teachers;
     
     // Lưu vào cache
     cache.teachers = {
-      data: filteredTeachers,
+      data,
       timestamp: Date.now()
     };
     
-    console.log(`✅ Cached ${filteredTeachers.length} teachers`);
-    return filteredTeachers;
+    console.log(`✅ Cached ${data.length} teachers`);
+    return data;
   } catch (error) {
     console.error("Error fetching from Google Sheets:", error);
     // Nếu có cache cũ, dùng nó dù đã hết hạn
@@ -111,6 +142,8 @@ async function fetchTeachersFromSheet(): Promise<Teacher[]> {
       return cache.teachers.data;
     }
     return [];
+  } finally {
+    cache.pendingRequests.teachers = null;
   }
 }
 
@@ -122,25 +155,32 @@ async function fetchExpertiseScores(teacherCode: string): Promise<{ [key: string
     
     // Kiểm tra cache
     if (isCacheValid(cache.expertiseRaw)) {
-      console.log("📦 Using cached expertise data");
       csvText = cache.expertiseRaw!.data;
     } else {
-      console.log("🔄 Fetching fresh expertise data from Google Sheets...");
-      const response = await fetch(TEACHER_EXPERTISE_CSV_URL, { 
-        cache: 'no-store'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Cannot fetch expertise data. Status: ${response.status}`);
+      // Deduplicate simultaneous requests
+      if (!cache.pendingRequests.expertiseRaw) {
+        console.log("🔄 Fetching fresh expertise data from Google Sheets...");
+        cache.pendingRequests.expertiseRaw = fetch(TEACHER_EXPERTISE_CSV_URL, { cache: 'no-store' })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(`Cannot fetch expertise data. Status: ${res.status}`);
+            return res.text();
+          });
+      } else {
+        console.log("⏳ Waiting for pending expertise fetch...");
       }
 
-      csvText = await response.text();
-      
-      // Lưu vào cache
-      cache.expertiseRaw = {
-        data: csvText,
-        timestamp: Date.now()
-      };
+      try {
+        csvText = await cache.pendingRequests.expertiseRaw;
+        
+        // Lưu vào cache
+        cache.expertiseRaw = {
+          data: csvText,
+          timestamp: Date.now()
+        };
+      } finally {
+        // Clear pending flag so subsequent failures can retry
+        cache.pendingRequests.expertiseRaw = null;
+      }
       console.log("✅ Cached expertise data");
     }
 
@@ -197,25 +237,32 @@ async function fetchExperienceScores(teacherCode: string): Promise<{ [key: strin
     
     // Kiểm tra cache
     if (isCacheValid(cache.experienceRaw)) {
-      console.log("📦 Using cached experience data");
       csvText = cache.experienceRaw!.data;
     } else {
-      console.log("🔄 Fetching fresh experience data from Google Sheets...");
-      const response = await fetch(TEACHER_EXPERIENCE_CSV_URL, { 
-        cache: 'no-store'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Cannot fetch experience data. Status: ${response.status}`);
+      // Deduplicate pending requests
+      if (!cache.pendingRequests.experienceRaw) {
+        console.log("🔄 Fetching fresh experience data from Google Sheets...");
+        cache.pendingRequests.experienceRaw = fetch(TEACHER_EXPERIENCE_CSV_URL, { cache: 'no-store' })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(`Cannot fetch experience data. Status: ${res.status}`);
+            return res.text();
+          });
+      } else {
+        console.log("⏳ Waiting for pending experience fetch...");
       }
 
-      csvText = await response.text();
-      
-      // Lưu vào cache
-      cache.experienceRaw = {
-        data: csvText,
-        timestamp: Date.now()
-      };
+      try {
+        csvText = await cache.pendingRequests.experienceRaw;
+        
+        // Lưu vào cache
+        cache.experienceRaw = {
+          data: csvText,
+          timestamp: Date.now()
+        };
+      } finally {
+        // Clear pending flag
+        cache.pendingRequests.experienceRaw = null;
+      }
       console.log("✅ Cached experience data");
     }
 

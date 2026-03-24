@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Stepper } from '@/components/ui/stepper';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/lib/auth-context';
+import { useTeacher } from '@/lib/teacher-context';
+import { CAMPUS_LIST, findMatchingCampus } from '@/lib/campus-data';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -24,52 +26,6 @@ interface Explanation {
   updated_at: string;
 }
 
-const CAMPUS_LIST = [
-  'HCM - 01 Quang Trung',
-  'HCM - 01 Tô Ký',
-  'HCM - Phan Văn Trị',
-  'HCM - 01 Trường Chinh',
-  'HCM - 261-263 Phan Xích Long',
-  'HCM - 322 Tây Thạnh',
-  'HCM - 414 Lũy Bán Bích',
-  'HCM - 624 Lạc Long Quân',
-  'HCM - Khu Tên Lửa',
-  'HCM - 02 Song Hành',
-  'HCM - 223 Nguyễn Xí',
-  'Thủ Đức - 120-122 Phạm Văn Đồng',
-  'Thủ Đức - 99 Lê Văn Việt',
-  'HCM - 165-167 Nguyễn Thị Thập',
-  'HCM - 343 Phạm Ngũ Lão',
-  'HCM - 39 Hải Thượng Lãn Ông',
-  'HCM - 618 Đường 3/2',
-  'HCM - Phú Mỹ Hưng',
-  'Cần Thơ - 153Q Trần Hưng Đạo',
-  'Dĩ An - Bình Dương',
-  'Đồng Nai - 253 Phạm Văn Thuận',
-  'MindX - Online',
-  'MindX Digital Art',
-  'Thủ Dầu Một - Bình Dương',
-  'Vũng Tàu - 205A Lê Hồng Phong',
-  'HN - 107 Nguyễn Phong Sắc',
-  'HN - 29T1 Hoàng Đạo Thúy',
-  'HN - 71 Nguyễn Chí Thanh',
-  'HN - A3 VinHomes Gardenia Hàm Nghi',
-  'HN - 06 Nguyễn Hữu Thọ',
-  'HN - 10 Trần Phú',
-  'HN - 505 Minh Khai',
-  'HN - 98 Nguyễn Văn Cừ',
-  'HN - Văn Phú Victoria',
-  'Nghệ An - 67 Đại Lộ Lê Nin',
-  'Thanh Hóa - Đại Lộ Lê Lợi',
-  'Đà Nẵng - 255-257 Hùng Vương',
-  'Bắc Ninh - 09 Lê Thái Tổ',
-  'Hải Phòng - 268 Trần Nguyên Hãn',
-  'Phú Thọ - 1606A Hùng Vương',
-  'Quảng Ninh - 70 Nguyễn Văn Cừ',
-  'Thái Nguyên - 04 Hoàng Văn Thụ',
-  'Vĩnh Phúc - 01 Trần Phú'
-];
-
 const SUBJECT_LIST = [
   '[COD] Scratch',
   '[COD] Web',
@@ -82,8 +38,11 @@ const SUBJECT_LIST = [
   '[Trial] Quy Trình Trai nghiệm'
 ];
 
+const STORAGE_KEY = 'teacher_auto_fill_data';
+
 export default function GiaiTrinhPage() {
   const { user } = useAuth();
+  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
   const searchParams = useSearchParams();
   const [explanations, setExplanations] = useState<Explanation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,9 +52,8 @@ export default function GiaiTrinhPage() {
   const [subjectSearch, setSubjectSearch] = useState('');
   const [showCampusList, setShowCampusList] = useState(false);
   const [showSubjectList, setShowSubjectList] = useState(false);
-  const [fetchingTeacher, setFetchingTeacher] = useState(false);
   const [selectedExplanation, setSelectedExplanation] = useState<Explanation | null>(null);
-  
+
   const [formData, setFormData] = useState({
     teacher_name: '',
     lms_code: '',
@@ -105,6 +63,62 @@ export default function GiaiTrinhPage() {
     test_date: '',
     reason: ''
   });
+
+  useEffect(() => {
+    // Load cached data on mount
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setFormData(prev => ({ ...prev, ...parsed }));
+        if (parsed.campus) setCampusSearch(parsed.campus);
+      } catch (e) {
+        console.error('Error loading saved data', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (teacherProfile) {
+      // Improved campus matching algorithm
+      // Prioritize branchIn as per user request
+      const teacherBranch = teacherProfile.branchIn || teacherProfile.branchCurrent || '';
+      
+      const matchedCampus = findMatchingCampus(teacherBranch);
+      
+      setFormData(prev => {
+        const updated = {
+            ...prev,
+            teacher_name: teacherProfile.name || prev.teacher_name || '',
+            lms_code: teacherProfile.code || prev.lms_code || '',
+            campus: matchedCampus || prev.campus || '',
+            email: teacherProfile.emailMindx || teacherProfile.emailPersonal || prev.email || user?.email || '',
+        };
+        
+        // Save identity fields only to local storage
+        const dataToSave = {
+          teacher_name: updated.teacher_name,
+          lms_code: updated.lms_code,
+          email: updated.email,
+          campus: updated.campus
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+        
+        return updated;
+      });
+      
+      if (matchedCampus && !campusSearch) {
+        setCampusSearch(matchedCampus);
+      }
+    } else {
+        // Fallback if teacher profile not found yet or failed
+        setFormData(prev => ({
+            ...prev,
+            email: prev.email || user?.email || ''
+        }));
+    }
+  }, [teacherProfile, user?.email]);
+
 
   const prefillAssignmentId = searchParams.get('assignment_id');
   const prefillSubject = searchParams.get('subject');
@@ -133,42 +147,6 @@ export default function GiaiTrinhPage() {
     return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
-  // Fetch teacher info to get LMS code
-  const fetchTeacherInfo = async () => {
-    if (!user?.email) return;
-    
-    setFetchingTeacher(true);
-    try {
-      const response = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}`);
-      const data = await response.json();
-      
-      if (data.success && data.teacher) {
-        const teacher = data.teacher;
-        setFormData(prev => ({
-          ...prev,
-          teacher_name: teacher.name || user.displayName || '',
-          lms_code: teacher.code || '',
-          email: teacher.emailMindx || user.email
-        }));
-      } else {
-        setFormData(prev => ({
-          ...prev,
-          teacher_name: user.displayName || '',
-          email: user.email
-        }));
-      }
-    } catch (error) {
-      console.error('Error fetching teacher info:', error);
-      setFormData(prev => ({
-        ...prev,
-        teacher_name: user.displayName || '',
-        email: user.email
-      }));
-    } finally {
-      setFetchingTeacher(false);
-    }
-  };
-
   // Fetch danh sách giải trình của user
   const fetchExplanations = async () => {
     try {
@@ -187,7 +165,6 @@ export default function GiaiTrinhPage() {
   useEffect(() => {
     if (user?.email) {
       fetchExplanations();
-      fetchTeacherInfo();
     }
   }, [user]);
 
@@ -226,11 +203,13 @@ export default function GiaiTrinhPage() {
       if (data.success) {
         toast.success('Gửi giải trình thành công! Email đã được gửi đến bộ phận học vụ.');
         setShowModal(false);
-        setCampusSearch('');
+        // Keep campus in search
+        // setCampusSearch('');
         setSubjectSearch('');
         setFormData(prev => ({
           ...prev,
-          campus: '',
+          // Keep campus in form data
+          // campus: '',
           subject: '',
           test_date: '',
           reason: ''
@@ -345,8 +324,8 @@ export default function GiaiTrinhPage() {
                       value={formData.teacher_name}
                       onChange={(e) => setFormData({ ...formData, teacher_name: e.target.value })}
                       className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition-all"
-                      placeholder={fetchingTeacher ? 'Đang tải...' : 'Tên giáo viên'}
-                      readOnly={fetchingTeacher}
+                      placeholder={isTeacherLoading ? 'Đang tải...' : 'Tên giáo viên'}
+                      readOnly={isTeacherLoading}
                     />
                   </div>
                   
@@ -360,8 +339,8 @@ export default function GiaiTrinhPage() {
                       value={formData.lms_code}
                       onChange={(e) => setFormData({ ...formData, lms_code: e.target.value })}
                       className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition-all"
-                      placeholder={fetchingTeacher ? 'Đang tải...' : 'Mã LMS'}
-                      readOnly={fetchingTeacher}
+                      placeholder={isTeacherLoading ? 'Đang tải...' : 'Mã LMS'}
+                      readOnly={isTeacherLoading}
                     />
                   </div>
                 </div>
