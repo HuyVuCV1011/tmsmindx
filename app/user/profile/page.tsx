@@ -1,28 +1,28 @@
 'use client'
 
-import { useAuth } from '@/lib/auth-context'
 import { PageContainer } from '@/components/PageContainer'
 import { Button } from '@/components/ui/button'
-import { 
-    User, 
-    Mail, 
-    Award, 
-    Upload, 
-    Trash2, 
-    Plus, 
+import { useAuth } from '@/lib/auth-context'
+import {
+    Award,
+    BookOpen,
     Calendar,
-    FileText,
-    X,
-    Image as ImageIcon,
-    Shield,
     Eye,
     EyeOff,
-    BookOpen
+    FileText,
+    Image as ImageIcon,
+    Mail,
+    Plus,
+    Shield,
+    Trash2,
+    Upload,
+    User,
+    X
 } from 'lucide-react'
-import { useState, useRef } from 'react'
-import useSWR from 'swr'
-import toast from 'react-hot-toast'
 import Image from 'next/image'
+import { useRef, useState } from 'react'
+import toast from 'react-hot-toast'
+import useSWR from 'swr'
 
 interface Certificate {
     id: number
@@ -302,6 +302,58 @@ export default function TeacherProfilePage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Teacher Information Section */}
+                {teacherInfo && (
+                    <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden">
+                        <div className="p-6 border-b border-gray-200 bg-linear-to-r from-blue-50 to-white flex items-center gap-3">
+                            <div className="w-12 h-12 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                                <User className="w-6 h-6 text-white" />
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-900">Thông tin giáo viên</h2>
+                                <p className="text-sm text-gray-500 font-medium">
+                                    Thông tin chi tiết hồ sơ
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                                <p className="text-sm text-gray-500 font-medium mb-1">Mã GV</p>
+                                <p className="font-bold text-gray-900 truncate" title={teacherInfo.code}>{teacherInfo.code || '---'}</p>
+                            </div>
+                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                                <p className="text-sm text-gray-500 font-medium mb-1">STT</p>
+                                <p className="font-bold text-gray-900 truncate" title={teacherInfo.stt}>{teacherInfo.stt || '---'}</p>
+                            </div>
+                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                                <p className="text-sm text-gray-500 font-medium mb-1">Chức vụ</p>
+                                <p className="font-bold text-gray-900 truncate" title={teacherInfo.position}>{teacherInfo.position || '---'}</p>
+                            </div>
+                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                                <p className="text-sm text-gray-500 font-medium mb-1">Ngày bắt đầu</p>
+                                <p className="font-bold text-gray-900 truncate" title={teacherInfo.startDate}>{teacherInfo.startDate || '---'}</p>
+                            </div>
+                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                                <p className="text-sm text-gray-500 font-medium mb-1">Khối</p>
+                                <p className="font-bold text-gray-900 truncate" title={teacherInfo.status}>{teacherInfo.status || '---'}</p>
+                            </div>
+                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                                <p className="text-sm text-gray-500 font-medium mb-1">Cơ sở (In)</p>
+                                <p className="font-bold text-gray-900 truncate" title={teacherInfo.branchIn}>{teacherInfo.branchIn || '---'}</p>
+                            </div>
+                             <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                                <p className="text-sm text-gray-500 font-medium mb-1">Onboard bởi</p>
+                                <p className="font-bold text-gray-900 truncate" title={teacherInfo.onboardBy}>{teacherInfo.onboardBy || '---'}</p>
+                            </div>
+                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors md:col-span-2">
+                                <p className="text-sm text-gray-500 font-medium mb-1">Email cá nhân</p>
+                                <p className="font-bold text-gray-900 truncate" title={teacherInfo.emailPersonal}>{teacherInfo.emailPersonal || '---'}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Privacy Settings Section */}
                 <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden">
