@@ -11,7 +11,7 @@ if (!global.pool) {
     password: process.env.DB_PASSWORD,
     max: 20, // Limit maximum connections to avoid exhausting Postgres connection slots
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 10000, // Increased to 10s to avoid timeout on slow networks
     ssl: {
       rejectUnauthorized: false
     }
