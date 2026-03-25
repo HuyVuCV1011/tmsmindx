@@ -5,6 +5,8 @@ import { EmptyState } from '@/components/EmptyState';
 import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
 import { TableSkeleton } from '@/components/skeletons';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BarChart3, Calendar, Play, Video } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -44,6 +46,32 @@ export default function TrainingDashboardPage() {
   const [dashboardData, setDashboardData] = useState<TeacherStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const [selectedTeacherCode, setSelectedTeacherCode] = useState<string | null>(null);
+  const [teacherDetail, setTeacherDetail] = useState<any>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+
+  // Detail Modal Helper
+  const openDetail = async (code: string) => {
+    setSelectedTeacherCode(code);
+    setIsLoadingDetail(true);
+    setTeacherDetail(null);
+    try {
+        const response = await fetch(`/api/training-db?code=${code}`);
+        const data = await response.json();
+        setTeacherDetail(data);
+    } catch (e) {
+        console.error("Failed to load details", e);
+    } finally {
+        setIsLoadingDetail(false);
+    }
+  };
+
+  const closeDetail = () => {
+    setSelectedTeacherCode(null);
+    setTeacherDetail(null);
+  };
+
   
   const [centerFilter, setCenterFilter] = useState('');
   const centers = useMemo(() => Array.from(new Set(dashboardData.map(d => d.center))), [dashboardData]);
@@ -167,9 +195,9 @@ export default function TrainingDashboardPage() {
                             </span>
                           )}
                         </div>
-                        <span className="px-2 py-1 rounded bg-green-100 text-green-800 text-xs font-medium whitespace-nowrap">
+                        <Badge variant="success" className="whitespace-nowrap">
                           Đã giao
-                        </span>
+                        </Badge>
                       </div>
                       
                       {v.description && (
@@ -222,50 +250,56 @@ export default function TrainingDashboardPage() {
               />
             ) : (
               <div className="overflow-x-auto -mx-4 sm:mx-0">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-y border-gray-200">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-semibold">No</th>
-                      <th className="px-3 py-2 text-left font-semibold">Họ tên</th>
-                      <th className="px-3 py-2 text-left font-semibold">Mã GV</th>
-                      <th className="px-3 py-2 text-left font-semibold">Cơ sở</th>
-                      <th className="px-3 py-2 text-center font-semibold">Điểm TK</th>
-                      <th className="px-3 py-2 text-center font-semibold">Video</th>
-                      <th className="px-3 py-2 text-center font-semibold">Hoàn thành</th>
-                      <th className="px-3 py-2 text-center font-semibold">ĐTB Video</th>
-                      <th className="px-3 py-2 text-center font-semibold">Bài tập</th>
-                      <th className="px-3 py-2 text-center font-semibold">ĐTB BT</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>No</TableHead>
+                      <TableHead>Họ tên</TableHead>
+                      <TableHead>Mã GV</TableHead>
+                      <TableHead>Cơ sở</TableHead>
+                      <TableHead className="text-center">Điểm TK</TableHead>
+                      <TableHead className="text-center">Video</TableHead>
+                      <TableHead className="text-center">Hoàn thành</TableHead>
+                      <TableHead className="text-center">ĐTB Video</TableHead>
+                      <TableHead className="text-center">Bài tập</TableHead>
+                      <TableHead className="text-center">ĐTB BT</TableHead>
+                      <TableHead className="text-center">Chi tiết</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {filteredDashboard.map((row, idx) => (
-                      <tr key={row.teacher_code} className="hover:bg-gray-50">
-                        <td className="px-3 py-2">{idx + 1}</td>
-                        <td className="px-3 py-2 font-medium">{row.full_name}</td>
-                        <td className="px-3 py-2">{row.teacher_code}</td>
-                        <td className="px-3 py-2 text-xs">{row.center || '-'}</td>
-                        <td className="px-3 py-2 text-center font-bold">
+                      <TableRow key={row.teacher_code}>
+                        <TableCell>{idx + 1}</TableCell>
+                        <TableCell className="font-medium">{row.full_name}</TableCell>
+                        <TableCell>{row.teacher_code}</TableCell>
+                        <TableCell className="text-xs">{row.center || '-'}</TableCell>
+                        <TableCell className="text-center font-bold">
                           {row.total_score ? Number(row.total_score).toFixed(2) : '0.00'}
-                        </td>
-                        <td className="px-3 py-2 text-center">
+                        </TableCell>
+                        <TableCell className="text-center">
                           {row.total_videos_assigned || 0}
-                        </td>
-                        <td className="px-3 py-2 text-center">
+                        </TableCell>
+                        <TableCell className="text-center">
                           {row.videos_completed || 0}
-                        </td>
-                        <td className="px-3 py-2 text-center">
+                        </TableCell>
+                        <TableCell className="text-center">
                           {row.avg_video_score ? Number(row.avg_video_score).toFixed(2) : '-'}
-                        </td>
-                        <td className="px-3 py-2 text-center">
+                        </TableCell>
+                        <TableCell className="text-center">
                           {row.assignments_passed || 0}/{row.total_assignments_taken || 0}
-                        </td>
-                        <td className="px-3 py-2 text-center">
+                        </TableCell>
+                        <TableCell className="text-center">
                           {row.avg_assignment_score ? Number(row.avg_assignment_score).toFixed(2) : '-'}
-                        </td>
-                      </tr>
+                        </TableCell>
+                        <TableCell className="text-center">
+                              <button onClick={() => openDetail(row.teacher_code)} className="text-blue-600 hover:underline">
+                                Xem
+                            </button>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
           </div>

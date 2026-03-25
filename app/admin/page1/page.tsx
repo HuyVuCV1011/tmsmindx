@@ -4,6 +4,7 @@ import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, Use
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import toast from 'react-hot-toast';
 import useSWR from "swr";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface TeacherAvailability {
   timestamp: string;
@@ -974,29 +975,29 @@ export default function Page1() {
                     const months = Array.from({ length: 12 }, (_, i) => `${i + 1}/${selectedTableYear}`);
 
                     return (
-                      <table className="w-full text-[10px] sm:text-xs min-w-[600px]">
-                        <thead>
-                          <tr className="border-b border-gray-900">
-                            <th className="text-left py-1.5 sm:py-2 px-1.5 sm:px-2 font-bold text-gray-900 min-w-[100px] sticky left-0 bg-white z-10">Chỉ tiêu</th>
+                      <Table className="w-full text-[10px] sm:text-xs min-w-[600px]">
+                        <TableHeader>
+                          <TableRow className="border-b border-gray-900">
+                            <TableHead className="text-left font-bold text-gray-900 min-w-[100px] sticky left-0 bg-white z-10">Chỉ tiêu</TableHead>
                             {months.map((month) => (
-                              <th key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 min-w-[50px] sm:min-w-[60px] ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
+                              <TableHead key={month} className={`text-center min-w-[50px] sm:min-w-[60px] ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
                                 }`}>
                                 <div className="font-medium text-gray-700 whitespace-nowrap">T{month.split('/')[0]}</div>
-                              </th>
+                              </TableHead>
                             ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr className="border-b border-gray-200">
-                            <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 sticky left-0 bg-white z-10">
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          <TableRow className="border-b border-gray-200">
+                            <TableCell className="sticky left-0 bg-white z-10">
                               <div className="font-medium text-gray-900 text-[10px] sm:text-xs">CM Chuyên sâu</div>
-                            </td>
+                            </TableCell>
                             {months.map((month) => {
                               const score = getScoreForMonth(expertiseData, month);
                               const scoreValue = score === "N/A" ? 0 : parseFloat(score);
                               const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
                               return (
-                                <td key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
+                                <TableCell key={month} className={`text-center ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
                                   }`}>
                                   <span
                                     onClick={() => {
@@ -1016,20 +1017,20 @@ export default function Page1() {
                                       }`}>
                                     {score === "N/A" && isCurrentMonth ? "📝 Đăng ký" : score}
                                   </span>
-                                </td>
+                                </TableCell>
                               );
                             })}
-                          </tr>
-                          <tr className="border-b border-gray-200">
-                            <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 sticky left-0 bg-white z-10">
+                          </TableRow>
+                          <TableRow className="border-b border-gray-200">
+                            <TableCell className="sticky left-0 bg-white z-10">
                               <div className="font-medium text-gray-900 text-[10px] sm:text-xs">KN - QT Trải nghiệm</div>
-                            </td>
+                            </TableCell>
                             {months.map((month) => {
                               const score = getScoreForMonth(experienceData, month);
                               const scoreValue = score === "N/A" ? 0 : parseFloat(score);
                               const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
                               return (
-                                <td key={month} className={`text-center py-1.5 sm:py-2 px-1 sm:px-2 ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
+                                <TableCell key={month} className={`text-center ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
                                   }`}>
                                   <span
                                     onClick={() => {
@@ -1049,12 +1050,12 @@ export default function Page1() {
                                       }`}>
                                     {score === "N/A" && isCurrentMonth ? "📝 Đăng ký" : score}
                                   </span>
-                                </td>
+                                </TableCell>
                               );
                             })}
-                          </tr>
-                        </tbody>
-                      </table>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
                     );
                   })()}
                   {scoresLoaded && (
@@ -1613,27 +1614,27 @@ export default function Page1() {
               </div>
 
               <div className="overflow-y-auto max-h-[calc(95vh-150px)] sm:max-h-[calc(90vh-220px)] bg-gray-50 overflow-x-auto">
-                <table className="w-full text-xs sm:text-sm bg-white min-w-[600px]">
-                  <thead className="bg-gradient-to-b from-gray-100 to-gray-50 border-b-2 border-gray-300 sticky top-0 z-10">
-                    <tr>
-                      <th className="text-left py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700 w-10 sm:w-16">STT</th>
-                      <th className="text-left py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700">{modalType === "expertise" ? "Bộ môn" : "Khối"}</th>
-                      {modalType === "expertise" && <th className="text-left py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700">Đề</th>}
-                      <th className="text-center py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700 w-16 sm:w-24">Cđ</th>
-                      <th className="text-center py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700 w-16 sm:w-24">Điểm</th>
-                      <th className="text-left py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700">Email</th>
-                      <th className="text-center py-2 sm:py-4 px-2 sm:px-4 font-bold text-gray-700 w-20 sm:w-32">Tính</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table className="w-full text-xs sm:text-sm bg-white min-w-[600px]">
+                  <TableHeader className="bg-gradient-to-b from-gray-100 to-gray-50 border-b-2 border-gray-300 sticky top-0 z-10">
+                    <TableRow>
+                      <TableHead className="text-left font-bold text-gray-700 w-10 sm:w-16">STT</TableHead>
+                      <TableHead className="text-left font-bold text-gray-700">{modalType === "expertise" ? "Bộ môn" : "Khối"}</TableHead>
+                      {modalType === "expertise" && <TableHead className="text-left font-bold text-gray-700">Đề</TableHead>}
+                      <TableHead className="text-center font-bold text-gray-700 w-16 sm:w-24">Cđ</TableHead>
+                      <TableHead className="text-center font-bold text-gray-700 w-16 sm:w-24">Điểm</TableHead>
+                      <TableHead className="text-left font-bold text-gray-700">Email</TableHead>
+                      <TableHead className="text-center font-bold text-gray-700 w-20 sm:w-32">Tính</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {modalRecords.map((record, index) => (
-                      <tr key={index} className={`border-b border-gray-200 transition-colors ${!record.isCountedInAverage ? "bg-red-50" : "hover:bg-blue-50"
+                      <TableRow key={index} className={`border-b border-gray-200 transition-colors ${!record.isCountedInAverage ? "bg-red-50" : "hover:bg-blue-50"
                         }`}>
-                        <td className="py-2 sm:py-4 px-2 sm:px-4 text-gray-500 font-medium text-center">{index + 1}</td>
-                        <td className="py-2 sm:py-4 px-2 sm:px-4 font-semibold text-gray-900">{modalType === "expertise" ? record.subject : record.teachingLevel}</td>
-                        {modalType === "expertise" && <td className="py-2 sm:py-4 px-2 sm:px-4 text-gray-600">{record.exam}</td>}
-                        <td className="text-center py-2 sm:py-4 px-2 sm:px-4 font-medium text-gray-700">{record.correct}</td>
-                        <td className="text-center py-2 sm:py-4 px-2 sm:px-4">
+                        <TableCell className="text-gray-500 font-medium text-center">{index + 1}</TableCell>
+                        <TableCell className="font-semibold text-gray-900">{modalType === "expertise" ? record.subject : record.teachingLevel}</TableCell>
+                        {modalType === "expertise" && <TableCell className="text-gray-600">{record.exam}</TableCell>}
+                        <TableCell className="text-center font-medium text-gray-700">{record.correct}</TableCell>
+                        <TableCell className="text-center">
                           <span className={`inline-block px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold text-xs sm:text-base whitespace-nowrap ${parseFloat(record.score.replace(",", ".")) >= 4
                               ? "bg-green-100 text-green-700"
                               : parseFloat(record.score.replace(",", ".")) >= 3
@@ -1642,8 +1643,8 @@ export default function Page1() {
                             }`}>
                             {record.score}
                           </span>
-                        </td>
-                        <td className="py-2 sm:py-4 px-2 sm:px-4">
+                        </TableCell>
+                        <TableCell>
                           {record.emailExplanation ? (
                             <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-orange-50 text-orange-700 rounded-md text-[10px] sm:text-xs font-medium truncate max-w-[150px] sm:max-w-full">
                               <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -1655,8 +1656,8 @@ export default function Page1() {
                           ) : (
                             <span className="text-gray-400 text-xs sm:text-sm">-</span>
                           )}
-                        </td>
-                        <td className="text-center py-2 sm:py-4 px-2 sm:px-4">
+                        </TableCell>
+                        <TableCell className="text-center">
                           {record.isCountedInAverage ? (
                             <span className="inline-flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-3 py-1 sm:py-1.5 bg-green-100 text-green-800 rounded-lg text-[10px] sm:text-xs font-semibold whitespace-nowrap">
                               <svg className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -1672,11 +1673,11 @@ export default function Page1() {
                               <span className="hidden sm:inline">Không</span>
                             </span>
                           )}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
 
               <div className="px-3 sm:px-6 py-3 sm:py-4 bg-gradient-to-b from-gray-50 to-gray-100 border-t border-gray-200">

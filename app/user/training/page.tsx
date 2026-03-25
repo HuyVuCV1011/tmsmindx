@@ -1,9 +1,13 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from "@/lib/auth-context";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
+import AssignmentsPage from "../assignments/page";
+import { BookOpen, FileText, Award, CheckCircle, Clock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface TrainingLesson {
   id: number;
@@ -16,6 +20,18 @@ interface TrainingLesson {
   lesson_number?: number;
   completion_status?: string;
   completed_at?: string;
+  time_spent_seconds?: number;
+}
+
+interface TrainingAssignment {
+  id: number;
+  assignment_title: string;
+  description: string;
+  video_id: number;
+  assignment_type: string;
+  passing_score: number;
+  max_attempts: number;
+  time_limit_minutes: number;
 }
 
 interface TrainingData {
@@ -50,7 +66,10 @@ function extractCodeFromEmail(email: string): string {
 export default function TrainingPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'lessons' | 'stats'>('lessons');
+  const searchParams = useSearchParams();
+  const startAssignmentId = searchParams.get('start_assignment_id');
+
+  const [tab, setTab] = useState<'lessons' | 'stats' | 'tests'>('lessons');
   const [submitCode, setSubmitCode] = useState("");
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
   const [isResolvingCode, setIsResolvingCode] = useState(false);
@@ -173,6 +192,16 @@ export default function TrainingPage() {
     }
   );
 
+  const { data: assignmentsData, isLoading: isLoadingAssignments } = useSWR(
+    teacher && user ? `/api/training-assignments?status=published&teacher_code=${teacher.code}` : null,
+    secureFetcher,
+    { 
+      revalidateOnFocus: false,
+      dedupingInterval: 120000
+    }
+  );
+
+
   const completedLessons = useMemo(() => {
     if (!trainingData?.lessons) return 0;
     return trainingData.lessons.filter((l: TrainingLesson) => 
@@ -186,6 +215,10 @@ export default function TrainingPage() {
       router.push(`/user/training/lesson?id=${lesson.id}&url=${encodeURIComponent(lesson.link)}&title=${encodeURIComponent(lesson.name)}`);
     }
   };
+
+  if (startAssignmentId) {
+      return <AssignmentsPage />;
+  }
 
   return (
     <div className="bg-white">
@@ -224,6 +257,16 @@ export default function TrainingPage() {
             onClick={() => setTab('stats')}
           >
             Thống kê điểm số
+          </button>
+          <button
+            className={`pb-3 px-2 border-b-2 font-bold transition-colors ${
+              tab === 'tests' 
+                ? 'border-blue-500 text-blue-700' 
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setTab('tests')}
+          >
+            Bài kiểm tra
           </button>
         </div>
 
@@ -357,11 +400,57 @@ export default function TrainingPage() {
                               </span>
                             </div>
                             
+                            {/* Progress info if not completed but started */}
+                            {!isCompleted && (lesson.time_spent_seconds ?? 0) > 0 && (
+                                <div className="mb-2">
+                                    <div className="flex justify-between text-xs text-blue-600 mb-1">
+                                        <span>Đang học</span>
+                                        <span>{Math.round(((lesson.time_spent_seconds || 0) / ((lesson.duration_minutes || 1) * 60)) * 100)}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                        <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${Math.min(100, Math.round(((lesson.time_spent_seconds || 0) / ((lesson.duration_minutes || 1) * 60)) * 100))}%` }}></div>
+                                    </div>
+                                </div>
+                            )}
+
                             {lesson.description && (
                               <p className="text-sm text-gray-600 line-clamp-2 mb-2">
                                 {lesson.description}
                               </p>
                             )}
+
+                            {/* Quiz Button */}
+                            {(() => {
+                              const assignmentList = assignmentsData?.data || [];
+                              const assignment = assignmentList.find((a: any) => a.video_id === lesson.id);
+                              
+                              if (!assignment) return null;
+                              
+                              return (
+                                <div className="mt-2 mb-3">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (isCompleted) {
+                                        router.push(`/user/training?start_assignment_id=${assignment.id}`);
+                                      }
+                                    }}
+                                    disabled={!isCompleted}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                                      isCompleted 
+                                        ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:scale-105 active:scale-95' 
+                                        : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                                    }`}
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                    </svg>
+                                    Làm bài kiểm tra
+                                    {!isCompleted && <span className="text-xs ml-1 opacity-70">(Hoàn thành video để mở)</span>}
+                                  </button>
+                                </div>
+                              );
+                            })()}
                             
                             <div className="flex items-center gap-4 text-sm text-gray-500">
                               {lesson.completed_at && (
@@ -395,36 +484,36 @@ export default function TrainingPage() {
                 <h2 className="text-xl font-bold mb-4 text-yellow-700">Thống kê điểm số các bài học</h2>
                 
                 <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-white border-b-2 border-gray-200">
-                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Lesson</th>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Tên bài học</th>
-                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase">Điểm số</th>
-                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase">Trạng thái</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-b-2 border-gray-200">
+                        <TableHead className="uppercase font-bold text-gray-700">Lesson</TableHead>
+                        <TableHead className="uppercase font-bold text-gray-700">Tên bài học</TableHead>
+                        <TableHead className="text-center uppercase font-bold text-gray-700">Điểm số</TableHead>
+                        <TableHead className="text-center uppercase font-bold text-gray-700">Trạng thái</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {trainingData.lessons.map((lesson: TrainingLesson, idx: number) => {
                         const notStarted = lesson.score === 0;
                         const passed = lesson.score >= 7;
                         
                         return (
-                          <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-4 py-3 text-sm font-medium text-purple-600">
+                          <TableRow key={idx} className="hover:bg-gray-50 transition-colors">
+                            <TableCell className="font-medium text-purple-600">
                               {idx + 1}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">
+                            </TableCell>
+                            <TableCell className="text-gray-900">
                               {lesson.name.replace(/^Lesson \d+:\s*/, '')}
-                            </td>
-                            <td className="px-4 py-3 text-center">
+                            </TableCell>
+                            <TableCell className="text-center">
                               <span className={`text-lg font-bold ${
                                 notStarted ? 'text-gray-400' : passed ? 'text-green-600' : 'text-yellow-600'
                               }`}>
                                 {notStarted ? '—' : lesson.score.toFixed(1)}
                               </span>
-                            </td>
-                            <td className="px-4 py-3 text-center">
+                            </TableCell>
+                            <TableCell className="text-center">
                               <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
                                 notStarted 
                                   ? 'bg-gray-100 text-gray-700'
@@ -434,12 +523,12 @@ export default function TrainingPage() {
                               }`}>
                                 {notStarted ? 'Chưa học' : passed ? 'Đạt' : 'Cần cải thiện'}
                               </span>
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
 
                 {/* Stats Summary */}
@@ -463,6 +552,116 @@ export default function TrainingPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+            
+            {/* Tab: Bài kiểm tra */}
+            {tab === 'tests' && (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="text-xl font-bold mb-4 text-blue-700">Bài kiểm tra & Bài tập</h2>
+                {isLoadingAssignments ? (
+                   <div className="text-center py-4">Đang tải danh sách bài tập...</div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {assignmentsData?.data?.filter((a: any) => {
+                      if (!a.video_id) return false;
+                      const linkedVideo = trainingData?.lessons?.find((l: any) => l.id === a.video_id);
+                      return !!linkedVideo;
+                    }).length === 0 && (
+                        <div className="col-span-full text-center py-8 text-gray-500">
+                            Không có bài kiểm tra nào được tìm thấy
+                        </div>
+                    )}
+                    {assignmentsData?.data?.filter((a: any) => {
+                        if (!a.video_id) return false;
+                        const linkedVideo = trainingData?.lessons?.find((l: any) => l.id === a.video_id);
+                        return !!linkedVideo;
+                    }).map((assignment: any) => {
+                        const linkedVideo = trainingData?.lessons?.find((l: any) => l.id === assignment.video_id);
+                        const isLocked = !linkedVideo || linkedVideo.completion_status !== 'completed';
+                        
+                        return (
+                          <div
+                            key={assignment.id}
+                            className={`bg-white rounded-lg shadow-sm border hover:shadow-md transition-all overflow-hidden group flex flex-col ${
+                              isLocked ? 'border-gray-200 opacity-75' : 'border-gray-200'
+                            }`}
+                          >
+                            <div className={`p-3 text-white ${isLocked ? 'bg-gray-400' : 'bg-gradient-to-br from-blue-500 to-blue-600'}`}>
+                              <div className="flex items-start justify-between mb-1.5">
+                                <BookOpen className="w-5 h-5 shrink-0" />
+                                {!isLocked && (
+                                  <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-semibold">Mở</span>
+                                )}
+                                {isLocked && (
+                                  <span className="px-1.5 py-0.5 bg-black/20 rounded-full text-[10px] font-semibold">Locked</span>
+                                )}
+                              </div>
+                              <h3 className="text-sm font-bold mb-1 line-clamp-2 leading-tight min-h-[2.5em]">{assignment.assignment_title}</h3>
+                              <p className="text-[11px] text-blue-50 line-clamp-1 opacity-90">
+                                {linkedVideo?.name ? linkedVideo.name.replace(/^Lesson \d+:\s*/, '') : 'Unknown Video'}
+                              </p>
+                            </div>
+
+                            <div className="p-3 flex flex-col flex-1">
+                              <div className="flex items-center gap-2 mb-3 text-xs flex-wrap">
+                                <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
+                                  <FileText className="w-3 h-3 text-gray-500" />
+                                  <span className="font-bold text-gray-900">{assignment.question_count || '?'}</span>
+                                  <span className="text-gray-600">câu</span>
+                                </div>
+
+                                <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
+                                  <Award className="w-3 h-3 text-gray-500" />
+                                  <span className="font-bold text-gray-900">{assignment.total_points || '?'}</span>
+                                  <span className="text-gray-600">đ</span>
+                                </div>
+
+                                <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
+                                  <CheckCircle className="w-3 h-3 text-gray-500" />
+                                  <span className="font-bold text-gray-900">{assignment.passing_score}</span>
+                                </div>
+
+                                <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
+                                  <Clock className="w-3 h-3 text-gray-500" />
+                                  <span className="font-bold text-gray-900">{assignment.time_limit_minutes}p</span>
+                                </div>
+                              </div>
+
+                              <div className="mt-auto">
+                                {(linkedVideo?.score > 0 || assignment.recent_submission) ? (
+                                    <div className={`mb-2.5 p-2 rounded-lg border flex justify-between items-center ${
+                                      (linkedVideo?.score >= assignment.passing_score)
+                                        ? 'bg-green-50 border-green-200'
+                                        : 'bg-amber-50 border-amber-200'
+                                    }`}>
+                                        <span className="text-[10px] font-semibold text-gray-700">Điểm số:</span>
+                                        <span className={`text-sm font-bold ${
+                                          (linkedVideo?.score >= assignment.passing_score) ? 'text-green-600' : 'text-amber-600'
+                                        }`}>
+                                          {linkedVideo?.score > 0 ? linkedVideo.score : (assignment.recent_submission?.score || 0)}
+                                          <span className="text-xs text-gray-500">/{assignment.total_points || '?'}</span>
+                                        </span>
+                                    </div>
+                                ) : null}
+
+                                <Button
+                                    onClick={() => router.push(`/user/training?start_assignment_id=${assignment.id}`)}
+                                    disabled={isLocked}
+                                    variant={isLocked ? "secondary" : "default"}
+                                    className={`w-full h-9 text-xs font-semibold ${
+                                      !isLocked ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : ''
+                                    }`}
+                                >
+                                    {isLocked ? 'Hoàn thành video để mở' : ((linkedVideo?.score > 0 || assignment.recent_submission) ? 'Làm lại' : 'Làm bài')}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </>

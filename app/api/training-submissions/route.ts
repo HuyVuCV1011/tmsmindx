@@ -240,12 +240,13 @@ export async function PUT(request: NextRequest) {
 
       const submission = result.rows[0];
 
-      // If assignment is passed, mark video as completed
-      if (is_passed && submission.teacher_code && submission.video_id) {
-        console.log('[Submission] Marking video as completed:', {
+      // Update video stats regardless of pass/fail
+      if (submission.teacher_code && submission.video_id) {
+        console.log('[Submission] Updating video stats:', {
           teacher_code: submission.teacher_code,
           video_id: submission.video_id,
-          score: score
+          score: score,
+          is_passed: is_passed
         });
 
         // Ensure teacher exists in training_teacher_stats (auto-create if not exists)
@@ -256,6 +257,8 @@ export async function PUT(request: NextRequest) {
         `;
         await pool.query(ensureTeacherQuery, [submission.teacher_code]);
 
+        const status = is_passed ? 'completed' : 'in_progress';
+
         const updateVideoScoreQuery = `
           INSERT INTO training_teacher_video_scores (
             teacher_code,
@@ -263,15 +266,19 @@ export async function PUT(request: NextRequest) {
             score,
             completion_status,
             completed_at
-          ) VALUES ($1, $2, $3, 'completed', NOW())
+          ) VALUES ($1, $2, $3, $4, CASE WHEN $5::boolean THEN NOW() ELSE NULL END)
           ON CONFLICT (teacher_code, video_id)
           DO UPDATE SET
             score = GREATEST(training_teacher_video_scores.score, $3),
-            completion_status = 'completed',
+            completion_status = CASE 
+              WHEN training_teacher_video_scores.completion_status = 'completed' THEN 'completed'
+              WHEN $5::boolean THEN 'completed'
+              ELSE 'in_progress'
+            END,
             completed_at = CASE 
-              WHEN training_teacher_video_scores.completion_status != 'completed' 
-              THEN NOW() 
-              ELSE training_teacher_video_scores.completed_at 
+              WHEN training_teacher_video_scores.completion_status = 'completed' THEN training_teacher_video_scores.completed_at
+              WHEN $5::boolean THEN NOW()
+              ELSE training_teacher_video_scores.completed_at
             END,
             updated_at = NOW()
         `;
@@ -279,10 +286,12 @@ export async function PUT(request: NextRequest) {
         await pool.query(updateVideoScoreQuery, [
           submission.teacher_code,
           submission.video_id,
-          score
+          score,
+          status,
+          is_passed
         ]);
 
-        console.log('[Submission] Video completion marked successfully');
+        console.log('[Submission] Video stats updated successfully');
       }
 
       return NextResponse.json({

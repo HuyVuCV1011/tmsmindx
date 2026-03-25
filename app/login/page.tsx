@@ -97,7 +97,7 @@ export default function LoginPage() {
 
         updateUser(userData, appAuthData.idToken);
 
-        const isAdminRole = ['super_admin', 'admin'].includes(appAuthData.role);
+        const isAdminRole = appAuthData.isAdmin;
         const redirectPath = isAdminRole ? '/admin/dashboard' : '/user/truyenthong';
 
         if (appAuthData.role === 'super_admin') {

@@ -3,6 +3,9 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import toast from 'react-hot-toast';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface Video {
   id: number;
@@ -71,6 +74,13 @@ function VideoDetailContent() {
   const [userAnswer, setUserAnswer] = useState<number|null>(null);
   const [previewMode, setPreviewMode] = useState(false);
   const [loadedDurationSeconds, setLoadedDurationSeconds] = useState<number | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<any>({
+    isOpen: false,
+    title: "",
+    message: "",
+    type: "info",
+    onConfirm: () => {},
+  });
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const openAddQuestionModal = () => {
@@ -253,6 +263,27 @@ function VideoDetailContent() {
 
   const handleUpdateStatus = async (newStatus: string) => {
     if (!video) return;
+
+    if (newStatus === 'active') {
+      try {
+        const assignmentRes = await fetch(`/api/training-assignments?video_id=${video.id}`);
+        const assignmentData = await assignmentRes.json();
+        
+        if (!assignmentData.success || !assignmentData.data || assignmentData.data.length === 0) {
+            setConfirmDialog({
+                isOpen: true,
+                title: "Yêu cầu Assignment",
+                message: "Video này chưa có Assignment (bài tập). Bạn không được phép Giao bài (Active) khi không có Assignment kèm theo. Vui lòng liên kết bài tập trước.",
+                type: "warning",
+                onConfirm: () => setConfirmDialog((p: any) => ({...p, isOpen: false}))
+            });
+            return;
+        }
+      } catch (e) {
+        console.error("Failed to check assignment", e);
+        // Fallback or alert
+      }
+    }
     
     const isAssigning = newStatus === 'active';
     if (isAssigning) setAssigning(true);
@@ -412,12 +443,13 @@ function VideoDetailContent() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Không tìm thấy video</h2>
             <p className="text-gray-600 mb-6">{error || "Video này không tồn tại hoặc đã bị xóa"}</p>
-            <button
+            <Button
+              variant="mindx"
               onClick={() => router.push('/admin/page5')}
-              className="bg-[#a1001f] text-white px-6 py-3 rounded-xl hover:bg-[#8a0019] font-medium transition shadow-lg hover:shadow-xl"
+              className="px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl"
             >
               Về danh sách video
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -651,29 +683,29 @@ function VideoDetailContent() {
                 {tab === 'student' ? (
                   <div className="overflow-x-auto">
                     {totalStudents > 0 ? (
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b-2 border-gray-200">
-                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">Học viên</th>
-                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">Tiến độ</th>
-                            <th className="text-center px-4 py-3 text-sm font-semibold text-gray-700">Điểm</th>
-                            <th className="text-center px-4 py-3 text-sm font-semibold text-gray-700">Lần làm</th>
-                            <th className="text-left px-4 py-3 text-sm font-semibold text-gray-700">Xem lần cuối</th>
-                            <th className="text-center px-4 py-3 text-sm font-semibold text-gray-700">Trạng thái</th>
-                          </tr>
-                        </thead>
-                        <tbody>
+                      <Table>
+                        <TableHeader className="border-b-2 border-gray-200">
+                          <TableRow>
+                            <TableHead className="text-left font-semibold text-gray-700">Học viên</TableHead>
+                            <TableHead className="text-left font-semibold text-gray-700">Tiến độ</TableHead>
+                            <TableHead className="text-center font-semibold text-gray-700">Điểm</TableHead>
+                            <TableHead className="text-center font-semibold text-gray-700">Lần làm</TableHead>
+                            <TableHead className="text-left font-semibold text-gray-700">Xem lần cuối</TableHead>
+                            <TableHead className="text-center font-semibold text-gray-700">Trạng thái</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
                           {video.students!.map((s, idx) => (
-                            <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50 transition">
-                              <td className="px-4 py-4">
+                            <TableRow key={idx} className="hover:bg-gray-50 transition">
+                              <TableCell>
                                 <div className="flex items-center gap-3">
                                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#a1001f] to-[#c41230] flex items-center justify-center text-white font-semibold">
                                     {s.name.charAt(0).toUpperCase()}
                                   </div>
                                   <span className="font-medium text-gray-900">{s.name}</span>
                                 </div>
-                              </td>
-                              <td className="px-4 py-4">
+                              </TableCell>
+                              <TableCell>
                                 <div className="flex items-center gap-2">
                                   <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                                     <div 
@@ -687,8 +719,8 @@ function VideoDetailContent() {
                                   </div>
                                   <span className="text-sm font-medium text-gray-700 w-12 text-right">{s.watched}%</span>
                                 </div>
-                              </td>
-                              <td className="px-4 py-4 text-center">
+                              </TableCell>
+                              <TableCell className="text-center">
                                 <span className={`inline-flex items-center justify-center min-w-[3rem] px-3 py-1 rounded-full text-sm font-semibold ${
                                   s.grade !== null 
                                     ? s.grade >= 8 ? 'bg-green-100 text-green-700' :
@@ -698,14 +730,14 @@ function VideoDetailContent() {
                                 }`}>
                                   {s.grade !== null ? s.grade : '-'}
                                 </span>
-                              </td>
-                              <td className="px-4 py-4 text-center">
+                              </TableCell>
+                              <TableCell className="text-center">
                                 <span className="text-sm text-gray-700">{s.attempts}</span>
-                              </td>
-                              <td className="px-4 py-4">
+                              </TableCell>
+                              <TableCell>
                                 <span className="text-sm text-gray-600">{s.lastWatched}</span>
-                              </td>
-                              <td className="px-4 py-4 text-center">
+                              </TableCell>
+                              <TableCell className="text-center">
                                 {s.turnedIn ? (
                                   <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 text-green-700 text-sm font-medium">
                                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -721,11 +753,11 @@ function VideoDetailContent() {
                                     Chưa nộp
                                   </span>
                                 )}
-                              </td>
-                            </tr>
+                              </TableCell>
+                            </TableRow>
                           ))}
-                        </tbody>
-                      </table>
+                        </TableBody>
+                      </Table>
                     ) : (
                       <div className="text-center py-12">
                         <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -742,16 +774,17 @@ function VideoDetailContent() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold text-gray-900">Câu hỏi tương tác</h3>
-                      <button
+                      <Button
+                        variant="mindx"
                         onClick={openAddQuestionModal}
                         disabled={video.status === 'active'}
-                        className="flex items-center gap-2 bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white px-4 py-2 rounded-xl hover:shadow-lg hover:from-[#8a0019] hover:to-[#a1001f] transition font-medium disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed"
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl font-medium"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
                         Thêm câu hỏi
-                      </button>
+                      </Button>
                     </div>
 
                     {questions.length === 0 ? (
@@ -763,16 +796,17 @@ function VideoDetailContent() {
                         </div>
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có câu hỏi</h3>
                         <p className="text-gray-600 mb-4">Thêm câu hỏi tương tác để tăng engagement</p>
-                        <button
+                        <Button
+                          variant="mindx"
                           onClick={openAddQuestionModal}
                           disabled={video.status === 'active'}
-                          className="inline-flex items-center gap-2 bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white px-6 py-3 rounded-xl hover:from-[#8a0019] hover:to-[#a1001f] transition font-medium shadow-lg hover:shadow-xl disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed"
+                          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl relative"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                           </svg>
                           Thêm câu hỏi đầu tiên
-                        </button>
+                        </Button>
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -931,15 +965,16 @@ function VideoDetailContent() {
               </h3>
               <div className="space-y-3">
                 {video.status === 'inactive' && (
-                  <button
+                  <Button
+                    variant="mindx"
                     onClick={() => router.push(`/admin/video-setup?id=${video.id}`)}
-                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white px-4 py-3 rounded-xl hover:shadow-lg hover:from-[#8a0019] hover:to-[#a1001f] transition font-medium"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                     Chỉnh sửa video
-                  </button>
+                  </Button>
                 )}
                 
                 <button
@@ -1201,7 +1236,8 @@ function VideoDetailContent() {
               >
                 Hủy
               </button>
-              <button
+              <Button
+                variant="mindx"
                 onClick={async () => {
                   if (video.status === 'active') {
                     toast.error('Video đang Active, không thể thêm câu hỏi mới.');
@@ -1254,10 +1290,10 @@ function VideoDetailContent() {
                   setNewAnswer(0);
                   setAddTime("");
                 }}
-                className="px-6 py-3 bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white rounded-xl hover:from-[#8a0019] hover:to-[#a1001f] transition font-medium shadow-lg hover:shadow-xl"
+                className="px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl"
               >
                 Lưu câu hỏi
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1304,20 +1340,30 @@ function VideoDetailContent() {
             </div>
 
             <div className="bg-gray-50 px-6 py-4 rounded-b-2xl border-t">
-              <button
+              <Button
+                variant="mindx"
                 onClick={() => {
                   setShowQuestionIdx(null);
                   setUserAnswer(null);
                   if (videoRef.current) videoRef.current.play();
                 }}
-                className="w-full bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white px-6 py-3 rounded-xl hover:from-[#8a0019] hover:to-[#a1001f] transition font-medium shadow-lg hover:shadow-xl"
+                className="w-full px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl"
               >
                 Tiếp tục video
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       )}
+      
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog((prev: any) => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm || (() => {})}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+      />
     </div>
   );
 }

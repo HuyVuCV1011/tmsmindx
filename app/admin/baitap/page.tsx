@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageContainer } from '@/components/PageContainer';
 import { TableSkeleton } from '@/components/skeletons';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Assignment } from '@/types/assignment';
 import { ASSIGNMENT_TYPES } from '@/lib/assignment-constants';
 import { Plus, Edit, Trash2, FileText, Eye, CheckCircle, XCircle } from 'lucide-react';
@@ -21,12 +25,12 @@ export default function BaiTapManagementPage() {
   const assignments: Assignment[] = data?.success ? data.data : [];
 
   const getStatusBadge = (status: string) => {
-    const styles = {
-      draft: 'bg-yellow-100 text-yellow-800',
-      published: 'bg-green-100 text-green-800',
-      archived: 'bg-gray-100 text-gray-800',
+    const variantMap: Record<string, 'warning' | 'success' | 'secondary'> = {
+      draft: 'warning',
+      published: 'success',
+      archived: 'secondary',
     };
-    const labels = {
+    const labels: Record<string, string> = {
       draft: 'Nháp',
       published: 'Đã công bố',
       archived: 'Lưu trữ',
@@ -34,10 +38,10 @@ export default function BaiTapManagementPage() {
     const Icon = status === 'published' ? CheckCircle : status === 'draft' ? Edit : XCircle;
     
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${styles[status as keyof typeof styles] || 'bg-gray-100 text-gray-800'}`}>
+      <Badge variant={variantMap[status] || 'secondary'}>
         <Icon className="w-3 h-3" />
-        {labels[status as keyof typeof labels] || status}
-      </span>
+        {labels[status] || status}
+      </Badge>
     );
   };
 
@@ -91,16 +95,16 @@ export default function BaiTapManagementPage() {
         </div>
         <div className="flex items-center gap-2">
           <Link href="/admin/baitap/tao-moi?mode=professional">
-            <button className="flex items-center gap-2 bg-[#a1001f] hover:bg-[#8a0019] text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-md">
+            <Button variant="mindx">
               <Plus className="h-5 w-5" />
               Tạo đề chuyên môn
-            </button>
+            </Button>
           </Link>
           <Link href="/admin/baitap/tao-moi">
-            <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-md">
+            <Button>
               <Plus className="h-5 w-5" />
               Tạo bài tập mới
-            </button>
+            </Button>
           </Link>
         </div>
       </div>
@@ -119,50 +123,34 @@ export default function BaiTapManagementPage() {
             <h3 className="text-xl font-bold text-gray-900 mb-2">Chưa có bài tập nào</h3>
             <p className="text-gray-600 mb-6">Bắt đầu bằng cách tạo bài tập đầu tiên</p>
             <Link href="/admin/baitap/tao-moi">
-              <button className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors shadow-md">
+              <Button>
                 <Plus className="h-5 w-5" />
                 Tạo bài tập đầu tiên
-              </button>
+              </Button>
             </Link>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    #
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Tiêu đề
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell">
-                    Video
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Loại
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden sm:table-cell">
-                    Câu hỏi
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden lg:table-cell">
-                    Điểm
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden sm:table-cell">
-                    Trạng thái
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Thao tác
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Tiêu đề</TableHead>
+                  <TableHead className="hidden md:table-cell">Video</TableHead>
+                  <TableHead className="text-center">Loại</TableHead>
+                  <TableHead className="text-center hidden sm:table-cell">Câu hỏi</TableHead>
+                  <TableHead className="text-center hidden lg:table-cell">Điểm</TableHead>
+                  <TableHead className="text-center hidden sm:table-cell">Trạng thái</TableHead>
+                  <TableHead className="text-center">Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {assignments.map((assignment, idx) => (
-                  <tr key={assignment.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                  <TableRow key={assignment.id}>
+                    <TableCell className="text-gray-600">
                       {idx + 1}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell>
                       <div className="font-semibold text-gray-900">
                         {assignment.assignment_title}
                       </div>
@@ -171,90 +159,66 @@ export default function BaiTapManagementPage() {
                           {assignment.description}
                         </div>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 hidden md:table-cell">
+                    </TableCell>
+                    <TableCell className="text-gray-600 hidden md:table-cell">
                       {assignment.video_title || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-center">
+                    </TableCell>
+                    <TableCell className="text-center">
                       {getTypeBadge(assignment.assignment_type)}
-                    </td>
-                    <td className="px-4 py-3 text-center hidden sm:table-cell">
-                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">
+                    </TableCell>
+                    <TableCell className="text-center hidden sm:table-cell">
+                      <Badge variant="info">
                         <FileText className="w-3 h-3" />
                         {assignment.question_count || 0}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center hidden lg:table-cell">
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center hidden lg:table-cell">
                       <div className="text-sm font-semibold text-gray-900">
                         {assignment.total_points}
                       </div>
                       <div className="text-xs text-gray-500">
                         Đạt: {assignment.passing_score}
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-center hidden sm:table-cell">
+                    </TableCell>
+                    <TableCell className="text-center hidden sm:table-cell">
                       {getStatusBadge(assignment.status)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-center gap-1">
                         <Link href={`/admin/baitap/${assignment.id}/cau-hoi?assignment_id=${assignment.id}`}>
-                          <button
-                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title="Quản lý câu hỏi"
-                          >
+                          <Button variant="ghost" size="icon-sm" title="Quản lý câu hỏi" className="text-green-600 hover:bg-green-50">
                             <FileText className="w-4 h-4" />
-                          </button>
+                          </Button>
                         </Link>
                         <Link href={`/admin/baitap/${assignment.id}/chinh-sua`}>
-                          <button
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Sửa"
-                          >
+                          <Button variant="ghost" size="icon-sm" title="Sửa" className="text-blue-600 hover:bg-blue-50">
                             <Edit className="w-4 h-4" />
-                          </button>
+                          </Button>
                         </Link>
-                        <button
-                          onClick={() => setDeleteConfirmId(assignment.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Xóa"
-                        >
+                        <Button variant="ghost" size="icon-sm" onClick={() => setDeleteConfirmId(assignment.id)} title="Xóa" className="text-red-600 hover:bg-red-50">
                           <Trash2 className="w-4 h-4" />
-                        </button>
+                        </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Xóa bài tập</h3>
-            <p className="text-gray-600 mb-6">
-              Bạn có chắc chắn muốn xóa bài tập này? Tất cả câu hỏi liên quan sẽ bị xóa. Hành động này không thể hoàn tác.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Hủy
-              </button>
-              <button
-                onClick={() => handleDelete(deleteConfirmId)}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                Xóa
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={!!deleteConfirmId}
+        onClose={() => setDeleteConfirmId(null)}
+        onConfirm={() => deleteConfirmId && handleDelete(deleteConfirmId)}
+        title="Xóa bài tập"
+        message="Bạn có chắc chắn muốn xóa bài tập này? Tất cả câu hỏi liên quan sẽ bị xóa. Hành động này không thể hoàn tác."
+        type="danger"
+        confirmText="Xóa"
+        cancelText="Hủy"
+      />
     </PageContainer>
   );
 }

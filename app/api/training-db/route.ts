@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
 
 export const GET = withApiProtection(async (request: NextRequest) => {
   try {
@@ -50,7 +50,8 @@ export const GET = withApiProtection(async (request: NextRequest) => {
         video_id,
         score,
         completion_status,
-        completed_at
+        completed_at,
+        time_spent_seconds
       FROM training_teacher_video_scores
       WHERE teacher_code = $1
     `;
@@ -62,7 +63,8 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       scoresMap.set(row.video_id, {
         score: parseFloat(row.score) || 0,
         completion_status: row.completion_status,
-        completed_at: row.completed_at
+        completed_at: row.completed_at,
+        time_spent_seconds: row.time_spent_seconds || 0
       });
     });
 
@@ -79,7 +81,8 @@ export const GET = withApiProtection(async (request: NextRequest) => {
         duration_minutes: video.duration_minutes,
         lesson_number: video.lesson_number || (index + 1),
         completion_status: scoreData ? scoreData.completion_status : 'not_started',
-        completed_at: scoreData ? scoreData.completed_at : null
+        completed_at: scoreData ? scoreData.completed_at : null,
+        time_spent_seconds: scoreData ? scoreData.time_spent_seconds : 0
       };
     });
 

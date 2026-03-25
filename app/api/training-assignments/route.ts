@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { NextResponse } from 'next/server';
 
 // GET: Lấy danh sách assignments
 export async function GET(request: Request) {
@@ -8,6 +8,7 @@ export async function GET(request: Request) {
     const id = searchParams.get('id');
     const video_id = searchParams.get('video_id');
     const status = searchParams.get('status');
+    const teacher_code = searchParams.get('teacher_code');
 
     let query = `
       SELECT a.*, v.title as video_title, v.lesson_number
@@ -41,6 +42,8 @@ export async function GET(request: Request) {
     // Lấy số lượng câu hỏi cho mỗi assignment
     if (result.rows.length > 0) {
       const assignmentIds = result.rows.map(row => row.id);
+      
+      // Fetch question counts
       const questionsQuery = `
         SELECT assignment_id, COUNT(*) as question_count
         FROM training_assignment_questions
@@ -54,8 +57,27 @@ export async function GET(request: Request) {
         return acc;
       }, {} as Record<number, number>);
 
+      // Fetch teacher submissions if teacher_code is provided
+      const submissionsMap: Record<number, any> = {};
+      if (teacher_code) {
+        const submissionsQuery = `
+          SELECT DISTINCT ON (assignment_id) *
+          FROM training_assignment_submissions
+          WHERE teacher_code = $1 AND assignment_id = ANY($2)
+          ORDER BY assignment_id, submitted_at DESC
+        `;
+        const submissionsResult = await pool.query(submissionsQuery, [teacher_code, assignmentIds]);
+        
+        submissionsResult.rows.forEach(sub => {
+          submissionsMap[sub.assignment_id] = sub;
+        });
+      }
+
       result.rows.forEach(row => {
         row.question_count = questionCounts[row.id] || 0;
+        if (teacher_code) {
+          row.recent_submission = submissionsMap[row.id] || null;
+        }
       });
     }
 
@@ -92,9 +114,9 @@ export async function POST(request: Request) {
     } = body;
 
     // Validate
-    if (!video_id || !assignment_title) {
+    if (!assignment_title) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields: video_id, assignment_title' },
+        { success: false, error: 'Missing required field: assignment_title' },
         { status: 400 }
       );
     }
@@ -132,7 +154,13 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, ...updateData } = body;
+    let { id, ...updateData } = body;
+
+    // Check search params if id is not in body
+    if (!id) {
+       const { searchParams } = new URL(request.url);
+       id = searchParams.get('id');
+    }
 
     if (!id) {
       return NextResponse.json(

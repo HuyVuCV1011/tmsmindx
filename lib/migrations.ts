@@ -646,7 +646,113 @@ const migrations: Migration[] = [
     `,
   },
 
+  // ─── V(Next): Split /admin/page4 into detailed routes for existing roles ───
+  {
+    name: 'split_admin_page4_permissions',
+    version: 31, // assuming the last one was around 30, let me check version numbers. Wait! I don't know the exact last version.
+    // wait I will use a high version number or a timestamp number. Let's use 1000.
+    sql: `
+      DO $$
+      DECLARE
+          r RECORD;
+      BEGIN
+          FOR r IN SELECT role_code FROM role_permissions WHERE route_path = '/admin/page4'
+          LOOP
+              INSERT INTO role_permissions (role_code, route_path) VALUES (r.role_code, '/admin/page4/lich-danh-gia') ON CONFLICT DO NOTHING;
+              INSERT INTO role_permissions (role_code, route_path) VALUES (r.role_code, '/admin/page4/danh-sach-dang-ky') ON CONFLICT DO NOTHING;
+              INSERT INTO role_permissions (role_code, route_path) VALUES (r.role_code, '/admin/page4/thu-vien-de') ON CONFLICT DO NOTHING;
+          END LOOP;
+          DELETE FROM role_permissions WHERE route_path = '/admin/page4';
+      END $$;
+    `,
+  },
+
   // ═══════════════════════════════════════════════════════
+  // V32: Salary Deals (Deal Lương / Hạ Lương / Bonus)
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V32_salary_deals',
+    version: 32,
+    sql: `
+      CREATE TABLE IF NOT EXISTS salary_deals (
+        id SERIAL PRIMARY KEY,
+        deal_type VARCHAR(20) NOT NULL CHECK (deal_type IN ('bonus','salary_reduction','salary_deal')),
+
+        -- Người gửi (Leader/TE/TC)
+        submitter_email VARCHAR(255) NOT NULL,
+        submitter_name VARCHAR(255) NOT NULL,
+
+        -- Thông tin GV
+        teacher_name VARCHAR(255) NOT NULL,
+        teacher_codename VARCHAR(100),
+        teacher_email VARCHAR(255),
+
+        -- Bonus fields
+        class_code VARCHAR(100),
+        bonus_amount INTEGER,
+        bonus_reason TEXT,
+
+        -- Salary deal fields
+        deal_salary_amount INTEGER,
+        teacher_experience TEXT,
+        teacher_certificates TEXT,
+
+        -- Salary reduction fields
+        current_rate VARCHAR(10),
+        new_rate VARCHAR(10),
+
+        -- Trạng thái duyệt
+        status VARCHAR(30) DEFAULT 'pending'
+          CHECK (status IN ('pending','tegl_approved','tegl_rejected','admin_approved','admin_rejected')),
+
+        -- TEGL review
+        tegl_note TEXT,
+        tegl_email VARCHAR(255),
+        tegl_name VARCHAR(255),
+        tegl_decided_at TIMESTAMP,
+
+        -- Admin review
+        admin_note TEXT,
+        admin_email VARCHAR(255),
+        admin_name VARCHAR(255),
+        admin_decided_at TIMESTAMP,
+
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_salary_deals_type ON salary_deals(deal_type);
+      CREATE INDEX IF NOT EXISTS idx_salary_deals_status ON salary_deals(status);
+      CREATE INDEX IF NOT EXISTS idx_salary_deals_submitter ON salary_deals(submitter_email);
+      CREATE INDEX IF NOT EXISTS idx_salary_deals_created ON salary_deals(created_at DESC);
+
+      -- Grant super_admin permission for admin deal-luong page
+      INSERT INTO app_permissions (user_id, route_path, can_access)
+      SELECT u.id, '/admin/deal-luong', true
+      FROM app_users u
+      WHERE u.role = 'super_admin'
+      ON CONFLICT (user_id, route_path) DO NOTHING;
+
+      -- Grant role-based permissions
+      INSERT INTO role_permissions (role_code, route_path)
+      VALUES ('AD', '/admin/deal-luong')
+      ON CONFLICT DO NOTHING;
+
+
+      -- Only AD and super_admin can access /admin/deal-luong
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V33: Make video_id nullable in training_video_assignments
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V33_make_video_id_nullable',
+    version: 33,
+    sql: `
+      ALTER TABLE training_video_assignments ALTER COLUMN video_id DROP NOT NULL;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========
