@@ -16,7 +16,7 @@ export const AVAILABLE_ROUTES = [
     { path: "/admin/assignment-questions", label: "Câu hỏi Assignment", group: "Đào tạo" },
     { path: "/admin/video-setup", label: "Cài đặt Video", group: "Đào tạo" },
     { path: "/admin/video-detail", label: "Chi tiết Video", group: "Đào tạo" },
-    { path: "/admin/baitap", label: "Bài tập", group: "Đào tạo" },
+    { path: "/admin/assignments", label: "Bài tập", group: "Đào tạo" },
     { path: "/admin/training-studio", label: "Training Studio", group: "Đào tạo" },
     { path: "/admin/giaitrinh", label: "QL Giải trình", group: "Nội dung" },
     { path: "/admin/truyenthong", label: "QL truyền thông", group: "Nội dung" },

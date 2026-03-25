@@ -507,7 +507,7 @@ const migrations: Migration[] = [
         ('/admin/user-management'),
         ('/admin/video-setup'),
         ('/admin/video-detail'),
-        ('/admin/baitap'),
+        ('/admin/assignments'),
         ('/admin/training-studio')
       ) AS route(path)
       WHERE u.email = 'hoteaching@mindx.com.vn'
@@ -751,6 +751,19 @@ const migrations: Migration[] = [
     version: 33,
     sql: `
       ALTER TABLE training_video_assignments ALTER COLUMN video_id DROP NOT NULL;
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V34: Fix view counts for training videos
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V34_fix_view_counts',
+    version: 34,
+    sql: `
+      UPDATE training_teacher_video_scores
+      SET view_count = 1
+      WHERE view_count IS NULL OR view_count = 0;
     `,
   },
 ];

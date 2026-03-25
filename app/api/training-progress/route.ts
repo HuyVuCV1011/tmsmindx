@@ -39,11 +39,12 @@ export const POST = withApiProtection(async (request: NextRequest) => {
 
     const sql = `
       INSERT INTO training_teacher_video_scores
-      (teacher_code, video_id, time_spent_seconds, completion_status, completed_at, updated_at, first_viewed_at)
-      VALUES ($1, $2, $3, $4::text, CASE WHEN $4::text = 'completed' THEN NOW() ELSE NULL END, NOW(), NOW())
+      (teacher_code, video_id, time_spent_seconds, completion_status, completed_at, updated_at, first_viewed_at, view_count)
+      VALUES ($1, $2, $3, $4::text, CASE WHEN $4::text = 'completed' THEN NOW() ELSE NULL END, NOW(), NOW(), 1)
       ON CONFLICT (teacher_code, video_id)
       DO UPDATE SET
         time_spent_seconds = GREATEST(training_teacher_video_scores.time_spent_seconds, EXCLUDED.time_spent_seconds),
+        view_count = GREATEST(training_teacher_video_scores.view_count, 1),
         completion_status = CASE 
           WHEN training_teacher_video_scores.completion_status = 'completed' THEN 'completed'
           ELSE EXCLUDED.completion_status

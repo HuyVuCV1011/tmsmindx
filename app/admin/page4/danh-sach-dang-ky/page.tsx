@@ -2,9 +2,9 @@
 
 import { Card } from "@/components/Card";
 import { PageContainer } from "@/components/PageContainer";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Stepper } from "@/components/ui/stepper";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { format } from "date-fns";
 import { ClipboardList, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
@@ -200,9 +200,25 @@ export default function ExamRegistrationListPage() {
                       <div className="text-xs text-gray-600">{row.subject_name || row.subject_code}</div>
                     </TableCell>
                     <TableCell className="text-xs text-gray-700">
-                      <div>Scheduled: {new Date(row.scheduled_at).toLocaleString("vi-VN")}</div>
-                      {row.open_at && <div>Mở: {new Date(row.open_at).toLocaleString("vi-VN")}</div>}
-                      {row.close_at && <div>Đóng: {new Date(row.close_at).toLocaleString("vi-VN")}</div>}
+                      {(() => {
+                        const start = row.open_at ? new Date(row.open_at) : (row.scheduled_at ? new Date(row.scheduled_at) : null);
+                        const end = row.close_at ? new Date(row.close_at) : null;
+                        
+                        if (!start) return <span className="text-gray-400">N/A</span>;
+                        
+                        const startTime = format(start, "HH:mm");
+                        const endTime = end ? format(end, "HH:mm") : null;
+                        const dateStr = format(start, "dd/MM/yyyy");
+                        
+                        return (
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-gray-900">
+                              {startTime}{endTime ? ` - ${endTime}` : ""}
+                            </span>
+                            <span className="text-gray-500">{dateStr}</span>
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {row.set_code ? (

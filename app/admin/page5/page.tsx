@@ -7,7 +7,7 @@ import { PageContainer } from "@/components/PageContainer";
 import { SearchBar } from "@/components/SearchBar";
 import { SkeletonList } from "@/components/skeletons";
 import { Tabs } from "@/components/Tabs";
-import { Lock, Trash2, Upload, Video } from "lucide-react";
+import { Eye, Lock, Trash2, Upload, Video } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import toast from 'react-hot-toast';
@@ -391,7 +391,10 @@ export default function Page5() {
                     {video.lesson_number && <span>•</span>}
                     <span>{videoDurations[video.id] ?? video.duration_minutes ?? 0}p</span>
                     <span>•</span>
-                    <span>👁️ {Math.max(video.view_count || 0, video.actual_view_count || 0, video.actual_viewers || 0)}</span>
+                    <span className="flex items-center gap-1">
+                      <Eye className="w-3 h-3" />
+                      {Math.max(video.view_count || 0, video.actual_view_count || 0, video.actual_viewers || 0)}
+                    </span>
                   </div>
 
                   <div className="font-semibold text-xs mb-1 line-clamp-2">{video.title}</div>
