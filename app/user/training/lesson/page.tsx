@@ -2,8 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
-import { useAppSelector, useAppDispatch } from "@/lib/redux/hooks";
-import { setVideo } from "@/lib/redux/features/trainingSlice";
+import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks";
+import { useToast } from "@/lib/use-toast";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
@@ -19,6 +19,7 @@ function LessonContent() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { user } = useAuth();
+  const toast = useToast();
   const searchParams = useSearchParams();
   const lessonIdParam = searchParams.get('id');
   
@@ -118,6 +119,12 @@ function LessonContent() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Ref to track if we are in quiz mode (to prevent auto-resume)
+  const isQuizActiveRef = useRef(false);
+  useEffect(() => {
+    isQuizActiveRef.current = videoPaused || currentQuestionIdx !== null;
+  }, [videoPaused, currentQuestionIdx]);
 
   // Reset state when lesson changes
   useEffect(() => {
@@ -141,6 +148,57 @@ function LessonContent() {
       videoRef.current.load();
     }
   }, [lessonId]);
+
+  // Handle visibility change (Tab Throttling - Pause video when tab is hidden)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      // Check actual video playing state
+      const isHidden = document.hidden || document.visibilityState === 'hidden';
+      
+      if (isHidden) {
+        // Pause if playing
+        if (videoRef.current && !videoRef.current.paused) {
+          videoRef.current.pause();
+          setIsPlaying(false);
+          console.log('[Lesson] ⏸️ Paused due to hidden tab');
+        }
+      } else {
+        // Resume if paused and not ended
+        // BUT only if we are NOT in a quiz
+        if (videoRef.current && videoRef.current.paused && !videoRef.current.ended) {
+          // Check if quiz is active using ref
+          if (isQuizActiveRef.current) {
+            console.log('[Lesson] ⚠️ Not resuming because quiz is active');
+            return;
+          }
+
+          videoRef.current.play()
+            .then(() => setIsPlaying(true))
+            .catch(e => console.error("Auto-resume failed:", e));
+          console.log('[Lesson] ▶️ Resumed due to visible tab');
+        }
+      }
+    };
+
+    // Also handle window blur for stricter focus enforcement
+    const handleBlur = () => {
+       if (videoRef.current && !videoRef.current.paused) {
+         videoRef.current.pause();
+         setIsPlaying(false);
+         // toast.warning('Vui lòng giữ cửa sổ này hoạt động để tiếp tục xem.');
+         console.log('[Lesson] ⏸️ Paused due to window blur (Focus Loss)');
+       }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    // window.addEventListener("blur", handleBlur); // Optional: Comment out if too strict
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      // window.removeEventListener("blur", handleBlur);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only bind once
 
   // Load saved progress
   useEffect(() => {
@@ -325,17 +383,37 @@ function LessonContent() {
     if (!video) return;
 
     const handleTimeUpdate = () => {
-      // Update last valid time (for seeking prevention)
-      lastValidTimeRef.current = video.currentTime;
+      // Security: Enforce max playback speed of 2x (Anti-cheat)
+      if (video.playbackRate > 2) {
+        console.log('[Lesson] ⚠️ Speed limit exceeded! Resetting to 2x');
+        video.playbackRate = 2;
+        setPlaybackSpeed(2);
+      }
+
+      const currentTime = video.currentTime;
+      const lastTime = lastValidTimeRef.current;
       
-      setCurrentTime(video.currentTime);
+      // Allow rewind (currentTime < lastTime) but check forward seek
+      // Threshold 3s is sufficient for 2x speed (1s real = 2s video)
+      const allowedJump = Math.max(3, video.playbackRate * 2);
+      
+      if (currentTime > lastTime + allowedJump) {
+         console.log(`[Lesson] 🚫 Forward skip blocked! Attempted: ${currentTime.toFixed(2)}s (Last: ${lastTime.toFixed(2)}s)`);
+         video.currentTime = lastTime;
+         return; 
+      }
+
+      // Update last valid time (for seeking prevention)
+      lastValidTimeRef.current = currentTime;
+      
+      setCurrentTime(currentTime);
       
       // Update max watched time
-      setMaxWatchedTime(prev => Math.max(prev, video.currentTime));
+      setMaxWatchedTime(prev => Math.max(prev, currentTime));
       
       // Log every 5 seconds
-      if (Math.floor(video.currentTime) % 5 === 0 && Math.floor(video.currentTime) !== 0) {
-        console.log(`[Lesson] Video time: ${video.currentTime.toFixed(2)}s`);
+      if (Math.floor(currentTime) % 5 === 0 && Math.floor(currentTime) !== 0) {
+        console.log(`[Lesson] Video time: ${currentTime.toFixed(2)}s`);
       }
     };
 
@@ -382,18 +460,30 @@ function LessonContent() {
     };
 
     const handleSeeking = () => {
-      // Completely prevent seeking (both forward and backward)
       const attemptedTime = video.currentTime;
-      const timeDiff = Math.abs(attemptedTime - lastValidTimeRef.current);
+      const lastTime = lastValidTimeRef.current;
       
-      // If seeking detected (difference > 0.5s), revert to last valid time
-      if (timeDiff > 0.5) {
-        console.log(`[Lesson] 🚫 Seeking blocked! Attempted: ${attemptedTime.toFixed(2)}s → Reverted to: ${lastValidTimeRef.current.toFixed(2)}s`);
-        video.currentTime = lastValidTimeRef.current;
+      // Check forward seeking (> allowedJump threshold)
+      const allowedJump = Math.max(5, video.playbackRate * 2);
+      if (attemptedTime > lastTime + allowedJump) {
+        console.log(`[Lesson] 🚫 Forward seeking blocked! Attempted: ${attemptedTime.toFixed(2)}s → Reverted to: ${lastTime.toFixed(2)}s`);
+        video.currentTime = lastTime;
+      } else if (attemptedTime < lastTime) {
+         // Allow rewind - update reference to current time
+         lastValidTimeRef.current = attemptedTime; 
+      }
+    };
+
+    const handleRateChange = () => {
+      if (video.playbackRate > 2) {
+        console.log('[Lesson] 🚫 External speed tool detected! Resetting to 2x');
+        video.playbackRate = 2;
+        setPlaybackSpeed(2);
       }
     };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('ratechange', handleRateChange);
     video.addEventListener('seeking', handleSeeking);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('ended', handleEnded);
@@ -403,6 +493,7 @@ function LessonContent() {
 
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('ratechange', handleRateChange);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('playing', handlePlaying);
@@ -702,8 +793,8 @@ function LessonContent() {
 
           {/* Question modal overlay */}
           {currentQuestionIdx !== null && (
-            <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
+            <div className="absolute inset-0 bg-transparent flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4 border border-gray-200">
                 <div className="mb-6">
                   {/* Result indicator */}
                   {showResult && (

@@ -4,6 +4,7 @@ export type LevelTag = "B" | "A" | "I";
 
 export interface ExamSetRecord {
   id: number;
+  subject_id: number;
   set_code: string;
   set_name: string;
   total_points: number;

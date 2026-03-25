@@ -507,7 +507,7 @@ const migrations: Migration[] = [
         ('/admin/user-management'),
         ('/admin/video-setup'),
         ('/admin/video-detail'),
-        ('/admin/baitap'),
+        ('/admin/assignments'),
         ('/admin/training-studio')
       ) AS route(path)
       WHERE u.email = 'hoteaching@mindx.com.vn'
@@ -753,6 +753,19 @@ const migrations: Migration[] = [
       ALTER TABLE training_video_assignments ALTER COLUMN video_id DROP NOT NULL;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V34: Fix view counts for training videos
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V34_fix_view_counts',
+    version: 34,
+    sql: `
+      UPDATE training_teacher_video_scores
+      SET view_count = 1
+      WHERE view_count IS NULL OR view_count = 0;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========
@@ -763,50 +776,58 @@ export async function runMigrations(pool: Pool): Promise<{ success: boolean; app
   const applied: string[] = [];
   const errors: string[] = [];
 
+  // Use a single client for all migrations to ensure connection stability and performance
+  let client;
   try {
-    // Bước 1: Tạo bảng _migrations trước (luôn chạy)
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS _migrations (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL UNIQUE,
-        version INTEGER NOT NULL,
-        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+    client = await pool.connect();
 
-    // Bước 2: Lấy danh sách migration đã chạy
-    const result = await pool.query('SELECT name FROM _migrations');
-    const appliedMigrations = new Set(result.rows.map((r: { name: string }) => r.name));
-
-    // Bước 3: Chạy từng migration chưa applied
-    for (const migration of migrations) {
-      if (appliedMigrations.has(migration.name)) {
-        continue; // Đã chạy rồi, bỏ qua
-      }
-
-      try {
-        await pool.query('BEGIN');
-        await pool.query(migration.sql);
-        await pool.query(
-          'INSERT INTO _migrations (name, version) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING',
-          [migration.name, migration.version]
+    try {
+      // Bước 1: Tạo bảng _migrations trước (luôn chạy)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS _migrations (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL UNIQUE,
+          version INTEGER NOT NULL,
+          applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-        await pool.query('COMMIT');
+      `);
 
-        applied.push(migration.name);
-        console.log(`  ✅ Migration applied: ${migration.name} (v${migration.version})`);
-      } catch (err: any) {
-        await pool.query('ROLLBACK');
-        const errorMsg = `Migration ${migration.name} failed: ${err.message}`;
-        errors.push(errorMsg);
-        console.error(`  ❌ ${errorMsg}`);
-        // Tiếp tục với migration tiếp theo (không dừng lại)
+      // Bước 2: Lấy danh sách migration đã chạy
+      const result = await client.query('SELECT name FROM _migrations');
+      const appliedMigrations = new Set(result.rows.map((r: { name: string }) => r.name));
+
+      // Bước 3: Chạy từng migration chưa applied
+      for (const migration of migrations) {
+        if (appliedMigrations.has(migration.name)) {
+          continue; // Đã chạy rồi, bỏ qua
+        }
+
+        try {
+          await client.query('BEGIN');
+          await client.query(migration.sql);
+          await client.query(
+            'INSERT INTO _migrations (name, version) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING',
+            [migration.name, migration.version]
+          );
+          await client.query('COMMIT');
+
+          applied.push(migration.name);
+          console.log(`  ✅ Migration applied: ${migration.name} (v${migration.version})`);
+        } catch (err: any) {
+          await client.query('ROLLBACK');
+          const errorMsg = `Migration ${migration.name} failed: ${err.message}`;
+          errors.push(errorMsg);
+          console.error(`  ❌ ${errorMsg}`);
+          // throw new Error(errorMsg); // Stop migration on first error (Removed to match original behavior: continue)
+        }
       }
-    }
 
-    return { success: errors.length === 0, applied, errors };
+      return { success: errors.length === 0, applied, errors };
+    } finally {
+      client.release(); // Always release the client back to the pool
+    }
   } catch (err: any) {
-    console.error('❌ Migration system error:', err.message);
+    console.error('❌ Migration system error (Connection or Query failed):', err.message);
     return { success: false, applied, errors: [err.message] };
   }
 }

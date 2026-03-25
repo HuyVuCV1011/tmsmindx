@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 
 type CalendarView = "day" | "week" | "month";
 type EventCategory = "registration" | "exam" | "workshop_teaching" | "meeting" | "advanced_training_release" | "holiday";
+type ParticipationStatus = "accepted" | "declined";
 
 type RegistrationTemplate = "official" | "supplement";
 
@@ -30,6 +31,48 @@ interface ExamSetAvailability {
 }
 
 const WEEKDAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+const EVENT_TYPE_LABELS: Record<EventCategory, string> = {
+  registration: "A: Lịch đăng ký kiểm tra",
+  exam: "B: Lịch kiểm tra chuyên môn",
+  workshop_teaching: "C: Lịch Workshop Teaching",
+  meeting: "D: Lịch họp",
+  advanced_training_release: "E: Lịch phát hành đào tạo nâng cao",
+  holiday: "F: Lịch nghỉ",
+};
+
+const REGISTRATION_TEMPLATE_LABELS: Record<RegistrationTemplate, string> = {
+  official: "Chính thức",
+  supplement: "Bổ sung",
+};
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("vi-VN", {
+    hour12: false,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getEventClass(eventType: EventCategory | undefined) {
+  switch (eventType) {
+    case "registration":
+      return "bg-red-100 text-red-900";
+    case "workshop_teaching":
+      return "bg-purple-200 text-purple-900";
+    case "meeting":
+      return "bg-blue-200 text-blue-900";
+    case "advanced_training_release":
+      return "bg-indigo-200 text-indigo-900";
+    case "holiday":
+      return "bg-amber-200 text-amber-900";
+    case "exam":
+    default:
+      return "bg-green-200 text-green-900";
+  }
+}
 const REGISTER_OPTIONS = [
   "[COD] Scratch (S)",
   "[COD] GameMaker (G)",
@@ -211,12 +254,16 @@ export default function MonthlyActivitiesPage() {
   const [focusDate, setFocusDate] = useState(new Date());
   const [events, setEvents] = useState<EvaluationEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showDayEventsModal, setShowDayEventsModal] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [availableOptions, setAvailableOptions] = useState<Set<string>>(new Set());
   const [teacherCode, setTeacherCode] = useState("");
+  const [teacherName, setTeacherName] = useState("");
   const [teacherCenterCode, setTeacherCenterCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [respondingEventId, setRespondingEventId] = useState<string | null>(null);
+  const [participationByEvent, setParticipationByEvent] = useState<Record<string, ParticipationStatus>>({});
 
   useEffect(() => {
     if (!user?.email) return;
@@ -227,6 +274,9 @@ export default function MonthlyActivitiesPage() {
         const data = await response.json();
         if (data?.teacher?.code) {
           setTeacherCode(data.teacher.code);
+          if (data?.teacher?.name) {
+            setTeacherName(String(data.teacher.name));
+          }
           if (data?.teacher?.branchCurrent) {
             setTeacherCenterCode(String(data.teacher.branchCurrent));
           }
@@ -237,8 +287,9 @@ export default function MonthlyActivitiesPage() {
 
       const fallback = user.email.split('@')[0] || '';
       setTeacherCode(fallback);
+      setTeacherName(user.displayName || fallback);
     })();
-  }, [user?.email]);
+  }, [user?.email, user?.displayName]);
 
   useEffect(() => {
     (async () => {
@@ -383,6 +434,42 @@ export default function MonthlyActivitiesPage() {
     return `Tháng ${focusDate.getMonth() + 1}/${focusDate.getFullYear()}`;
   }, [focusDate, view]);
 
+  const selectedDayEvents = useMemo(() => {
+    if (!selectedDate) return [];
+    return eventsByDateKey.get(formatDateKey(selectedDate)) || [];
+  }, [eventsByDateKey, selectedDate]);
+
+  useEffect(() => {
+    if (!showDayEventsModal || !teacherCode || selectedDayEvents.length === 0) {
+      return;
+    }
+
+    const eventIds = selectedDayEvents.map((event) => event.id).join(',');
+
+    (async () => {
+      try {
+        const response = await fetch(
+          `/api/event-schedule-participants?teacher_code=${encodeURIComponent(teacherCode)}&event_ids=${encodeURIComponent(eventIds)}`
+        );
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || 'Không thể tải phản hồi tham gia');
+        }
+
+        const next: Record<string, ParticipationStatus> = {};
+        (data.data || []).forEach((row: { event_id: string; response_status: ParticipationStatus }) => {
+          if (row.event_id && row.response_status) {
+            next[row.event_id] = row.response_status;
+          }
+        });
+        setParticipationByEvent(next);
+      } catch (error) {
+        console.error('Failed to load participation response:', error);
+        setParticipationByEvent({});
+      }
+    })();
+  }, [showDayEventsModal, selectedDayEvents, teacherCode]);
+
   const stepDate = (amount: number) => {
     const next = new Date(focusDate);
 
@@ -414,8 +501,23 @@ export default function MonthlyActivitiesPage() {
   };
 
   const handleDayClick = (date: Date) => {
-    const registrationEvent = registrationEventByDate(date);
+    const dateEvents = eventsByDateKey.get(formatDateKey(date)) || [];
+    if (dateEvents.length === 0) {
+      return;
+    }
+
+    setSelectedDate(date);
+    setShowDayEventsModal(true);
+  };
+
+  const openRegisterModalFromDay = () => {
+    if (!selectedDate) {
+      return;
+    }
+
+    const registrationEvent = registrationEventByDate(selectedDate);
     if (!registrationEvent) {
+      toast.error("Ngày này không có lịch đăng ký");
       return;
     }
 
@@ -424,13 +526,51 @@ export default function MonthlyActivitiesPage() {
     const endAt = new Date(registrationEvent.endAt);
 
     if (now >= startAt && now <= endAt) {
-      setSelectedDate(date);
+      setShowDayEventsModal(false);
       setSelectedOptions([]);
       setShowRegisterModal(true);
       return;
     }
 
     toast.error("Quá hạn đăng ký");
+  };
+
+  const handleParticipationResponse = async (eventId: string, responseStatus: ParticipationStatus) => {
+    if (!teacherCode.trim()) {
+      toast.error("Không xác định được mã giáo viên");
+      return;
+    }
+
+    try {
+      setRespondingEventId(eventId);
+      const response = await fetch('/api/event-schedule-participants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_id: eventId,
+          teacher_code: teacherCode,
+          teacher_name: teacherName || user?.displayName || teacherCode,
+          teacher_email: user?.email || null,
+          response_status: responseStatus,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Không thể cập nhật phản hồi tham gia');
+      }
+
+      setParticipationByEvent((previous) => ({
+        ...previous,
+        [eventId]: responseStatus,
+      }));
+
+      toast.success(responseStatus === 'accepted' ? 'Bạn đã xác nhận tham gia' : 'Bạn đã từ chối tham gia');
+    } catch (error: any) {
+      toast.error(error?.message || 'Không thể lưu phản hồi');
+    } finally {
+      setRespondingEventId(null);
+    }
   };
 
   const submitRegistration = async () => {
@@ -680,7 +820,7 @@ export default function MonthlyActivitiesPage() {
                     : inCurrentMonth
                       ? "bg-white"
                       : "bg-gray-50"
-                } ${hasRegistrationEvent ? "cursor-pointer hover:bg-blue-50" : ""}`}
+                  } ${dayEvents.length > 0 ? "cursor-pointer hover:bg-blue-50" : ""}`}
                 onClick={() => handleDayClick(date)}
               >
                 <div className="mb-1 flex items-center justify-between">
@@ -735,12 +875,138 @@ export default function MonthlyActivitiesPage() {
                       </div>
                     );
                   })}
+                  {dayEvents.length > 3 && (
+                    <div className="text-[11px] font-semibold text-gray-500">
+                      +{dayEvents.length - 3} sự kiện khác
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
       </Card>
+
+      {showDayEventsModal && selectedDate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-3xl rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <h3 className="text-lg font-bold text-gray-900">
+                Sự kiện ngày {selectedDate.toLocaleDateString("vi-VN")}
+              </h3>
+              <button
+                onClick={() => setShowDayEventsModal(false)}
+                className="rounded-md p-1 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="max-h-[65vh] space-y-3 overflow-y-auto p-4">
+              {selectedDayEvents.length === 0 ? (
+                <div className="rounded-md border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+                  Không có sự kiện nào trong ngày này.
+                </div>
+              ) : (
+                selectedDayEvents.map((event) => (
+                  <div key={event.id} className="rounded-lg border border-gray-200 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getEventClass(event.eventType)}`}>
+                        {EVENT_TYPE_LABELS[event.eventType || "exam"]}
+                      </span>
+                      <span className="text-xs font-semibold text-blue-700">
+                        {formatEventTimeRange(event.startAt, event.endAt)}
+                      </span>
+                    </div>
+
+                    <p className="mt-2 text-sm font-semibold whitespace-pre-line text-gray-900">{event.title}</p>
+
+                    <div className="mt-2 grid gap-1 text-sm text-gray-700">
+                      <p>
+                        <span className="font-semibold">Chuyên môn:</span> {event.specialty || "-"}
+                      </p>
+                      <p>
+                        <span className="font-semibold">Bắt đầu:</span> {formatDateTime(event.startAt)}
+                      </p>
+                      <p>
+                        <span className="font-semibold">Kết thúc:</span> {formatDateTime(event.endAt)}
+                      </p>
+                      {event.registrationTemplate && (
+                        <p>
+                          <span className="font-semibold">Mẫu đăng ký:</span>{" "}
+                          {REGISTRATION_TEMPLATE_LABELS[event.registrationTemplate]}
+                        </p>
+                      )}
+                      {event.note && (
+                        <p className="whitespace-pre-line">
+                          <span className="font-semibold">Ghi chú:</span> {event.note}
+                        </p>
+                      )}
+                    </div>
+
+                    {event.eventType !== "registration" && event.eventType !== "holiday" && (
+                      <div className="mt-3 border-t border-gray-200 pt-3">
+                        <p className="mb-2 text-xs font-semibold text-gray-600">Xác nhận tham gia sự kiện</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={() => handleParticipationResponse(event.id, "accepted")}
+                            disabled={respondingEventId === event.id}
+                            className={`rounded-md border px-3 py-1.5 text-xs font-semibold ${
+                              participationByEvent[event.id] === "accepted"
+                                ? "border-green-500 bg-green-600 text-white"
+                                : "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
+                            }`}
+                          >
+                            {respondingEventId === event.id ? "Đang lưu..." : "Tham gia"}
+                          </button>
+                          <button
+                            onClick={() => handleParticipationResponse(event.id, "declined")}
+                            disabled={respondingEventId === event.id}
+                            className={`rounded-md border px-3 py-1.5 text-xs font-semibold ${
+                              participationByEvent[event.id] === "declined"
+                                ? "border-red-500 bg-red-600 text-white"
+                                : "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+                            }`}
+                          >
+                            {respondingEventId === event.id ? "Đang lưu..." : "Từ chối"}
+                          </button>
+                          {participationByEvent[event.id] === "accepted" && (
+                            <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                              Bạn đã xác nhận tham gia
+                            </span>
+                          )}
+                          {participationByEvent[event.id] === "declined" && (
+                            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                              Bạn đã từ chối tham gia
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 px-4 py-3">
+              {Boolean(activeRegistrationEventByDate(selectedDate)) && (
+                <button
+                  onClick={openRegisterModalFromDay}
+                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Đăng ký kiểm tra
+                </button>
+              )}
+              <button
+                onClick={() => setShowDayEventsModal(false)}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showRegisterModal && selectedDate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
