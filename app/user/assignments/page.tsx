@@ -5,11 +5,11 @@ import { Tabs } from '@/components/Tabs';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
-import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send, XCircle } from 'lucide-react';
-import Image from 'next/image';
+import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send, Trophy, XCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import NextImage from 'next/image';
 import toast from 'react-hot-toast';
 
 interface Assignment {
@@ -94,8 +94,9 @@ export default function TeacherAssignmentPage() {
   const [examLoading, setExamLoading] = useState(true);
   const [error, setError] = useState('');
   const [teacherCode, setTeacherCode] = useState('');
-  const [activeMainTab, setActiveMainTab] = useState<'exam' | 'training'>('exam');
+  const [activeMainTab, setActiveMainTab] = useState<'exam' | 'scores' | 'training'>('exam');
   const [selectedExamMonth, setSelectedExamMonth] = useState('all');
+  const [activeExamSubTab, setActiveExamSubTab] = useState<'best' | string>('best');
   const [view, setView] = useState<'list' | 'taking' | 'result'>('list');
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [timerActive, setTimerActive] = useState(false);
@@ -433,6 +434,91 @@ export default function TeacherAssignmentPage() {
     return Math.round((Object.keys(answers).length / questions.length) * 100);
   };
 
+  // ─── Sub-tabs inside exam section (hooks must be before any early return) ──
+  const last6Months = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    });
+  }, []);
+
+  const bestScoreData = useMemo<{
+    subject_code: string;
+    best_score: number | null;
+    passing_score: number;
+    total_points: number;
+    attempt_count: number;
+    passed_count: number;
+    latest_open_at: string;
+  }[]>(() => {
+    const last6Set = new Set(last6Months);
+    const map = new Map<string, { subject_code: string; best_score: number | null; passing_score: number; total_points: number; attempt_count: number; passed_count: number; latest_open_at: string }>();
+
+    examAssignments.forEach(item => {
+      const date = new Date(item.open_at);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (!last6Set.has(monthKey)) return;
+
+      const score = item.score !== null ? Number(item.score) : null;
+      const existing = map.get(item.subject_code);
+
+      if (!existing) {
+        map.set(item.subject_code, {
+          subject_code: item.subject_code,
+          best_score: score,
+          passing_score: item.passing_score,
+          total_points: item.total_points,
+          attempt_count: 1,
+          passed_count: score !== null && score >= item.passing_score ? 1 : 0,
+          latest_open_at: item.open_at,
+        });
+      } else {
+        const newBest =
+          score !== null
+            ? existing.best_score === null ? score : Math.max(existing.best_score, score)
+            : existing.best_score;
+        map.set(item.subject_code, {
+          ...existing,
+          best_score: newBest,
+          attempt_count: existing.attempt_count + 1,
+          passed_count: existing.passed_count + (score !== null && score >= item.passing_score ? 1 : 0),
+          latest_open_at: item.open_at > existing.latest_open_at ? item.open_at : existing.latest_open_at,
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.subject_code.localeCompare(b.subject_code));
+  }, [examAssignments, last6Months]);
+
+  const examSubMonthTabs = useMemo(() => {
+    const examMonthOpts = Array.from(
+      new Set(
+        examAssignments.map(item => {
+          const date = new Date(item.open_at);
+          const month = `${date.getMonth() + 1}`.padStart(2, '0');
+          return `${date.getFullYear()}-${month}`;
+        })
+      )
+    ).sort((a, b) => b.localeCompare(a));
+    const all = new Set([...examMonthOpts, ...last6Months]);
+    return Array.from(all).sort((a, b) => b.localeCompare(a));
+  }, [examAssignments, last6Months]);
+
+  const formatMonthLabel = (ym: string) => {
+    const [y, m] = ym.split('-');
+    return `Tháng ${parseInt(m)}/${y}`;
+  };
+
+  const assignmentsForSubTab = useMemo(() => {
+    if (activeExamSubTab === 'best') return [];
+    return examAssignments.filter(item => {
+      const date = new Date(item.open_at);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      return key === activeExamSubTab;
+    });
+  }, [examAssignments, activeExamSubTab]);
+
   // Loading state when auto-starting assignment
   if (startId && view === 'list') {
     const target = assignments.find(a => a.id.toString() === startId);
@@ -545,7 +631,7 @@ export default function TeacherAssignmentPage() {
                   {/* Question Image */}
                   {question.image_url && (
                     <div className="mb-3 md:mb-4 ml-11 md:ml-14">
-                      <Image
+                      <NextImage
                         src={question.image_url}
                         alt="Question"
                         width={400}
@@ -919,7 +1005,8 @@ export default function TeacherAssignmentPage() {
 
 
   const mainTabs = [
-    { id: 'exam', label: 'Kiểm tra chuyên môn & Quy trình - kỹ năng trải nghiệm', count: examAssignments.length },
+    { id: 'exam', label: 'Kiểm tra chuyên môn & Quy trình - kỹ năng trải nghiệm' },
+    { id: 'scores', label: 'Điểm kiểm tra', count: examAssignments.length },
   ];
 
   return (
@@ -933,7 +1020,7 @@ export default function TeacherAssignmentPage() {
         <Tabs
           tabs={mainTabs}
           activeTab={activeMainTab}
-          onChange={(tabId) => setActiveMainTab(tabId as 'exam' | 'training')}
+          onChange={(tabId) => setActiveMainTab(tabId as 'exam' | 'scores' | 'training')}
         />
 
         {error ? (
@@ -942,89 +1029,186 @@ export default function TeacherAssignmentPage() {
             <p className="text-red-700 font-medium">{error}</p>
           </div>
         ) : activeMainTab === 'exam' ? (
-          <div className="mt-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <h2 className="text-lg font-semibold text-gray-900">Danh sách bài thi đã đăng ký</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Lọc theo tháng:</span>
-                <select
-                  value={selectedExamMonth}
-                  onChange={(e) => setSelectedExamMonth(e.target.value)}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+          <div key="exam" className="mt-6 animate-tab-enter">
+            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-16 text-center">
+              <BookOpen className="mx-auto mb-4 h-16 w-16 text-gray-300" />
+              <p className="text-gray-400 text-sm">Nội dung đang được cập nhật...</p>
+            </div>
+          </div>
+        ) : activeMainTab === 'scores' ? (
+          <div key="scores" className="mt-6 space-y-4 animate-tab-enter">
+            {/* ─── Sub-tabs: Điểm cao nhất + từng tháng ─── */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b border-gray-200 scrollbar-hide">
+              <button
+                onClick={() => setActiveExamSubTab('best')}
+                className={`flex shrink-0 items-center gap-1.5 rounded-t-md px-4 py-2 text-sm font-semibold transition-colors ${
+                  activeExamSubTab === 'best'
+                    ? 'border-b-2 border-amber-500 text-amber-700 bg-amber-50'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <Trophy className="h-4 w-4" />
+                Điểm cao nhất
+              </button>
+              {examSubMonthTabs.map(ym => (
+                <button
+                  key={ym}
+                  onClick={() => setActiveExamSubTab(ym)}
+                  className={`shrink-0 rounded-t-md px-4 py-2 text-sm font-semibold transition-colors ${
+                    activeExamSubTab === ym
+                      ? 'border-b-2 border-blue-500 text-blue-700 bg-blue-50'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                  }`}
                 >
-                  <option value="all">Tất cả</option>
-                  {examMonthOptions.map((month) => (
-                    <option key={month} value={month}>{month}</option>
-                  ))}
-                </select>
-              </div>
+                  {formatMonthLabel(ym)}
+                </button>
+              ))}
             </div>
 
             {examLoading ? (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-10 text-center text-gray-500">
+              <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500 shadow-sm">
                 Đang tải danh sách bài thi...
               </div>
-            ) : filteredExamAssignments.length === 0 ? (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-                <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có bài thi đăng ký</h3>
-                <p className="text-gray-500">Hiện tại chưa có bài thi chuyên môn hoặc quy trình - kỹ năng trải nghiệm.</p>
+            ) : activeExamSubTab === 'best' ? (
+              /* ─── Tab: Điểm cao nhất 6 tháng ─── */
+              <div key="best" className="animate-tab-enter">
+                <p className="mb-3 text-xs text-gray-500">
+                  Tổng hợp điểm cao nhất của bạn trong 6 tháng gần nhất ({formatMonthLabel(last6Months[last6Months.length - 1])} – {formatMonthLabel(last6Months[0])})
+                </p>
+                {bestScoreData.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-12 text-center">
+                    <Trophy className="mx-auto mb-3 h-12 w-12 text-gray-300" />
+                    <p className="text-sm text-gray-500">Chưa có dữ liệu kiểm tra trong 6 tháng qua.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        <tr>
+                          <th className="px-4 py-3 text-left">Môn học</th>
+                          <th className="px-4 py-3 text-center">Điểm cao nhất</th>
+                          <th className="px-4 py-3 text-center">Tổng điểm</th>
+                          <th className="px-4 py-3 text-center">Kết quả</th>
+                          <th className="px-4 py-3 text-center">Số lần thi</th>
+                          <th className="px-4 py-3 text-center">Đạt / Tổng</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {bestScoreData.map(row => {
+                          const isPassed = row.best_score !== null && row.best_score >= row.passing_score;
+                          return (
+                            <tr key={row.subject_code} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-3 font-medium text-gray-900">{row.subject_code}</td>
+                              <td className="px-4 py-3 text-center">
+                                {row.best_score === null ? (
+                                  <span className="text-gray-400">Chưa có</span>
+                                ) : (
+                                  <span className={`text-lg font-bold ${isPassed ? 'text-green-600' : 'text-red-600'}`}>
+                                    {row.best_score}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-center text-gray-600">{row.total_points}</td>
+                              <td className="px-4 py-3 text-center">
+                                {row.best_score === null ? (
+                                  <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-500">Chưa thi</span>
+                                ) : isPassed ? (
+                                  <span className="rounded-full border border-green-300 bg-green-50 px-2.5 py-0.5 text-xs font-semibold text-green-700">Đạt</span>
+                                ) : (
+                                  <span className="rounded-full border border-red-300 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">Chưa đạt</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-center text-gray-700">{row.attempt_count}</td>
+                              <td className="px-4 py-3 text-center">
+                                <span className={row.passed_count > 0 ? 'font-semibold text-green-700' : 'text-gray-500'}>
+                                  {row.passed_count}
+                                </span>
+                                <span className="text-gray-400">/{row.attempt_count}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredExamAssignments.map((item) => {
-                  const now = new Date();
-                  const closeAt = new Date(item.close_at);
-                  const isExpiredZero = (item.assignment_status === 'expired' || closeAt < now) && Number(item.score || 0) === 0;
+              /* ─── Tab: Từng tháng ─── */
+              <div key={activeExamSubTab} className="animate-tab-enter">
+                <p className="mb-3 text-xs text-gray-500">
+                  {assignmentsForSubTab.length} bài thi trong {formatMonthLabel(activeExamSubTab)}
+                </p>
+                {assignmentsForSubTab.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
+                    <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
+                    <p className="text-sm text-gray-500">Không có bài thi nào trong tháng này.</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {assignmentsForSubTab.map((item) => {
+                      const now = new Date();
+                      const closeAt = new Date(item.close_at);
+                      const isExpiredZero = (item.assignment_status === 'expired' || closeAt < now) && Number(item.score || 0) === 0;
 
-                  return (
-                    <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <h3 className="text-sm font-bold text-gray-900 line-clamp-2">{item.subject_code}</h3>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${getExamStatusClass(item)}`}>
-                          {getExamStatusLabel(item)}
-                        </span>
-                      </div>
+                      return (
+                        <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                          <div className="mb-2 flex items-start justify-between gap-2">
+                            <h3 className="line-clamp-2 text-sm font-bold text-gray-900">{item.subject_code}</h3>
+                            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getExamStatusClass(item)}`}>
+                              {getExamStatusLabel(item)}
+                            </span>
+                          </div>
 
-                      <div className="text-xs text-gray-600 space-y-1 mb-3">
-                        <p><span className="font-medium">Loại:</span> {formatRegistrationType(item.registration_type)}</p>
-                        <p><span className="font-medium">Bộ đề:</span> {item.set_code} - {item.set_name}</p>
-                        <p><span className="font-medium">Mở:</span> {new Date(item.open_at).toLocaleString('vi-VN')}</p>
-                        <p><span className="font-medium">Đóng:</span> {new Date(item.close_at).toLocaleString('vi-VN')}</p>
-                        <p>
-                          <span className="font-medium">Điểm:</span>{' '}
-                          <span className={item.score !== null ? (item.score >= item.passing_score ? 'text-green-600 font-bold' : 'text-red-600 font-bold') : ''}>
-                            {item.score === null ? 'Chưa có' : item.score}
-                          </span>
-                        </p>
-                      </div>
+                          <div className="mb-3 space-y-1 text-xs text-gray-600">
+                            <p><span className="font-medium">Loại:</span> {formatRegistrationType(item.registration_type)}</p>
+                            <p><span className="font-medium">Bộ đề:</span> {item.set_code} – {item.set_name}</p>
+                            <p><span className="font-medium">Mở:</span> {new Date(item.open_at).toLocaleString('vi-VN')}</p>
+                            <p><span className="font-medium">Đóng:</span> {new Date(item.close_at).toLocaleString('vi-VN')}</p>
+                            <p>
+                              <span className="font-medium">Điểm: </span>
+                              {item.score === null ? (
+                                <span className="text-gray-400">Chưa có</span>
+                              ) : (
+                                <span className={`font-bold ${item.score >= item.passing_score ? 'text-green-600' : 'text-red-600'}`}>
+                                  {item.score} / {item.total_points}
+                                  {' '}
+                                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${item.score >= item.passing_score ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                    {item.score >= item.passing_score ? 'Đạt' : 'Chưa đạt'}
+                                  </span>
+                                </span>
+                              )}
+                            </p>
+                          </div>
 
-                      {item.can_take ? (
-                        <Link
-                          href={`/user/assignments/exam/${item.id}`}
-                          className="w-full inline-flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700"
-                        >
-                          {item.score !== null || item.assignment_status === 'submitted' ? 'Làm lại bài' : 'Bắt đầu làm bài'}
-                        </Link>
-                      ) : isExpiredZero && !item.explanation_status ? (
-                        <Link
-                          href={`/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`}
-                          className="w-full inline-flex items-center justify-center px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700"
-                        >
-                          Giải trình
-                        </Link>
-                      ) : item.explanation_status ? (
-                        <div className="w-full inline-flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold">
-                          Đã giải trình ({item.explanation_status})
+                          {item.can_take ? (
+                            <Link
+                              href={`/user/assignments/exam/${item.id}`}
+                              className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                            >
+                              {item.score !== null || item.assignment_status === 'submitted' ? 'Làm lại bài' : 'Bắt đầu làm bài'}
+                            </Link>
+                          ) : isExpiredZero && !item.explanation_status ? (
+                            <Link
+                              href={`/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`}
+                              className="inline-flex w-full items-center justify-center rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                            >
+                              Giải trình
+                            </Link>
+                          ) : item.explanation_status ? (
+                            <div className="inline-flex w-full items-center justify-center rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-700">
+                              Đã giải trình ({item.explanation_status})
+                            </div>
+                          ) : (
+                            <div className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
+                              {new Date(item.open_at) > now ? 'Chưa tới giờ mở' : 'Thông tin bài thi'}
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="w-full inline-flex items-center justify-center px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold">
-                          {new Date(item.open_at) > now ? 'Chưa tới giờ mở' : 'Thông tin bài thi'}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>

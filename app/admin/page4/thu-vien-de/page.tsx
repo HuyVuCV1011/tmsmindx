@@ -20,12 +20,14 @@ interface EvaluationEvent {
 
 interface PlannedEvent {
   id: string;
+  subjectId: string;
   label: string;
   startDate: string;
   endDate: string;
   startTime: string;
   endTime: string;
-  registrationTemplate: "official" | "supplementary";
+  registrationTemplate: "official" | "supplement";
+  selectedSetId: number | null;
 }
 
 const WEEKDAY_LABELS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -63,6 +65,53 @@ function addMinutesToTime(timeStr: string, minsToAdd: number) {
 function formatDateKey(date: Date) {
   const pad = (v: number) => v.toString().padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function parseDateKey(value: string) {
+  const [yearText, monthText, dayText] = value.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+
+  if (!year || !month || !day) return null;
+  return { year, month, day };
+}
+
+function daysInMonth(year: number, month: number) {
+  return new Date(year, month, 0).getDate();
+}
+
+function generateMonthlyDateKeys(startDateKey: string, endDateKey: string) {
+  const start = parseDateKey(startDateKey);
+  const end = parseDateKey(endDateKey);
+  if (!start || !end) return [];
+
+  const startDate = new Date(start.year, start.month - 1, start.day);
+  const endDate = new Date(end.year, end.month - 1, end.day);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate > endDate) {
+    return [];
+  }
+
+  const result: string[] = [];
+  const targetDay = start.day;
+  let cursorYear = start.year;
+  let cursorMonth = start.month;
+
+  while (true) {
+    const day = Math.min(targetDay, daysInMonth(cursorYear, cursorMonth));
+    const current = new Date(cursorYear, cursorMonth - 1, day);
+    if (current > endDate) break;
+
+    result.push(formatDateKey(current));
+
+    cursorMonth += 1;
+    if (cursorMonth > 12) {
+      cursorMonth = 1;
+      cursorYear += 1;
+    }
+  }
+
+  return result;
 }
 
 function buildCalendarCells(focusDate: Date) {
@@ -201,12 +250,14 @@ export default function ProfessionalAssignmentLibraryPage() {
     setPlannedEvents(
       SUBJECT_CONFIGS.filter((s) => s.examType === "expertise" || s.examType === "experience").map((s) => ({
         id: s.id,
+        subjectId: s.id,
         label: s.label,
         startDate: autoStartDate,
         endDate: autoEndDate,
         startTime: "19:00",
         endTime: "21:00",
         registrationTemplate: "official",
+        selectedSetId: null,
       }))
     );
     setIsAutoCreateModalOpen(true);
@@ -255,6 +306,35 @@ export default function ProfessionalAssignmentLibraryPage() {
   const selectedSubject = useMemo(() => {
     return subjectOptions.find((subject) => subject.id === selectedSubjectId) || subjectOptions[0];
   }, [subjectOptions, selectedSubjectId]);
+
+  const activeSetsBySubjectId = useMemo(() => {
+    const map = new Map<string, ExamSetRecord[]>();
+
+    SUBJECT_CONFIGS.forEach((subject) => {
+      const subjectSets = getSetsBySubject(sets, subject).filter((set) => set.status === "active");
+      map.set(subject.id, subjectSets);
+    });
+
+    return map;
+  }, [sets]);
+
+  useEffect(() => {
+    if (!isAutoCreateModalOpen || sets.length === 0) return;
+
+    setPlannedEvents((prev) =>
+      prev.map((event) => {
+        const options = activeSetsBySubjectId.get(event.subjectId) || [];
+        if (options.length === 0) {
+          if (event.selectedSetId === null) return event;
+          return { ...event, selectedSetId: null };
+        }
+
+        const hasCurrent = options.some((set) => set.id === event.selectedSetId);
+        if (hasCurrent) return event;
+        return { ...event, selectedSetId: options[0].id };
+      })
+    );
+  }, [isAutoCreateModalOpen, sets, activeSetsBySubjectId]);
 
   const fetchSets = async () => {
     try {
@@ -376,6 +456,14 @@ export default function ProfessionalAssignmentLibraryPage() {
     e.dataTransfer.effectAllowed = "move";
   };
 
+  const isPlannedEventScheduled = (event: PlannedEvent) => {
+    return Boolean(event.startDate && event.endDate);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+  };
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
@@ -383,6 +471,7 @@ export default function ProfessionalAssignmentLibraryPage() {
 
   const handleDrop = (e: React.DragEvent, dropId: string) => {
     e.preventDefault();
+    e.stopPropagation();
     if (!draggedId || draggedId === dropId) return;
 
     const draggedIndex = plannedEvents.findIndex((item) => item.id === draggedId);
@@ -396,8 +485,41 @@ export default function ProfessionalAssignmentLibraryPage() {
     setDraggedId(null);
   };
 
+  const handleRemoveZoneDragOver = (e: React.DragEvent) => {
+    if (!draggedId) return;
+    const draggedEvent = plannedEvents.find((item) => item.id === draggedId);
+    if (!draggedEvent || !isPlannedEventScheduled(draggedEvent)) {
+      e.dataTransfer.dropEffect = "none";
+      return;
+    }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleRemoveFromCalendarDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!draggedId) return;
+
+    const draggedEvent = plannedEvents.find((item) => item.id === draggedId);
+    if (!draggedEvent || !isPlannedEventScheduled(draggedEvent)) {
+      setDraggedId(null);
+      return;
+    }
+
+    const next = plannedEvents.map((item) =>
+      item.id === draggedId
+        ? { ...item, startDate: "", endDate: "" }
+        : item
+    );
+
+    commitPlannedEvents(next);
+    setDraggedId(null);
+  };
+
   const handleCalendarDrop = (e: React.DragEvent, dateKey: string) => {
     e.preventDefault();
+    e.stopPropagation();
     if (!draggedId) return;
 
     const durationMins = getDurationMins(autoStartTime, autoEndTime) || 120;
@@ -424,7 +546,7 @@ export default function ProfessionalAssignmentLibraryPage() {
     setDraggedId(null);
   };
 
-  const updatePlannedEvent = (id: string, field: keyof PlannedEvent, value: string) => {
+  const updatePlannedEvent = <K extends keyof PlannedEvent>(id: string, field: K, value: PlannedEvent[K]) => {
     const next = plannedEvents.map((evt) => (evt.id === id ? { ...evt, [field]: value } : evt));
     commitPlannedEvents(next);
   };
@@ -537,34 +659,111 @@ export default function ProfessionalAssignmentLibraryPage() {
     return `Kiểm tra chuyên sâu ${label}`;
   };
 
+  const parseYearMonthFromDate = (value: string) => {
+    const [yearText, monthText] = value.split("-");
+    const year = Number(yearText);
+    const month = Number(monthText);
+    if (!year || !month) {
+      const now = new Date();
+      return { year: now.getFullYear(), month: now.getMonth() + 1 };
+    }
+    return { year, month };
+  };
+
   const handleAutoCreateEvents = async (evt?: React.FormEvent) => {
     if (evt) evt.preventDefault();
-    if (plannedEvents.some(p => p.endDate < p.startDate)) {
+
+    const scheduledEvents = plannedEvents.filter(isPlannedEventScheduled);
+    if (scheduledEvents.length === 0) {
+      toast.error("Vui lòng kéo ít nhất 1 môn vào calendar trước khi lưu");
+      return;
+    }
+
+    const missingSchedule = scheduledEvents.find(
+      (p) => !p.startDate || !p.endDate || !p.startTime || !p.endTime
+    );
+    if (missingSchedule) {
+      toast.error(`Vui lòng gán lịch đầy đủ cho môn ${missingSchedule.label}`);
+      return;
+    }
+
+    if (scheduledEvents.some((p) => p.endDate < p.startDate)) {
       toast.error("Có bộ môn có ngày kết thúc trước ngày bắt đầu!");
+      return;
+    }
+
+    const missingSet = scheduledEvents.find((event) => !event.selectedSetId);
+    if (missingSet) {
+      toast.error(`Vui lòng chọn bộ đề cho môn ${missingSet.label}`);
       return;
     }
 
     try {
       setIsAutoCreating(true);
       let successCount = 0;
+      const selectionUpdated = new Set<string>();
       
-      for (const planned of plannedEvents) {
-        const response = await fetch("/api/event-schedules", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: getAutoEventTitle(planned.label),
-            event_type: "exam",
-            specialty: planned.label,
-            registration_template: planned.registrationTemplate,
-            start_at: `${planned.startDate}T${planned.startTime}:00`,
-            end_at: `${planned.endDate}T${planned.endTime}:59`,
-            note: "Lịch kiểm tra tạo tự động",
-          }),
-        });
-        
-        if (response.ok) {
-          successCount++;
+      for (const planned of scheduledEvents) {
+        const selectedSet = sets.find((set) => set.id === planned.selectedSetId);
+        if (!selectedSet) {
+          continue;
+        }
+
+        const monthlyDateKeys = generateMonthlyDateKeys(planned.startDate, planned.endDate);
+
+        for (const occurrenceDate of monthlyDateKeys) {
+          const { year, month } = parseYearMonthFromDate(occurrenceDate);
+          const selectionKey = `${selectedSet.subject_id}-${year}-${month}`;
+          if (!selectionUpdated.has(selectionKey)) {
+            const selectionResponse = await fetch("/api/monthly-exam-selections", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                subject_id: selectedSet.subject_id,
+                selected_set_id: selectedSet.id,
+                year,
+                month,
+                note: `Auto set from schedule ${planned.startDate} -> ${planned.endDate}`,
+              }),
+            });
+
+            const selectionData = await selectionResponse.json();
+            if (!selectionResponse.ok || !selectionData?.success) {
+              throw new Error(selectionData?.error || `Không thể chọn bộ đề cho ${planned.label}`);
+            }
+
+            selectionUpdated.add(selectionKey);
+          }
+
+          const response = await fetch("/api/event-schedules", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: crypto.randomUUID(),
+              title: getAutoEventTitle(planned.label),
+              event_type: "exam",
+              specialty: planned.label,
+              registration_template: planned.registrationTemplate,
+              start_at: `${occurrenceDate}T${planned.startTime}:00`,
+              end_at: `${occurrenceDate}T${planned.endTime}:00`,
+              note: "Lịch kiểm tra tạo tự động theo tháng",
+              metadata: {
+                recurrence: "monthly",
+                range_start_date: planned.startDate,
+                range_end_date: planned.endDate,
+                occurrence_date: occurrenceDate,
+                subject_id: selectedSet.subject_id,
+                selected_set_id: selectedSet.id,
+                selected_set_code: selectedSet.set_code,
+                selected_set_name: selectedSet.set_name,
+              },
+            }),
+          });
+
+          const createData = await response.json();
+          if (response.ok && createData?.success) {
+            successCount++;
+          }
         }
       }
       
@@ -701,19 +900,17 @@ export default function ProfessionalAssignmentLibraryPage() {
 
               <div className={cn("grid gap-3", group.columnsClass)}>
                 {group.subjects.map((subject) => (
-                  <div
+                  <Link
                     key={`${group.blockCode}-${subject.id}`}
+                    href={`/admin/page4/thu-vien-de/subjects/${subject.id}`}
                     className={cn(
-                      "rounded-lg border border-gray-200 bg-gray-50 p-3",
-                      "min-h-30"
+                      "block rounded-lg border border-gray-200 bg-gray-50 p-3 transition-colors",
+                      "min-h-30 hover:border-red-200 hover:bg-red-50/40"
                     )}
                   >
-                    <Link
-                      href={`/admin/page4/thu-vien-de/subjects/${subject.id}`}
-                      className="text-sm font-semibold text-gray-900 hover:text-red-700"
-                    >
+                    <p className="text-sm font-semibold text-gray-900 hover:text-red-700">
                       {subject.label}
-                    </Link>
+                    </p>
                     {subject.sets.length > 0 && (
                       <p className="mt-1 text-xs text-gray-500">{subject.sets.length} bộ đề</p>
                     )}
@@ -743,7 +940,7 @@ export default function ProfessionalAssignmentLibraryPage() {
                         </div>
                       </>
                     )}
-                  </div>
+                  </Link>
                 ))}
               </div>
 
@@ -881,6 +1078,22 @@ export default function ProfessionalAssignmentLibraryPage() {
               <div className="text-xs text-blue-600 bg-blue-50 p-2 mb-3 rounded border border-blue-100">
                  * Kéo từ đây thả vào Lịch bên phải. Môn đứng trên cùng sẽ được tạo đầu tiên.
               </div>
+
+              <div
+                onDragOver={handleRemoveZoneDragOver}
+                onDrop={handleRemoveFromCalendarDrop}
+                className={cn(
+                  "mb-3 rounded border border-dashed px-3 py-2 text-xs",
+                  draggedId && (() => {
+                    const draggedEvent = plannedEvents.find((item) => item.id === draggedId);
+                    return draggedEvent ? isPlannedEventScheduled(draggedEvent) : false;
+                  })()
+                    ? "border-rose-300 bg-rose-50 text-rose-700"
+                    : "border-gray-300 bg-gray-50 text-gray-600"
+                )}
+              >
+                Kéo môn từ ô lịch thả vào đây để xóa khỏi calendar.
+              </div>
               
               <div className="flex flex-col gap-2 p-2 mb-3 bg-gray-50 rounded border border-gray-200">
                 <div className="flex gap-2 w-full">
@@ -949,6 +1162,7 @@ export default function ProfessionalAssignmentLibraryPage() {
                     key={evt.id}
                     draggable
                     onDragStart={(e) => handleDragStart(e, evt.id)}
+                    onDragEnd={handleDragEnd}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, evt.id)}
                     className={cn(
@@ -964,18 +1178,37 @@ export default function ProfessionalAssignmentLibraryPage() {
                     <div className="flex items-center gap-2 pl-6">
                        <select
                          value={evt.registrationTemplate}
-                         onChange={(e) => updatePlannedEvent(evt.id, "registrationTemplate", e.target.value)}
+                         onChange={(e) => updatePlannedEvent(evt.id, "registrationTemplate", e.target.value as PlannedEvent["registrationTemplate"])}
                          className="flex-1 rounded border border-gray-300 px-2 py-1 text-[11px] bg-gray-50"
                        >
                          <option value="official">ĐK Chính thức</option>
-                         <option value="supplementary">ĐK Bổ sung</option>
+                         <option value="supplement">ĐK Bổ sung</option>
                        </select>
+                    </div>
+
+                    <div className="flex items-center gap-2 pl-6">
+                      <select
+                        value={evt.selectedSetId ?? ""}
+                        onChange={(e) => updatePlannedEvent(evt.id, "selectedSetId", e.target.value ? Number(e.target.value) : null)}
+                        className="flex-1 rounded border border-gray-300 px-2 py-1 text-[11px] bg-gray-50"
+                      >
+                        {(activeSetsBySubjectId.get(evt.subjectId) || []).length === 0 ? (
+                          <option value="">Chưa có bộ đề active</option>
+                        ) : (
+                          <>
+                            {(activeSetsBySubjectId.get(evt.subjectId) || []).map((set) => (
+                              <option key={set.id} value={set.id}>
+                                {set.set_code} - {set.set_name}
+                              </option>
+                            ))}
+                          </>
+                        )}
+                      </select>
                     </div>
 
                     <div className="flex items-center gap-1 pl-6">
                        <input
                          type="date"
-                         required
                          value={evt.startDate}
                          onChange={(e) => updatePlannedEvent(evt.id, "startDate", e.target.value)}
                          className="w-[45%] rounded border border-gray-300 px-1 py-1 text-[11px]"
@@ -983,7 +1216,6 @@ export default function ProfessionalAssignmentLibraryPage() {
                        <span className="text-gray-400 text-xs text-center w-[10%]">-</span>
                        <input
                          type="date"
-                         required
                          value={evt.endDate}
                          onChange={(e) => updatePlannedEvent(evt.id, "endDate", e.target.value)}
                          className="w-[45%] rounded border border-gray-300 px-1 py-1 text-[11px]"
@@ -992,7 +1224,6 @@ export default function ProfessionalAssignmentLibraryPage() {
                     <div className="flex items-center gap-1 pl-6">
                        <input
                          type="time"
-                         required
                          value={evt.startTime}
                          onChange={(e) => updatePlannedEvent(evt.id, "startTime", e.target.value)}
                          className="w-[45%] rounded border border-gray-300 px-1 py-1 text-[11px]"
@@ -1000,7 +1231,6 @@ export default function ProfessionalAssignmentLibraryPage() {
                        <span className="text-gray-400 text-xs text-center w-[10%]">-</span>
                        <input
                          type="time"
-                         required
                          value={evt.endTime}
                          onChange={(e) => updatePlannedEvent(evt.id, "endTime", e.target.value)}
                          className="w-[45%] rounded border border-gray-300 px-1 py-1 text-[11px]"
@@ -1089,6 +1319,7 @@ export default function ProfessionalAssignmentLibraryPage() {
                                      key={evt.id}
                                      draggable
                                      onDragStart={(e) => handleDragStart(e, evt.id)}
+                                     onDragEnd={handleDragEnd}
                                      title={evt.label}
                                      className={cn(
                                        "text-[10px] leading-tight px-1.5 py-1 rounded truncate border cursor-move transition-transform active:scale-95 shadow-sm",
