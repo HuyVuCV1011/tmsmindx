@@ -52,15 +52,11 @@ export default function LoginPage() {
     // Basic client-side validation
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      setError('Vui lòng nhập tên người dùng hoặc email.');
+      setError('Vui lòng nhập Email hoặc Mã đăng nhập.');
       setIsSubmitting(false);
       return;
     }
-    if (!trimmedEmail.includes('@')) {
-      setError('Email không hợp lệ.');
-      setIsSubmitting(false);
-      return;
-    }
+    // Strict email check removed to allow username/code login
     if (password.length < 6) {
       setError('Mật khẩu cần ít nhất 6 ký tự.');
       setIsSubmitting(false);
@@ -285,12 +281,14 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <form className="flex flex-col gap-3 animate-fade-in animation-delay-300" onSubmit={handleSubmit}>
+          <form className="flex flex-col gap-3 animate-fade-in animation-delay-300" onSubmit={handleSubmit} noValidate>
             <div className="relative group">
-              <label className="block text-xs font-semibold mb-1 text-gray-700 transition-colors group-focus-within:text-[#800000]">Tên người dùng/Email</label>
+              <label className="block text-xs font-semibold mb-1 text-gray-700 transition-colors group-focus-within:text-[#800000]">Email / Mã đăng nhập</label>
               <input
-                type="email"
-                placeholder="...@mindx.net.vn"
+                type="text"
+                name="username"
+                autoComplete="username"
+                placeholder="Email hoặc Mã đăng nhập..."
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 transition-all duration-300 hover:border-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed"
                 value={email}
                 onChange={e => setEmail(e.target.value)}

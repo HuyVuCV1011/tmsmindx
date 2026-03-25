@@ -16,13 +16,49 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const normalizedEmail = email.trim().toLowerCase();
+        const normalizedInput = email.trim().toLowerCase();
+        
+        let userResult;
 
-        // Check if email exists in app_users
-        const userResult = await pool.query(
-            'SELECT * FROM app_users WHERE email = $1 AND is_active = true',
-            [normalizedEmail]
-        );
+        if (normalizedInput.includes('@')) {
+            // Standard email login or username with explicit marker
+            userResult = await pool.query(
+                `SELECT * FROM app_users 
+                 WHERE (email = $1 OR LOWER(username) = $1) 
+                 AND is_active = true
+                 LIMIT 1`,
+                [normalizedInput]
+            );
+        } else {
+            // Username or Email prefix case (e.g. "baotc01")
+            // Priority: 
+            // 1. Exact username match
+            // 2. Email match with @mindx.edu.vn (standard)
+            // 3. Email match with @mindx.net.vn (legacy)
+            // 4. Email match with @mindx.com.vn (internal)
+            
+            const suffixes = [
+                '@mindx.edu.vn',
+                '@mindx.net.vn', 
+                '@mindx.com.vn'
+            ];
+            const possibleEmails = suffixes.map(s => `${normalizedInput}${s}`);
+            
+            // Check username first, then emails
+            userResult = await pool.query(
+                `SELECT * FROM app_users 
+                 WHERE (LOWER(username) = $1 OR email = ANY($2::text[])) 
+                 AND is_active = true
+                 ORDER BY 
+                   CASE 
+                     WHEN LOWER(username) = $1 THEN 1 
+                     WHEN email LIKE $3 THEN 2  -- Prefer .edu.vn
+                     ELSE 3 
+                   END
+                 LIMIT 1`,
+                [normalizedInput, possibleEmails, `%@mindx.edu.vn`]
+            );
+        }
 
         if (userResult.rows.length === 0) {
             // Not an app user — signal client to fallback to Firebase
