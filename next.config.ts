@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   experimental: {
     webpackBuildWorker: false, // Reduce parallel file operations
   },
+  serverExternalPackages: ['ffprobe-static'],
   
   images: {
     remotePatterns: [
