@@ -4,7 +4,7 @@ import { Card } from "@/components/Card";
 import Modal from "@/components/Modal";
 import { PageContainer } from "@/components/PageContainer";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ListChecks, PlusCircle, SquarePen, Trash2 } from "lucide-react";
+import { ArrowLeft, ListChecks, PlusCircle, Shuffle, Star, SquarePen, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -25,6 +25,25 @@ export default function SubjectDetailPage() {
   const [passingScore, setPassingScore] = useState(7);
   const [status, setStatus] = useState<"active" | "inactive">("active");
 
+  // ─── Monthly selection state ───────────────────────────────────────
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  interface MonthlySelection {
+    set_id: number | null;
+    set_code: string | null;
+    set_name: string | null;
+    selection_mode: "manual" | "random";
+  }
+  const [monthlySelection, setMonthlySelection] = useState<MonthlySelection | null>(null);
+  const [isDefaultModalOpen, setIsDefaultModalOpen] = useState(false);
+  const [defaultSelectedSetId, setDefaultSelectedSetId] = useState<number | "">("");
+  const [isSavingDefault, setIsSavingDefault] = useState(false);
+  const [isRandomizing, setIsRandomizing] = useState(false);
+  const [isRemovingSelection, setIsRemovingSelection] = useState(false);
+  const [subjectDbId, setSubjectDbId] = useState<number | null>(null);
+
   const subject = useMemo(() => {
     if (!subjectId) return undefined;
     return getSubjectById(subjectId);
@@ -36,13 +55,17 @@ export default function SubjectDetailPage() {
   }, [sets, subject]);
 
   const fetchSets = async () => {
+    if (!subject) return;
+
     try {
       setLoading(true);
-      const response = await fetch("/api/exam-sets");
+      const response = await fetch(`/api/exam-sets?subject_code=${encodeURIComponent(subject.label)}`);
       const data = await response.json();
 
       if (data.success) {
-        setSets(data.data || []);
+        const rows = (data.data || []) as Array<ExamSetRecord & { subject_id?: number }>;
+        setSets(rows);
+        setSubjectDbId(rows[0]?.subject_id ?? null);
       } else {
         toast.error(data.error || "Không thể tải danh sách bộ đề");
       }
@@ -56,7 +79,35 @@ export default function SubjectDetailPage() {
 
   useEffect(() => {
     fetchSets();
-  }, []);
+  }, [subject?.label]);
+
+  // Fetch monthly selection cho tháng hiện tại
+  const fetchMonthlySelection = async (dbId: number) => {
+    try {
+      const res = await fetch(
+        `/api/monthly-exam-selections?subject_id=${dbId}&year=${currentYear}&month=${currentMonth}`
+      );
+      const data = await res.json();
+      if (data.success && data.data) {
+        setMonthlySelection({
+          set_id: data.data.set_id ?? null,
+          set_code: data.data.set_code ?? null,
+          set_name: data.data.set_name ?? null,
+          selection_mode: data.data.selection_mode,
+        });
+      } else {
+        setMonthlySelection(null);
+      }
+    } catch {
+      setMonthlySelection(null);
+    }
+  };
+
+  useEffect(() => {
+    if (subjectDbId) {
+      fetchMonthlySelection(subjectDbId);
+    }
+  }, [subjectDbId]);
 
   const resetCreateForm = () => {
     setSetName("");
@@ -186,6 +237,90 @@ export default function SubjectDetailPage() {
     }
   };
 
+  const handleSaveDefault = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subjectDbId || !defaultSelectedSetId) return;
+
+    try {
+      setIsSavingDefault(true);
+      const res = await fetch("/api/monthly-exam-selections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject_id: subjectDbId,
+          year: currentYear,
+          month: currentMonth,
+          selected_set_id: defaultSelectedSetId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast.error(data.error || "Không thể lưu lựa chọn");
+        return;
+      }
+      await fetchMonthlySelection(subjectDbId);
+      toast.success("Đã lưu bộ đề mặc định cho tháng này");
+      setIsDefaultModalOpen(false);
+    } catch {
+      toast.error("Có lỗi xảy ra khi lưu lựa chọn");
+    } finally {
+      setIsSavingDefault(false);
+    }
+  };
+
+  const handleRandomize = async () => {
+    if (!subjectDbId) {
+      toast.error("Chưa xác định được môn học trong hệ thống");
+      return;
+    }
+    try {
+      setIsRandomizing(true);
+      const res = await fetch("/api/monthly-exam-selections", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject_id: subjectDbId, year: currentYear, month: currentMonth }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast.error(data.error || "Không thể chọn ngẫu nhiên");
+        return;
+      }
+      await fetchMonthlySelection(subjectDbId);
+      toast.success(`Đã chọn ngẫu nhiên: ${data.picked?.set_code} – ${data.picked?.set_name}`);
+    } catch {
+      toast.error("Có lỗi xảy ra khi chọn ngẫu nhiên");
+    } finally {
+      setIsRandomizing(false);
+    }
+  };
+
+  const handleRemoveSelection = async () => {
+    if (!subjectDbId) {
+      toast.error("Chưa xác định được môn học trong hệ thống");
+      return;
+    }
+
+    try {
+      setIsRemovingSelection(true);
+      const response = await fetch(
+        `/api/monthly-exam-selections?subject_id=${subjectDbId}&year=${currentYear}&month=${currentMonth}`,
+        { method: "DELETE" }
+      );
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        toast.error(data.error || "Không thể xóa lựa chọn tháng");
+        return;
+      }
+
+      setMonthlySelection(null);
+      toast.success("Đã xóa lựa chọn bộ đề của tháng này");
+    } catch {
+      toast.error("Có lỗi xảy ra khi xóa lựa chọn tháng");
+    } finally {
+      setIsRemovingSelection(false);
+    }
+  };
+
   if (!subject) {
     return (
       <PageContainer title="Chi tiết bộ đề theo môn" description="Không tìm thấy môn học.">
@@ -226,14 +361,77 @@ export default function SubjectDetailPage() {
         </button>
       </div>
 
-      <Card className="rounded-xl" padding="md">
-        <div className="mb-4 flex items-center gap-2">
-          <div className="rounded-lg bg-gray-100 p-2">
-            <ListChecks className="h-5 w-5 text-gray-700" />
+      {/* Banner bộ đề được chọn cho tháng */}
+      {monthlySelection?.set_code && (
+        <div className={cn(
+          "mb-4 flex items-center justify-between gap-3 rounded-lg border px-4 py-3",
+          monthlySelection.selection_mode === "random"
+            ? "border-blue-200 bg-blue-50"
+            : "border-amber-200 bg-amber-50"
+        )}>
+          <div className="flex min-w-0 items-center gap-3">
+            {monthlySelection.selection_mode === "random"
+              ? <Shuffle className="h-4 w-4 shrink-0 text-blue-600" />
+              : <Star className="h-4 w-4 shrink-0 text-amber-600" />
+            }
+            <div className="min-w-0">
+              <p className={cn("text-xs font-semibold uppercase tracking-wider",
+                monthlySelection.selection_mode === "random" ? "text-blue-600" : "text-amber-600"
+              )}>
+                Bộ đề tháng {currentMonth}/{currentYear}
+                {monthlySelection.selection_mode === "random" ? " (Ngẫu nhiên)" : " (Mặc định)"}
+              </p>
+              <p className="truncate text-sm font-semibold text-gray-900">
+                {monthlySelection.set_code} — {monthlySelection.set_name}
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">{subject.label}</h2>
-            <p className="text-sm text-gray-500">Danh sách đầy đủ bộ đề của môn</p>
+          <button
+            type="button"
+            onClick={handleRemoveSelection}
+            disabled={isRemovingSelection}
+            className="inline-flex items-center gap-1 rounded-md border border-red-300 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {isRemovingSelection ? "Đang xóa..." : "Remove"}
+          </button>
+        </div>
+      )}
+
+      <Card className="rounded-xl" padding="md">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="rounded-lg bg-gray-100 p-2">
+              <ListChecks className="h-5 w-5 text-gray-700" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">{subject.label}</h2>
+              <p className="text-sm text-gray-500">Danh sách đầy đủ bộ đề của môn</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!subjectDbId || subjectSets.length === 0}
+              onClick={() => {
+                setDefaultSelectedSetId(monthlySelection?.set_id ?? "");
+                setIsDefaultModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Star className="h-3.5 w-3.5" />
+              Mặc định
+            </button>
+            <button
+              type="button"
+              disabled={isRandomizing || !subjectDbId || subjectSets.length === 0}
+              onClick={handleRandomize}
+              className="inline-flex items-center gap-1.5 rounded-md border border-blue-400 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Shuffle className="h-3.5 w-3.5" />
+              {isRandomizing ? "Đang chọn..." : "Ngẫu nhiên"}
+            </button>
           </div>
         </div>
 
@@ -383,6 +581,57 @@ export default function SubjectDetailPage() {
             >
               <PlusCircle className="h-4 w-4" />
               {isCreating ? "Đang tạo..." : "Tạo đề"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal chọn bộ đề mặc định cho tháng */}
+      <Modal
+        isOpen={isDefaultModalOpen}
+        onClose={() => setIsDefaultModalOpen(false)}
+        title={`Chọn bộ đề mặc định – Tháng ${currentMonth}/${currentYear}`}
+        subtitle={`Môn: ${subject.label}`}
+        maxWidth="md"
+        headerColor="from-[#92400e] to-[#d97706]"
+      >
+        <form onSubmit={handleSaveDefault} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Chọn bộ đề</label>
+            <select
+              required
+              value={defaultSelectedSetId}
+              onChange={(e) => setDefaultSelectedSetId(e.target.value ? Number(e.target.value) : "")}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="">-- Chọn bộ đề --</option>
+              {subjectSets
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.set_code} – {s.set_name}
+                  </option>
+                ))}
+            </select>
+            {subjectSets.length === 0 && (
+              <p className="mt-1 text-xs text-red-500">Không có bộ đề nào để chọn.</p>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsDefaultModalOpen(false)}
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              disabled={isSavingDefault || !defaultSelectedSetId}
+              className="inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Star className="h-4 w-4" />
+              {isSavingDefault ? "Đang lưu..." : "Lưu mặc định"}
             </button>
           </div>
         </form>

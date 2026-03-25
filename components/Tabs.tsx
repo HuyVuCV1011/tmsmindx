@@ -19,7 +19,8 @@ export function Tabs({ tabs, activeTab, onChange }: TabsProps) {
             key={tab.id}
             onClick={() => onChange(tab.id)}
             className={`
-              relative px-4 py-2.5 text-sm font-semibold transition-all duration-300 whitespace-nowrap
+              relative px-4 py-2.5 text-sm font-semibold whitespace-nowrap
+              transition-colors duration-200
               ${
                 activeTab === tab.id
                   ? "text-[#a1001f]"
@@ -32,7 +33,7 @@ export function Tabs({ tabs, activeTab, onChange }: TabsProps) {
               {tab.count !== undefined && (
                 <span
                   className={`
-                    px-2 py-0.5 text-xs rounded-full font-bold
+                    px-2 py-0.5 text-xs rounded-full font-bold transition-colors duration-200
                     ${
                       activeTab === tab.id
                         ? "bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white"
@@ -44,9 +45,13 @@ export function Tabs({ tabs, activeTab, onChange }: TabsProps) {
                 </span>
               )}
             </span>
-            {activeTab === tab.id && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#a1001f] to-[#c41230]"></div>
-            )}
+            <div
+              className={`
+                absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#a1001f] to-[#c41230]
+                transition-all duration-250 ease-out origin-left
+                ${activeTab === tab.id ? 'scale-x-100 opacity-100' : 'scale-x-0 opacity-0'}
+              `}
+            />
           </button>
         ))}
       </div>
