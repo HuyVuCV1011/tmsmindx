@@ -27,8 +27,21 @@ async function ensureAssignmentsFromRegistrations(teacherCodes: string[]) {
       resolved AS (
         SELECT
           m.*,
-          set_pick.id AS set_id
+          COALESCE(month_pick.id, set_pick.id) AS set_id
         FROM missing m
+        LEFT JOIN LATERAL (
+          SELECT es.id
+          FROM exam_subject_catalog esc
+          JOIN monthly_exam_selections mes
+            ON mes.subject_id = esc.id
+           AND mes.year = EXTRACT(YEAR FROM m.scheduled_at)::int
+           AND mes.month = EXTRACT(MONTH FROM m.scheduled_at)::int
+          JOIN exam_sets es ON es.id = mes.selected_set_id
+          WHERE esc.exam_type = m.exam_type
+            AND esc.block_code = m.block_code
+            AND esc.subject_code = m.subject_code
+          LIMIT 1
+        ) month_pick ON TRUE
         LEFT JOIN LATERAL (
           SELECT es.id
           FROM exam_sets es

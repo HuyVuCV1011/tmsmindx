@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Download,
   Plus,
+  Users,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -50,6 +51,16 @@ interface ExamScheduleItem {
   specialty: string;
   startTime: string;
   endTime: string;
+}
+
+interface EventParticipant {
+  id: number;
+  event_id: string;
+  teacher_code: string;
+  teacher_name: string | null;
+  teacher_email: string | null;
+  response_status: "accepted" | "declined";
+  responded_at: string;
 }
 
 const REGISTRATION_TEMPLATE_LABELS: Record<RegistrationTemplate, string> = {
@@ -229,6 +240,10 @@ export default function ProfessionalEvaluationSchedulePage() {
   const [events, setEvents] = useState<EvaluationEvent[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isSavingEvent, setIsSavingEvent] = useState(false);
+  const [showParticipantsModal, setShowParticipantsModal] = useState(false);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
+  const [selectedParticipantEvent, setSelectedParticipantEvent] = useState<EvaluationEvent | null>(null);
+  const [acceptedParticipants, setAcceptedParticipants] = useState<EventParticipant[]>([]);
   const calendarPermissionPath = "/admin/page4/lich-danh-gia";
 
   const [formData, setFormData] = useState(() => {
@@ -528,6 +543,30 @@ export default function ProfessionalEvaluationSchedulePage() {
       toast.success("Đã xóa sự kiện");
     } catch (error: any) {
       toast.error(error?.message || 'Không thể xóa sự kiện');
+    }
+  };
+
+  const handleViewParticipants = async (event: EvaluationEvent) => {
+    try {
+      setParticipantsLoading(true);
+      setSelectedParticipantEvent(event);
+      setShowParticipantsModal(true);
+
+      const response = await fetch(
+        `/api/event-schedule-participants?event_id=${encodeURIComponent(event.id)}&status=accepted`
+      );
+      const data = await response.json();
+
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Không thể tải danh sách tham gia');
+      }
+
+      setAcceptedParticipants((data.data || []) as EventParticipant[]);
+    } catch (error: any) {
+      setAcceptedParticipants([]);
+      toast.error(error?.message || 'Không thể tải danh sách tham gia');
+    } finally {
+      setParticipantsLoading(false);
     }
   };
 
@@ -1466,6 +1505,12 @@ export default function ProfessionalEvaluationSchedulePage() {
                       {canManageCalendar && (
                         <div className="flex items-center gap-2">
                           <button
+                            onClick={() => handleViewParticipants(event)}
+                            className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                          >
+                            <Users className="h-3.5 w-3.5" /> Xem tham gia
+                          </button>
+                          <button
                             onClick={() => openEditEvent(event)}
                             className="rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
                           >
@@ -1488,6 +1533,69 @@ export default function ProfessionalEvaluationSchedulePage() {
             <div className="flex justify-end border-t border-gray-200 px-4 py-3">
               <button
                 onClick={() => setShowDayEventsModal(false)}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold hover:bg-gray-50"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showParticipantsModal && selectedParticipantEvent && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Danh sách xác nhận tham gia</h3>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {selectedParticipantEvent.title} • {formatEventTimeRange(selectedParticipantEvent.startAt, selectedParticipantEvent.endAt)}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowParticipantsModal(false)}
+                className="rounded-md p-1 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto p-4">
+              {participantsLoading ? (
+                <div className="rounded-lg border border-gray-200 p-6 text-center text-sm text-gray-500">
+                  Đang tải danh sách tham gia...
+                </div>
+              ) : acceptedParticipants.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+                  Chưa có mentor tham gia.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {acceptedParticipants.map((participant, index) => (
+                    <div key={participant.id} className="rounded-lg border border-gray-200 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {index + 1}. {participant.teacher_name || participant.teacher_code}
+                          </p>
+                          <p className="text-xs text-gray-600">Mã GV: {participant.teacher_code}</p>
+                          {participant.teacher_email && (
+                            <p className="text-xs text-gray-600">Email: {participant.teacher_email}</p>
+                          )}
+                        </div>
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                          Đã xác nhận
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end border-t border-gray-200 px-4 py-3">
+              <button
+                onClick={() => setShowParticipantsModal(false)}
                 className="rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold hover:bg-gray-50"
               >
                 Đóng

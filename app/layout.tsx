@@ -1,4 +1,4 @@
-import { Analytics } from "@vercel/analytics/next"
+import { Analytics } from "@vercel/analytics/react"
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PersistentLayout } from "@/components/PersistentLayout";
 import { AuthProvider } from "@/lib/auth-context";
