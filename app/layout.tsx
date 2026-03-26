@@ -2,6 +2,8 @@ import { Analytics } from "@vercel/analytics/react"
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PersistentLayout } from "@/components/PersistentLayout";
 import { AuthProvider } from "@/lib/auth-context";
+import { TeacherProvider } from "@/lib/teacher-context";
+import StoreProvider from "./StoreProvider";
 import type { Metadata } from "next";
 import { Exo } from "next/font/google";
 import { Toaster } from 'react-hot-toast';
@@ -27,11 +29,15 @@ export default function RootLayout({
     <html lang="vi">
       <body className={`${exo.variable} font-exo bg-white text-gray-900`}>
         <ErrorBoundary>
-          <AuthProvider>
-            <PersistentLayout>
-              {children}
-            </PersistentLayout>
-          </AuthProvider>
+          <StoreProvider>
+            <AuthProvider>
+              <TeacherProvider>
+                <PersistentLayout>
+                  {children}
+                </PersistentLayout>
+              </TeacherProvider>
+            </AuthProvider>
+          </StoreProvider>
         </ErrorBoundary>
         <Toaster 
           position="top-center"

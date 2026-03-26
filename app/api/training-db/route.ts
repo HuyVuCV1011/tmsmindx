@@ -1,6 +1,27 @@
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import ffprobe from 'ffprobe-static';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
+
+async function getVideoDurationInSeconds(url: string, ffprobePath: string): Promise<number> {
+  try {
+    const { stdout } = await execFileAsync(ffprobePath, [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      url
+    ]);
+    const duration = parseFloat(stdout.trim());
+    return isNaN(duration) ? 0 : duration;
+  } catch (error) {
+    console.error('Failed to get video duration:', error);
+    return 0;
+  }
+}
 
 export const GET = withApiProtection(async (request: NextRequest) => {
   try {
@@ -43,6 +64,31 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       ORDER BY lesson_number ASC
     `;
     const videosResult = await pool.query(videosQuery);
+
+    // Auto-update duration for videos with placeholder (30 mins) or missing duration
+    const durationUpdates = videosResult.rows
+      .filter(video => (!video.duration_minutes || video.duration_minutes === 30) && video.video_link)
+      .map(async (video) => {
+        try {
+          // Use ffprobe to get actual duration
+          console.log(`[Training DB API] Fetching duration for video ${video.id}...`);
+          const durationSec = await getVideoDurationInSeconds(video.video_link, ffprobe.path);
+          const minutes = Math.max(1, Math.ceil(durationSec / 60));
+          
+          if (minutes > 0 && minutes !== 30) {
+            await pool.query('UPDATE training_videos SET duration_minutes = $1 WHERE id = $2', [minutes, video.id]);
+            video.duration_minutes = minutes; // Update local object for response
+            console.log(`[Training DB API] Updated video ${video.id} duration to ${minutes} mins`);
+          }
+        } catch (err) {
+          console.error(`[Training DB API] Failed to update duration for video ${video.id}:`, err);
+        }
+      });
+    
+    // Process updates in parallel (await to ensure response has correct data)
+    if (durationUpdates.length > 0) {
+      await Promise.all(durationUpdates);
+    }
 
     // Fetch teacher's scores for each video
     const scoresQuery = `

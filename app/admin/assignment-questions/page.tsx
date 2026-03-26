@@ -329,7 +329,7 @@ function AssignmentQuestionsContent() {
         <div className="text-center py-12">
           <p className="text-red-600">Không tìm thấy bài tập</p>
           <button
-            onClick={() => router.push('/admin/baitap')}
+            onClick={() => router.push('/admin/assignments')}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Quay lại danh sách
@@ -375,7 +375,7 @@ function AssignmentQuestionsContent() {
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <button
-          onClick={() => router.push('/admin/baitap')}
+          onClick={() => router.push('/admin/assignments')}
           className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />

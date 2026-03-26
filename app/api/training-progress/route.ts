@@ -4,10 +4,28 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const POST = withApiProtection(async (request: NextRequest) => {
   try {
-    const { teacherCode, videoId, timeSpent, isCompleted } = await request.json();
+    const { teacherCode, videoId, timeSpent, isCompleted, totalDuration } = await request.json();
 
     if (!teacherCode || !videoId) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+    }
+
+    // Step 0: If totalDuration is provided, update the video metadata
+    if (totalDuration && typeof totalDuration === 'number' && totalDuration > 0) {
+        // Calculate minutes (rounded up, at least 1)
+        const durationMinutes = Math.max(1, Math.ceil(totalDuration / 60));
+        
+        // Update video duration if it's different or NULL
+        // We use a separate try-catch to not block progress saving if this fails
+        try {
+            await pool.query(`
+                UPDATE training_videos 
+                SET duration_minutes = $1 
+                WHERE id = $2 AND (duration_minutes IS NULL OR duration_minutes != $1)
+            `, [durationMinutes, videoId]);
+        } catch (err) {
+            console.error('Failed to update video duration:', err);
+        }
     }
 
     // Determine status
@@ -21,11 +39,12 @@ export const POST = withApiProtection(async (request: NextRequest) => {
 
     const sql = `
       INSERT INTO training_teacher_video_scores
-      (teacher_code, video_id, time_spent_seconds, completion_status, completed_at, updated_at, first_viewed_at)
-      VALUES ($1, $2, $3, $4::text, CASE WHEN $4::text = 'completed' THEN NOW() ELSE NULL END, NOW(), NOW())
+      (teacher_code, video_id, time_spent_seconds, completion_status, completed_at, updated_at, first_viewed_at, view_count)
+      VALUES ($1, $2, $3, $4::text, CASE WHEN $4::text = 'completed' THEN NOW() ELSE NULL END, NOW(), NOW(), 1)
       ON CONFLICT (teacher_code, video_id)
       DO UPDATE SET
         time_spent_seconds = GREATEST(training_teacher_video_scores.time_spent_seconds, EXCLUDED.time_spent_seconds),
+        view_count = GREATEST(training_teacher_video_scores.view_count, 1),
         completion_status = CASE 
           WHEN training_teacher_video_scores.completion_status = 'completed' THEN 'completed'
           ELSE EXCLUDED.completion_status
@@ -45,6 +64,31 @@ export const POST = withApiProtection(async (request: NextRequest) => {
 
   } catch (error) {
     console.error('Error updating progress:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+});
+
+export const GET = withApiProtection(async (request: NextRequest) => {
+  const teacherCode = request.nextUrl.searchParams.get('teacherCode');
+  const videoId = request.nextUrl.searchParams.get('videoId');
+
+  if (!teacherCode || !videoId) {
+    return NextResponse.json({ error: 'Missing teacherCode or videoId' }, { status: 400 });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT time_spent_seconds, completion_status FROM training_teacher_video_scores WHERE teacher_code = $1 AND video_id = $2',
+      [teacherCode, videoId]
+    );
+
+    if (result.rows.length === 0) {
+      return NextResponse.json({ success: true, data: null });
+    }
+
+    return NextResponse.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching progress:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 });

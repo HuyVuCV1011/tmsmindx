@@ -507,7 +507,7 @@ const migrations: Migration[] = [
         ('/admin/user-management'),
         ('/admin/video-setup'),
         ('/admin/video-detail'),
-        ('/admin/baitap'),
+        ('/admin/assignments'),
         ('/admin/training-studio')
       ) AS route(path)
       WHERE u.email = 'hoteaching@mindx.com.vn'
@@ -755,60 +755,15 @@ const migrations: Migration[] = [
   },
 
   // ═══════════════════════════════════════════════════════
-  // V34: Monthly exam selections - Admin chọn bộ đề cho từng tháng
+  // V34: Fix view counts for training videos
   // ═══════════════════════════════════════════════════════
   {
-    name: 'V34_create_monthly_exam_selections',
+    name: 'V34_fix_view_counts',
     version: 34,
     sql: `
-      CREATE TABLE IF NOT EXISTS monthly_exam_selections (
-        id SERIAL PRIMARY KEY,
-        subject_id INTEGER NOT NULL REFERENCES exam_subject_catalog(id) ON DELETE CASCADE,
-        year INTEGER NOT NULL,
-        month INTEGER NOT NULL,
-        selected_set_id INTEGER REFERENCES exam_sets(id) ON DELETE SET NULL,
-        selection_mode VARCHAR(20) NOT NULL DEFAULT 'manual' CHECK (selection_mode IN ('manual', 'random')),
-        note TEXT,
-        created_by TEXT,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(subject_id, year, month)
-      );
-      CREATE INDEX IF NOT EXISTS idx_monthly_exam_sel_subject ON monthly_exam_selections(subject_id);
-      CREATE INDEX IF NOT EXISTS idx_monthly_exam_sel_ym ON monthly_exam_selections(year, month);
-    `,
-  },
-
-  // ═══════════════════════════════════════════════════════
-  // V35: Event participants (Tham gia/Từ chối sự kiện)
-  // ═══════════════════════════════════════════════════════
-  {
-    name: 'V35_event_schedule_participants',
-    version: 35,
-    sql: `
-      CREATE TABLE IF NOT EXISTS event_schedule_participants (
-        id SERIAL PRIMARY KEY,
-        event_id UUID NOT NULL REFERENCES event_schedules(id) ON DELETE CASCADE,
-        teacher_code VARCHAR(100) NOT NULL,
-        teacher_name VARCHAR(255),
-        teacher_email VARCHAR(255),
-        response_status VARCHAR(20) NOT NULL CHECK (response_status IN ('accepted', 'declined')),
-        note TEXT,
-        responded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(event_id, teacher_code)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_event_participants_event ON event_schedule_participants(event_id);
-      CREATE INDEX IF NOT EXISTS idx_event_participants_teacher ON event_schedule_participants(teacher_code);
-      CREATE INDEX IF NOT EXISTS idx_event_participants_status ON event_schedule_participants(response_status);
-
-      DROP TRIGGER IF EXISTS trg_event_schedule_participants_updated_at ON event_schedule_participants;
-      CREATE TRIGGER trg_event_schedule_participants_updated_at
-      BEFORE UPDATE ON event_schedule_participants
-      FOR EACH ROW
-      EXECUTE FUNCTION update_updated_at_column();
+      UPDATE training_teacher_video_scores
+      SET view_count = 1
+      WHERE view_count IS NULL OR view_count = 0;
     `,
   },
 ];
