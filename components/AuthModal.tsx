@@ -72,10 +72,10 @@ export default function AuthModal({ open, onClose }: { open: boolean; onClose: (
           </div>
           <form className="flex flex-col gap-3" onSubmit={e => { e.preventDefault(); /* handle login */ }}>
             <div>
-              <label className="block text-xs font-semibold mb-1 text-gray-700">Username or Email</label>
+              <label className="block text-xs font-semibold mb-1 text-gray-700">Username or Email / Mã đăng nhập</label>
               <input
-                type="email"
-                placeholder="...@mindx.edu.vn"
+                type="text"
+                placeholder="Email, Username or Code..."
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#a1001f]"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
