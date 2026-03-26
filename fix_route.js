@@ -1,5 +1,10 @@
+const fs = require('fs');
+const path = require('path');
+
+const filePath = path.join(process.cwd(), 'app/api/training-submissions/route.ts');
+
+const content = `import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { NextRequest, NextResponse } from 'next/server';
 
 // GET: Fetch teacher submissions with filters
 export async function GET(request: NextRequest) {
@@ -10,7 +15,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const latest = searchParams.get('latest'); // Get only the latest submission
 
-    let query = `
+    let query = \`
       SELECT 
         tas.*,
         tva.assignment_title,
@@ -21,25 +26,25 @@ export async function GET(request: NextRequest) {
       LEFT JOIN training_videos tv ON tva.video_id = tv.id
       LEFT JOIN training_teacher_stats ts ON tas.teacher_code = ts.teacher_code
       WHERE 1=1
-    `;
+    \`;
 
     const values = [];
     let paramIndex = 1;
 
     if (teacherCode) {
-      query += ` AND tas.teacher_code = $${paramIndex}`;
+      query += \` AND tas.teacher_code = $\${paramIndex}\`;
       values.push(teacherCode);
       paramIndex++;
     }
 
     if (assignmentId) {
-      query += ` AND tas.assignment_id = $${paramIndex}`;
+      query += \` AND tas.assignment_id = $\${paramIndex}\`;
       values.push(assignmentId);
       paramIndex++;
     }
 
     if (status) {
-      query += ` AND tas.status = $${paramIndex}`;
+      query += \` AND tas.status = $\${paramIndex}\`;
       values.push(status);
       paramIndex++;
     }
@@ -88,7 +93,7 @@ export async function POST(request: NextRequest) {
     // Sync teacher info if provided
     if (teacher_info && teacher_info.center && teacher_info.teaching_block) {
       try {
-        await pool.query(`
+        await pool.query(\`
           INSERT INTO training_teacher_stats (
             teacher_code, 
             full_name, 
@@ -106,14 +111,14 @@ export async function POST(request: NextRequest) {
             teaching_block = EXCLUDED.teaching_block,
             work_email = EXCLUDED.work_email,
             updated_at = NOW()
-        `, [
+        \`, [
            teacher_code,
            teacher_info.full_name || teacher_code,
            teacher_info.center,
            teacher_info.teaching_block,
            teacher_info.work_email || ''
         ]);
-        console.log(`Synced stats for teacher ${teacher_code}`);
+        console.log(\`Synced stats for teacher \${teacher_code}\`);
       } catch (err) {
         console.error('Error syncing teacher stats:', err);
         // Continue even if sync fails, as the main goal is starting the assignment
@@ -121,41 +126,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if there's already an in-progress submission
-    const existingQuery = `
+    const existingQuery = \`
       SELECT * FROM training_assignment_submissions 
       WHERE teacher_code = $1 AND assignment_id = $2 AND status = 'in_progress'
       ORDER BY created_at DESC
       LIMIT 1
-    `;
+    \`;
     const existingResult = await pool.query(existingQuery, [teacher_code, assignment_id]);
     
     if (existingResult.rows.length > 0) {
-      // 1. Fetch Draft Answers
-      const submissionId = existingResult.rows[0].id;
-      const answersQuery = `
-          SELECT question_id, answer_text 
-          FROM training_assignment_answers 
-          WHERE submission_id = $1
-      `;
-      const answersResult = await pool.query(answersQuery, [submissionId]);
-      
-      const existingAnswers: Record<number, string> = {};
-      answersResult.rows.forEach(row => {
-          existingAnswers[row.question_id] = row.answer_text;
-      });
-
       // Return existing in-progress submission
       return NextResponse.json({
         success: true,
         data: existingResult.rows[0],
-        existing_answers: existingAnswers,
-        server_time: new Date().toISOString(),
         message: 'Continuing existing submission'
       });
     }
 
     // Get total points from assignment
-    const assignmentQuery = 'SELECT total_points, max_attempts FROM training_video_assignments WHERE id = $1';
+    const assignmentQuery = 'SELECT total_points FROM training_video_assignments WHERE id = $1';
     const assignmentResult = await pool.query(assignmentQuery, [assignment_id]);
 
     if (assignmentResult.rows.length === 0) {
@@ -165,26 +154,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { total_points: totalPoints, max_attempts: maxAttempts } = assignmentResult.rows[0];
+    const totalPoints = assignmentResult.rows[0].total_points;
 
     // Calculate next attempt number
-    const attemptQuery = `
+    const attemptQuery = \`
       SELECT COALESCE(MAX(attempt_number), 0) + 1 as next_attempt
       FROM training_assignment_submissions
       WHERE teacher_code = $1 AND assignment_id = $2
-    `;
+    \`;
     const attemptResult = await pool.query(attemptQuery, [teacher_code, assignment_id]);
     const nextAttempt = attemptResult.rows[0].next_attempt;
 
-    // Check max attempts (if set)
-    if (maxAttempts > 0 && nextAttempt > maxAttempts) {
-        return NextResponse.json(
-            { error: `Bạn đã hết lượt làm bài (Tối đa ${maxAttempts} lượt)` },
-            { status: 400 }
-        );
-    }
-
-    const query = `
+    const query = \`
       INSERT INTO training_assignment_submissions (
         teacher_code,
         assignment_id,
@@ -194,7 +175,7 @@ export async function POST(request: NextRequest) {
         started_at
       ) VALUES ($1, $2, $3, $4, 'in_progress', NOW())
       RETURNING *
-    `;
+    \`;
 
     const values = [teacher_code, assignment_id, nextAttempt, totalPoints];
     const result = await pool.query(query, values);
@@ -202,10 +183,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: result.rows[0],
-      server_time: new Date().toISOString(),
       message: 'Submission started successfully'
     }, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating submission:', error);
     return NextResponse.json(
       { 
@@ -235,7 +215,7 @@ export async function PUT(request: NextRequest) {
 
     if (action === 'submit') {
       // Teacher submits assignment
-      query = `
+      query = \`
         UPDATE training_assignment_submissions
         SET 
           status = 'submitted',
@@ -243,7 +223,7 @@ export async function PUT(request: NextRequest) {
           time_spent_seconds = EXTRACT(EPOCH FROM (NOW() - started_at))::INTEGER
         WHERE id = $1
         RETURNING *
-      `;
+      \`;
       values = [id];
     } else if (action === 'grade') {
       // System or admin grades assignment
@@ -268,7 +248,7 @@ export async function PUT(request: NextRequest) {
 
       console.log('[Submission] Grading submission:', { id, score: parsedScore, is_passed });
 
-      query = `
+      query = \`
         UPDATE training_assignment_submissions
         SET 
           score = $1,
@@ -279,7 +259,7 @@ export async function PUT(request: NextRequest) {
         WHERE id = $3
         RETURNING *, (SELECT teacher_code FROM training_assignment_submissions WHERE id = $3) as teacher_code,
                      (SELECT video_id FROM training_video_assignments WHERE id = (SELECT assignment_id FROM training_assignment_submissions WHERE id = $3)) as video_id
-      `;
+      \`;
       values = [parsedScore, is_passed, id];
       
       // Execute the update
@@ -304,16 +284,16 @@ export async function PUT(request: NextRequest) {
         });
 
         // Ensure teacher exists in training_teacher_stats (auto-create if not exists)
-        const ensureTeacherQuery = `
+        const ensureTeacherQuery = \`
           INSERT INTO training_teacher_stats (teacher_code, full_name, work_email, status)
           VALUES ($1, $1, '', 'Active')
           ON CONFLICT (teacher_code) DO NOTHING
-        `;
+        \`;
         await pool.query(ensureTeacherQuery, [submission.teacher_code]);
 
         const status = is_passed ? 'completed' : 'in_progress';
 
-        const updateVideoScoreQuery = `
+        const updateVideoScoreQuery = \`
           INSERT INTO training_teacher_video_scores (
             teacher_code,
             video_id,
@@ -335,7 +315,7 @@ export async function PUT(request: NextRequest) {
               ELSE training_teacher_video_scores.completed_at
             END,
             updated_at = NOW()
-        `;
+        \`;
 
         await pool.query(updateVideoScoreQuery, [
           submission.teacher_code,
@@ -348,25 +328,19 @@ export async function PUT(request: NextRequest) {
         // Also update teacher_answers if answers are provided
         if (updates.answers && Array.isArray(updates.answers)) {
           for (const answer of updates.answers) {
-            try {
-              await pool.query(
-                `INSERT INTO training_teacher_answers (
-                   teacher_code, video_id, question_id, answer_text, is_correct, points_earned
-                 ) VALUES ($1, $2, $3, $4, $5, $6)`,
-                [
-                  submission.teacher_code,
-                  submission.video_id,
-                  answer.question_id,
-                  answer.answer_text,
-                  answer.is_correct,
-                  answer.points_earned
-                ]
-              );
-            } catch (err: any) {
-              // Ignore foreign key violations if mapping is inconsistent (e.g. assignment question ID vs video question ID)
-              // This prevents partial failures from crashing the whole grading request
-              console.warn(`[Submission] Skipped syncing answer to teacher_answers for QID ${answer.question_id}:`, err.message);
-            }
+            await pool.query(
+              \`INSERT INTO training_teacher_answers (
+                 teacher_code, video_id, question_id, answer_text, is_correct, points_earned
+               ) VALUES ($1, $2, $3, $4, $5, $6)\`,
+              [
+                submission.teacher_code,
+                submission.video_id,
+                answer.question_id,
+                answer.answer_text,
+                answer.is_correct,
+                answer.points_earned
+              ]
+            );
           }
         }
       }
@@ -380,15 +354,10 @@ export async function PUT(request: NextRequest) {
             if (!answer.question_id) continue;
             
             await pool.query(
-              `INSERT INTO training_assignment_answers (
+              \`INSERT INTO training_assignment_answers (
                  submission_id, question_id, answer_text, is_correct, points_earned
                ) VALUES ($1, $2, $3, $4, $5)
-               ON CONFLICT (submission_id, question_id) DO UPDATE SET
-               answer_text = EXCLUDED.answer_text,
-               is_correct = EXCLUDED.is_correct,
-               points_earned = EXCLUDED.points_earned,
-               answered_at = NOW()
-              `, 
+               ON CONFLICT (id) DO NOTHING\`, 
               [
                 id,
                 answer.question_id,
@@ -408,32 +377,6 @@ export async function PUT(request: NextRequest) {
         data: submission,
         message: 'Submission graded successfully'
       });
-    } else if (action === 'save_draft') {
-        const { answers } = updates;
-        if (answers && Array.isArray(answers)) {
-            try {
-                for (const answer of answers) {
-                    await pool.query(
-                      `INSERT INTO training_assignment_answers (
-                         submission_id, question_id, answer_text
-                       ) VALUES ($1, $2, $3)
-                       ON CONFLICT (submission_id, question_id) DO UPDATE SET
-                       answer_text = EXCLUDED.answer_text,
-                       answered_at = NOW()`,
-                      [
-                        id,
-                        answer.question_id,
-                        answer.answer_text
-                      ]
-                    );
-                }
-                return NextResponse.json({ success: true, message: 'Draft saved' });
-            } catch (e) {
-                console.error("Save draft error", e);
-                return NextResponse.json({ error: 'Failed to save draft' }, { status: 500 });
-            }
-        }
-        return NextResponse.json({ success: true, message: 'No answers to save' });
     } else {
       // General update (if not 'grade' or 'submit')
       const setClauses = [];
@@ -443,19 +386,19 @@ export async function PUT(request: NextRequest) {
       for (const [key, value] of Object.entries(updates)) {
         if (key === 'answers') continue;
         
-        setClauses.push(`${key} = $${paramIndex}`);
+        setClauses.push(\`\${key} = $\${paramIndex}\`);
         updateValues.push(value);
         paramIndex++;
       }
       
       if (setClauses.length > 0) {
         updateValues.push(id);
-        query = `
+        query = \`
           UPDATE training_assignment_submissions
-          SET ${setClauses.join(', ')}
-          WHERE id = $${paramIndex}
+          SET \${setClauses.join(', ')}
+          WHERE id = $\${paramIndex}
           RETURNING *
-        `;
+        \`;
         values = updateValues;
       }
     }
@@ -526,4 +469,7 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
-// Force recompile 
+`;
+
+fs.writeFileSync(filePath, content);
+console.log('File written successfully');

@@ -1,10 +1,10 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useMemo } from 'react';
-import { useAuth } from './auth-context';
 import { Teacher } from '@/types/teacher';
-import { logger } from './logger';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useAuth } from './auth-context';
 import { findMatchingCampus } from './campus-data';
+import { logger } from './logger';
 
 const STORAGE_KEY = 'teacher_auto_fill_data';
 
@@ -30,7 +30,7 @@ export const useTeacher = () => useContext(TeacherContext);
 export function TeacherProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [teacherProfile, setTeacherProfile] = useState<Teacher | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Chỉ fetch dữ liệu nếu user đã đăng nhập
   const refreshProfile = async () => {
@@ -75,7 +75,8 @@ export function TeacherProvider({ children }: { children: React.ReactNode }) {
               teacher_name: profile.name || '',
               lms_code: profile.code || '',
               email: profile.emailMindx || profile.emailPersonal || user.email || '',
-              campus: matchedCampus || ''
+              campus: matchedCampus || '',
+              status: profile.status || ''
             };
 
             localStorage.setItem(STORAGE_KEY, JSON.stringify(autoFillData));
@@ -101,6 +102,7 @@ export function TeacherProvider({ children }: { children: React.ReactNode }) {
       refreshProfile();
     } else {
       setTeacherProfile(null);
+      setIsLoading(false);
     }
   }, [user?.email]);
 

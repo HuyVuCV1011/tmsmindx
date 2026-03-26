@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Stepper } from '@/components/ui/stepper';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/lib/auth-context';
-import { useTeacher } from '@/lib/teacher-context';
 import { CAMPUS_LIST, findMatchingCampus } from '@/lib/campus-data';
+import { useTeacher } from '@/lib/teacher-context';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -100,7 +100,8 @@ export default function GiaiTrinhPage() {
           teacher_name: updated.teacher_name,
           lms_code: updated.lms_code,
           email: updated.email,
-          campus: updated.campus
+          campus: updated.campus,
+          status: teacherProfile.status || ''
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
         

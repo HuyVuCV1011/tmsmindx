@@ -1,11 +1,11 @@
 "use client";
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from "@/lib/auth-context";
 import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from 'react-hot-toast';
 import useSWR, { mutate } from "swr";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // Cache for processed data
 const dataCache = new Map();
@@ -157,9 +157,9 @@ export default function Page1() {
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
   const [isResolvingCode, setIsResolvingCode] = useState(false);
   const [error, setError] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("12");
-  const [selectedYear, setSelectedYear] = useState("2025");
-  const [selectedTableYear, setSelectedTableYear] = useState("2025");
+  const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+  const [selectedTableYear, setSelectedTableYear] = useState(String(new Date().getFullYear()));
 
   // Debounce refs
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1187,15 +1187,15 @@ export default function Page1() {
             <div className="bg-gray-900 text-white p-2 sm:p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <h3 className="text-sm font-bold">Các chỉ số theo tháng</h3>
               <div className="flex items-center gap-2 w-full sm:w-auto">
-                <label className="text-xs">Năm:</label>
+                <label className="text-xs">Năm gốc:</label>
                 <select
                   value={selectedTableYear}
                   onChange={(e) => setSelectedTableYear(e.target.value)}
                   className="px-2 py-1 text-xs bg-white text-gray-900 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-white flex-1 sm:flex-initial"
                 >
-                  <option value="2024">2024</option>
-                  <option value="2025">2025</option>
-                  <option value="2026">2026</option>
+                  <option value={String(new Date().getFullYear())}>{new Date().getFullYear()}</option>
+                  <option value={String(new Date().getFullYear() - 1)}>{new Date().getFullYear() - 1}</option>
+                  <option value={String(new Date().getFullYear() - 2)}>{new Date().getFullYear() - 2}</option>
                 </select>
               </div>
             </div>
@@ -1229,94 +1229,102 @@ export default function Page1() {
                 </div>
               ) : (
                 /* Actual Table */
-                <>
-                  {(() => {
-                    const months = Array.from({ length: 12 }, (_, i) => `${i + 1}/${selectedTableYear}`);
+                <div className="flex flex-col gap-6">
+                  {[0, 1].map((offset) => {
+                    const yearDisplay = parseInt(selectedTableYear) - offset;
+                    const months = Array.from({ length: 12 }, (_, i) => `${i + 1}/${yearDisplay}`);
 
                     return (
-                      <Table className="text-[10px] sm:text-xs min-w-150">
-                        <TableHeader>
-                          <TableRow className="border-b border-gray-900">
-                            <TableHead className="text-left font-bold text-gray-900 min-w-25 sticky left-0 bg-white z-10">Chỉ tiêu</TableHead>
-                            {months.map((month) => (
-                              <TableHead key={month} className={`text-center min-w-12.5 sm:min-w-15 ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
-                                }`}>
-                                <div className="font-medium text-gray-700 whitespace-nowrap">T{month.split('/')[0]}</div>
-                              </TableHead>
-                            ))}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <TableRow className="border-b border-gray-200">
-                            <TableCell className="sticky left-0 bg-white z-10">
-                              <div className="font-medium text-gray-900 text-[10px] sm:text-xs">CM Chuyên sâu</div>
-                            </TableCell>
-                            {months.map((month) => {
-                              const score = getScoreForMonth(expertiseData, month);
-                              const scoreValue = score === "N/A" ? 0 : parseFloat(score);
-                              const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
-                              return (
-                                <TableCell key={month} className={`text-center ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
+                      <div key={yearDisplay} className="space-y-2">
+                        <h4 className="font-bold text-gray-800 text-sm px-1">Năm {yearDisplay}</h4>
+                        <Table className="text-[10px] sm:text-xs min-w-150">
+                          <TableHeader>
+                            <TableRow className="border-b border-gray-900">
+                              <TableHead className="text-left font-bold text-gray-900 min-w-25 sticky left-0 bg-white z-10 w-32 border-r border-gray-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Chỉ tiêu</TableHead>
+                              {months.map((month) => (
+                                <TableHead key={month} className={`text-center min-w-12.5 sm:min-w-15 ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
                                   }`}>
-                                  <span
-                                    onClick={() => {
-                                      if (score === "N/A" && isCurrentMonth) {
-                                        setRegistrationCheckModalOpen(true);
-                                      } else if (score !== "N/A") {
-                                        openModal(month, "expertise");
-                                      }
-                                    }}
-                                    className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${score === "N/A"
-                                        ? isCurrentMonth
-                                          ? "bg-yellow-200 text-yellow-900 cursor-pointer hover:bg-yellow-300 animate-pulse font-bold shadow-lg border-2 border-yellow-400"
-                                          : "bg-gray-200 text-gray-700"
-                                        : scoreValue >= 8
-                                          ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
-                                          : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
-                                      }`}>
-                                    {score === "N/A" && isCurrentMonth ? "📝 Đăng ký" : score}
-                                  </span>
-                                </TableCell>
-                              );
-                            })}
-                          </TableRow>
-                          <TableRow className="border-b border-gray-200">
-                            <TableCell className="sticky left-0 bg-white z-10">
-                              <div className="font-medium text-gray-900 text-[10px] sm:text-xs">KN - QT Trải nghiệm</div>
-                            </TableCell>
-                            {months.map((month) => {
-                              const score = getScoreForMonth(experienceData, month);
-                              const scoreValue = score === "N/A" ? 0 : parseFloat(score);
-                              const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
-                              return (
-                                <TableCell key={month} className={`text-center ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
-                                  }`}>
-                                  <span
-                                    onClick={() => {
-                                      if (score === "N/A" && isCurrentMonth) {
-                                        setRegistrationCheckModalOpen(true);
-                                      } else if (score !== "N/A") {
-                                        openModal(month, "experience");
-                                      }
-                                    }}
-                                    className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${score === "N/A"
-                                        ? isCurrentMonth
-                                          ? "bg-yellow-200 text-yellow-900 cursor-pointer hover:bg-yellow-300 animate-pulse font-bold shadow-lg border-2 border-yellow-400"
-                                          : "bg-gray-200 text-gray-700"
-                                        : scoreValue >= 8
-                                          ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
-                                          : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
-                                      }`}>
-                                    {score === "N/A" && isCurrentMonth ? "📝 Đăng ký" : score}
-                                  </span>
-                                </TableCell>
-                              );
-                            })}
-                          </TableRow>
-                        </TableBody>
-                      </Table>
+                                  <div className="font-medium text-gray-700 whitespace-nowrap">T{month.split('/')[0]}</div>
+                                </TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            <TableRow className="border-b border-gray-200">
+                              <TableCell className="sticky left-0 bg-white z-10 w-32 font-medium text-gray-900 text-[10px] sm:text-xs border-r border-gray-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                                CM Chuyên sâu
+                              </TableCell>
+                              {months.map((month) => {
+                                const score = getScoreForMonth(expertiseData, month);
+                                const scoreValue = score === "N/A" ? 0 : parseFloat(score);
+                                const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
+                                const isCurrentMonthCell = isCurrentMonth && score === "N/A";
+                                
+                                return (
+                                  <TableCell key={month} className={`text-center ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
+                                    }`}>
+                                    <span
+                                      onClick={() => {
+                                        if (score === "N/A" && isCurrentMonth) {
+                                          setRegistrationCheckModalOpen(true);
+                                        } else if (score !== "N/A") {
+                                          openModal(month, "expertise");
+                                        }
+                                      }}
+                                      className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${score === "N/A"
+                                          ? isCurrentMonth
+                                            ? "bg-yellow-200 text-yellow-900 cursor-pointer hover:bg-yellow-300 animate-pulse font-bold shadow-lg border-2 border-yellow-400"
+                                            : "bg-gray-200 text-gray-700"
+                                          : scoreValue >= 8
+                                            ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
+                                            : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
+                                        }`}>
+                                      {isCurrentMonthCell ? "📝 Đăng ký" : score}
+                                    </span>
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+                            <TableRow className="border-b border-gray-200">
+                              <TableCell className="sticky left-0 bg-white z-10 w-32 font-medium text-gray-900 text-[10px] sm:text-xs border-r border-gray-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                                KN - QT Trải nghiệm
+                              </TableCell>
+                              {months.map((month) => {
+                                const score = getScoreForMonth(experienceData, month);
+                                const scoreValue = score === "N/A" ? 0 : parseFloat(score);
+                                const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
+                                const isCurrentMonthCell = isCurrentMonth && score === "N/A";
+
+                                return (
+                                  <TableCell key={month} className={`text-center ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
+                                    }`}>
+                                    <span
+                                      onClick={() => {
+                                        if (score === "N/A" && isCurrentMonth) {
+                                          setRegistrationCheckModalOpen(true);
+                                        } else if (score !== "N/A") {
+                                          openModal(month, "experience");
+                                        }
+                                      }}
+                                      className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${score === "N/A"
+                                          ? isCurrentMonth
+                                            ? "bg-yellow-200 text-yellow-900 cursor-pointer hover:bg-yellow-300 animate-pulse font-bold shadow-lg border-2 border-yellow-400"
+                                            : "bg-gray-200 text-gray-700"
+                                          : scoreValue >= 8
+                                            ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
+                                            : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
+                                        }`}>
+                                      {isCurrentMonthCell ? "📝 Đăng ký" : score}
+                                    </span>
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
                     );
-                  })()}
+                  })}
                   {scoresLoaded && (
                     <div className="mt-2 sm:mt-3 flex flex-col sm:flex-row gap-1.5 sm:gap-4 text-[10px] sm:text-xs text-gray-600">
                       <div className="flex items-center gap-1">
@@ -1333,7 +1341,7 @@ export default function Page1() {
                       </div>
                     </div>
                   )}
-                </>
+                </div>
               )}
             </div>
           </div>

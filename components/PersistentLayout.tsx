@@ -10,8 +10,8 @@ function Layout({ children }: { children: React.ReactNode }) {
   const { isOpen } = useSidebar();
   const { user } = useAuth();
 
-  // Don't show sidebar on login page or root page
-  let shouldShowSidebar = !pathname.startsWith('/login') && pathname !== '/';
+  // Don't show sidebar on login, public pages or root page
+  let shouldShowSidebar = !pathname.startsWith('/login') && pathname !== '/' && !pathname.startsWith('/public');
 
   // Hide sidebar if admin user has no permissions
   if (shouldShowSidebar && pathname.startsWith('/admin')) {

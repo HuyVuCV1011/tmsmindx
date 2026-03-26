@@ -1,6 +1,6 @@
 import { withApiProtection } from "@/lib/api-protection";
-import { NextRequest, NextResponse } from "next/server";
 import { Teacher } from "@/types/teacher";
+import { NextRequest, NextResponse } from "next/server";
 
 const TEACHER_PROFILE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_PROFILE_CSV_URL || "";
 const TEACHER_EXPERTISE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERTISE_CSV_URL || "";
@@ -396,7 +396,24 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       { status: 404 }
     );
   }
-
+  // Fetch updated status from external API
+  try {
+    const emailToFetch = teacher.emailMindx || teacher.emailPersonal || emailParam;
+    if (emailToFetch) {
+      const externalRes = await fetch(`https://tmsmindx.vercel.app/api/teachers?email=${encodeURIComponent(emailToFetch)}`, {
+        next: { revalidate: 60 } // Cache for 60 seconds
+      });
+      if (externalRes.ok) {
+        const externalData = await externalRes.json();
+        if (externalData.teacher?.status) {
+          teacher.status = externalData.teacher.status;
+          // console.log(`Updated status for ${teacher.code} from external API: ${teacher.status}`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching external teacher status:", error);
+  }
   // � TEMPORARY: Bỏ qua authorization check để test
   // if (!isAdmin) {
   //   ... (authorization code commented out for testing)

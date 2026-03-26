@@ -1,15 +1,17 @@
  'use client';
 
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
-import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
-import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send, Trophy, XCircle } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { useTeacher } from '@/lib/teacher-context';
+import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send, Trophy, XCircle, RefreshCw } from 'lucide-react';
+
 import NextImage from 'next/image';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface Assignment {
@@ -82,7 +84,8 @@ interface ExamAssignment {
 }
 
 export default function TeacherAssignmentPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
   const router = useRouter();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [examAssignments, setExamAssignments] = useState<ExamAssignment[]>([]);
@@ -133,10 +136,34 @@ export default function TeacherAssignmentPage() {
 
   // Get teacher code from user email
   useEffect(() => {
-    if (user && user.email && !teacherCode) {
+    if (teacherCode) return; // Already have code
+
+    // 1. Try from context first (fastest)
+    if (teacherProfile?.code) {
+      setTeacherCode(teacherProfile.code);
+      return;
+    }
+
+    // 2. Try from localStorage (fast)
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('teacher_auto_fill_data');
+        if (cached) {
+          const data = JSON.parse(cached);
+          if (data.lms_code) {
+            setTeacherCode(data.lms_code);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse local teacher data", e);
+      }
+    }
+
+    // 3. Last reort: fetch from API (slowest)
+    if (user && user.email) {
       (async () => {
         try {
-          // Try to get teacher code from API
           const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}`);
           const data = await res.json();
           if (data?.teacher?.code) {
@@ -154,7 +181,7 @@ export default function TeacherAssignmentPage() {
         }
       })();
     }
-  }, [user, teacherCode]);
+  }, [user, teacherCode, teacherProfile]);
 
   useEffect(() => {
     if (teacherCode) {
@@ -166,36 +193,52 @@ export default function TeacherAssignmentPage() {
   const fetchAvailableAssignments = async () => {
     try {
       setTrainingLoading(true);
+      
+      // 1. Fetch assignments list
       const response = await fetch('/api/training-assignments?status=published');
       const data = await response.json();
+      
       if (data.success) {
-        // Fetch recent submissions for each assignment
-        const assignmentsWithScores = await Promise.all(
-          data.data.map(async (assignment: Assignment) => {
+        let submissionsMap = new Map<number, any>();
+
+        // 2. Fetch all submissions for teacher (instead of N+1 requests)
+        if (teacherCode) {
             try {
-              const submissionRes = await fetch(
-                `/api/training-submissions?teacher_code=${teacherCode}&assignment_id=${assignment.id}&latest=true`
-              );
-              const submissionData = await submissionRes.json();
-              if (submissionData.success && submissionData.data?.length > 0) {
-                const latestSubmission = submissionData.data[0];
-                return {
-                  ...assignment,
-                  recent_submission: {
-                    score: latestSubmission.score,
-                    percentage: latestSubmission.percentage,
-                    is_passed: latestSubmission.is_passed,
-                    submitted_at: latestSubmission.submitted_at,
-                    attempt_number: latestSubmission.attempt_number
-                  }
-                };
-              }
+                // Fetch ALL submissions for this teacher, ordered by created_at DESC
+                const subRes = await fetch(`/api/training-submissions?teacher_code=${teacherCode}`);
+                const subData = await subRes.json();
+                
+                if (subData.success && Array.isArray(subData.data)) {
+                    // Map assignment_id to its LATEST submission
+                    subData.data.forEach((sub: any) => {
+                        if (!submissionsMap.has(sub.assignment_id)) {
+                            submissionsMap.set(sub.assignment_id, sub);
+                        }
+                    });
+                }
             } catch (err) {
-              console.warn('Failed to fetch submission for assignment:', assignment.id);
+                console.warn('Failed to batch fetch submissions', err);
+            }
+        }
+
+        // 3. Merge data
+        const assignmentsWithScores = data.data.map((assignment: Assignment) => {
+            const latestSubmission = submissionsMap.get(assignment.id);
+            if (latestSubmission) {
+                return {
+                    ...assignment,
+                    recent_submission: {
+                        score: latestSubmission.score,
+                        percentage: latestSubmission.percentage,
+                        is_passed: latestSubmission.is_passed,
+                        submitted_at: latestSubmission.submitted_at, 
+                        attempt_number: latestSubmission.attempt_number
+                    }
+                };
             }
             return assignment;
-          })
-        );
+        });
+        
         setAssignments(assignmentsWithScores);
       }
     } catch (err) {
@@ -245,6 +288,29 @@ export default function TeacherAssignmentPage() {
 
   const startAssignment = async (assignment: Assignment) => {
     try {
+      // 1. Check teacher profile from context to insure data integrity
+      if (isTeacherLoading) {
+        toast('Đang đồng bộ dữ liệu giáo viên, vui lòng thử lại sau giây lát...');
+        return;
+      }
+
+      if (!teacherProfile) {
+        toast.error('Thiếu thông tin giáo viên. Vui lòng đăng xuất và đăng nhập lại.');
+        setTimeout(() => {
+           logout();
+        }, 1500);
+        return;
+      }
+
+      // Check required fields directly from profile
+      const teacherBranch = teacherProfile.branchCurrent || teacherProfile.branchIn;
+      // Note: teacherProfile.status might be mapped differently, but checking basic existence is safer
+      // We assume if profile loaded, it's good enough or we can check branch
+      if (!teacherBranch) {
+        toast.error('Thiếu thông tin Cơ sở (Branch). Vui lòng cập nhật thông tin.');
+        return;
+      }
+
       // Fetch questions
       const questionsRes = await fetch(`/api/training-assignment-questions?assignment_id=${assignment.id}`);
       const questionsData = await questionsRes.json();
@@ -261,7 +327,13 @@ export default function TeacherAssignmentPage() {
         body: JSON.stringify({
           teacher_code: teacherCode,
           assignment_id: assignment.id,
-          attempt_number: 1
+          attempt_number: 1,
+          teacher_info: {
+            full_name: teacherProfile?.name || teacherCode,
+            center: teacherProfile?.branchCurrent || '',
+            teaching_block: teacherProfile?.programCurrent || '', 
+            work_email: user?.email || '',
+          }
         })
       });
 
@@ -274,30 +346,51 @@ export default function TeacherAssignmentPage() {
       setCurrentAssignment(assignment);
       setQuestions(questionsData.data);
       setSubmission(submissionData.data);
-      setAnswers({});
+      
+      // Load saved answers if this is a continuing submission
+      if (submissionData.existing_answers && Object.keys(submissionData.existing_answers).length > 0) {
+         setAnswers(submissionData.existing_answers);
+         toast.success('Đã tải lại bài làm cũ của bạn');
+      } else {
+         setAnswers({});
+      }
+      
       setView('taking');
       
-      // Start timer - check if there's a saved endTime
+      // Start timer - logic updated to use server started_at and server_time
       if (assignment.time_limit_minutes > 0) {
-        const savedEndTime = localStorage.getItem(`assignment_${assignment.id}_endTime`);
-        const now = Date.now();
+        let remainingSeconds = assignment.time_limit_minutes * 60;
         
-        if (savedEndTime) {
-          // Calculate remaining time from saved endTime
-          const remainingSeconds = Math.max(0, Math.floor((parseInt(savedEndTime) - now) / 1000));
-          setTimeRemaining(remainingSeconds);
-          setTimerActive(remainingSeconds > 0);
+        if (submissionData.data.started_at) {
+           const startTime = new Date(submissionData.data.started_at).getTime();
+           
+           // Use server time if available to avoid clock drift, fallback to local
+           const serverNow = submissionData.server_time ? new Date(submissionData.server_time).getTime() : Date.now();
+           const elapsedSeconds = Math.floor((serverNow - startTime) / 1000);
+           
+           // Calculate offset for local countdown
+           const clientNow = Date.now();
+           // How much ahead/behind is the client vs server?
+           const clockOffset = clientNow - serverNow; // e.g. +5000ms if client is 5s ahead
+           
+           remainingSeconds = Math.max(0, (assignment.time_limit_minutes * 60) - elapsedSeconds);
+           
+           console.log('[Assignment] Timer init:', {
+             serverStarted: submissionData.data.started_at,
+             serverNow: submissionData.server_time,
+             elapsed: elapsedSeconds,
+             limit: assignment.time_limit_minutes * 60,
+             remaining: remainingSeconds,
+             offset: clockOffset
+           });
+        }
+
+        setTimeRemaining(remainingSeconds);
+        setTimerActive(remainingSeconds > 0);
           
-          if (remainingSeconds === 0) {
-            // Time's up - auto submit
-            setTimeout(() => submitAssignment(), 100);
-          }
-        } else {
-          // First time - set new endTime
-          const endTime = now + (assignment.time_limit_minutes * 60 * 1000);
-          localStorage.setItem(`assignment_${assignment.id}_endTime`, endTime.toString());
-          setTimeRemaining(assignment.time_limit_minutes * 60);
-          setTimerActive(true);
+        if (remainingSeconds === 0) {
+          // If already expired according to server, submit immediately
+          setTimeout(() => submitAssignment(true), 100);
         }
       }
     } catch (err) {
@@ -306,31 +399,47 @@ export default function TeacherAssignmentPage() {
     }
   };
 
+  // Create debounced save function
+  const saveAnswerToDb = async (submissionId: number, questionId: number, answer: string) => {
+    try {
+        await fetch('/api/training-submissions', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: submissionId,
+                action: 'save_draft',
+                answers: [{ question_id: questionId, answer_text: answer }]
+            })
+        });
+    } catch (e) {
+        console.error("Failed to auto-save answer", e);
+    }
+  };
+
+  const handleAnswerChange = (questionId: number, answer: string) => {
+    setAnswers(prev => ({ ...prev, [questionId]: answer }));
+    if (submission?.id) {
+        saveAnswerToDb(submission.id, questionId, answer);
+    }
+  };
+
   // Timer countdown
   useEffect(() => {
     if (!timerActive || timeRemaining === null || timeRemaining <= 0) return;
 
     const interval = setInterval(() => {
-      if (!currentAssignment) return;
-      
-      const savedEndTime = localStorage.getItem(`assignment_${currentAssignment.id}_endTime`);
-      if (!savedEndTime) return;
-      
-      const now = Date.now();
-      const endTime = parseInt(savedEndTime);
-      const remainingSeconds = Math.max(0, Math.floor((endTime - now) / 1000));
-      
-      setTimeRemaining(remainingSeconds);
-      
-      if (remainingSeconds === 0) {
-        setTimerActive(false);
-        // Auto submit when time's up
-        submitAssignment();
-      }
+      setTimeRemaining(prev => {
+        if (prev === null || prev <= 0) {
+            setTimerActive(false);
+            submitAssignment();
+            return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [timerActive, timeRemaining, currentAssignment]);
+  }, [timerActive, timeRemaining]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -396,6 +505,23 @@ export default function TeacherAssignmentPage() {
 
       // Update submission
       const isPassed = totalScore >= currentAssignment!.passing_score;
+      
+      // Prepare answers payload
+      const answersPayload = questions.map(q => {
+        const userAnswer = answers[q.id] || '';
+        const correctAnswer = (q.correct_answer || '').trim().toLowerCase();
+        const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer;
+        const points = parseFloat(q.points?.toString() || '0');
+        const pointsEarned = isCorrect ? points : 0;
+        
+        return {
+          question_id: q.id,
+          answer_text: userAnswer,
+          is_correct: isCorrect,
+          points_earned: pointsEarned
+        };
+      });
+
       const response = await fetch('/api/training-submissions', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -403,19 +529,14 @@ export default function TeacherAssignmentPage() {
           id: submission.id,
           action: 'grade',
           score: totalScore,
-          is_passed: isPassed
+          is_passed: isPassed,
+          answers: answersPayload
         })
       });
 
       const data = await response.json();
       if (data.success) {
         setSubmission(data.data);
-        
-        // Clear saved timer
-        if (currentAssignment) {
-          localStorage.removeItem(`assignment_${currentAssignment.id}_endTime`);
-        }
-        
         setView('result');
       } else {
         toast.error('Lỗi khi nộp bài: ' + data.error);
@@ -424,10 +545,6 @@ export default function TeacherAssignmentPage() {
       console.error('Error submitting assignment:', err);
       toast.error('Lỗi khi nộp bài');
     }
-  };
-
-  const handleAnswerChange = (questionId: number, answer: string) => {
-    setAnswers(prev => ({ ...prev, [questionId]: answer }));
   };
 
   const getProgress = () => {
@@ -745,7 +862,7 @@ export default function TeacherAssignmentPage() {
 
         {/* Sidebar - Desktop only */}
         <div className="hidden lg:block w-72 shrink-0">
-          <div className="sticky top-4 space-y-3">
+          <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
             {/* Assignment Info Card */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
               <h2 className="text-base font-bold text-gray-900 mb-1 line-clamp-2">{currentAssignment.assignment_title}</h2>
@@ -787,6 +904,30 @@ export default function TeacherAssignmentPage() {
               <p className="text-xs text-gray-600 text-center">
                 {answeredCount}/{questions.length} câu đã trả lời
               </p>
+
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-[10px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">Ma trận câu hỏi</p>
+                <div className="grid grid-cols-5 gap-2">
+                  {questions.map((q, index) => {
+                    const isAnswered = answers[q.id] !== undefined && answers[q.id] !== '';
+                    return (
+                      <div
+                        key={q.id}
+                        className={`
+                          flex items-center justify-center text-[10px] font-bold h-7 rounded transition-all duration-200
+                          ${isAnswered 
+                            ? 'bg-green-500 text-white shadow-sm ring-1 ring-green-600' 
+                            : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                          }
+                        `}
+                        title={`Câu ${index + 1}: ${isAnswered ? 'Đã làm' : 'Chưa làm'}`}
+                      >
+                        {index + 1}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             {/* Stats Card */}
@@ -952,11 +1093,26 @@ export default function TeacherAssignmentPage() {
                   fetchAvailableAssignments();
                 }
               }}
+              variant="outline"
               className="w-full flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto"
             >
               <ArrowLeft className="w-5 h-5" />
               {startId ? 'Quay lại bài học' : 'Quay lại danh sách'}
             </Button>
+            
+            {currentAssignment?.max_attempts && submission && submission.attempt_number < currentAssignment.max_attempts && (
+               <Button
+                 onClick={() => {
+                   if (confirm('Bạn có chắc muốn làm lại bài tập này? Kết quả mới sẽ được tính là một lần làm bài mới.')) {
+                        startAssignment(currentAssignment);
+                   }
+                 }}
+                 className="w-full mt-3 flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto shadow-md"
+               >
+                 <RefreshCw className="w-5 h-5" />
+                 Làm lại bài tập
+               </Button>
+            )}
           </div>
         </div>
       </PageContainer>
