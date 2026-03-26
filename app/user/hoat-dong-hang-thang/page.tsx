@@ -73,6 +73,43 @@ function getEventClass(eventType: EventCategory | undefined) {
       return "bg-green-200 text-green-900";
   }
 }
+
+function getCalendarEventStyle(eventType: EventCategory | undefined) {
+  switch (eventType) {
+    case "registration":
+      return {
+        timeClassName: "text-red-700",
+        titleClassName: "bg-red-100 text-red-900",
+      };
+    case "workshop_teaching":
+      return {
+        timeClassName: "text-purple-700",
+        titleClassName: "bg-purple-200 text-purple-900",
+      };
+    case "meeting":
+      return {
+        timeClassName: "text-blue-700",
+        titleClassName: "bg-blue-200 text-blue-900",
+      };
+    case "advanced_training_release":
+      return {
+        timeClassName: "text-indigo-700",
+        titleClassName: "bg-indigo-200 text-indigo-900",
+      };
+    case "holiday":
+      return {
+        timeClassName: "text-amber-700",
+        titleClassName: "bg-amber-200 text-amber-900",
+      };
+    case "exam":
+    default:
+      return {
+        timeClassName: "text-green-700",
+        titleClassName: "bg-green-200 text-green-900",
+      };
+  }
+}
+
 const REGISTER_OPTIONS = [
   "[COD] Scratch (S)",
   "[COD] GameMaker (G)",
@@ -264,6 +301,10 @@ export default function MonthlyActivitiesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [respondingEventId, setRespondingEventId] = useState<string | null>(null);
   const [participationByEvent, setParticipationByEvent] = useState<Record<string, ParticipationStatus>>({});
+  const [userRegisteredSubjects, setUserRegisteredSubjects] = useState<Set<string>>(new Set());
+  const [showQuickRegisterModal, setShowQuickRegisterModal] = useState(false);
+  const [quickRegisterOptions, setQuickRegisterOptions] = useState<string[]>([]);
+  const [quickSubmitting, setQuickSubmitting] = useState(false);
 
   useEffect(() => {
     if (!user?.email) return;
@@ -372,6 +413,26 @@ export default function MonthlyActivitiesPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!teacherCode) return;
+    (async () => {
+      try {
+        const response = await fetch(`/api/exam-registrations?teacher_code=${encodeURIComponent(teacherCode)}`);
+        const data = await response.json();
+        if (!response.ok || !data?.success) return;
+        const registeredSet = new Set<string>();
+        (data.data || []).forEach((row: { block_code: string; subject_code: string }) => {
+          Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
+            if (mapped.block_code === row.block_code && mapped.subject_code === row.subject_code) {
+              registeredSet.add(option);
+            }
+          });
+        });
+        setUserRegisteredSubjects(registeredSet);
+      } catch {}
+    })();
+  }, [teacherCode]);
+
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
     return Array.from({ length: 9 }, (_, index) => currentYear - 3 + index);
@@ -414,6 +475,28 @@ export default function MonthlyActivitiesPage() {
     return map;
   }, [events]);
 
+  const visibleEventsByDateKey = useMemo(() => {
+    const normalizeStr = (v: string) =>
+      v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const map = new Map<string, EvaluationEvent[]>();
+    eventsByDateKey.forEach((dayEvents, key) => {
+      const visible = dayEvents.filter((event) => {
+        if (event.eventType !== "exam") return true;
+        return Object.entries(REGISTER_OPTION_MAP).some(([option, mapped]) => {
+          if (!userRegisteredSubjects.has(option)) return false;
+          const specialty = normalizeStr(event.specialty || "");
+          const title = normalizeStr(event.title || "");
+          return mapped.specialtyAliases.some((alias) => {
+            const a = normalizeStr(alias);
+            return specialty.includes(a) || title.includes(a);
+          });
+        });
+      });
+      map.set(key, visible);
+    });
+    return map;
+  }, [eventsByDateKey, userRegisteredSubjects]);
+
   const periodLabel = useMemo(() => {
     if (view === "day") {
       return focusDate.toLocaleDateString("vi-VN", {
@@ -436,8 +519,8 @@ export default function MonthlyActivitiesPage() {
 
   const selectedDayEvents = useMemo(() => {
     if (!selectedDate) return [];
-    return eventsByDateKey.get(formatDateKey(selectedDate)) || [];
-  }, [eventsByDateKey, selectedDate]);
+    return visibleEventsByDateKey.get(formatDateKey(selectedDate)) || [];
+  }, [visibleEventsByDateKey, selectedDate]);
 
   useEffect(() => {
     if (!showDayEventsModal || !teacherCode || selectedDayEvents.length === 0) {
@@ -501,7 +584,7 @@ export default function MonthlyActivitiesPage() {
   };
 
   const handleDayClick = (date: Date) => {
-    const dateEvents = eventsByDateKey.get(formatDateKey(date)) || [];
+    const dateEvents = visibleEventsByDateKey.get(formatDateKey(date)) || [];
     if (dateEvents.length === 0) {
       return;
     }
@@ -710,10 +793,111 @@ export default function MonthlyActivitiesPage() {
     );
   };
 
+  const toggleQuickOption = (option: string) => {
+    setQuickRegisterOptions((prev) =>
+      prev.includes(option) ? prev.filter((item) => item !== option) : [...prev, option]
+    );
+  };
+
+  const submitQuickRegistration = async () => {
+    if (quickRegisterOptions.length === 0) {
+      toast.error("Vui lòng chọn ít nhất 1 bộ môn");
+      return;
+    }
+    if (!teacherCode.trim()) {
+      toast.error("Không xác định được mã giáo viên");
+      return;
+    }
+
+    const normalized = (value: string) =>
+      value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const examEvents = events.filter((event) => event.eventType === "exam");
+    const now = new Date();
+    const submittedOptions: string[] = [];
+    const failedOptions: string[] = [];
+    const failedDetails: string[] = [];
+
+    try {
+      setQuickSubmitting(true);
+      for (const option of quickRegisterOptions) {
+        const mapped = REGISTER_OPTION_MAP[option];
+        if (!mapped) {
+          failedOptions.push(option);
+          failedDetails.push(`${option}: chưa có mapping dữ liệu`);
+          continue;
+        }
+        if (!availableOptions.has(option)) {
+          failedOptions.push(option);
+          failedDetails.push(`${option}: chưa có bộ đề active`);
+          continue;
+        }
+        const matchedExamEvents = examEvents
+          .filter((event) => {
+            const eventSpecialty = normalized(event.specialty || "");
+            const eventTitle = normalized(event.title || "");
+            return mapped.specialtyAliases.some((alias) => {
+              const aliasNorm = normalized(alias);
+              return eventSpecialty.includes(aliasNorm) || eventTitle.includes(aliasNorm);
+            });
+          })
+          .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+        const futureExamEvents = matchedExamEvents.filter((e) => new Date(e.startAt) >= now);
+        const matchedExamEvent = futureExamEvents[0] || null;
+        if (!matchedExamEvent) {
+          failedOptions.push(option);
+          failedDetails.push(`${option}: chưa có lịch thi kế tiếp`);
+          continue;
+        }
+        const scheduledAt = new Date(matchedExamEvent.startAt);
+        const closeAt = new Date(matchedExamEvent.endAt);
+        const response = await fetch('/api/exam-registrations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            teacher_code: teacherCode,
+            exam_type: mapped.exam_type,
+            registration_type: "official",
+            block_code: mapped.block_code,
+            subject_code: mapped.subject_code,
+            center_code: teacherCenterCode || null,
+            scheduled_at: scheduledAt.toISOString(),
+            source_form: "main_form",
+            open_at: scheduledAt.toISOString(),
+            close_at: closeAt.toISOString(),
+          }),
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          submittedOptions.push(option);
+        } else {
+          failedOptions.push(option);
+          failedDetails.push(`${option}: ${data?.error || 'lỗi không xác định'}`);
+        }
+      }
+    } finally {
+      setQuickSubmitting(false);
+    }
+
+    if (submittedOptions.length > 0) {
+      setUserRegisteredSubjects((prev) => {
+        const next = new Set(prev);
+        submittedOptions.forEach((o) => next.add(o));
+        return next;
+      });
+      toast.success(`Đăng ký thành công ${submittedOptions.length} bộ môn`);
+      setShowQuickRegisterModal(false);
+      setQuickRegisterOptions([]);
+    }
+    if (failedOptions.length > 0) {
+      toast.error(`Không thể đăng ký: ${failedOptions.join(', ')}`);
+      console.warn('Quick registration failed details:', failedDetails);
+    }
+  };
+
   return (
     <PageContainer
       title="CÁC HOẠT ĐỘNG HÀNG THÁNG"
-      description="Lịch tổng hợp sự kiện đào tạo và đăng ký kiểm tra (quyền quan sát)"
+      description=""
     >
       <Card className="overflow-hidden" padding="sm">
         <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 text-center">
@@ -787,6 +971,15 @@ export default function MonthlyActivitiesPage() {
                 {option.label}
               </button>
             ))}
+            <button
+              onClick={() => {
+                setQuickRegisterOptions([]);
+                setShowQuickRegisterModal(true);
+              }}
+              className="rounded-md border border-green-600 bg-green-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-700"
+            >
+              Đăng ký kiểm tra chuyên sâu
+            </button>
           </div>
         </div>
 
@@ -807,7 +1000,7 @@ export default function MonthlyActivitiesPage() {
           {calendarCells.map(({ date, inCurrentMonth }) => {
             const isToday = isSameDate(startOfDay(date), startOfDay(new Date()));
             const dateKey = formatDateKey(date);
-            const dayEvents = eventsByDateKey.get(dateKey) || [];
+            const dayEvents = visibleEventsByDateKey.get(dateKey) || [];
             const hasRegistrationEvent = Boolean(registrationEventByDate(date));
             const hasActiveRegistration = Boolean(activeRegistrationEventByDate(date));
 
@@ -852,11 +1045,13 @@ export default function MonthlyActivitiesPage() {
 
                 <div className="space-y-1">
                   {dayEvents.slice(0, 3).map((event) => {
+                    const calendarEventStyle = getCalendarEventStyle(event.eventType);
+
                     if (event.eventType === "registration") {
                       return (
                         <div
                           key={event.id}
-                          className="py-1 text-center text-[11px] leading-4 font-bold text-red-700 whitespace-pre-line"
+                          className={`rounded-sm px-1 py-1 text-center text-[11px] leading-4 font-bold whitespace-pre-line ${calendarEventStyle.titleClassName}`}
                           title={event.title.replace(/\n/g, " ")}
                         >
                           {event.title}
@@ -866,10 +1061,10 @@ export default function MonthlyActivitiesPage() {
 
                     return (
                       <div key={event.id} className="flex items-start gap-1">
-                        <div className="w-18 shrink-0 text-[11px] font-semibold text-blue-700 leading-4">
+                        <div className={`w-18 shrink-0 text-[11px] font-semibold leading-4 ${calendarEventStyle.timeClassName}`}>
                           {formatEventTimeRange(event.startAt, event.endAt)}
                         </div>
-                        <div className="flex-1 rounded-sm px-1 py-1 text-[11px] leading-4 font-semibold text-center bg-green-200 text-green-900">
+                        <div className={`flex-1 rounded-sm px-1 py-1 text-[11px] leading-4 font-semibold text-center ${calendarEventStyle.titleClassName}`}>
                           {event.title}
                         </div>
                       </div>
@@ -1066,6 +1261,81 @@ export default function MonthlyActivitiesPage() {
                 className="rounded-md bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
               >
                 {submitting ? "Đang gửi..." : "Gửi đăng ký"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showQuickRegisterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <h3 className="text-lg font-bold text-gray-900">Đăng ký kiểm tra chuyên sâu</h3>
+              <button
+                onClick={() => setShowQuickRegisterModal(false)}
+                className="rounded-md p-1 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 max-h-[65vh] overflow-y-auto">
+              <p className="text-sm text-gray-700 font-medium">
+                Chọn bộ môn bạn muốn đăng ký kiểm tra chuyên sâu <span className="text-red-600">*</span>
+              </p>
+
+              {REGISTER_OPTIONS.map((option) => {
+                const isAlreadyRegistered = userRegisteredSubjects.has(option);
+                const isAvailable = availableOptions.has(option);
+                return (
+                  <label
+                    key={option}
+                    className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer ${
+                      isAlreadyRegistered
+                        ? "border-green-300 bg-green-50"
+                        : isAvailable
+                        ? "border-gray-200 hover:bg-gray-50"
+                        : "border-gray-100 bg-gray-50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isAlreadyRegistered || quickRegisterOptions.includes(option)}
+                      disabled={isAlreadyRegistered || !isAvailable}
+                      onChange={() => toggleQuickOption(option)}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300"
+                    />
+                    <span
+                      className={`text-sm flex-1 ${
+                        isAlreadyRegistered ? "text-green-700" : isAvailable ? "text-gray-900" : "text-gray-400"
+                      }`}
+                    >
+                      {option}
+                      {isAlreadyRegistered && (
+                        <span className="ml-2 text-xs font-semibold text-green-600">(Đã đăng ký)</span>
+                      )}
+                      {!isAvailable && !isAlreadyRegistered && (
+                        <span className="ml-2 text-xs text-gray-400">(chưa có đề)</span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-4 py-3">
+              <button
+                onClick={() => setShowQuickRegisterModal(false)}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold hover:bg-gray-50"
+              >
+                Đóng
+              </button>
+              <button
+                onClick={submitQuickRegistration}
+                disabled={quickSubmitting || quickRegisterOptions.length === 0}
+                className="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {quickSubmitting ? "Đang đăng ký..." : "Xác nhận đăng ký"}
               </button>
             </div>
           </div>
