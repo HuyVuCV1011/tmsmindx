@@ -24,6 +24,25 @@ function parseDateValue(value: string | null | undefined) {
   return parsed;
 }
 
+function toTimestampString(value: Date | string | null | undefined) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function serializeEventScheduleRow(row: Record<string, any>) {
+  return {
+    ...row,
+    start_at: toTimestampString(row.start_at),
+    end_at: toTimestampString(row.end_at),
+    created_at: toTimestampString(row.created_at),
+    updated_at: toTimestampString(row.updated_at),
+  };
+}
+
 export const GET = withApiProtection(async (request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
@@ -79,7 +98,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
 
     return NextResponse.json({
       success: true,
-      data: result.rows,
+      data: result.rows.map(serializeEventScheduleRow),
       count: result.rows.length,
     });
   } catch (error: any) {
@@ -175,7 +194,7 @@ export const POST = withApiProtection(async (request: NextRequest) => {
     return NextResponse.json(
       {
         success: true,
-        data: result.rows[0],
+        data: serializeEventScheduleRow(result.rows[0]),
         message: 'Event created successfully',
       },
       { status: 201 }
@@ -303,7 +322,7 @@ export const PUT = withApiProtection(async (request: NextRequest) => {
 
     return NextResponse.json({
       success: true,
-      data: updated,
+      data: serializeEventScheduleRow(updated),
       message: 'Event updated successfully',
     });
   } catch (error: any) {
@@ -341,7 +360,7 @@ export const DELETE = withApiProtection(async (request: NextRequest) => {
 
     return NextResponse.json({
       success: true,
-      data: result.rows[0],
+      data: serializeEventScheduleRow(result.rows[0]),
       message: 'Event deleted successfully',
     });
   } catch (error: any) {
