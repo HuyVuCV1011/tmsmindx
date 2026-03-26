@@ -1,0 +1,12 @@
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   ▲ Next.js 16.0.10 (Turbopack)
+   - Local:         http://localhost:3000
+   - Network:       http://192.168.0.2:3000
+   - Experiments (use with caution):
+     ⨯ webpackBuildWorker
+
+ ✓ Starting...
+ ✓ Ready in 1289ms
+ ○ Compiling /user/truyenthong ...
+ GET /user/truyenthong 200 in 5.0s (compile: 4.6s, render: 431ms)
+ GET /login 200 in 879ms (compile: 826ms, render: 53ms)

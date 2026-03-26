@@ -90,7 +90,7 @@ export default function CommunicationsPage() {
 
                 {/* Header Section - Now after slider */}
                 <div className="bg-white border-b border-gray-200">
-                    <div className="max-w-7xl mx-auto px-1 md:px-2 py-8">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div>
                                 <h1 className="text-3xl font-black text-gray-900 tracking-tight">Truyền Thông Nội Bộ</h1>
@@ -109,24 +109,24 @@ export default function CommunicationsPage() {
                     </div>
                 </div>
 
-                <div className="max-w-7xl mx-auto px-1 md:px-2 pt-8 pb-8 space-y-12">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 space-y-12">
 
                     {/* Two Column Layout: Main Content + Sidebar */}
                     <div className="flex flex-col lg:flex-row gap-6">
                         
                         {/* Main Content - Left Side */}
                         <div className="flex-1 min-w-0">
-                            <div className="flex flex-col gap-8">
+                            <div className="flex flex-col gap-6 md:gap-8">
 
                                 {/* Sticky Filter Bar */}
-                                <div className="top-20 z-30 bg-white/80 backdrop-blur-xl border border-gray-200/50 p-2 rounded-2xl shadow-sm flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
+                                <div className="top-20 z-30 bg-white/95 backdrop-blur-sm border border-gray-200/50 p-2 rounded-2xl shadow-sm flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
                                     <div className="flex p-1 gap-1">
                                         {postTypes.map(type => (
                                             <button
                                                 key={type.value}
                                                 onClick={() => setSelectedFilter(type.value)}
                                                 className={cn(
-                                                    "px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap",
+                                                    "px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 whitespace-nowrap",
                                                     selectedFilter === type.value
                                                         ? "bg-gray-900 text-white shadow-md"
                                                         : "bg-transparent text-gray-600 hover:bg-gray-100"
