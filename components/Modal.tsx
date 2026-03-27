@@ -65,7 +65,7 @@ export default function Modal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
       {/* Backdrop with minimal opacity */}
       <div
-        className="fixed inset-0  bg-opacity-60 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-opacity-60 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
