@@ -3,6 +3,7 @@
 import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { ExplanationSection } from '@/components/user/ExplanationSection';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
 import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send, Trophy, XCircle } from 'lucide-react';
@@ -94,7 +95,7 @@ export default function TeacherAssignmentPage() {
   const [examLoading, setExamLoading] = useState(true);
   const [error, setError] = useState('');
   const [teacherCode, setTeacherCode] = useState('');
-  const [activeMainTab, setActiveMainTab] = useState<'exam' | 'scores' | 'training'>('exam');
+  const [activeMainTab, setActiveMainTab] = useState<'exam' | 'scores' | 'explanations' | 'training'>('exam');
   const [selectedExamMonth, setSelectedExamMonth] = useState('all');
   const [activeExamSubTab, setActiveExamSubTab] = useState<'best' | string>('best');
   const [view, setView] = useState<'list' | 'taking' | 'result'>('list');
@@ -103,6 +104,13 @@ export default function TeacherAssignmentPage() {
   
   const searchParams = useSearchParams();
   const startId = searchParams.get('start_assignment_id');
+  const tabParam = searchParams.get('tab');
+
+  useEffect(() => {
+    if (tabParam === 'explanations' && activeMainTab !== 'explanations') {
+      setActiveMainTab('explanations');
+    }
+  }, [tabParam, activeMainTab]);
 
   // Auto-start assignment logic
   useEffect(() => {
@@ -1007,6 +1015,7 @@ export default function TeacherAssignmentPage() {
   const mainTabs = [
     { id: 'exam', label: 'Kiểm tra chuyên môn & Quy trình - kỹ năng trải nghiệm' },
     { id: 'scores', label: 'Điểm kiểm tra', count: examAssignments.length },
+    { id: 'explanations', label: 'Giải trình điểm kiểm tra' },
   ];
 
   return (
@@ -1020,7 +1029,7 @@ export default function TeacherAssignmentPage() {
         <Tabs
           tabs={mainTabs}
           activeTab={activeMainTab}
-          onChange={(tabId) => setActiveMainTab(tabId as 'exam' | 'scores' | 'training')}
+          onChange={(tabId) => setActiveMainTab(tabId as 'exam' | 'scores' | 'explanations' | 'training')}
         />
 
         {error ? (
@@ -1190,7 +1199,7 @@ export default function TeacherAssignmentPage() {
                             </Link>
                           ) : isExpiredZero && !item.explanation_status ? (
                             <Link
-                              href={`/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`}
+                              href={`/user/assignments?tab=explanations&assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`}
                               className="inline-flex w-full items-center justify-center rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
                             >
                               Giải trình
@@ -1211,6 +1220,10 @@ export default function TeacherAssignmentPage() {
                 )}
               </div>
             )}
+          </div>
+        ) : activeMainTab === 'explanations' ? (
+          <div key="explanations" className="mt-6 animate-tab-enter">
+            <ExplanationSection compact />
           </div>
         ) : assignments.length === 0 ? (
           <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
