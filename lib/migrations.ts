@@ -791,6 +791,19 @@ const migrations: Migration[] = [
       ADD CONSTRAINT unique_submission_question UNIQUE (submission_id, question_id);
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V36: Grant K12 docs screen permission for TM
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V36_grant_page2_permission_to_tm',
+    version: 36,
+    sql: `
+      INSERT INTO role_permissions (role_code, route_path)
+      VALUES ('TM', '/admin/page2')
+      ON CONFLICT DO NOTHING;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========
