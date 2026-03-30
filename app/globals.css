@@ -180,17 +180,6 @@
     animation: pulse-glow 2s ease-in-out infinite;
   }
 
-  /* Smooth transitions for all interactive elements */
-  button, a, input:not([id^="react-select"]), textarea, select {
-    transition: all 0.3s ease-in-out;
-  }
-
-  /* Focus states */
-  button:focus-visible, a:focus-visible, input:not([id^="react-select"]):focus-visible, 
-  textarea:focus-visible, select:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px #a1001f, 0 0 0 4px white;
-  }
 
   /* Modern card styles */
   .card-modern {
