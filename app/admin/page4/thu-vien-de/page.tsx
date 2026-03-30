@@ -22,6 +22,7 @@ interface PlannedEvent {
   id: string;
   subjectId: string;
   label: string;
+  eventKind: "exam" | "registration";
   startDate: string;
   endDate: string;
   startTime: string;
@@ -31,6 +32,10 @@ interface PlannedEvent {
 }
 
 const WEEKDAY_LABELS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+const REGISTRATION_EVENT_LABELS = {
+  official: "Đăng ký kiểm tra chuyên sâu chính thức",
+  supplement: "Đăng ký kiểm tra chuyên sâu bổ sung",
+} as const;
 
 function startOfDay(date: Date) {
   const copy = new Date(date);
@@ -248,17 +253,44 @@ export default function ProfessionalAssignmentLibraryPage() {
     setHistory([]);
     setFuture([]);
     setPlannedEvents(
-      SUBJECT_CONFIGS.filter((s) => s.examType === "expertise" || s.examType === "experience").map((s) => ({
-        id: s.id,
-        subjectId: s.id,
-        label: s.label,
-        startDate: autoStartDate,
-        endDate: autoEndDate,
-        startTime: "19:00",
-        endTime: "21:00",
-        registrationTemplate: "official",
-        selectedSetId: null,
-      }))
+      [
+        {
+          id: "registration-official",
+          subjectId: "registration-official",
+          label: REGISTRATION_EVENT_LABELS.official,
+          eventKind: "registration" as const,
+          startDate: autoStartDate,
+          endDate: autoEndDate,
+          startTime: "00:00",
+          endTime: "23:59",
+          registrationTemplate: "official" as const,
+          selectedSetId: null,
+        },
+        {
+          id: "registration-supplement",
+          subjectId: "registration-supplement",
+          label: REGISTRATION_EVENT_LABELS.supplement,
+          eventKind: "registration" as const,
+          startDate: autoStartDate,
+          endDate: autoEndDate,
+          startTime: "00:00",
+          endTime: "23:59",
+          registrationTemplate: "supplement" as const,
+          selectedSetId: null,
+        },
+        ...SUBJECT_CONFIGS.filter((s) => s.examType === "expertise" || s.examType === "experience").map((s) => ({
+          id: s.id,
+          subjectId: s.id,
+          label: s.label,
+          eventKind: "exam" as const,
+          startDate: autoStartDate,
+          endDate: autoEndDate,
+          startTime: "19:00",
+          endTime: "21:00",
+          registrationTemplate: "official" as const,
+          selectedSetId: null,
+        })),
+      ]
     );
     setIsAutoCreateModalOpen(true);
   };
@@ -323,6 +355,11 @@ export default function ProfessionalAssignmentLibraryPage() {
 
     setPlannedEvents((prev) =>
       prev.map((event) => {
+        if (event.eventKind === "registration") {
+          if (event.selectedSetId === null) return event;
+          return { ...event, selectedSetId: null };
+        }
+
         const options = activeSetsBySubjectId.get(event.subjectId) || [];
         if (options.length === 0) {
           if (event.selectedSetId === null) return event;
@@ -522,10 +559,26 @@ export default function ProfessionalAssignmentLibraryPage() {
     e.stopPropagation();
     if (!draggedId) return;
 
+    const draggedEvent = plannedEvents.find((item) => item.id === draggedId);
+    if (!draggedEvent) return;
+
+    if (draggedEvent.eventKind === "registration") {
+      const next = plannedEvents.map((item) =>
+        item.id === draggedId
+          ? { ...item, startDate: dateKey, endDate: dateKey, startTime: "00:00", endTime: "23:59" }
+          : item
+      );
+      commitPlannedEvents(next);
+      setDraggedId(null);
+      return;
+    }
+
     const durationMins = getDurationMins(autoStartTime, autoEndTime) || 120;
     
     let newStart = autoStartTime;
-    const existingOnDate = plannedEvents.filter(p => p.startDate === dateKey && p.endDate === dateKey && p.id !== draggedId);
+    const existingOnDate = plannedEvents.filter(
+      (p) => p.eventKind === "exam" && p.startDate === dateKey && p.endDate === dateKey && p.id !== draggedId
+    );
     
     if (existingOnDate.length > 0) {
       let maxEnd = "00:00";
@@ -556,6 +609,16 @@ export default function ProfessionalAssignmentLibraryPage() {
     let currentStart = autoStartTime;
     
     const next = plannedEvents.map((evt) => {
+      if (evt.eventKind === "registration") {
+        return {
+          ...evt,
+          startDate: autoStartDate,
+          endDate: autoEndDate,
+          startTime: "00:00",
+          endTime: "23:59",
+        };
+      }
+
       const assignedStart = currentStart;
       const assignedEnd = addMinutesToTime(assignedStart, durationMins);
       currentStart = assignedEnd;
@@ -578,6 +641,17 @@ export default function ProfessionalAssignmentLibraryPage() {
       const d = new Date(start);
       d.setDate(d.getDate() + idx);
       const dateKey = formatDateKey(d);
+
+      if (evt.eventKind === "registration") {
+        return {
+          ...evt,
+          startDate: dateKey,
+          endDate: dateKey,
+          startTime: "00:00",
+          endTime: "23:59",
+        };
+      }
+
       return {
         ...evt,
         startDate: dateKey,
@@ -692,7 +766,7 @@ export default function ProfessionalAssignmentLibraryPage() {
       return;
     }
 
-    const missingSet = scheduledEvents.find((event) => !event.selectedSetId);
+    const missingSet = scheduledEvents.find((event) => event.eventKind === "exam" && !event.selectedSetId);
     if (missingSet) {
       toast.error(`Vui lòng chọn bộ đề cho môn ${missingSet.label}`);
       return;
@@ -704,6 +778,41 @@ export default function ProfessionalAssignmentLibraryPage() {
       const selectionUpdated = new Set<string>();
       
       for (const planned of scheduledEvents) {
+        if (planned.eventKind === "registration") {
+          const monthlyDateKeys = generateMonthlyDateKeys(planned.startDate, planned.endDate);
+
+          for (const occurrenceDate of monthlyDateKeys) {
+            const response = await fetch("/api/event-schedules", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                id: crypto.randomUUID(),
+                title: REGISTRATION_EVENT_LABELS[planned.registrationTemplate],
+                event_type: "registration",
+                specialty: "Lịch đăng ký kiểm tra",
+                registration_template: planned.registrationTemplate,
+                start_at: `${occurrenceDate}T${planned.startTime}:00`,
+                end_at: `${occurrenceDate}T${planned.endTime}:00`,
+                note: "Lịch đăng ký kiểm tra tạo tự động theo tháng",
+                metadata: {
+                  recurrence: "monthly",
+                  range_start_date: planned.startDate,
+                  range_end_date: planned.endDate,
+                  occurrence_date: occurrenceDate,
+                  auto_created_from: planned.id,
+                },
+              }),
+            });
+
+            const createData = await response.json();
+            if (response.ok && createData?.success) {
+              successCount++;
+            }
+          }
+
+          continue;
+        }
+
         const selectedSet = sets.find((set) => set.id === planned.selectedSetId);
         if (!selectedSet) {
           continue;
@@ -1186,25 +1295,31 @@ export default function ProfessionalAssignmentLibraryPage() {
                        </select>
                     </div>
 
-                    <div className="flex items-center gap-2 pl-6">
-                      <select
-                        value={evt.selectedSetId ?? ""}
-                        onChange={(e) => updatePlannedEvent(evt.id, "selectedSetId", e.target.value ? Number(e.target.value) : null)}
-                        className="flex-1 rounded border border-gray-300 px-2 py-1 text-[11px] bg-gray-50"
-                      >
-                        {(activeSetsBySubjectId.get(evt.subjectId) || []).length === 0 ? (
-                          <option value="">Chưa có bộ đề active</option>
-                        ) : (
-                          <>
-                            {(activeSetsBySubjectId.get(evt.subjectId) || []).map((set) => (
-                              <option key={set.id} value={set.id}>
-                                {set.set_code} - {set.set_name}
-                              </option>
-                            ))}
-                          </>
-                        )}
-                      </select>
-                    </div>
+                    {evt.eventKind === "exam" ? (
+                      <div className="flex items-center gap-2 pl-6">
+                        <select
+                          value={evt.selectedSetId ?? ""}
+                          onChange={(e) => updatePlannedEvent(evt.id, "selectedSetId", e.target.value ? Number(e.target.value) : null)}
+                          className="flex-1 rounded border border-gray-300 px-2 py-1 text-[11px] bg-gray-50"
+                        >
+                          {(activeSetsBySubjectId.get(evt.subjectId) || []).length === 0 ? (
+                            <option value="">Chưa có bộ đề active</option>
+                          ) : (
+                            <>
+                              {(activeSetsBySubjectId.get(evt.subjectId) || []).map((set) => (
+                                <option key={set.id} value={set.id}>
+                                  {set.set_code} - {set.set_name}
+                                </option>
+                              ))}
+                            </>
+                          )}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="pl-6 text-[11px] font-medium text-blue-700">
+                        Event đăng ký, không cần chọn bộ đề.
+                      </div>
+                    )}
 
                     <div className="flex items-center gap-1 pl-6">
                        <input
@@ -1323,9 +1438,13 @@ export default function ProfessionalAssignmentLibraryPage() {
                                      title={evt.label}
                                      className={cn(
                                        "text-[10px] leading-tight px-1.5 py-1 rounded truncate border cursor-move transition-transform active:scale-95 shadow-sm",
-                                       evt.registrationTemplate === "official" 
-                                          ? "bg-green-100 text-green-800 border-green-200" 
-                                          : "bg-red-100 text-red-800 border-red-200"
+                                        evt.eventKind === "registration"
+                                          ? evt.registrationTemplate === "official"
+                                            ? "bg-blue-100 text-blue-800 border-blue-200"
+                                            : "bg-amber-100 text-amber-800 border-amber-200"
+                                          : evt.registrationTemplate === "official" 
+                                            ? "bg-green-100 text-green-800 border-green-200" 
+                                            : "bg-red-100 text-red-800 border-red-200"
                                      )}
                                    >
                                       {evt.label}

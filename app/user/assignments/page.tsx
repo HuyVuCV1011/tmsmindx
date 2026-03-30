@@ -4,6 +4,7 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import Modal from '@/components/Modal';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
 import { useTeacher } from '@/lib/teacher-context';
@@ -107,6 +108,7 @@ export default function TeacherAssignmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
   const isSubmittingRef = useRef(false);
+  const [selectedExamInfo, setSelectedExamInfo] = useState<ExamAssignment | null>(null);
   
   const searchParams = useSearchParams();
   const startId = searchParams.get('start_assignment_id');
@@ -597,52 +599,42 @@ export default function TeacherAssignmentPage() {
     });
   }, []);
 
-  const bestScoreData = useMemo<{
-    subject_code: string;
-    best_score: number | null;
-    passing_score: number;
-    total_points: number;
-    attempt_count: number;
-    passed_count: number;
-    latest_open_at: string;
-  }[]>(() => {
+  const monthlyAverageData = useMemo(() => {
     const last6Set = new Set(last6Months);
-    const map = new Map<string, { subject_code: string; best_score: number | null; passing_score: number; total_points: number; attempt_count: number; passed_count: number; latest_open_at: string }>();
+    const monthlyScores = new Map<string, number[]>();
 
     examAssignments.forEach(item => {
+      if (item.score === null) return;
+      if (item.exam_type === 'experience') return;
+
       const date = new Date(item.open_at);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       if (!last6Set.has(monthKey)) return;
 
-      const score = item.score !== null ? Number(item.score) : null;
-      const existing = map.get(item.subject_code);
+      const score = Number(item.score);
+      if (Number.isNaN(score)) return;
 
-      if (!existing) {
-        map.set(item.subject_code, {
-          subject_code: item.subject_code,
-          best_score: score,
-          passing_score: item.passing_score,
-          total_points: item.total_points,
-          attempt_count: 1,
-          passed_count: score !== null && score >= item.passing_score ? 1 : 0,
-          latest_open_at: item.open_at,
-        });
+      if (!monthlyScores.has(monthKey)) {
+        monthlyScores.set(monthKey, [score]);
       } else {
-        const newBest =
-          score !== null
-            ? existing.best_score === null ? score : Math.max(existing.best_score, score)
-            : existing.best_score;
-        map.set(item.subject_code, {
-          ...existing,
-          best_score: newBest,
-          attempt_count: existing.attempt_count + 1,
-          passed_count: existing.passed_count + (score !== null && score >= item.passing_score ? 1 : 0),
-          latest_open_at: item.open_at > existing.latest_open_at ? item.open_at : existing.latest_open_at,
-        });
+        monthlyScores.get(monthKey)!.push(score);
       }
     });
 
-    return Array.from(map.values()).sort((a, b) => a.subject_code.localeCompare(b.subject_code));
+    return last6Months
+      .map(month => {
+        const scores = monthlyScores.get(month) || [];
+        if (!scores.length) {
+          return { month, average: null as number | null, count: 0 };
+        }
+        const total = scores.reduce((sum, value) => sum + value, 0);
+        return {
+          month,
+          average: total / scores.length,
+          count: scores.length,
+        };
+      })
+      .sort((a, b) => b.month.localeCompare(a.month));
   }, [examAssignments, last6Months]);
 
   const examSubMonthTabs = useMemo(() => {
@@ -672,6 +664,64 @@ export default function TeacherAssignmentPage() {
       return key === activeExamSubTab;
     });
   }, [examAssignments, activeExamSubTab]);
+
+  const bestMonthAverage = useMemo(() => {
+    const validMonths = monthlyAverageData.filter(item => item.average !== null) as Array<{
+      month: string;
+      average: number;
+      count: number;
+    }>;
+
+    if (!validMonths.length) return null;
+
+    return validMonths.sort((a, b) => {
+      if (b.average !== a.average) return b.average - a.average;
+      return b.month.localeCompare(a.month);
+    })[0];
+  }, [monthlyAverageData]);
+
+  const bestMonthAssignments = useMemo(() => {
+    if (!bestMonthAverage) return [] as ExamAssignment[];
+
+    return examAssignments
+      .filter(item => {
+        if (item.exam_type === 'experience') return false;
+        if (item.score === null) return false;
+
+        const date = new Date(item.open_at);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        return monthKey === bestMonthAverage.month;
+      })
+      .sort((a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime());
+  }, [examAssignments, bestMonthAverage]);
+
+  const bestExperienceExamScore = useMemo(() => {
+    const last6Set = new Set(last6Months);
+
+    const experienceScores = examAssignments
+      .filter(item => {
+        if (item.exam_type !== 'experience') return false;
+        if (item.score === null) return false;
+
+        const date = new Date(item.open_at);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        return last6Set.has(monthKey);
+      })
+      .sort((a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime());
+
+    if (!experienceScores.length) return null;
+
+    return experienceScores.reduce((best, current) => {
+      const bestScore = Number(best.score ?? -Infinity);
+      const currentScore = Number(current.score ?? -Infinity);
+
+      if (currentScore > bestScore) return current;
+      if (currentScore < bestScore) return best;
+
+      // Tie-breaker: prefer latest exam date when scores are equal.
+      return new Date(current.open_at).getTime() > new Date(best.open_at).getTime() ? current : best;
+    });
+  }, [examAssignments, last6Months]);
 
   // Loading state when auto-starting assignment
   if (startId && view === 'list') {
@@ -1290,61 +1340,78 @@ export default function TeacherAssignmentPage() {
               /* ─── Tab: Điểm cao nhất 6 tháng ─── */
               <div key="best" className="animate-tab-enter">
                 <p className="mb-3 text-xs text-gray-500">
-                  Tổng hợp điểm cao nhất của bạn trong 6 tháng gần nhất ({formatMonthLabel(last6Months[last6Months.length - 1])} – {formatMonthLabel(last6Months[0])})
+                  Tổng hợp theo tháng trung bình cao nhất trong 6 tháng gần nhất ({formatMonthLabel(last6Months[last6Months.length - 1])} – {formatMonthLabel(last6Months[0])})
                 </p>
-                {bestScoreData.length === 0 ? (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  {bestMonthAverage ? (
+                    <p>
+                      Điểm trung bình cao nhất theo tháng (không tính Kiểm tra quy trình & kỹ năng trải nghiệm):
+                      {' '}
+                      <span className="font-semibold">{bestMonthAverage.average.toFixed(2)}</span>
+                      {' '}
+                      ở
+                      {' '}
+                      <span className="font-semibold">{formatMonthLabel(bestMonthAverage.month)}</span>
+                      {' '}
+                      ({bestMonthAverage.count} bài).
+                    </p>
+                  ) : (
+                    <p>Chưa có dữ liệu điểm chuyên môn để tính điểm trung bình tháng cao nhất.</p>
+                  )}
+                </div>
+
+                {bestMonthAverage ? (
+                  <div className="mb-4 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        <tr>
+                          <th className="px-4 py-3 text-left">Môn học</th>
+                          <th className="px-4 py-3 text-center">Điểm</th>
+                          <th className="px-4 py-3 text-center">Ngày thi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {bestMonthAssignments.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="px-4 py-4 text-center text-gray-500">
+                              Không có bài thi chuyên môn trong {formatMonthLabel(bestMonthAverage.month)}.
+                            </td>
+                          </tr>
+                        ) : (
+                          bestMonthAssignments.map(item => (
+                            <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-3 font-medium text-gray-900">{item.subject_code}</td>
+                              <td className="px-4 py-3 text-center font-semibold text-gray-900">{item.score}</td>
+                              <td className="px-4 py-3 text-center text-gray-600">{new Date(item.open_at).toLocaleDateString('vi-VN')}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+
+                {bestExperienceExamScore === null ? (
                   <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-12 text-center">
                     <Trophy className="mx-auto mb-3 h-12 w-12 text-gray-300" />
-                    <p className="text-sm text-gray-500">Chưa có dữ liệu kiểm tra trong 6 tháng qua.</p>
+                    <p className="text-sm text-gray-500">Chưa có điểm Kiểm tra quy trình & kỹ năng trải nghiệm trong 6 tháng qua.</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-600">
                         <tr>
-                          <th className="px-4 py-3 text-left">Môn học</th>
-                          <th className="px-4 py-3 text-center">Điểm cao nhất</th>
-                          <th className="px-4 py-3 text-center">Tổng điểm</th>
-                          <th className="px-4 py-3 text-center">Kết quả</th>
-                          <th className="px-4 py-3 text-center">Số lần thi</th>
-                          <th className="px-4 py-3 text-center">Đạt / Tổng</th>
+                          <th className="px-4 py-3 text-left">Kiểm tra quy trình & kỹ năng trải nghiệm</th>
+                          <th className="px-4 py-3 text-center">Điểm</th>
+                          <th className="px-4 py-3 text-center">Ngày thi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {bestScoreData.map(row => {
-                          const isPassed = row.best_score !== null && row.best_score >= row.passing_score;
-                          return (
-                            <tr key={row.subject_code} className="hover:bg-gray-50 transition-colors">
-                              <td className="px-4 py-3 font-medium text-gray-900">{row.subject_code}</td>
-                              <td className="px-4 py-3 text-center">
-                                {row.best_score === null ? (
-                                  <span className="text-gray-400">Chưa có</span>
-                                ) : (
-                                  <span className={`text-lg font-bold ${isPassed ? 'text-green-600' : 'text-red-600'}`}>
-                                    {row.best_score}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-center text-gray-600">{row.total_points}</td>
-                              <td className="px-4 py-3 text-center">
-                                {row.best_score === null ? (
-                                  <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-500">Chưa thi</span>
-                                ) : isPassed ? (
-                                  <span className="rounded-full border border-green-300 bg-green-50 px-2.5 py-0.5 text-xs font-semibold text-green-700">Đạt</span>
-                                ) : (
-                                  <span className="rounded-full border border-red-300 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">Chưa đạt</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-center text-gray-700">{row.attempt_count}</td>
-                              <td className="px-4 py-3 text-center">
-                                <span className={row.passed_count > 0 ? 'font-semibold text-green-700' : 'text-gray-500'}>
-                                  {row.passed_count}
-                                </span>
-                                <span className="text-gray-400">/{row.attempt_count}</span>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        <tr className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 font-medium text-gray-900">{bestExperienceExamScore.subject_code}</td>
+                          <td className="px-4 py-3 text-center font-semibold text-gray-900">{bestExperienceExamScore.score}</td>
+                          <td className="px-4 py-3 text-center text-gray-600">{new Date(bestExperienceExamScore.open_at).toLocaleDateString('vi-VN')}</td>
+                        </tr>
                       </tbody>
                     </table>
                   </div>
@@ -1417,9 +1484,13 @@ export default function TeacherAssignmentPage() {
                               Đã giải trình ({item.explanation_status})
                             </div>
                           ) : (
-                            <div className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedExamInfo(item)}
+                              className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                            >
                               {new Date(item.open_at) > now ? 'Chưa tới giờ mở' : 'Thông tin bài thi'}
-                            </div>
+                            </button>
                           )}
                         </div>
                       );
@@ -1512,6 +1583,59 @@ export default function TeacherAssignmentPage() {
             ))}
           </div>
         )}
+
+        <Modal
+          isOpen={selectedExamInfo !== null}
+          onClose={() => setSelectedExamInfo(null)}
+          title="Thông tin bài thi"
+          subtitle={selectedExamInfo?.subject_code || ''}
+          maxWidth="lg"
+          footer={
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setSelectedExamInfo(null)}>
+                Đóng
+              </Button>
+            </div>
+          }
+        >
+          {selectedExamInfo && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Môn học</p>
+                  <p className="font-semibold text-gray-900">{selectedExamInfo.subject_code}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Trạng thái</p>
+                  <p className="font-semibold text-gray-900">{getExamStatusLabel(selectedExamInfo)}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Loại đăng ký</p>
+                  <p className="font-semibold text-gray-900">{formatRegistrationType(selectedExamInfo.registration_type)}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Bộ đề</p>
+                  <p className="font-semibold text-gray-900">{selectedExamInfo.set_code} - {selectedExamInfo.set_name}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Mở bài</p>
+                  <p className="font-semibold text-gray-900">{new Date(selectedExamInfo.open_at).toLocaleString('vi-VN')}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Đóng bài</p>
+                  <p className="font-semibold text-gray-900">{new Date(selectedExamInfo.close_at).toLocaleString('vi-VN')}</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                <p className="text-xs text-blue-700">Điểm</p>
+                <p className="text-base font-bold text-blue-900">
+                  {selectedExamInfo.score === null ? 'Chưa có điểm' : `${selectedExamInfo.score} / ${selectedExamInfo.total_points}`}
+                </p>
+              </div>
+            </div>
+          )}
+        </Modal>
       </div>
     </PageContainer>
   );
