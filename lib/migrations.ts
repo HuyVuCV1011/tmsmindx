@@ -766,6 +766,19 @@ const migrations: Migration[] = [
       WHERE view_count IS NULL OR view_count = 0;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V35: Grant K12 docs screen permission for TM
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V35_grant_page2_permission_to_tm',
+    version: 35,
+    sql: `
+      INSERT INTO role_permissions (role_code, route_path)
+      VALUES ('TM', '/admin/page2')
+      ON CONFLICT DO NOTHING;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========
