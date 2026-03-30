@@ -285,7 +285,7 @@ export function UpcomingEventsSidebar() {
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-right duration-700">
             {/* Upcoming Events Section */}
-            <div className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.12)] transition-shadow duration-300">
+            <div className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
                 <div className="p-5 border-b border-gray-100 bg-linear-to-r from-gray-50 to-white">
                     <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-600" />
@@ -349,8 +349,8 @@ export function UpcomingEventsSidebar() {
             </div>
 
             {/* Upcoming Birthdays Section */}
-            <div className="bg-linear-to-br from-red-800 via-red-900 to-rose-900 rounded-2xl overflow-hidden shadow-[0_8px_30px_rgba(153,27,27,0.45)] hover:shadow-[0_12px_40px_rgba(153,27,27,0.55)] transition-all duration-300 hover:scale-[1.02]">
-                <div className="p-4 border-b border-white/10 bg-linear-to-r from-red-700/50 to-transparent backdrop-blur-sm">
+            <div className="bg-linear-to-br from-red-800 via-red-900 to-rose-900 rounded-2xl overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300">
+                <div className="p-4 border-b border-white/10 bg-linear-to-r from-red-700/50 to-transparent">
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2.5">
                         <span className="text-xl">🎂</span>
                         <span>
@@ -385,7 +385,7 @@ export function UpcomingEventsSidebar() {
                             className={`flex items-center gap-3 text-white -mx-2 px-2.5 py-2.5 rounded-xl transition-all duration-200 border backdrop-blur-sm group ${
                                 person.masked
                                     ? 'bg-white/5 border-white/5 opacity-60 cursor-default'
-                                    : 'bg-white/5 hover:bg-white/15 border-white/10 hover:border-white/25'
+                                    : 'bg-white/5 hover:bg-white/10 border-white/10 hover:border-white/20'
                             }`}
                         >
                             <div className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-200">
@@ -412,7 +412,7 @@ export function UpcomingEventsSidebar() {
                 </div>
 
                 <div className="px-4 pb-4">
-                    <button className="w-full py-3 bg-white/15 hover:bg-white text-white hover:text-red-700 text-sm font-bold rounded-xl transition-all duration-200 border border-white/30 hover:border-white shadow-lg hover:shadow-xl backdrop-blur-sm group">
+                    <button className="w-full py-3 bg-white/15 hover:bg-white text-white hover:text-red-700 text-sm font-bold rounded-xl transition-colors duration-200 border border-white/30 hover:border-white shadow-sm hover:shadow-md group">
                         <span className="flex items-center justify-center gap-2">
                             <span>Gửi lời chúc ngay</span>
                             <span className="group-hover:scale-125 transition-transform">💌</span>

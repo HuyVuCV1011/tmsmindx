@@ -44,7 +44,7 @@ export default function PostCard({ post }: { post: Post }) {
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
-            <article className="flex flex-col h-full bg-white rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] border border-gray-100/50">
+            <article className="flex flex-col h-full bg-white rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl border border-gray-100/50">
                 {/* Image Container with Zoom Effect */}
                 <div className="relative aspect-[16/10] overflow-hidden bg-gray-100">
                     <Image
@@ -56,6 +56,7 @@ export default function PostCard({ post }: { post: Post }) {
                             isHovered ? "scale-105" : "scale-100"
                         )}
                         loading="lazy"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                     />
 
                     {/* Overlay on hover */}
