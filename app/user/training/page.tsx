@@ -183,7 +183,7 @@ export default function TrainingPage() {
 
       (async () => {
         try {
-          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
           if (res?.teacher?.code) {
             setSubmitCode(res.teacher.code);
             setIsResolvingCode(false);

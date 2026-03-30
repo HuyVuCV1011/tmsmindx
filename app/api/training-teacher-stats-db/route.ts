@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
 
 export const GET = withApiProtection(async (request: NextRequest) => {
   try {

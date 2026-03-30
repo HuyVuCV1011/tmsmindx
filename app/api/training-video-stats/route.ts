@@ -41,20 +41,21 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     const teacherMatrixResult = await pool.query(`
       SELECT
         tts.teacher_code,
-        tts.full_name,
-        tts.center,
-        tts.teaching_block,
+        COALESCE(t.full_name, tts.full_name) as full_name,
+        COALESCE(t.main_centre, tts.center) as center,
+        COALESCE(t.course_line, tts.teaching_block) as teaching_block,
         tv.id as video_id,
         tv.title as video_title,
         tvs.completion_status,
         tvs.time_spent_seconds,
         tvs.score
       FROM training_teacher_stats tts
+      LEFT JOIN teachers t ON tts.teacher_code = t.code
       CROSS JOIN training_videos tv
       LEFT JOIN training_teacher_video_scores tvs 
         ON tv.id = tvs.video_id AND tts.teacher_code = tvs.teacher_code
       WHERE tv.status = 'active'
-      ORDER BY tts.full_name ASC, tv.created_at ASC
+      ORDER BY COALESCE(t.full_name, tts.full_name) ASC, tv.created_at ASC
     `);
 
     // group matrix by teacher

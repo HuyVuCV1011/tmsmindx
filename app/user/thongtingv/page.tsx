@@ -286,7 +286,7 @@ export default function Page1() {
       (async () => {
         try {
           console.log('🔍 Attempting teacher lookup by email first:', user.email);
-          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
           if (res?.teacher?.code) {
             console.log('✅ Found teacher by email:', res.teacher.code);
             setSearchCode(res.teacher.code);
@@ -404,7 +404,7 @@ export default function Page1() {
         try {
           setIsResolvingCode(true);
           console.log('🔁 Teacher lookup by code failed; trying lookup by email:', user.email);
-          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
           if (res?.teacher?.code) {
             console.log('✅ Resolved teacher code by email:', res.teacher.code);
             setSubmitCode(res.teacher.code);

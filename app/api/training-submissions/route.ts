@@ -74,9 +74,9 @@ export async function POST(request: NextRequest) {
     const {
       teacher_code,
       assignment_id,
-      attempt_number = 1,
-      teacher_info
+      attempt_number = 1
     } = body;
+    let { teacher_info } = body;
 
     if (!teacher_code || !assignment_id) {
       return NextResponse.json(
@@ -86,7 +86,31 @@ export async function POST(request: NextRequest) {
     }
 
     // Sync teacher info if provided
-    if (teacher_info && teacher_info.center && teacher_info.teaching_block) {
+    if (teacher_info && (teacher_info.center || teacher_info.teaching_block)) {
+        // Try to fetch latest info from teachers table to ensure accuracy
+        try {
+            const teacherRes = await pool.query(
+                `SELECT full_name, main_centre, course_line, work_email FROM teachers WHERE code = $1`,
+                [teacher_code]
+            );
+            
+            if (teacherRes.rows.length > 0) {
+                const updatedTeacher = teacherRes.rows[0];
+                console.log(`[Sync] Updating teacher stats for ${teacher_code} from DB:`, updatedTeacher);
+                
+                // Override with DB values if available
+                teacher_info.full_name = updatedTeacher.full_name || teacher_info.full_name;
+                teacher_info.center = updatedTeacher.main_centre || teacher_info.center;
+                teacher_info.teaching_block = updatedTeacher.course_line || teacher_info.teaching_block;
+                // Only update email if DB has one
+                if (updatedTeacher.work_email) {
+                    teacher_info.work_email = updatedTeacher.work_email;
+                }
+            }
+        } catch (e) {
+            console.error("Error fetching teacher details from DB", e);
+        }
+
       try {
         await pool.query(`
           INSERT INTO training_teacher_stats (
@@ -345,28 +369,48 @@ export async function PUT(request: NextRequest) {
           is_passed
         ]);
         
-        // Also update teacher_answers if answers are provided
+        // Sync teacher answers in one bulk query and only for valid training_video_questions IDs.
+        // Assignment question IDs can differ from video question IDs; filtering here prevents FK errors.
         if (updates.answers && Array.isArray(updates.answers)) {
-          for (const answer of updates.answers) {
-            try {
-              await pool.query(
-                `INSERT INTO training_teacher_answers (
-                   teacher_code, video_id, question_id, answer_text, is_correct, points_earned
-                 ) VALUES ($1, $2, $3, $4, $5, $6)`,
-                [
-                  submission.teacher_code,
-                  submission.video_id,
-                  answer.question_id,
-                  answer.answer_text,
-                  answer.is_correct,
-                  answer.points_earned
-                ]
-              );
-            } catch (err: any) {
-              // Ignore foreign key violations if mapping is inconsistent (e.g. assignment question ID vs video question ID)
-              // This prevents partial failures from crashing the whole grading request
-              console.warn(`[Submission] Skipped syncing answer to teacher_answers for QID ${answer.question_id}:`, err.message);
-            }
+          try {
+            const syncTeacherAnswersQuery = `
+              WITH incoming AS (
+                SELECT *
+                FROM jsonb_to_recordset($3::jsonb) AS x(
+                  question_id INT,
+                  answer_text TEXT,
+                  is_correct BOOLEAN,
+                  points_earned NUMERIC
+                )
+              )
+              INSERT INTO training_teacher_answers (
+                teacher_code,
+                video_id,
+                question_id,
+                answer_text,
+                is_correct,
+                points_earned
+              )
+              SELECT
+                $1,
+                $2,
+                incoming.question_id,
+                incoming.answer_text,
+                COALESCE(incoming.is_correct, false),
+                COALESCE(incoming.points_earned, 0)
+              FROM incoming
+              INNER JOIN training_video_questions tvq
+                ON tvq.id = incoming.question_id
+               AND tvq.video_id = $2
+            `;
+
+            await pool.query(syncTeacherAnswersQuery, [
+              submission.teacher_code,
+              submission.video_id,
+              JSON.stringify(updates.answers)
+            ]);
+          } catch (err: any) {
+            console.warn('[Submission] Skipped syncing answers to teacher_answers:', err.message);
           }
         }
       }
@@ -375,29 +419,39 @@ export async function PUT(request: NextRequest) {
       if (updates.answers && Array.isArray(updates.answers)) {
         try {
           console.log('[Submission] Saving answers count:', updates.answers.length);
-          for (const answer of updates.answers) {
-            // Basic validation
-            if (!answer.question_id) continue;
-            
-            await pool.query(
-              `INSERT INTO training_assignment_answers (
-                 submission_id, question_id, answer_text, is_correct, points_earned
-               ) VALUES ($1, $2, $3, $4, $5)
-               ON CONFLICT (submission_id, question_id) DO UPDATE SET
-               answer_text = EXCLUDED.answer_text,
-               is_correct = EXCLUDED.is_correct,
-               points_earned = EXCLUDED.points_earned,
-               answered_at = NOW()
-              `, 
-              [
-                id,
-                answer.question_id,
-                answer.answer_text,
-                answer.is_correct ?? false,
-                answer.points_earned ?? 0
-              ]
-            );
-          }
+          const saveAnswersQuery = `
+            WITH incoming AS (
+              SELECT *
+              FROM jsonb_to_recordset($2::jsonb) AS x(
+                question_id INT,
+                answer_text TEXT,
+                is_correct BOOLEAN,
+                points_earned NUMERIC
+              )
+              WHERE question_id IS NOT NULL
+            )
+            INSERT INTO training_assignment_answers (
+              submission_id,
+              question_id,
+              answer_text,
+              is_correct,
+              points_earned
+            )
+            SELECT
+              $1,
+              incoming.question_id,
+              incoming.answer_text,
+              COALESCE(incoming.is_correct, false),
+              COALESCE(incoming.points_earned, 0)
+            FROM incoming
+            ON CONFLICT (submission_id, question_id) DO UPDATE SET
+              answer_text = EXCLUDED.answer_text,
+              is_correct = EXCLUDED.is_correct,
+              points_earned = EXCLUDED.points_earned,
+              answered_at = NOW()
+          `;
+
+          await pool.query(saveAnswersQuery, [id, JSON.stringify(updates.answers)]);
         } catch (err) {
             console.error('[Submission] Error saving answers:', err);
         }

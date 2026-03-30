@@ -3,15 +3,16 @@
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
 import { useTeacher } from '@/lib/teacher-context';
-import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send, Trophy, XCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, RefreshCw, Send, Trophy, XCircle } from 'lucide-react';
 
 import NextImage from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface Assignment {
@@ -103,6 +104,9 @@ export default function TeacherAssignmentPage() {
   const [view, setView] = useState<'list' | 'taking' | 'result'>('list');
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [timerActive, setTimerActive] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
+  const isSubmittingRef = useRef(false);
   
   const searchParams = useSearchParams();
   const startId = searchParams.get('start_assignment_id');
@@ -164,7 +168,7 @@ export default function TeacherAssignmentPage() {
     if (user && user.email) {
       (async () => {
         try {
-          const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+          const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
           const data = await res.json();
           if (data?.teacher?.code) {
             setTeacherCode(data.teacher.code);
@@ -423,6 +427,22 @@ export default function TeacherAssignmentPage() {
     }
   };
 
+  const scrollToQuestion = (questionId: number) => {
+    const element = document.getElementById(`question-${questionId}`);
+    if (!element) return;
+
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    element.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+    setTimeout(() => {
+      element.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
+    }, 1200);
+  };
+
+  const handleStopAndSubmit = () => {
+    setIsStopConfirmOpen(false);
+    submitAssignment(true);
+  };
+
   // Timer countdown
   useEffect(() => {
     if (!timerActive || timeRemaining === null || timeRemaining <= 0) return;
@@ -447,8 +467,18 @@ export default function TeacherAssignmentPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const decodeEscapedHtml = (value: string) => {
+    if (!value || !value.includes('&lt;')) return value;
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = value;
+    return textarea.value;
+  };
+
+  const hasHtmlMarkup = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value);
+
   const submitAssignment = async (skipConfirm?: boolean | React.MouseEvent) => {
     if (!submission) return;
+    if (isSubmittingRef.current) return;
 
     const isConfirmed = typeof skipConfirm === 'boolean' ? skipConfirm : false;
 
@@ -471,6 +501,10 @@ export default function TeacherAssignmentPage() {
     }
 
     try {
+      isSubmittingRef.current = true;
+      setIsSubmitting(true);
+      setTimerActive(false);
+
       // Calculate score synchronously
       let totalScore = 0;
       console.log('[Assignment] Starting score calculation for', questions.length, 'questions');
@@ -544,6 +578,9 @@ export default function TeacherAssignmentPage() {
     } catch (err) {
       console.error('Error submitting assignment:', err);
       toast.error('Lỗi khi nộp bài');
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -716,6 +753,7 @@ export default function TeacherAssignmentPage() {
               return (
               <div 
                 key={question.id} 
+                id={`question-${question.id}`}
                 className={`bg-white rounded-xl shadow-sm border-2 transition-all ${
                   answers[question.id] 
                     ? 'border-green-200 bg-green-50/30' 
@@ -765,7 +803,7 @@ export default function TeacherAssignmentPage() {
                         {question.options.map((option: string, optIdx: number) => (
                           <label
                             key={optIdx}
-                            className={`flex items-center gap-2 md:gap-3 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                            className={`flex items-start gap-2 md:gap-3 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${
                               answers[question.id] === option
                                 ? 'border-blue-500 bg-blue-50 shadow-sm'
                                 : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
@@ -779,7 +817,21 @@ export default function TeacherAssignmentPage() {
                               onChange={(e) => handleAnswerChange(question.id, e.target.value)}
                               className="w-4 md:w-5 h-4 md:h-5 text-blue-600"
                             />
-                            <span className="flex-1 text-sm md:text-base font-medium text-gray-900">{option}</span>
+                            {(() => {
+                              const normalizedOption = decodeEscapedHtml(String(option));
+                              const renderAsHtml = hasHtmlMarkup(normalizedOption);
+
+                              if (renderAsHtml) {
+                                return (
+                                  <div
+                                    className="prose prose-sm md:prose-base max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
+                                    dangerouslySetInnerHTML={{ __html: normalizedOption }}
+                                  />
+                                );
+                              }
+
+                              return <span className="flex-1 text-sm md:text-base font-medium text-gray-900">{normalizedOption}</span>;
+                            })()}
                           </label>
                         ))}
                       </div>
@@ -827,11 +879,7 @@ export default function TeacherAssignmentPage() {
             <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 md:gap-4">
               <Button
                 variant="outline"
-                onClick={() => {
-                  if (confirm('Bạn có chắc muốn dừng và nộp bài luôn không? Kết quả hiện tại sẽ được lưu.')) {
-                    submitAssignment(true);
-                  }
-                }}
+                onClick={() => setIsStopConfirmOpen(true)}
                 className="flex items-center justify-center gap-2 px-4 md:px-6 py-3 font-medium text-gray-700 text-sm md:text-base h-auto"
               >
                 <ArrowLeft className="w-4 md:w-5 h-4 md:h-5" />
@@ -849,11 +897,12 @@ export default function TeacherAssignmentPage() {
                 )}
                 
                 <Button
+                  disabled={isSubmitting}
                   onClick={submitAssignment}
                   className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 font-semibold shadow-md text-sm md:text-base h-auto"
                 >
                   <Send className="w-4 md:w-5 h-4 md:h-5" />
-                  Nộp bài
+                  {isSubmitting ? 'Đang nộp...' : 'Nộp bài'}
                 </Button>
               </div>
             </div>
@@ -911,19 +960,22 @@ export default function TeacherAssignmentPage() {
                   {questions.map((q, index) => {
                     const isAnswered = answers[q.id] !== undefined && answers[q.id] !== '';
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={q.id}
+                        onClick={() => scrollToQuestion(q.id)}
                         className={`
-                          flex items-center justify-center text-[10px] font-bold h-7 rounded transition-all duration-200
+                          flex items-center justify-center text-[10px] font-bold h-7 rounded transition-all duration-200 cursor-pointer
                           ${isAnswered 
                             ? 'bg-green-500 text-white shadow-sm ring-1 ring-green-600' 
                             : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                           }
                         `}
                         title={`Câu ${index + 1}: ${isAnswered ? 'Đã làm' : 'Chưa làm'}`}
+                        aria-label={`Đi tới câu ${index + 1}`}
                       >
                         {index + 1}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -980,20 +1032,17 @@ export default function TeacherAssignmentPage() {
               )}
               
               <Button
+                disabled={isSubmitting}
                 onClick={submitAssignment}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-semibold shadow-md h-auto"
               >
                 <Send className="w-4 h-4" />
-                Nộp bài
+                {isSubmitting ? 'Đang nộp...' : 'Nộp bài'}
               </Button>
               
               <Button
                 variant="outline"
-                onClick={() => {
-                  if (confirm('Bạn có chắc muốn dừng và nộp bài luôn không? Kết quả hiện tại sẽ được lưu.')) {
-                    submitAssignment(true);
-                  }
-                }}
+                onClick={() => setIsStopConfirmOpen(true)}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-gray-700 h-auto"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -1002,6 +1051,18 @@ export default function TeacherAssignmentPage() {
             </div>
           </div>
         </div>
+
+        <ConfirmDialog
+          isOpen={isStopConfirmOpen}
+          onClose={() => setIsStopConfirmOpen(false)}
+          onConfirm={handleStopAndSubmit}
+          title="Xác nhận nộp bài"
+          message="Bạn có chắc muốn dừng và nộp bài luôn không? Kết quả hiện tại sẽ được lưu."
+          confirmText="Nộp bài"
+          cancelText="Tiếp tục làm"
+          type="warning"
+          icon="warning"
+        />
       </div>
         </div>
       </PageContainer>

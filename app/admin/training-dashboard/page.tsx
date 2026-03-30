@@ -61,6 +61,33 @@ interface TeacherMatrixEntry {
   videos: Record<string, { completion_status: string | null; time_spent_seconds: number; score: number | null }>;
 }
 
+function calculateAverageScoreFromColumns(row: TeacherStats, videoColumns: ActiveVideo[]): number {
+  const scoreMap = new Map<number, VideoScore>();
+  (row.video_scores || []).forEach((vs) => scoreMap.set(vs.video_id, vs));
+
+  const scores = videoColumns
+    .map((v) => scoreMap.get(v.id)?.score)
+    .filter((s): s is number => s !== null && s !== undefined && !Number.isNaN(Number(s)))
+    .map((s) => Number(s));
+
+  if (scores.length === 0) return 0;
+
+  const total = scores.reduce((sum, s) => sum + s, 0);
+  return total / scores.length;
+}
+
+function calculateAverageScoreFromMatrix(entry: TeacherMatrixEntry, videoStats: VideoStat[]): number {
+  const scores = videoStats
+    .map((v) => entry.videos[v.video_id]?.score)
+    .filter((s): s is number => s !== null && s !== undefined && !Number.isNaN(Number(s)))
+    .map((s) => Number(s));
+
+  if (scores.length === 0) return 0;
+
+  const total = scores.reduce((sum, s) => sum + s, 0);
+  return total / scores.length;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function WatchStatusBadge({ status }: { status: string | null }) {
@@ -179,7 +206,9 @@ function exportCSV(headers: string[], rows: (string | number | null)[][], filena
     return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const lines = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))];
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const BOM = '\uFEFF';
+  const csvContent = lines.join('\r\n');
+  const blob = new Blob([BOM, csvContent], { type: 'text/csv;charset=utf-8;' });
   downloadBlob(blob, filename);
 }
 
@@ -429,7 +458,11 @@ export default function TrainingDashboardPage() {
   const handleExportTeacher = async (fmt: ExportFormat) => {
     const headers = ['Họ tên', 'Mã GV', 'Cơ sở', 'Khối', 'Điểm TK', ...videoColumns.map(v => v.title)];
     const rows = filteredTeachers.map(t => [
-      t.full_name, t.teacher_code, t.center, t.teaching_block, t.total_score,
+      t.full_name,
+      t.teacher_code,
+      t.center,
+      t.teaching_block,
+      Number(calculateAverageScoreFromColumns(t, videoColumns).toFixed(2)),
       ...videoColumns.map(v => {
         const vs = t.video_scores.find(s => s.video_id === v.id);
         return vs?.score ?? null;
@@ -527,6 +560,7 @@ export default function TrainingDashboardPage() {
                       // Build a lookup map for this teacher's video scores
                       const scoreMap = new Map<number, VideoScore>();
                       (row.video_scores || []).forEach(vs => scoreMap.set(vs.video_id, vs));
+                      const summaryAverage = calculateAverageScoreFromColumns(row, videoColumns);
 
                       return (
                         <TableRow key={row.teacher_code}>
@@ -536,7 +570,7 @@ export default function TrainingDashboardPage() {
                           <TableCell className="text-xs">{row.center || '—'}</TableCell>
                           <TableCell className="text-xs">{row.teaching_block || '—'}</TableCell>
                           <TableCell className="text-center font-bold">
-                            {row.total_score ? Number(row.total_score).toFixed(2) : '0.00'}
+                            {summaryAverage.toFixed(2)}
                           </TableCell>
                           {/* Per-video score cells */}
                           {videoColumns.map(v => {
@@ -650,6 +684,7 @@ export default function TrainingDashboardPage() {
                                 <TableHead>Mã GV</TableHead>
                                 <TableHead>Cơ sở</TableHead>
                                 <TableHead>Khối</TableHead>
+                                <TableHead className="text-center">Điểm TK</TableHead>
                                 {videoStats.map(v => (
                                   <TableHead key={v.video_id} className="text-center min-w-[90px]">
                                     <span className="text-xs leading-tight block line-clamp-2" title={v.title}>
@@ -667,6 +702,9 @@ export default function TrainingDashboardPage() {
                                   <TableCell className="font-mono text-xs">{t.teacher_code}</TableCell>
                                   <TableCell className="text-xs">{t.center || '—'}</TableCell>
                                   <TableCell className="text-xs">{t.teaching_block || '—'}</TableCell>
+                                  <TableCell className="text-center font-bold">
+                                    {calculateAverageScoreFromMatrix(t, videoStats).toFixed(2)}
+                                  </TableCell>
                                   {videoStats.map(v => {
                                     const entry = t.videos[v.video_id];
                                     return (

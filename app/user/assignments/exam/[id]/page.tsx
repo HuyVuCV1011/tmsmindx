@@ -54,7 +54,7 @@ export default function ExamAssignmentTakingPage() {
 
     (async () => {
       try {
-        const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+        const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
         const data = await res.json();
         if (data?.teacher?.code) {
           setTeacherCode(data.teacher.code);
