@@ -5,7 +5,7 @@ import { useState } from "react";
 export const AVAILABLE_ROUTES = [
     { path: "/admin/dashboard", label: "Dashboard", group: "Tổng quan" },
     { path: "/admin/page1", label: "Thông tin GV", group: "Quản lý" },
-    { path: "/admin/page2", label: "Màn hình 2", group: "Quản lý" },
+    { path: "/admin/page2", label: "Quy trình quy định K12 Teaching", group: "Quản lý" },
     { path: "/admin/page3", label: "Màn hình 3", group: "Quản lý" },
     { path: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện", group: "Sự kiện" },
     { path: "/admin/page4/danh-sach-dang-ky", label: "Danh sách đăng ký", group: "Đánh giá năng lực GV" },

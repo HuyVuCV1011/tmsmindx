@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks";
+import { useTeacher } from "@/lib/teacher-context";
 import { useToast } from "@/lib/use-toast";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -19,6 +20,7 @@ function LessonContent() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { user } = useAuth();
+  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
   const toast = useToast();
   const searchParams = useSearchParams();
   const lessonIdParam = searchParams.get('id');
@@ -62,6 +64,24 @@ function LessonContent() {
   useEffect(() => {
     lessonIdRef.current = lessonId;
   }, [lessonId]);
+
+  // ── Guard: redirect non-admin users if teacher profile missing ──
+  useEffect(() => {
+    if (!user) return;
+    if (isTeacherLoading) return;
+
+    const isAdmin = (user as any).role === 'admin' || (user as any).isAdmin === true;
+    if (isAdmin) return;
+    
+    // Check if teacher profile is valid
+    if (!teacherProfile) {
+      // Clear session data and redirect
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      router.replace('/login');
+    }
+  }, [user, isTeacherLoading, teacherProfile, router]);
   
   // Helper to save progress
   const saveCompletion = async (id: string | null, time: number) => {

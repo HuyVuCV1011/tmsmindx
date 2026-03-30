@@ -1,15 +1,16 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from "@/lib/auth-context";
-import { useAppDispatch } from "@/lib/redux/hooks";
 import { setVideo } from "@/lib/redux/features/trainingSlice";
+import { useAppDispatch } from "@/lib/redux/hooks";
+import { useTeacher } from "@/lib/teacher-context";
+import { Award, BookOpen, CheckCircle, Clock, FileText } from 'lucide-react';
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import AssignmentsPage from "../assignments/page";
-import { BookOpen, FileText, Award, CheckCircle, Clock } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 
 interface TrainingLesson {
   id: number;
@@ -76,6 +77,37 @@ export default function TrainingPage() {
   const [submitCode, setSubmitCode] = useState("");
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
   const [isResolvingCode, setIsResolvingCode] = useState(false);
+
+  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
+
+  // ── Guard: block non-admin users if teacher profile is missing ──
+  const [missingProfile, setMissingProfile] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    // Skip check while loading
+    if (isTeacherLoading) return;
+
+    const isAdmin = (user as any).role === 'admin' || (user as any).isAdmin === true;
+    if (isAdmin) return;
+    
+    if (!teacherProfile) {
+      setMissingProfile(true);
+    } else {
+      setMissingProfile(false);
+    }
+  }, [user, isTeacherLoading, teacherProfile]);
+
+  const handleForceLogout = () => {
+    try {
+      localStorage.removeItem('teacher_auto_fill_data');
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+    } catch {}
+    router.push('/login');
+  };
 
   const secureFetcher = useCallback(async (url: string) => {
     let token = localStorage.getItem('token');
@@ -151,7 +183,7 @@ export default function TrainingPage() {
 
       (async () => {
         try {
-          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
           if (res?.teacher?.code) {
             setSubmitCode(res.teacher.code);
             setIsResolvingCode(false);
@@ -229,10 +261,32 @@ export default function TrainingPage() {
       return <AssignmentsPage />;
   }
 
+  // localStorage guard modal
+  if (missingProfile) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center">
+          <div className="text-4xl mb-4">⚠️</div>
+          <h2 className="text-lg font-bold text-slate-800 mb-2">Phiên làm việc không hợp lệ</h2>
+          <p className="text-slate-500 text-sm mb-6">
+            Không tìm thấy thông tin giáo viên trong hệ thống. Vui lòng đăng xuất và đăng nhập lại để tiếp tục.
+          </p>
+          <button
+            onClick={handleForceLogout}
+            className="w-full bg-[#a1001f] text-white font-semibold py-2.5 rounded-xl hover:bg-[#80001a] transition-colors"
+          >
+            Đăng xuất và đăng nhập lại
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white">
       <div className="w-full">
         {/* Header */}
+
         <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg p-6 mb-6">
           <div className="flex items-center gap-3">
             <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">

@@ -45,8 +45,29 @@ const REGISTRATION_TEMPLATE_LABELS: Record<RegistrationTemplate, string> = {
   supplement: "Bổ sung",
 };
 
+function parseLocalDateTime(value: string) {
+  const normalized = value.trim().replace(" ", "T");
+  const match = normalized.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
+  );
+
+  if (!match) {
+    return new Date(value);
+  }
+
+  const [, year, month, day, hour, minute, second = "0"] = match;
+  return new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second)
+  );
+}
+
 function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("vi-VN", {
+  return parseLocalDateTime(value).toLocaleString("vi-VN", {
     hour12: false,
     day: "2-digit",
     month: "2-digit",
@@ -73,6 +94,43 @@ function getEventClass(eventType: EventCategory | undefined) {
       return "bg-green-200 text-green-900";
   }
 }
+
+function getCalendarEventStyle(eventType: EventCategory | undefined) {
+  switch (eventType) {
+    case "registration":
+      return {
+        timeClassName: "text-red-700",
+        titleClassName: "bg-red-100 text-red-900",
+      };
+    case "workshop_teaching":
+      return {
+        timeClassName: "text-purple-700",
+        titleClassName: "bg-purple-200 text-purple-900",
+      };
+    case "meeting":
+      return {
+        timeClassName: "text-blue-700",
+        titleClassName: "bg-blue-200 text-blue-900",
+      };
+    case "advanced_training_release":
+      return {
+        timeClassName: "text-indigo-700",
+        titleClassName: "bg-indigo-200 text-indigo-900",
+      };
+    case "holiday":
+      return {
+        timeClassName: "text-amber-700",
+        titleClassName: "bg-amber-200 text-amber-900",
+      };
+    case "exam":
+    default:
+      return {
+        timeClassName: "text-green-700",
+        titleClassName: "bg-green-200 text-green-900",
+      };
+  }
+}
+
 const REGISTER_OPTIONS = [
   "[COD] Scratch (S)",
   "[COD] GameMaker (G)",
@@ -213,14 +271,27 @@ function formatDateKey(date: Date) {
 }
 
 function formatEventTimeRange(startAt: string, endAt: string) {
-  const start = new Date(startAt);
-  const end = new Date(endAt);
+  const start = parseLocalDateTime(startAt);
+  const end = parseLocalDateTime(endAt);
   const hhmm = (value: Date) => {
     const h = value.getHours().toString().padStart(2, "0");
     const m = value.getMinutes().toString().padStart(2, "0");
     return `${h}h${m}`;
   };
   return `${hhmm(start)} - ${hhmm(end)}`;
+}
+
+function isPastEvent(event: EvaluationEvent) {
+  return parseLocalDateTime(event.endAt).getTime() < Date.now();
+}
+
+function isPastDate(date: Date) {
+  return startOfDay(date).getTime() < startOfDay(new Date()).getTime();
+}
+
+function isRegistrationActive(event: EvaluationEvent) {
+  const now = new Date();
+  return now >= parseLocalDateTime(event.startAt) && now <= parseLocalDateTime(event.endAt);
 }
 
 function buildCalendarCells(focusDate: Date, view: CalendarView) {
@@ -254,6 +325,7 @@ export default function MonthlyActivitiesPage() {
   const [focusDate, setFocusDate] = useState(new Date());
   const [events, setEvents] = useState<EvaluationEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedRegistrationEvent, setSelectedRegistrationEvent] = useState<EvaluationEvent | null>(null);
   const [showDayEventsModal, setShowDayEventsModal] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
@@ -264,13 +336,15 @@ export default function MonthlyActivitiesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [respondingEventId, setRespondingEventId] = useState<string | null>(null);
   const [participationByEvent, setParticipationByEvent] = useState<Record<string, ParticipationStatus>>({});
+  const [userRegisteredSubjects, setUserRegisteredSubjects] = useState<Set<string>>(new Set());
+  const [selectedExamEventByOption, setSelectedExamEventByOption] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!user?.email) return;
 
     (async () => {
       try {
-        const response = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+        const response = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
         const data = await response.json();
         if (data?.teacher?.code) {
           setTeacherCode(data.teacher.code);
@@ -372,6 +446,26 @@ export default function MonthlyActivitiesPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!teacherCode) return;
+    (async () => {
+      try {
+        const response = await fetch(`/api/exam-registrations?teacher_code=${encodeURIComponent(teacherCode)}`);
+        const data = await response.json();
+        if (!response.ok || !data?.success) return;
+        const registeredSet = new Set<string>();
+        (data.data || []).forEach((row: { block_code: string; subject_code: string }) => {
+          Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
+            if (mapped.block_code === row.block_code && mapped.subject_code === row.subject_code) {
+              registeredSet.add(option);
+            }
+          });
+        });
+        setUserRegisteredSubjects(registeredSet);
+      } catch {}
+    })();
+  }, [teacherCode]);
+
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
     return Array.from({ length: 9 }, (_, index) => currentYear - 3 + index);
@@ -383,8 +477,8 @@ export default function MonthlyActivitiesPage() {
     const map = new Map<string, EvaluationEvent[]>();
     events.forEach((event) => {
       if (event.eventType === "registration" || event.eventType === "holiday") {
-        const startDate = startOfDay(new Date(event.startAt));
-        const endDate = startOfDay(new Date(event.endAt));
+        const startDate = startOfDay(parseLocalDateTime(event.startAt));
+        const endDate = startOfDay(parseLocalDateTime(event.endAt));
         const cursor = new Date(startDate);
         while (cursor.getTime() <= endDate.getTime()) {
           const key = formatDateKey(cursor);
@@ -394,7 +488,7 @@ export default function MonthlyActivitiesPage() {
           cursor.setDate(cursor.getDate() + 1);
         }
       } else {
-        const key = formatDateKey(new Date(event.startAt));
+        const key = formatDateKey(parseLocalDateTime(event.startAt));
         const previous = map.get(key) || [];
         previous.push(event);
         map.set(key, previous);
@@ -406,11 +500,59 @@ export default function MonthlyActivitiesPage() {
         key,
         list.sort(
           (first, second) =>
-            new Date(first.startAt).getTime() - new Date(second.startAt).getTime()
+            parseLocalDateTime(first.startAt).getTime() - parseLocalDateTime(second.startAt).getTime()
         )
       );
     });
 
+    return map;
+  }, [events]);
+
+  const visibleEventsByDateKey = useMemo(() => {
+    const normalizeStr = (v: string) =>
+      v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const map = new Map<string, EvaluationEvent[]>();
+    eventsByDateKey.forEach((dayEvents, key) => {
+      const visible = dayEvents.filter((event) => {
+        if (event.eventType !== "exam") return true;
+        return Object.entries(REGISTER_OPTION_MAP).some(([option, mapped]) => {
+          if (!userRegisteredSubjects.has(option)) return false;
+          const specialty = normalizeStr(event.specialty || "");
+          const title = normalizeStr(event.title || "");
+          return mapped.specialtyAliases.some((alias) => {
+            const a = normalizeStr(alias);
+            return specialty.includes(a) || title.includes(a);
+          });
+        });
+      });
+      map.set(key, visible);
+    });
+    return map;
+  }, [eventsByDateKey, userRegisteredSubjects]);
+
+  const upcomingExamEventsByOption = useMemo(() => {
+    const now = new Date();
+    const normalizeStr = (v: string) =>
+      v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const map: Record<string, EvaluationEvent[]> = {};
+    Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
+      map[option] = events
+        .filter((e) => e.eventType === "exam")
+        .filter((e) => {
+          const specialty = normalizeStr(e.specialty || "");
+          const title = normalizeStr(e.title || "");
+          return mapped.specialtyAliases.some((alias) => {
+            const a = normalizeStr(alias);
+            return specialty.includes(a) || title.includes(a);
+          });
+        })
+        .filter((e) => parseLocalDateTime(e.endAt) >= now)
+        .sort(
+          (a, b) =>
+            parseLocalDateTime(a.startAt).getTime() -
+            parseLocalDateTime(b.startAt).getTime()
+        );
+    });
     return map;
   }, [events]);
 
@@ -436,8 +578,14 @@ export default function MonthlyActivitiesPage() {
 
   const selectedDayEvents = useMemo(() => {
     if (!selectedDate) return [];
-    return eventsByDateKey.get(formatDateKey(selectedDate)) || [];
-  }, [eventsByDateKey, selectedDate]);
+    return visibleEventsByDateKey.get(formatDateKey(selectedDate)) || [];
+  }, [visibleEventsByDateKey, selectedDate]);
+
+  const activeRegistrationEventsForSelectedDate = useMemo(() => {
+    return selectedDayEvents.filter(
+      (event) => event.eventType === "registration" && !isPastEvent(event)
+    );
+  }, [selectedDayEvents]);
 
   useEffect(() => {
     if (!showDayEventsModal || !teacherCode || selectedDayEvents.length === 0) {
@@ -470,6 +618,21 @@ export default function MonthlyActivitiesPage() {
     })();
   }, [showDayEventsModal, selectedDayEvents, teacherCode]);
 
+  useEffect(() => {
+    if (!showRegisterModal) return;
+    setSelectedExamEventByOption((prev) => {
+      const next: Record<string, string> = {};
+      selectedOptions.forEach((option) => {
+        const examEvents = upcomingExamEventsByOption[option] || [];
+        next[option] =
+          prev[option] && examEvents.some((e) => e.id === prev[option])
+            ? prev[option]
+            : examEvents[0]?.id || "";
+      });
+      return next;
+    });
+  }, [selectedOptions, upcomingExamEventsByOption, showRegisterModal]);
+
   const stepDate = (amount: number) => {
     const next = new Date(focusDate);
 
@@ -486,12 +649,8 @@ export default function MonthlyActivitiesPage() {
 
   const activeRegistrationEventByDate = (date: Date) => {
     const dateEvents = eventsByDateKey.get(formatDateKey(date)) || [];
-    const now = new Date();
     return dateEvents.find(
-      (event) =>
-        event.eventType === "registration" &&
-        now >= new Date(event.startAt) &&
-        now <= new Date(event.endAt)
+      (event) => event.eventType === "registration" && !isPastEvent(event)
     );
   };
 
@@ -501,8 +660,21 @@ export default function MonthlyActivitiesPage() {
   };
 
   const handleDayClick = (date: Date) => {
-    const dateEvents = eventsByDateKey.get(formatDateKey(date)) || [];
+    if (isPastDate(date)) {
+      return;
+    }
+
+    const dateEvents = visibleEventsByDateKey.get(formatDateKey(date)) || [];
     if (dateEvents.length === 0) {
+      return;
+    }
+
+    const registrationEvent = dateEvents.find(
+      (event) => event.eventType === "registration" && !isPastEvent(event)
+    );
+    if (registrationEvent) {
+      setSelectedDate(date);
+      openRegisterModalForEvent(registrationEvent);
       return;
     }
 
@@ -521,23 +693,52 @@ export default function MonthlyActivitiesPage() {
       return;
     }
 
-    const now = new Date();
-    const startAt = new Date(registrationEvent.startAt);
-    const endAt = new Date(registrationEvent.endAt);
+    openRegisterModalForEvent(registrationEvent);
+  };
 
-    if (now >= startAt && now <= endAt) {
-      setShowDayEventsModal(false);
-      setSelectedOptions([]);
-      setShowRegisterModal(true);
+  const openRegisterModalForEvent = (registrationEvent: EvaluationEvent) => {
+    if (isPastEvent(registrationEvent)) {
+      toast.error("Sự kiện đăng ký đã hết hạn");
       return;
     }
 
-    toast.error("Quá hạn đăng ký");
+    setShowDayEventsModal(false);
+    setSelectedOptions([]);
+    setSelectedExamEventByOption({});
+    setSelectedRegistrationEvent(registrationEvent);
+    setShowRegisterModal(true);
+  };
+
+  const resolveValidTeacherCode = async () => {
+    if (!user?.email) return "";
+
+    // /api/teachers trả về teacher đã được đối soát với training_teacher_stats.
+    try {
+      const response = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+      const data = await response.json();
+      const resolved = (data?.teacher?.code || "").toString().trim();
+
+      if (response.ok && data?.teacher && resolved) {
+        if (resolved !== teacherCode) {
+          setTeacherCode(resolved);
+        }
+        return resolved;
+      }
+    } catch {
+    }
+
+    return "";
   };
 
   const handleParticipationResponse = async (eventId: string, responseStatus: ParticipationStatus) => {
     if (!teacherCode.trim()) {
       toast.error("Không xác định được mã giáo viên");
+      return;
+    }
+
+    const event = events.find((item) => item.id === eventId);
+    if (event && isPastEvent(event)) {
+      toast.error("Sự kiện đã qua, không thể phản hồi");
       return;
     }
 
@@ -584,23 +785,19 @@ export default function MonthlyActivitiesPage() {
       return;
     }
 
-    if (!teacherCode.trim()) {
-      toast.error("Không xác định được mã giáo viên");
+    const validTeacherCode = await resolveValidTeacherCode();
+    if (!validTeacherCode) {
+      toast.error("Không xác định được mã giáo viên hợp lệ từ hồ sơ. Vui lòng kiểm tra lại email/mã GV hoặc liên hệ admin.");
       return;
     }
 
-    const registrationEvent = registrationEventByDate(selectedDate);
+    const registrationEvent = selectedRegistrationEvent || registrationEventByDate(selectedDate);
+    if (!registrationEvent || isPastEvent(registrationEvent)) {
+      toast.error("Đợt đăng ký này đã hết hạn");
+      return;
+    }
     const registrationType = registrationEvent?.registrationTemplate === "supplement" ? "additional" : "official";
     const sourceForm = registrationEvent?.registrationTemplate === "supplement" ? "additional_form" : "main_form";
-
-    const normalized = (value: string) =>
-      value
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-        .trim();
-
-    const examEvents = events.filter((event) => event.eventType === "exam");
 
     const submittedOptions: string[] = [];
     const failedOptions: string[] = [];
@@ -610,23 +807,18 @@ export default function MonthlyActivitiesPage() {
       setSubmitting(true);
 
       for (const option of selectedOptions) {
+        if (userRegisteredSubjects.has(option)) {
+          failedOptions.push(option);
+          failedDetails.push(`${option}: bạn đã đăng ký môn này trước đó`);
+          continue;
+        }
+
         const mapped = REGISTER_OPTION_MAP[option];
         if (!mapped) {
           failedOptions.push(option);
           failedDetails.push(`${option}: chưa có mapping dữ liệu`);
           continue;
         }
-
-        const matchedExamEvents = examEvents
-          .filter((event) => {
-            const eventSpecialty = normalized(event.specialty || "");
-            const eventTitle = normalized(event.title || "");
-            return mapped.specialtyAliases.some((alias) => {
-              const aliasNormalized = normalized(alias);
-              return eventSpecialty.includes(aliasNormalized) || eventTitle.includes(aliasNormalized);
-            });
-          })
-          .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 
         const hasActiveSetForOption = availableOptions.has(option);
         if (!hasActiveSetForOption) {
@@ -635,37 +827,25 @@ export default function MonthlyActivitiesPage() {
           continue;
         }
 
-        const registrationEnd = registrationEvent ? new Date(registrationEvent.endAt) : null;
-        const now = new Date();
-
-        const futureAfterRegistration = matchedExamEvents.filter((event) => {
-          const start = new Date(event.startAt);
-          if (registrationEnd && start < registrationEnd) return false;
-          return start >= now;
-        });
-
-        const futureFromNow = matchedExamEvents.filter((event) => new Date(event.startAt) >= now);
-
-        const matchedExamEvent = futureAfterRegistration[0] || futureFromNow[0] || null;
+        const examEventId = selectedExamEventByOption[option];
+        const matchedExamEvent = examEventId
+          ? events.find((e) => e.id === examEventId) || null
+          : null;
 
         if (!matchedExamEvent) {
           failedOptions.push(option);
-          failedDetails.push(`${option}: chưa có lịch thi kế tiếp hợp lệ`);
+          failedDetails.push(`${option}: chưa chọn lịch thi`);
           continue;
         }
 
-        const scheduledAt = matchedExamEvent
-          ? new Date(matchedExamEvent.startAt)
-          : new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 21, 0, 0, 0);
-        const closeAt = matchedExamEvent
-          ? new Date(matchedExamEvent.endAt)
-          : new Date(scheduledAt.getTime() + 45 * 60 * 1000);
+        const scheduledAt = parseLocalDateTime(matchedExamEvent.startAt);
+        const closeAt = parseLocalDateTime(matchedExamEvent.endAt);
 
         const response = await fetch('/api/exam-registrations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            teacher_code: teacherCode,
+            teacher_code: validTeacherCode,
             exam_type: mapped.exam_type,
             registration_type: registrationType,
             block_code: mapped.block_code,
@@ -682,8 +862,10 @@ export default function MonthlyActivitiesPage() {
         if (response.ok && data.success) {
           submittedOptions.push(option);
         } else {
+          const errMsg = data?.error || 'lỗi không xác định';
           failedOptions.push(option);
-          failedDetails.push(`${option}: ${data?.error || 'lỗi không xác định'}`);
+          failedDetails.push(`${option}: ${errMsg}`);
+          console.error('[Registration] Failed:', { option, errMsg, teacher_code: validTeacherCode, block_code: mapped.block_code, subject_code: mapped.subject_code });
         }
       }
     } finally {
@@ -691,13 +873,23 @@ export default function MonthlyActivitiesPage() {
     }
 
     if (submittedOptions.length > 0) {
+      setUserRegisteredSubjects((prev) => {
+        const next = new Set(prev);
+        submittedOptions.forEach((option) => next.add(option));
+        return next;
+      });
       toast.success(`Đăng ký thành công ${submittedOptions.length} nội dung`);
       setShowRegisterModal(false);
       setSelectedOptions([]);
+      setSelectedRegistrationEvent(null);
     }
 
     if (failedOptions.length > 0) {
-      toast.error(`Không thể đăng ký: ${failedOptions.join(', ')}`);
+      const firstDetail = failedDetails[0] || failedOptions.join(', ');
+      toast.error(`Đăng ký thất bại: ${firstDetail}`, { duration: 6000 });
+      if (failedDetails.length > 1) {
+        setTimeout(() => toast.error(failedDetails.slice(1).join('\n'), { duration: 6000 }), 500);
+      }
       console.warn('Registration failed details:', failedDetails);
     }
   };
@@ -713,7 +905,7 @@ export default function MonthlyActivitiesPage() {
   return (
     <PageContainer
       title="CÁC HOẠT ĐỘNG HÀNG THÁNG"
-      description="Lịch tổng hợp sự kiện đào tạo và đăng ký kiểm tra (quyền quan sát)"
+      description=""
     >
       <Card className="overflow-hidden" padding="sm">
         <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 text-center">
@@ -807,9 +999,10 @@ export default function MonthlyActivitiesPage() {
           {calendarCells.map(({ date, inCurrentMonth }) => {
             const isToday = isSameDate(startOfDay(date), startOfDay(new Date()));
             const dateKey = formatDateKey(date);
-            const dayEvents = eventsByDateKey.get(dateKey) || [];
+            const dayEvents = visibleEventsByDateKey.get(dateKey) || [];
             const hasRegistrationEvent = Boolean(registrationEventByDate(date));
             const hasActiveRegistration = Boolean(activeRegistrationEventByDate(date));
+            const isPastCalendarDate = isPastDate(date);
 
             return (
               <div
@@ -820,7 +1013,7 @@ export default function MonthlyActivitiesPage() {
                     : inCurrentMonth
                       ? "bg-white"
                       : "bg-gray-50"
-                  } ${dayEvents.length > 0 ? "cursor-pointer hover:bg-blue-50" : ""}`}
+                  } ${dayEvents.length > 0 && !isPastCalendarDate ? "cursor-pointer hover:bg-blue-50" : ""} ${isPastCalendarDate ? "opacity-60" : ""}`}
                 onClick={() => handleDayClick(date)}
               >
                 <div className="mb-1 flex items-center justify-between">
@@ -838,12 +1031,12 @@ export default function MonthlyActivitiesPage() {
                     </span>
                   )}
 
-                  {hasActiveRegistration && (
+                  {hasActiveRegistration && !isPastCalendarDate && (
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
                       Đăng ký
                     </span>
                   )}
-                  {!hasActiveRegistration && hasRegistrationEvent && (
+                  {(isPastCalendarDate || (hasRegistrationEvent && !hasActiveRegistration)) && (
                     <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
                       Quá hạn
                     </span>
@@ -852,11 +1045,13 @@ export default function MonthlyActivitiesPage() {
 
                 <div className="space-y-1">
                   {dayEvents.slice(0, 3).map((event) => {
+                    const calendarEventStyle = getCalendarEventStyle(event.eventType);
+
                     if (event.eventType === "registration") {
                       return (
                         <div
                           key={event.id}
-                          className="py-1 text-center text-[11px] leading-4 font-bold text-red-700 whitespace-pre-line"
+                          className={`rounded-sm px-1 py-1 text-center text-[11px] leading-4 font-bold whitespace-pre-line ${calendarEventStyle.titleClassName}`}
                           title={event.title.replace(/\n/g, " ")}
                         >
                           {event.title}
@@ -866,10 +1061,10 @@ export default function MonthlyActivitiesPage() {
 
                     return (
                       <div key={event.id} className="flex items-start gap-1">
-                        <div className="w-18 shrink-0 text-[11px] font-semibold text-blue-700 leading-4">
+                        <div className={`w-18 shrink-0 text-[11px] font-semibold leading-4 ${calendarEventStyle.timeClassName}`}>
                           {formatEventTimeRange(event.startAt, event.endAt)}
                         </div>
-                        <div className="flex-1 rounded-sm px-1 py-1 text-[11px] leading-4 font-semibold text-center bg-green-200 text-green-900">
+                        <div className={`flex-1 rounded-sm px-1 py-1 text-[11px] leading-4 font-semibold text-center ${calendarEventStyle.titleClassName}`}>
                           {event.title}
                         </div>
                       </div>
@@ -908,7 +1103,12 @@ export default function MonthlyActivitiesPage() {
                   Không có sự kiện nào trong ngày này.
                 </div>
               ) : (
-                selectedDayEvents.map((event) => (
+                selectedDayEvents.map((event) => {
+                  const eventIsPast = isPastEvent(event);
+                  const canRespond = event.eventType !== "registration" && event.eventType !== "holiday" && !eventIsPast;
+                  const canRegister = event.eventType === "registration" && !eventIsPast;
+
+                  return (
                   <div key={event.id} className="rounded-lg border border-gray-200 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getEventClass(event.eventType)}`}>
@@ -942,9 +1142,25 @@ export default function MonthlyActivitiesPage() {
                           <span className="font-semibold">Ghi chú:</span> {event.note}
                         </p>
                       )}
+                      {eventIsPast && (
+                        <p className="text-xs font-semibold text-gray-500">Sự kiện đã qua</p>
+                      )}
                     </div>
 
-                    {event.eventType !== "registration" && event.eventType !== "holiday" && (
+                    {canRegister && (
+                      <div className="mt-3 border-t border-gray-200 pt-3">
+                        <button
+                          onClick={() => openRegisterModalForEvent(event)}
+                          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                        >
+                          {event.registrationTemplate === "supplement"
+                            ? "Đăng ký kiểm tra chuyên sâu bổ sung"
+                            : "Đăng ký kiểm tra chuyên sâu chính thức"}
+                        </button>
+                      </div>
+                    )}
+
+                    {canRespond && (
                       <div className="mt-3 border-t border-gray-200 pt-3">
                         <p className="mb-2 text-xs font-semibold text-gray-600">Xác nhận tham gia sự kiện</p>
                         <div className="flex flex-wrap items-center gap-2">
@@ -984,17 +1200,18 @@ export default function MonthlyActivitiesPage() {
                       </div>
                     )}
                   </div>
-                ))
+                );
+                })
               )}
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 px-4 py-3">
-              {Boolean(activeRegistrationEventByDate(selectedDate)) && (
+              {activeRegistrationEventsForSelectedDate.length > 0 && (
                 <button
                   onClick={openRegisterModalFromDay}
                   className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                 >
-                  Đăng ký kiểm tra
+                  Mở đăng ký
                 </button>
               )}
               <button
@@ -1016,7 +1233,10 @@ export default function MonthlyActivitiesPage() {
                 Form đăng ký kiểm tra - {selectedDate.toLocaleDateString("vi-VN")}
               </h3>
               <button
-                onClick={() => setShowRegisterModal(false)}
+                onClick={() => {
+                  setShowRegisterModal(false);
+                  setSelectedRegistrationEvent(null);
+                }}
                 className="rounded-md p-1 hover:bg-gray-100"
               >
                 <X className="h-5 w-5" />
@@ -1024,38 +1244,91 @@ export default function MonthlyActivitiesPage() {
             </div>
 
             <div className="p-4 space-y-3 max-h-[65vh] overflow-y-auto">
+              {selectedRegistrationEvent && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                  <p className="font-semibold">Đợt đăng ký đang chọn</p>
+                  <p className="mt-1 whitespace-pre-line">{selectedRegistrationEvent.title}</p>
+                  <p className="mt-1 text-xs">
+                    Thời gian: {formatDateTime(selectedRegistrationEvent.startAt)} - {formatDateTime(selectedRegistrationEvent.endAt)}
+                  </p>
+                </div>
+              )}
               <p className="text-sm text-gray-700 font-medium">
                 Nội dung đăng ký kiểm tra chuyên sâu <span className="text-red-600">*</span>
               </p>
               <p className="text-sm text-gray-500">Các bạn vui lòng chọn ít nhất 1 option</p>
 
-              {REGISTER_OPTIONS.map((option) => (
-                <label
-                  key={option}
-                  className={`flex items-start gap-2 rounded-lg border px-3 py-2 ${
-                    availableOptions.has(option)
-                      ? "border-gray-200 hover:bg-gray-50"
-                      : "border-gray-100 bg-gray-50 text-gray-400"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedOptions.includes(option)}
-                    disabled={!availableOptions.has(option)}
-                    onChange={() => toggleOption(option)}
-                    className="mt-0.5 h-4 w-4 rounded border-gray-300"
-                  />
-                  <span className={`text-sm ${availableOptions.has(option) ? "text-gray-900" : "text-gray-400"}`}>
-                    {option}
-                    {!availableOptions.has(option) && " (chưa có đề)"}
-                  </span>
-                </label>
-              ))}
+              {REGISTER_OPTIONS.map((option) => {
+                const isAvailable = availableOptions.has(option);
+                const isSelected = selectedOptions.includes(option);
+                const examEvents = upcomingExamEventsByOption[option] || [];
+                const hasExamEvents = examEvents.length > 0;
+                const isAlreadyRegistered = userRegisteredSubjects.has(option);
+                const isDisabled = !isAvailable || !hasExamEvents || isAlreadyRegistered;
+                const selectedEventId = selectedExamEventByOption[option] || "";
+
+                return (
+                  <div key={option} className="space-y-1">
+                    <label
+                      className={`flex items-start gap-2 rounded-lg border px-3 py-2 ${
+                        isDisabled
+                          ? "border-gray-100 bg-gray-50 text-gray-400"
+                          : "border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={isDisabled}
+                        onChange={() => toggleOption(option)}
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300"
+                      />
+                      <span className={`text-sm ${isDisabled ? "text-gray-400" : "text-gray-900"}`}>
+                        {option}
+                        {isAlreadyRegistered && " (đã đăng ký)"}
+                        {!isAvailable && " (chưa có đề)"}
+                        {!isAlreadyRegistered && isAvailable && !hasExamEvents && " (chưa có lịch thi)"}
+                      </span>
+                    </label>
+
+                    {isSelected && !isDisabled && (
+                      <div className="ml-6 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                        <p className="mb-1 text-xs font-semibold text-blue-700">Lịch thi:</p>
+                        {examEvents.length === 1 ? (
+                          <p className="text-sm text-blue-900">
+                            {formatDateTime(examEvents[0].startAt)} — {formatDateTime(examEvents[0].endAt)}
+                          </p>
+                        ) : (
+                          <select
+                            value={selectedEventId}
+                            onChange={(e) =>
+                              setSelectedExamEventByOption((prev) => ({
+                                ...prev,
+                                [option]: e.target.value,
+                              }))
+                            }
+                            className="w-full rounded-md border border-blue-300 bg-white px-2 py-1 text-sm"
+                          >
+                            {examEvents.map((event) => (
+                              <option key={event.id} value={event.id}>
+                                {formatDateTime(event.startAt)} — {formatDateTime(event.endAt)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-4 py-3">
               <button
-                onClick={() => setShowRegisterModal(false)}
+                onClick={() => {
+                  setShowRegisterModal(false);
+                  setSelectedRegistrationEvent(null);
+                }}
                 className="rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold hover:bg-gray-50"
               >
                 Đóng

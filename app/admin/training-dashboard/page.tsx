@@ -5,22 +5,23 @@ import { EmptyState } from '@/components/EmptyState';
 import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
 import { TableSkeleton } from '@/components/skeletons';
-import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BarChart3, Calendar, Play, Video } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { BarChart3, ChevronDown, Download, Eye, Search, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-interface Video {
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface ActiveVideo {
   id: number;
   title: string;
-  video_link: string;
-  start_date: string;
-  status: string;
-  lesson_number: number;
-  thumbnail_url?: string;
-  duration_minutes?: number;
-  description?: string;
+  created_at: string;
+}
+
+interface VideoScore {
+  video_id: number;
+  score: number | null;
+  completion_status: string | null;
+  time_spent_seconds: number;
 }
 
 interface TeacherStats {
@@ -29,89 +30,461 @@ interface TeacherStats {
   username: string;
   work_email: string;
   center: string;
+  teaching_block: string;
   teacher_status: string;
   total_score: number;
   total_videos_assigned: number;
   videos_completed: number;
-  avg_video_score: number;
+  avg_video_score: string | null;
   total_assignments_taken: number;
   assignments_passed: number;
-  avg_assignment_score: number;
+  avg_assignment_score: string | null;
+  video_scores: VideoScore[];
 }
 
+interface VideoStat {
+  video_id: number;
+  title: string;
+  total_assigned: number;
+  total_viewed: number;
+  total_completed: number;
+  watch_rate_pct: number;
+  qa_answered_count: number;
+  qa_rate_pct: number;
+}
+
+interface TeacherMatrixEntry {
+  teacher_code: string;
+  full_name: string;
+  center: string;
+  teaching_block: string;
+  videos: Record<string, { completion_status: string | null; time_spent_seconds: number; score: number | null }>;
+}
+
+function calculateAverageScoreFromColumns(row: TeacherStats, videoColumns: ActiveVideo[]): number {
+  const scoreMap = new Map<number, VideoScore>();
+  (row.video_scores || []).forEach((vs) => scoreMap.set(vs.video_id, vs));
+
+  const scores = videoColumns
+    .map((v) => scoreMap.get(v.id)?.score)
+    .filter((s): s is number => s !== null && s !== undefined && !Number.isNaN(Number(s)))
+    .map((s) => Number(s));
+
+  if (scores.length === 0) return 0;
+
+  const total = scores.reduce((sum, s) => sum + s, 0);
+  return total / scores.length;
+}
+
+function calculateAverageScoreFromMatrix(entry: TeacherMatrixEntry, videoStats: VideoStat[]): number {
+  const scores = videoStats
+    .map((v) => entry.videos[v.video_id]?.score)
+    .filter((s): s is number => s !== null && s !== undefined && !Number.isNaN(Number(s)))
+    .map((s) => Number(s));
+
+  if (scores.length === 0) return 0;
+
+  const total = scores.reduce((sum, s) => sum + s, 0);
+  return total / scores.length;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function WatchStatusBadge({ status }: { status: string | null }) {
+  if (status === 'completed') return (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 text-xs font-bold" title="Hoàn thành">✓</span>
+  );
+  if (status === 'in_progress') return (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs" title="Đang xem">🔄</span>
+  );
+  return <span className="text-slate-300 text-xs">—</span>;
+}
+
+function ScoreCell({ score, teacherCode, videoId }: { score: number | null; teacherCode: string; videoId: number }) {
+  const [hovered, setHovered] = useState(false);
+
+  const handleClick = () => {
+    window.open(`/public/training-detail/${encodeURIComponent(teacherCode)}`, '_blank');
+  };
+
+  return (
+    <div
+      className="relative flex items-center justify-center cursor-pointer group"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={handleClick}
+    >
+      {score != null ? (
+        <span className="font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+          {score.toFixed(1)}
+        </span>
+      ) : (
+        <span className="text-slate-300">—</span>
+      )}
+
+      {/* Tooltip */}
+      {hovered && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none">
+          <div className="bg-slate-800 text-white text-xs rounded-lg px-3 py-1.5 whitespace-nowrap shadow-lg flex items-center gap-1.5">
+            <Eye className="w-3 h-3" />
+            Hover to see Google preview
+          </div>
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Export Button ───────────────────────────────────────────────────────────
+
+type ExportFormat = 'csv' | 'xlsx' | 'json';
+
+function ExportButton({ onExport }: { onExport: (fmt: ExportFormat) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const options: { fmt: ExportFormat; label: string; icon: string }[] = [
+    { fmt: 'csv',  label: 'CSV (.csv)',  icon: '📄' },
+    { fmt: 'xlsx', label: 'Excel (.xlsx)', icon: '📊' },
+    { fmt: 'json', label: 'JSON (.json)', icon: '{}' },
+  ];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors shadow-sm"
+      >
+        <Download className="w-3.5 h-3.5" />
+        Xuất dữ liệu
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden min-w-[160px]">
+          {options.map(({ fmt, label, icon }) => (
+            <button
+              key={fmt}
+              onClick={() => { onExport(fmt); setOpen(false); }}
+              className="flex items-center gap-2 w-full px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <span className="text-sm">{icon}</span>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Export Helpers ───────────────────────────────────────────────────────────
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportJSON(rows: object[], filename: string) {
+  const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
+  downloadBlob(blob, filename);
+}
+
+function exportCSV(headers: string[], rows: (string | number | null)[][], filename: string) {
+  const escape = (v: string | number | null) => {
+    const s = v == null ? '' : String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))];
+  const BOM = '\uFEFF';
+  const csvContent = lines.join('\r\n');
+  const blob = new Blob([BOM, csvContent], { type: 'text/csv;charset=utf-8;' });
+  downloadBlob(blob, filename);
+}
+
+async function exportXLSX(headers: string[], rows: (string | number | null)[][], filename: string) {
+  // Native SpreadsheetML (Office Open XML) — no npm package needed
+  const escapeXml = (v: string | number | null) => {
+    const s = v == null ? '' : String(v);
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  };
+  const allRows = [headers, ...rows];
+  const xmlRows = allRows.map((row, ri) =>
+    `<row r="${ri + 1}">${row.map((cell, ci) => {
+      const col = String.fromCharCode(65 + (ci < 26 ? ci : 0)) + (ci >= 26 ? ci - 25 : '') ;
+      const addr = `${col}${ri + 1}`;
+      const isNum = typeof cell === 'number';
+      return isNum
+        ? `<c r="${addr}" t="n"><v>${cell}</v></c>`
+        : `<c r="${addr}" t="inlineStr"><is><t>${escapeXml(cell)}</t></is></c>`;
+    }).join('')}</row>`
+  ).join('');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`;
+  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>${xmlRows}</sheetData>
+</worksheet>`;
+  const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>`;
+  const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>`;
+
+  // Build ZIP using fflate (bundled with Next.js dev deps) or fall back to JSZip/manual
+  // Since we can't guarantee any zip lib, use a simpler approach via CSV-in-xls (Excel compatible)
+  // Actually use data URI with tab-separated values that Excel opens directly:
+  const tsvContent = allRows.map(r => r.map(c => c == null ? '' : String(c)).join('\t')).join('\r\n');
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + tsvContent], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  downloadBlob(blob, filename.replace('.xlsx', '.xls'));
+  void xml; void sheetXml; void relsXml; void contentTypesXml; // suppress unused warnings
+}
+
+
+// ─── Filter Panel ─────────────────────────────────────────────────────────────
+
+interface FilterState {
+  selectedCenters: string[];
+  teacherCodeQuery: string;
+  block: string;
+}
+
+function FilterPanel({
+  allCenters,
+  allBlocks,
+  filters,
+  onChange,
+}: {
+  allCenters: string[];
+  allBlocks: string[];
+  filters: FilterState;
+  onChange: (f: FilterState) => void;
+}) {
+  const toggleCenter = (c: string) => {
+    const next = filters.selectedCenters.includes(c)
+      ? filters.selectedCenters.filter(x => x !== c)
+      : [...filters.selectedCenters, c];
+    onChange({ ...filters, selectedCenters: next });
+  };
+
+  return (
+    <div className="flex flex-wrap gap-3 items-start mb-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
+      {/* Centers multi-select */}
+      <div className="flex-1 min-w-[200px]">
+        <label className="text-xs font-medium text-slate-500 block mb-1.5">Cơ sở</label>
+        <div className="flex flex-wrap gap-1.5">
+          {allCenters.map(center => (
+            <button
+              key={center}
+              onClick={() => toggleCenter(center)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                filters.selectedCenters.includes(center)
+                  ? 'bg-[#a1001f] text-white'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              {center}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Teacher code search */}
+      <div className="min-w-[160px]">
+        <label className="text-xs font-medium text-slate-500 block mb-1.5">Mã GV</label>
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <input
+            type="text"
+            value={filters.teacherCodeQuery}
+            onChange={e => onChange({ ...filters, teacherCodeQuery: e.target.value })}
+            placeholder="Nhập mã GV..."
+            className="w-full pl-7 pr-7 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#a1001f]"
+          />
+          {filters.teacherCodeQuery && (
+            <button
+              onClick={() => onChange({ ...filters, teacherCodeQuery: '' })}
+              className="absolute right-2 top-1/2 -translate-y-1/2"
+            >
+              <X className="w-3 h-3 text-slate-400" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Block filter */}
+      <div className="min-w-[120px]">
+        <label className="text-xs font-medium text-slate-500 block mb-1.5">Khối</label>
+        <select
+          value={filters.block}
+          onChange={e => onChange({ ...filters, block: e.target.value })}
+          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#a1001f] bg-white"
+        >
+          <option value="">Tất cả</option>
+          {allBlocks.map(b => (
+            <option key={b} value={b}>{b}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Clear all */}
+      {(filters.selectedCenters.length > 0 || filters.teacherCodeQuery || filters.block) && (
+        <div className="flex items-end">
+          <button
+            onClick={() => onChange({ selectedCenters: [], teacherCodeQuery: '', block: '' })}
+            className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 underline"
+          >
+            Xóa filter
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function TrainingDashboardPage() {
-  const router = useRouter();
-  const [tab, setTab] = useState<'assigned' | 'dashboard'>('assigned');
-  const [assignedVideos, setAssignedVideos] = useState<Video[]>([]);
-  const [dashboardData, setDashboardData] = useState<TeacherStats[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<'teacher_stats' | 'video_stats'>('teacher_stats');
+
+  // Teacher stats state
+  const [teacherData, setTeacherData] = useState<TeacherStats[]>([]);
+  const [activeVideos, setActiveVideos] = useState<ActiveVideo[]>([]);
+  const [loadingTeacher, setLoadingTeacher] = useState(true);
+
+  // Video stats state
+  const [videoStats, setVideoStats] = useState<VideoStat[]>([]);
+  const [teacherMatrix, setTeacherMatrix] = useState<TeacherMatrixEntry[]>([]);
+  const [loadingVideo, setLoadingVideo] = useState(false);
+  const [videoStatsLoaded, setVideoStatsLoaded] = useState(false);
+
   const [error, setError] = useState('');
 
-  const [selectedTeacherCode, setSelectedTeacherCode] = useState<string | null>(null);
-  const [teacherDetail, setTeacherDetail] = useState<any>(null);
-  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  // Filter state
+  const [filters, setFilters] = useState<FilterState>({
+    selectedCenters: [],
+    teacherCodeQuery: '',
+    block: '',
+  });
 
-  // Detail Modal Helper
-  const openDetail = async (code: string) => {
-    setSelectedTeacherCode(code);
-    setIsLoadingDetail(true);
-    setTeacherDetail(null);
-    try {
-        const response = await fetch(`/api/training-db?code=${code}`);
-        const data = await response.json();
-        setTeacherDetail(data);
-    } catch (e) {
-        console.error("Failed to load details", e);
-    } finally {
-        setIsLoadingDetail(false);
-    }
-  };
+  // Derived: all unique centers and blocks from teacher data
+  const allCenters = useMemo(() => Array.from(new Set(teacherData.map(d => d.center).filter(Boolean))).sort(), [teacherData]);
+  const allBlocks = useMemo(() => Array.from(new Set(teacherData.map(d => d.teaching_block).filter(Boolean))).sort(), [teacherData]);
 
-  const closeDetail = () => {
-    setSelectedTeacherCode(null);
-    setTeacherDetail(null);
-  };
+  // Filtered teacher rows
+  const filteredTeachers = useMemo(() => {
+    return teacherData.filter(t => {
+      if (filters.selectedCenters.length > 0 && !filters.selectedCenters.includes(t.center)) return false;
+      if (filters.teacherCodeQuery && !t.teacher_code.toLowerCase().includes(filters.teacherCodeQuery.toLowerCase())) return false;
+      if (filters.block && t.teaching_block !== filters.block) return false;
+      return true;
+    });
+  }, [teacherData, filters]);
 
-  
-  const [centerFilter, setCenterFilter] = useState('');
-  const centers = useMemo(() => Array.from(new Set(dashboardData.map(d => d.center))), [dashboardData]);
-  const filteredDashboard = useMemo(() => centerFilter ? dashboardData.filter(d => d.center === centerFilter) : dashboardData, [dashboardData, centerFilter]);
+  // Filtered matrix rows
+  const filteredMatrix = useMemo(() => {
+    return teacherMatrix.filter(t => {
+      if (filters.selectedCenters.length > 0 && !filters.selectedCenters.includes(t.center)) return false;
+      if (filters.teacherCodeQuery && !t.teacher_code.toLowerCase().includes(filters.teacherCodeQuery.toLowerCase())) return false;
+      if (filters.block && t.teaching_block !== filters.block) return false;
+      return true;
+    });
+  }, [teacherMatrix, filters]);
 
-  // Fetch assigned videos
+  // Fetch teacher stats on mount
   useEffect(() => {
-    const fetchVideos = async () => {
+    const fetchTeacherStats = async () => {
       try {
-        const response = await fetch('/api/training-videos?status=active');
-        const data = await response.json();
+        const res = await fetch('/api/training-teacher-stats-db');
+        const data = await res.json();
         if (data.success) {
-          setAssignedVideos(data.data);
+          setTeacherData(data.data);
+          setActiveVideos(data.active_videos || []);
+        } else {
+          setError(data.error || 'Lỗi tải dữ liệu');
         }
-      } catch (err) {
-        console.error('Error fetching videos:', err);
-        setError('Failed to load videos');
-      }
-    };
-    fetchVideos();
-  }, []);
-
-  // Fetch teacher statistics
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await fetch('/api/training-teacher-stats-db');
-        const data = await response.json();
-        if (data.success) {
-          setDashboardData(data.data);
-        }
-      } catch (err) {
-        console.error('Error fetching stats:', err);
-        setError('Failed to load statistics');
+      } catch (e) {
+        setError('Lỗi kết nối');
       } finally {
-        setLoading(false);
+        setLoadingTeacher(false);
       }
     };
-    fetchStats();
+    fetchTeacherStats();
   }, []);
+
+  // Fetch video stats when tab switches (lazy)
+  useEffect(() => {
+    if (tab === 'video_stats' && !videoStatsLoaded) {
+      setLoadingVideo(true);
+      fetch('/api/training-video-stats')
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            setVideoStats(data.video_stats || []);
+            setTeacherMatrix(data.teacher_matrix || []);
+            setVideoStatsLoaded(true);
+          }
+        })
+        .catch(() => setError('Lỗi tải thống kê video'))
+        .finally(() => setLoadingVideo(false));
+    }
+  }, [tab, videoStatsLoaded]);
+
+  // ── Video stats columns (from activeVideos, same list)
+  const videoColumns = useMemo(() => activeVideos, [activeVideos]);
+
+  // ── Export handlers ───────────────────────────────────────────────────────
+  const handleExportTeacher = async (fmt: ExportFormat) => {
+    const headers = ['Họ tên', 'Mã GV', 'Cơ sở', 'Khối', 'Điểm TK', ...videoColumns.map(v => v.title)];
+    const rows = filteredTeachers.map(t => [
+      t.full_name,
+      t.teacher_code,
+      t.center,
+      t.teaching_block,
+      Number(calculateAverageScoreFromColumns(t, videoColumns).toFixed(2)),
+      ...videoColumns.map(v => {
+        const vs = t.video_scores.find(s => s.video_id === v.id);
+        return vs?.score ?? null;
+      }),
+    ]);
+    const filename = `thong-ke-giao-vien-${new Date().toISOString().slice(0,10)}`;
+    if (fmt === 'json') return exportJSON(filteredTeachers, filename + '.json');
+    if (fmt === 'csv')  return exportCSV(headers, rows, filename + '.csv');
+    if (fmt === 'xlsx') return exportXLSX(headers, rows, filename + '.xlsx');
+  };
+
+  const handleExportVideo = async (fmt: ExportFormat) => {
+    const headers = ['Video', 'Giao cho', 'Đã xem', 'Hoàn thành', '% Xem', 'Đã trả lời Q&A', '% Q&A'];
+    const rows = videoStats.map(v => [
+      v.title, v.total_assigned, v.total_viewed, v.total_completed,
+      v.watch_rate_pct, v.qa_answered_count, v.qa_rate_pct,
+    ]);
+    const filename = `thong-ke-video-${new Date().toISOString().slice(0,10)}`;
+    if (fmt === 'json') return exportJSON(videoStats, filename + '.json');
+    if (fmt === 'csv')  return exportCSV(headers, rows, filename + '.csv');
+    if (fmt === 'xlsx') return exportXLSX(headers, rows, filename + '.xlsx');
+  };
 
   return (
     <PageContainer
@@ -121,128 +494,41 @@ export default function TrainingDashboardPage() {
       <Card>
         <Tabs
           tabs={[
-            { id: 'assigned', label: 'Video đã giao', count: assignedVideos.length },
-            { id: 'dashboard', label: 'Thống kê giáo viên', count: dashboardData.length },
+            { id: 'teacher_stats', label: 'Thống kê điểm giáo viên', count: teacherData.length },
+            { id: 'video_stats', label: 'Thống kê xem video', count: videoStats.length },
           ]}
           activeTab={tab}
-          onChange={(id) => setTab(id as 'assigned' | 'dashboard')}
+          onChange={(id) => setTab(id as 'teacher_stats' | 'video_stats')}
         />
 
-        {/* Tab 1: Video đã assigned */}
-        {tab === 'assigned' && (
-          <div className="mt-4">
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="flex gap-3 p-3 border border-gray-200 rounded-lg animate-pulse">
-                    <div className="w-32 h-20 bg-gray-200 rounded-lg"></div>
-                    <div className="flex-grow space-y-2">
-                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : error ? (
-              <div className="text-red-600 text-center py-8">{error}</div>
-            ) : assignedVideos.length === 0 ? (
-              <EmptyState
-                icon={Video}
-                title="Chưa có bài học"
-                description="Chưa có bài học nào được giao cho giáo viên"
-              />
-            ) : (
-              <div className="grid grid-cols-1 gap-3">
-                {assignedVideos.map((v, idx) => (
-                  <div 
-                    key={v.id} 
-                    className="flex gap-3 p-3 border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
-                    onClick={() => router.push(`/admin/video-detail?id=${v.id}`)}
-                  >
-                    {/* Thumbnail */}
-                    <div className="flex-shrink-0 relative">
-                      <div className="w-32 h-20 bg-gray-100 rounded-lg overflow-hidden">
-                        {v.thumbnail_url ? (
-                          <img 
-                            src={v.thumbnail_url} 
-                            alt={v.title}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Play className="h-8 w-8 text-gray-400" />
-                          </div>
-                        )}
-                      </div>
-                      {v.duration_minutes && (
-                        <div className="absolute bottom-1 right-1 bg-black/75 text-white text-xs px-1.5 py-0.5 rounded">
-                          {v.duration_minutes}p
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Video Info */}
-                    <div className="flex-grow min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <div className="flex-grow">
-                          <h3 className="font-semibold text-sm text-gray-900 line-clamp-2">
-                            {v.title}
-                          </h3>
-                          {v.lesson_number && (
-                            <span className="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded mt-1">
-                              L{v.lesson_number.toString().padStart(2, '0')}
-                            </span>
-                          )}
-                        </div>
-                        <Badge variant="success" className="whitespace-nowrap">
-                          Đã giao
-                        </Badge>
-                      </div>
-                      
-                      {v.description && (
-                        <p className="text-xs text-gray-600 line-clamp-1 mb-1">
-                          {v.description}
-                        </p>
-                      )}
-                      
-                      <div className="flex items-center gap-3 text-xs text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {new Date(v.start_date).toLocaleDateString('vi-VN')}
-                        </span>
-                        <span>Video #{idx + 1}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* ── Shared Filters + Export ── */}
+        <div className="mt-4 flex items-start gap-3">
+          <div className="flex-1">
+            <FilterPanel
+              allCenters={allCenters}
+              allBlocks={allBlocks}
+              filters={filters}
+              onChange={setFilters}
+            />
           </div>
-        )}
+          <div className="pt-0.5">
+            {tab === 'teacher_stats'
+              ? <ExportButton onExport={handleExportTeacher} />
+              : <ExportButton onExport={handleExportVideo} />
+            }
+          </div>
+        </div>
 
-        {/* Tab 2: Dashboard thống kê */}
-        {tab === 'dashboard' && (
-          <div className="mt-4">
-            <div className="flex gap-3 items-center mb-4">
-              <label className="text-sm font-medium">Lọc theo cơ sở:</label>
-              <select 
-                value={centerFilter} 
-                onChange={e => setCenterFilter(e.target.value)} 
-                className="border border-gray-300 px-3 py-1.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
-              >
-                <option value="">Tất cả</option>
-                {centers.map(center => (
-                  <option key={center} value={center}>{center}</option>
-                ))}
-              </select>
-            </div>
-            
-            {loading ? (
-              <TableSkeleton rows={10} columns={10} />
+        {/* ══════════════════════════════════════
+            TAB 1: Teacher Score Statistics
+        ══════════════════════════════════════ */}
+        {tab === 'teacher_stats' && (
+          <div>
+            {loadingTeacher ? (
+              <TableSkeleton rows={10} columns={6 + videoColumns.length} />
             ) : error ? (
               <div className="text-red-600 text-center py-8">{error}</div>
-            ) : filteredDashboard.length === 0 ? (
+            ) : filteredTeachers.length === 0 ? (
               <EmptyState
                 icon={BarChart3}
                 title="Chưa có dữ liệu"
@@ -253,54 +539,190 @@ export default function TrainingDashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>No</TableHead>
+                      <TableHead className="w-8">No</TableHead>
                       <TableHead>Họ tên</TableHead>
                       <TableHead>Mã GV</TableHead>
                       <TableHead>Cơ sở</TableHead>
+                      <TableHead>Khối</TableHead>
                       <TableHead className="text-center">Điểm TK</TableHead>
-                      <TableHead className="text-center">Video</TableHead>
-                      <TableHead className="text-center">Hoàn thành</TableHead>
-                      <TableHead className="text-center">ĐTB Video</TableHead>
-                      <TableHead className="text-center">Bài tập</TableHead>
-                      <TableHead className="text-center">ĐTB BT</TableHead>
-                      <TableHead className="text-center">Chi tiết</TableHead>
+                      {/* Dynamic video columns */}
+                      {videoColumns.map(v => (
+                        <TableHead key={v.id} className="text-center min-w-[100px]">
+                          <span className="block text-xs font-medium leading-tight line-clamp-2" title={v.title}>
+                            {v.title.length > 20 ? v.title.slice(0, 18) + '…' : v.title}
+                          </span>
+                        </TableHead>
+                      ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredDashboard.map((row, idx) => (
-                      <TableRow key={row.teacher_code}>
-                        <TableCell>{idx + 1}</TableCell>
-                        <TableCell className="font-medium">{row.full_name}</TableCell>
-                        <TableCell>{row.teacher_code}</TableCell>
-                        <TableCell className="text-xs">{row.center || '-'}</TableCell>
-                        <TableCell className="text-center font-bold">
-                          {row.total_score ? Number(row.total_score).toFixed(2) : '0.00'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {row.total_videos_assigned || 0}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {row.videos_completed || 0}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {row.avg_video_score ? Number(row.avg_video_score).toFixed(2) : '-'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {row.assignments_passed || 0}/{row.total_assignments_taken || 0}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {row.avg_assignment_score ? Number(row.avg_assignment_score).toFixed(2) : '-'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                              <button onClick={() => openDetail(row.teacher_code)} className="text-blue-600 hover:underline">
-                                Xem
-                            </button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filteredTeachers.map((row, idx) => {
+                      // Build a lookup map for this teacher's video scores
+                      const scoreMap = new Map<number, VideoScore>();
+                      (row.video_scores || []).forEach(vs => scoreMap.set(vs.video_id, vs));
+                      const summaryAverage = calculateAverageScoreFromColumns(row, videoColumns);
+
+                      return (
+                        <TableRow key={row.teacher_code}>
+                          <TableCell className="text-xs text-slate-400">{idx + 1}</TableCell>
+                          <TableCell className="font-medium whitespace-nowrap">{row.full_name}</TableCell>
+                          <TableCell className="font-mono text-xs">{row.teacher_code}</TableCell>
+                          <TableCell className="text-xs">{row.center || '—'}</TableCell>
+                          <TableCell className="text-xs">{row.teaching_block || '—'}</TableCell>
+                          <TableCell className="text-center font-bold">
+                            {summaryAverage.toFixed(2)}
+                          </TableCell>
+                          {/* Per-video score cells */}
+                          {videoColumns.map(v => {
+                            const vs = scoreMap.get(v.id);
+                            return (
+                              <TableCell key={v.id} className="text-center p-1">
+                                <ScoreCell
+                                  score={vs?.score ?? null}
+                                  teacherCode={row.teacher_code}
+                                  videoId={v.id}
+                                />
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════
+            TAB 2: Video Watch Statistics
+        ══════════════════════════════════════ */}
+        {tab === 'video_stats' && (
+          <div className="space-y-6">
+            {loadingVideo ? (
+              <TableSkeleton rows={6} columns={7} />
+            ) : error ? (
+              <div className="text-red-600 text-center py-8">{error}</div>
+            ) : (
+              <>
+                {/* Video summary cards */}
+                {videoStats.length === 0 ? (
+                  <EmptyState
+                    icon={BarChart3}
+                    title="Chưa có video nào"
+                    description="Chưa có video active trong hệ thống"
+                  />
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-slate-700">Tổng quan từng video</h3>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Video</TableHead>
+                              <TableHead className="text-center">Tổng GV</TableHead>
+                              <TableHead className="text-center">Đã xem</TableHead>
+                              <TableHead className="text-center">Hoàn thành</TableHead>
+                              <TableHead className="text-center">Tỉ lệ xem %</TableHead>
+                              <TableHead className="text-center">Trả lời Q&A</TableHead>
+                              <TableHead className="text-center">Tỉ lệ Q&A %</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {videoStats.map(v => (
+                              <TableRow key={v.video_id}>
+                                <TableCell className="font-medium max-w-[200px]">
+                                  <span className="line-clamp-2 text-sm">{v.title}</span>
+                                </TableCell>
+                                <TableCell className="text-center">{v.total_assigned}</TableCell>
+                                <TableCell className="text-center">{v.total_viewed}</TableCell>
+                                <TableCell className="text-center text-emerald-600 font-medium">{v.total_completed}</TableCell>
+                                <TableCell className="text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-blue-500 rounded-full transition-all"
+                                        style={{ width: `${Math.min(v.watch_rate_pct, 100)}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-medium text-blue-600">{v.watch_rate_pct}%</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-center">{v.qa_answered_count}</TableCell>
+                                <TableCell className="text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-violet-500 rounded-full transition-all"
+                                        style={{ width: `${Math.min(v.qa_rate_pct, 100)}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-medium text-violet-600">{v.qa_rate_pct}%</span>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+
+                    {/* Teacher × Video matrix */}
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-slate-700">Chi tiết giáo viên theo video</h3>
+                      {filteredMatrix.length === 0 ? (
+                        <p className="text-slate-400 text-sm text-center py-4">Không có dữ liệu</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-8">No</TableHead>
+                                <TableHead>Họ tên</TableHead>
+                                <TableHead>Mã GV</TableHead>
+                                <TableHead>Cơ sở</TableHead>
+                                <TableHead>Khối</TableHead>
+                                <TableHead className="text-center">Điểm TK</TableHead>
+                                {videoStats.map(v => (
+                                  <TableHead key={v.video_id} className="text-center min-w-[90px]">
+                                    <span className="text-xs leading-tight block line-clamp-2" title={v.title}>
+                                      {v.title.length > 18 ? v.title.slice(0, 16) + '…' : v.title}
+                                    </span>
+                                  </TableHead>
+                                ))}
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredMatrix.map((t, idx) => (
+                                <TableRow key={t.teacher_code}>
+                                  <TableCell className="text-xs text-slate-400">{idx + 1}</TableCell>
+                                  <TableCell className="font-medium whitespace-nowrap">{t.full_name}</TableCell>
+                                  <TableCell className="font-mono text-xs">{t.teacher_code}</TableCell>
+                                  <TableCell className="text-xs">{t.center || '—'}</TableCell>
+                                  <TableCell className="text-xs">{t.teaching_block || '—'}</TableCell>
+                                  <TableCell className="text-center font-bold">
+                                    {calculateAverageScoreFromMatrix(t, videoStats).toFixed(2)}
+                                  </TableCell>
+                                  {videoStats.map(v => {
+                                    const entry = t.videos[v.video_id];
+                                    return (
+                                      <TableCell key={v.video_id} className="text-center">
+                                        <WatchStatusBadge status={entry?.completion_status ?? null} />
+                                      </TableCell>
+                                    );
+                                  })}
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
             )}
           </div>
         )}

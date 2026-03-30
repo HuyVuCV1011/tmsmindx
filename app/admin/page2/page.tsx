@@ -1,23 +1,24 @@
-"use client";
+import K12DocsClient from "@/components/k12-docs/K12DocsClient";
+import { loadK12Docs } from "@/lib/k12-docs";
 
-import { Card } from "@/components/Card";
-import { EmptyState } from "@/components/EmptyState";
-import { PageContainer } from "@/components/PageContainer";
-import { FileText } from "lucide-react";
+interface PageProps {
+  searchParams: Promise<{ doc?: string | string[] }>;
+}
 
-export default function Page2() {
+export default async function Page2({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const docs = await loadK12Docs();
+  const rawDoc = params.doc;
+  const selectedSlug = Array.isArray(rawDoc) ? rawDoc[0] : rawDoc || docs.defaultSlug;
+
   return (
-    <PageContainer
-      title="Màn hình 2"
-      description="Nội dung và quản lý màn hình 2"
-    >
-      <Card>
-        <EmptyState
-          icon={FileText}
-          title="Chưa có nội dung"
-          description="Màn hình này đang được phát triển. Nội dung sẽ được cập nhật sớm."
-        />
-      </Card>
-    </PageContainer>
+    <K12DocsClient
+      basePath="/admin/page2"
+      pageTitle="Quy trình quy định K12 Teaching"
+      tree={docs.tree}
+      documents={docs.documents}
+      selectedSlug={selectedSlug}
+      defaultSlug={docs.defaultSlug}
+    />
   );
 }
