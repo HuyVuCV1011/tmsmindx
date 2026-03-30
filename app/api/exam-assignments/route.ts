@@ -211,6 +211,22 @@ export async function GET(request: NextRequest) {
       `;
     }
 
+    const since = searchParams.get('since');
+    if (since) {
+      values.push(since);
+      query += `
+        AND tea.open_at >= $${values.length}::date
+      `;
+    }
+
+    const before = searchParams.get('before');
+    if (before) {
+      values.push(before);
+      query += `
+        AND tea.open_at < $${values.length}::date
+      `;
+    }
+
     query += `
       ORDER BY tea.open_at DESC, tea.created_at DESC
     `;

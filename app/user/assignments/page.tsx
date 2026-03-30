@@ -209,14 +209,6 @@ export default function TeacherAssignmentPage() {
     if (teacherCode) {
       fetchAvailableAssignments();
       fetchExamAssignments();
-
-      // Realtime polling every 10 seconds for both assigned exams and training tests
-      const interval = setInterval(() => {
-        fetchAvailableAssignments(true);
-        fetchExamAssignments(true);
-      }, 10000);
-
-      return () => clearInterval(interval);
     }
   }, [teacherCode]);
 
@@ -286,21 +278,55 @@ export default function TeacherAssignmentPage() {
       }
 
       const teacherCodesParam = encodeURIComponent(Array.from(candidates).join(','));
-      const response = await fetch(
-        `/api/exam-assignments?teacher_code=${encodeURIComponent(teacherCode)}&teacher_codes=${teacherCodesParam}`,
+      const baseParams = `teacher_code=${encodeURIComponent(teacherCode)}&teacher_codes=${teacherCodesParam}`;
+
+      // ── Phase 1: fetch last 6 months immediately ──────────────────────────
+      const now = new Date();
+      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const sinceStr = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2, '0')}-01`;
+
+      const recentRes = await fetch(
+        `/api/exam-assignments?${baseParams}&since=${sinceStr}`,
         { cache: 'no-store' }
       );
-      const data = await response.json();
-      if (data.success) {
-        setExamAssignments(data.data || []);
+      const recentData = await recentRes.json();
+      if (recentData.success) {
+        setExamAssignments(recentData.data || []);
+      }
+
+      if (!isBackgroundUpdate) setExamLoading(false);
+
+      // ── Phase 2: fetch older data in background and merge ─────────────────
+      // Skip older fetch on background polling (10s interval) — those only
+      // need to refresh recent data for live updates.
+      if (!isBackgroundUpdate) {
+        (async () => {
+          try {
+            const olderRes = await fetch(
+              `/api/exam-assignments?${baseParams}&before=${sinceStr}`,
+              { cache: 'no-store' }
+            );
+            const olderData = await olderRes.json();
+            if (olderData.success && olderData.data?.length > 0) {
+              setExamAssignments(prev => {
+                // Merge: keep recent items, append older ones (no duplicates)
+                const existingIds = new Set(prev.map((item: ExamAssignment) => item.id));
+                const newOlder = olderData.data.filter((item: ExamAssignment) => !existingIds.has(item.id));
+                return [...prev, ...newOlder];
+              });
+            }
+          } catch (err) {
+            console.warn('Background fetch of older exam assignments failed:', err);
+          }
+        })();
       }
     } catch (err) {
       console.error('Error fetching exam assignments:', err);
       setError('Failed to load exam assignments');
-    } finally {
       if (!isBackgroundUpdate) setExamLoading(false);
     }
   };
+
 
   const startAssignment = async (assignment: Assignment) => {
     try {
@@ -1291,7 +1317,7 @@ export default function TeacherAssignmentPage() {
                   <span className="ml-auto text-[10px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded-full font-semibold border border-blue-100">Xem chi tiết</span>
                 </div>
                 <p className="text-2xl font-bold text-gray-900">{scoreStats.passRate}%</p>
-                <p className="text-xs text-gray-500 mt-1">{scoreStats.totalPassed} / {scoreStats.totalAssigned} bài trong 6 tháng</p>
+                <p className="text-xs text-gray-500 mt-1">{scoreStats.totalPassed} / {scoreStats.totalAssigned} bài trong 6 tháng gần đây</p>
               </button>
 
               <button
@@ -1769,8 +1795,8 @@ export default function TeacherAssignmentPage() {
                       <div
                         key={item.id}
                         className={`flex items-center gap-3 rounded-lg border px-4 py-3 transition-all ${isPassed
-                            ? 'border-green-200 bg-green-50'
-                            : 'border-red-200 bg-red-50'
+                          ? 'border-green-200 bg-green-50'
+                          : 'border-red-200 bg-red-50'
                           }`}
                       >
                         {/* Pass/Fail icon */}
