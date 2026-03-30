@@ -1,14 +1,14 @@
- 'use client';
+'use client';
 
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import Modal from '@/components/Modal';
 import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import Modal from '@/components/Modal';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
 import { useTeacher } from '@/lib/teacher-context';
-import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, RefreshCw, Send, Trophy, XCircle } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, ChevronDown, ChevronUp, Clock, FileText, FilterX, RefreshCw, Send, Trophy, XCircle } from 'lucide-react';
 
 import NextImage from 'next/image';
 import Link from 'next/link';
@@ -81,8 +81,14 @@ interface ExamAssignment {
   total_points: number;
   passing_score: number;
   explanation_status?: 'pending' | 'accepted' | 'rejected';
+  admin_note?: string;
   is_open?: boolean;
   can_take?: boolean;
+}
+
+interface EffectiveExamScore {
+  score: number | null;
+  isMissedCurrentMonth: boolean;
 }
 
 export default function TeacherAssignmentPage() {
@@ -100,8 +106,49 @@ export default function TeacherAssignmentPage() {
   const [error, setError] = useState('');
   const [teacherCode, setTeacherCode] = useState('');
   const [activeMainTab, setActiveMainTab] = useState<'exam' | 'scores' | 'training'>('exam');
-  const [selectedExamMonth, setSelectedExamMonth] = useState('all');
-  const [activeExamSubTab, setActiveExamSubTab] = useState<'best' | string>('best');
+
+  const [selectedExamMonth, setSelectedExamMonth] = useState('6months');
+  const [scoreTypeFilter, setScoreTypeFilter] = useState<'all' | 'expertise' | 'experience'>('all');
+  const [scoreResultFilter, setScoreResultFilter] = useState<'all' | 'passed' | 'failed' | 'missing' | 'needs_explanation' | 'has_explanation'>('all');
+  const [scoreSubjectKeyword, setScoreSubjectKeyword] = useState('');
+
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [activeStatCard, setActiveStatCard] = useState<null | 'expertise' | 'experience' | 'missing'>(null);
+  const [showPassRateModal, setShowPassRateModal] = useState(false);
+
+  const toggleStatCard = (card: 'expertise' | 'experience' | 'missing') => {
+    setActiveStatCard(prev => prev === card ? null : card);
+  };
+
+  // Auto-expand month when selected
+  useEffect(() => {
+    if (selectedExamMonth !== '6months' && selectedExamMonth !== 'all') {
+      setExpandedMonths(prev => {
+        const next = new Set(prev);
+        next.add(selectedExamMonth);
+        return next;
+      });
+    }
+  }, [selectedExamMonth]);
+
+  const toggleMonthExpand = (month: string) => {
+    setExpandedMonths(prev => {
+      const next = new Set(prev);
+      if (next.has(month)) {
+        next.delete(month);
+      } else {
+        next.add(month);
+      }
+      return next;
+    });
+  };
+
+  const clearFilters = () => {
+    setScoreSubjectKeyword('');
+    setSelectedExamMonth('6months');
+    setScoreTypeFilter('all');
+    setScoreResultFilter('all');
+  };
   const [view, setView] = useState<'list' | 'taking' | 'result'>('list');
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [timerActive, setTimerActive] = useState(false);
@@ -109,7 +156,7 @@ export default function TeacherAssignmentPage() {
   const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
   const isSubmittingRef = useRef(false);
   const [selectedExamInfo, setSelectedExamInfo] = useState<ExamAssignment | null>(null);
-  
+
   const searchParams = useSearchParams();
   const startId = searchParams.get('start_assignment_id');
 
@@ -196,7 +243,7 @@ export default function TeacherAssignmentPage() {
     }
   }, [teacherCode]);
 
-  const fetchAvailableAssignments = async () => {
+  const fetchAvailableAssignments = async (isBackgroundUpdate = false) => {
     try {
       setTrainingLoading(true);
       
@@ -251,13 +298,13 @@ export default function TeacherAssignmentPage() {
       console.error('Error fetching assignments:', err);
       setError('Failed to load assignments');
     } finally {
-      setTrainingLoading(false);
+      if (!isBackgroundUpdate) setTrainingLoading(false);
     }
   };
 
-  const fetchExamAssignments = async () => {
+  const fetchExamAssignments = async (isBackgroundUpdate = false) => {
     try {
-      setExamLoading(true);
+      if (!isBackgroundUpdate) setExamLoading(true);
 
       const candidates = new Set<string>();
       const normalizedTeacherCode = teacherCode?.trim();
@@ -277,20 +324,55 @@ export default function TeacherAssignmentPage() {
       }
 
       const teacherCodesParam = encodeURIComponent(Array.from(candidates).join(','));
-      const response = await fetch(
-        `/api/exam-assignments?teacher_code=${encodeURIComponent(teacherCode)}&teacher_codes=${teacherCodesParam}`
+      const baseParams = `teacher_code=${encodeURIComponent(teacherCode)}&teacher_codes=${teacherCodesParam}`;
+
+      // ── Phase 1: fetch last 6 months immediately ──────────────────────────
+      const now = new Date();
+      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const sinceStr = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2, '0')}-01`;
+
+      const recentRes = await fetch(
+        `/api/exam-assignments?${baseParams}&since=${sinceStr}`,
+        { cache: 'no-store' }
       );
-      const data = await response.json();
-      if (data.success) {
-        setExamAssignments(data.data || []);
+      const recentData = await recentRes.json();
+      if (recentData.success) {
+        setExamAssignments(recentData.data || []);
+      }
+
+      if (!isBackgroundUpdate) setExamLoading(false);
+
+      // ── Phase 2: fetch older data in background and merge ─────────────────
+      // Skip older fetch on background polling (10s interval) — those only
+      // need to refresh recent data for live updates.
+      if (!isBackgroundUpdate) {
+        (async () => {
+          try {
+            const olderRes = await fetch(
+              `/api/exam-assignments?${baseParams}&before=${sinceStr}`,
+              { cache: 'no-store' }
+            );
+            const olderData = await olderRes.json();
+            if (olderData.success && olderData.data?.length > 0) {
+              setExamAssignments(prev => {
+                // Merge: keep recent items, append older ones (no duplicates)
+                const existingIds = new Set(prev.map((item: ExamAssignment) => item.id));
+                const newOlder = olderData.data.filter((item: ExamAssignment) => !existingIds.has(item.id));
+                return [...prev, ...newOlder];
+              });
+            }
+          } catch (err) {
+            console.warn('Background fetch of older exam assignments failed:', err);
+          }
+        })();
       }
     } catch (err) {
       console.error('Error fetching exam assignments:', err);
       setError('Failed to load exam assignments');
-    } finally {
-      setExamLoading(false);
+      if (!isBackgroundUpdate) setExamLoading(false);
     }
   };
+
 
   const startAssignment = async (assignment: Assignment) => {
     try {
@@ -320,7 +402,7 @@ export default function TeacherAssignmentPage() {
       // Fetch questions
       const questionsRes = await fetch(`/api/training-assignment-questions?assignment_id=${assignment.id}`);
       const questionsData = await questionsRes.json();
-      
+
       if (!questionsData.success) {
         toast.error('Không thể tải câu hỏi');
         return;
@@ -510,14 +592,14 @@ export default function TeacherAssignmentPage() {
       // Calculate score synchronously
       let totalScore = 0;
       console.log('[Assignment] Starting score calculation for', questions.length, 'questions');
-      
+
       questions.forEach((question, idx) => {
         const userAnswer = answers[question.id] || '';
         const correctAnswer = (question.correct_answer || '').trim().toLowerCase();
         const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer;
         const points = parseFloat(question.points?.toString() || '0');
         const pointsEarned = isCorrect ? points : 0;
-        
+
         console.log(`[Assignment] Q${idx + 1}:`, {
           questionId: question.id,
           points: points,
@@ -526,7 +608,7 @@ export default function TeacherAssignmentPage() {
           isCorrect: isCorrect,
           pointsEarned: pointsEarned
         });
-        
+
         totalScore += pointsEarned;
       });
 
@@ -590,138 +672,261 @@ export default function TeacherAssignmentPage() {
     return Math.round((Object.keys(answers).length / questions.length) * 100);
   };
 
-  // ─── Sub-tabs inside exam section (hooks must be before any early return) ──
-  const last6Months = useMemo(() => {
-    const now = new Date();
-    return Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    });
-  }, []);
-
-  const monthlyAverageData = useMemo(() => {
-    const last6Set = new Set(last6Months);
-    const monthlyScores = new Map<string, number[]>();
-
-    examAssignments.forEach(item => {
-      if (item.score === null) return;
-      if (item.exam_type === 'experience') return;
-
-      const date = new Date(item.open_at);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      if (!last6Set.has(monthKey)) return;
-
-      const score = Number(item.score);
-      if (Number.isNaN(score)) return;
-
-      if (!monthlyScores.has(monthKey)) {
-        monthlyScores.set(monthKey, [score]);
-      } else {
-        monthlyScores.get(monthKey)!.push(score);
-      }
-    });
-
-    return last6Months
-      .map(month => {
-        const scores = monthlyScores.get(month) || [];
-        if (!scores.length) {
-          return { month, average: null as number | null, count: 0 };
-        }
-        const total = scores.reduce((sum, value) => sum + value, 0);
-        return {
-          month,
-          average: total / scores.length,
-          count: scores.length,
-        };
-      })
-      .sort((a, b) => b.month.localeCompare(a.month));
-  }, [examAssignments, last6Months]);
-
-  const examSubMonthTabs = useMemo(() => {
-    const examMonthOpts = Array.from(
-      new Set(
-        examAssignments.map(item => {
-          const date = new Date(item.open_at);
-          const month = `${date.getMonth() + 1}`.padStart(2, '0');
-          return `${date.getFullYear()}-${month}`;
-        })
-      )
-    ).sort((a, b) => b.localeCompare(a));
-    const all = new Set([...examMonthOpts, ...last6Months]);
-    return Array.from(all).sort((a, b) => b.localeCompare(a));
-  }, [examAssignments, last6Months]);
-
+  // ─── Shared Helper Functions ───
   const formatMonthLabel = (ym: string) => {
     const [y, m] = ym.split('-');
     return `Tháng ${parseInt(m)}/${y}`;
   };
 
-  const assignmentsForSubTab = useMemo(() => {
-    if (activeExamSubTab === 'best') return [];
-    return examAssignments.filter(item => {
+  function getEffectiveExamScore(item: ExamAssignment): EffectiveExamScore {
+    const now = new Date();
+    const openAt = new Date(item.open_at);
+    const closeAt = new Date(item.close_at);
+    const isCurrentMonth =
+      openAt.getFullYear() === now.getFullYear() &&
+      openAt.getMonth() === now.getMonth();
+
+    const isMissedCurrentMonth =
+      isCurrentMonth &&
+      closeAt < now &&
+      item.score === null &&
+      item.score_status === 'null' &&
+      !item.can_take;
+
+    // 0. "môn nào chưa tới giờ mở bài làm thì không tính"
+    if (openAt > now) {
+      return { score: null, isMissedCurrentMonth: false };
+    }
+
+    // 1. "nếu giải trình đã được duyệt thì điểm = null và loại bỏ môn đó khỏi các môn tính điểm trung bình"
+    if (item.explanation_status === 'accepted') {
+      return { score: null, isMissedCurrentMonth: false };
+    }
+
+    // 2. "trung bình điểm của các môn đăng ký trong tháng đó, nếu chưa giải trình thì điểm = 0, ... nếu đã giải trình thì nhưng bị từ chối thì điểm = 0"
+    // Mặc định nạp 0 điểm cho bất kỳ môn nào không bị loại bỏ (tức là chưa thi, chưa giải trình, chờ giải trình, từ chối giải trình).
+    let effectiveScore = 0;
+    if (item.score !== null && item.score_status !== 'null') {
+      const parsed = Number(item.score);
+      effectiveScore = Number.isNaN(parsed) ? 0 : parsed;
+    }
+
+    return {
+      score: effectiveScore,
+      isMissedCurrentMonth
+    };
+  }
+
+  const formatExplanationStatus = (status?: ExamAssignment['explanation_status']) => {
+    if (status === 'pending') return 'Đang chờ duyệt';
+    if (status === 'accepted') return 'Đã duyệt';
+    if (status === 'rejected') return 'Từ chối';
+    return 'Chưa có';
+  };
+
+  // ─── Sub-tabs inside exam section (hooks must be before any early return) ──
+  const scoreStats = useMemo(() => {
+    let totalAssigned = 0;
+    let totalPassed = 0;
+    let bestExperience = 0;
+    let missingOrPending = 0;
+
+    const now = new Date();
+    const last6Months = new Set(
+      Array.from({ length: 6 }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      })
+    );
+    const monthlyExpertiseScores = new Map<string, number[]>();
+
+    examAssignments.forEach(item => {
+      const { score, isMissedCurrentMonth } = getEffectiveExamScore(item);
       const date = new Date(item.open_at);
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      return key === activeExamSubTab;
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+      // Tính Tỉ lệ đạt trong 6 tháng: Loại bỏ bài được duyệt, chỉ đếm các bài đã được phép tính điểm (score !== null)
+      if (last6Months.has(monthKey)) {
+        const isExcluded = item.explanation_status === 'accepted';
+        if (!isExcluded && score !== null) {
+          totalAssigned++;
+          if (score >= item.passing_score) totalPassed++;
+        }
+      }
+
+      if (score !== null) {
+
+        if (item.exam_type === 'experience') {
+          if (last6Months.has(monthKey) && score > bestExperience) {
+            bestExperience = score;
+          }
+        }
+        if (item.exam_type !== 'experience') {
+          if (last6Months.has(monthKey)) {
+            if (!monthlyExpertiseScores.has(monthKey)) {
+              monthlyExpertiseScores.set(monthKey, []);
+            }
+            monthlyExpertiseScores.get(monthKey)!.push(score);
+          }
+        }
+      }
+
+      // Chỉ đếm nếu thiếu điểm và chưa từng gửi giải trình (pending/accepted/rejected đều coi đã xử lý)
+      if (isMissedCurrentMonth && !item.explanation_status) {
+        missingOrPending++;
+      }
     });
-  }, [examAssignments, activeExamSubTab]);
 
-  const bestMonthAverage = useMemo(() => {
-    const validMonths = monthlyAverageData.filter(item => item.average !== null) as Array<{
-      month: string;
-      average: number;
-      count: number;
-    }>;
+    let bestMonthAverage = 0;
+    let bestExpertiseMonth = '';
+    monthlyExpertiseScores.forEach((scores, month) => {
+      if (scores.length > 0) {
+        const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+        if (avg > bestMonthAverage) {
+          bestMonthAverage = avg;
+          bestExpertiseMonth = month;
+        }
+      }
+    });
 
-    if (!validMonths.length) return null;
+    // Track month of best experience score (within last 6 months)
+    let bestExperienceMonth = '';
+    let tempBest = 0;
+    examAssignments.forEach(item => {
+      if (item.exam_type !== 'experience') return;
+      const { score } = getEffectiveExamScore(item);
+      if (score === null) return;
+      const date = new Date(item.open_at);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (last6Months.has(monthKey) && score > tempBest) {
+        tempBest = score;
+        bestExperienceMonth = monthKey;
+      }
+    });
 
-    return validMonths.sort((a, b) => {
-      if (b.average !== a.average) return b.average - a.average;
-      return b.month.localeCompare(a.month);
-    })[0];
-  }, [monthlyAverageData]);
-
-  const bestMonthAssignments = useMemo(() => {
-    if (!bestMonthAverage) return [] as ExamAssignment[];
-
-    return examAssignments
-      .filter(item => {
-        if (item.exam_type === 'experience') return false;
-        if (item.score === null) return false;
-
+    // Track all months with missing/pending items (only count if no explanation status at all)
+    const missingMonths = new Set<string>();
+    examAssignments.forEach(item => {
+      const { isMissedCurrentMonth } = getEffectiveExamScore(item);
+      if (isMissedCurrentMonth && !item.explanation_status) {
         const date = new Date(item.open_at);
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        return monthKey === bestMonthAverage.month;
-      })
-      .sort((a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime());
-  }, [examAssignments, bestMonthAverage]);
-
-  const bestExperienceExamScore = useMemo(() => {
-    const last6Set = new Set(last6Months);
-
-    const experienceScores = examAssignments
-      .filter(item => {
-        if (item.exam_type !== 'experience') return false;
-        if (item.score === null) return false;
-
-        const date = new Date(item.open_at);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        return last6Set.has(monthKey);
-      })
-      .sort((a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime());
-
-    if (!experienceScores.length) return null;
-
-    return experienceScores.reduce((best, current) => {
-      const bestScore = Number(best.score ?? -Infinity);
-      const currentScore = Number(current.score ?? -Infinity);
-
-      if (currentScore > bestScore) return current;
-      if (currentScore < bestScore) return best;
-
-      // Tie-breaker: prefer latest exam date when scores are equal.
-      return new Date(current.open_at).getTime() > new Date(best.open_at).getTime() ? current : best;
+        missingMonths.add(monthKey);
+      }
     });
-  }, [examAssignments, last6Months]);
+
+    return {
+      totalAssigned,
+      totalPassed,
+      passRate: totalAssigned > 0 ? ((totalPassed / totalAssigned) * 100).toFixed(1) : '0',
+      avgExpertise: bestMonthAverage > 0 ? bestMonthAverage.toFixed(2) : '0',
+      bestExpertiseMonth,
+      bestExperience,
+      bestExperienceMonth,
+      missingOrPending,
+      missingMonths,
+    };
+  }, [examAssignments]);
+
+  const monthlyOverviewData = useMemo(() => {
+    const dataMap = new Map<string, {
+      expertiseSum: number;
+      expertiseCount: number;
+      experienceScores: number[];
+    }>();
+
+    examAssignments.forEach(item => {
+      const { score } = getEffectiveExamScore(item);
+      if (score === null) return;
+
+      const date = new Date(item.open_at);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+      if (!dataMap.has(monthKey)) {
+        dataMap.set(monthKey, { expertiseSum: 0, expertiseCount: 0, experienceScores: [] });
+      }
+
+      const monthData = dataMap.get(monthKey)!;
+      if (item.exam_type === 'experience') {
+        monthData.experienceScores.push(score);
+      } else {
+        monthData.expertiseSum += score;
+        monthData.expertiseCount += 1;
+      }
+    });
+
+    return Array.from(dataMap.entries())
+      .map(([month, stats]) => ({
+        month,
+        avgExpertise: stats.expertiseCount > 0 ? (stats.expertiseSum / stats.expertiseCount).toFixed(2) : null,
+        maxExperience: stats.experienceScores.length > 0 ? Math.max(...stats.experienceScores) : null
+      }))
+      .sort((a, b) => b.month.localeCompare(a.month)); // Newest first
+  }, [examAssignments]);
+
+  const filteredGroupedExams = useMemo(() => {
+    const now = new Date();
+    const last6MonthsSet = new Set(
+      Array.from({ length: 6 }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      })
+    );
+
+    const filtered = examAssignments.filter(item => {
+      if (scoreSubjectKeyword) {
+        const keyword = scoreSubjectKeyword.toLowerCase();
+        if (!item.subject_code.toLowerCase().includes(keyword) && (!item.set_name || !item.set_name.toLowerCase().includes(keyword))) {
+          return false;
+        }
+      }
+
+      const date = new Date(item.open_at);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+      if (selectedExamMonth === '6months') {
+        if (!last6MonthsSet.has(monthKey)) return false;
+      } else if (selectedExamMonth !== 'all') {
+        if (monthKey !== selectedExamMonth) return false;
+      }
+
+      if (scoreTypeFilter !== 'all' && item.exam_type !== scoreTypeFilter) {
+        return false;
+      }
+
+      if (scoreResultFilter !== 'all') {
+        const { score, isMissedCurrentMonth } = getEffectiveExamScore(item);
+        if (scoreResultFilter === 'passed') {
+          if (score === null || score < item.passing_score) return false;
+        } else if (scoreResultFilter === 'failed') {
+          if (score === null || score >= item.passing_score) return false;
+        } else if (scoreResultFilter === 'missing') {
+          if (!isMissedCurrentMonth) return false;
+        } else if (scoreResultFilter === 'needs_explanation') {
+          if (!isMissedCurrentMonth || item.explanation_status) return false;
+        } else if (scoreResultFilter === 'has_explanation') {
+          if (!item.explanation_status) return false;
+        }
+      }
+
+      return true;
+    });
+
+    const groups: Record<string, typeof filtered> = {};
+    filtered.forEach(item => {
+      const date = new Date(item.open_at);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (!groups[monthKey]) groups[monthKey] = [];
+      groups[monthKey].push(item);
+    });
+
+    return Object.entries(groups)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([month, items]) => ({
+        month,
+        items: items.sort((a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime())
+      }));
+  }, [examAssignments, scoreSubjectKeyword, selectedExamMonth, scoreTypeFilter, scoreResultFilter]);
 
   // Loading state when auto-starting assignment
   if (startId && view === 'list') {
@@ -748,7 +953,7 @@ export default function TeacherAssignmentPage() {
             <div className="h-8 bg-gray-200 rounded w-1/3 mb-2"></div>
             <div className="h-4 bg-gray-200 rounded w-1/2 mb-6"></div>
           </div>
-          
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4" style={{ animationDelay: `${i * 100}ms` }}>
@@ -1122,27 +1327,26 @@ export default function TeacherAssignmentPage() {
   if (view === 'result' && submission) {
     const percentage = formatPercentage(submission.percentage);
     const isPassed = submission.is_passed;
-    
+
     return (
       <PageContainer>
         <div className="w-full">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
             {/* Result Header */}
             <div className="text-center mb-8">
-              <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${
-                isPassed ? 'bg-green-100' : 'bg-red-100'
-              }`}>
+              <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${isPassed ? 'bg-green-100' : 'bg-red-100'
+                }`}>
                 {isPassed ? (
                   <CheckCircle className="w-12 h-12 text-green-600" />
                 ) : (
                   <XCircle className="w-12 h-12 text-red-600" />
                 )}
               </div>
-              
+
               <h2 className="text-3xl font-bold mb-2">
                 {isPassed ? 'Chúc mừng!' : 'Cố gắng thêm nhé!'}
               </h2>
-              
+
               <p className={`text-lg font-semibold ${isPassed ? 'text-green-600' : 'text-red-600'}`}>
                 {isPassed ? '✅ Đạt yêu cầu' : '❌ Chưa đạt yêu cầu'}
               </p>
@@ -1171,23 +1375,21 @@ export default function TeacherAssignmentPage() {
                 </div>
                 <span className="text-2xl font-bold text-blue-600">{percentage}%</span>
               </div>
-              
+
               <div className="w-full bg-gray-200 rounded-full h-3">
-                <div 
-                  className={`h-3 rounded-full transition-all duration-500 ${
-                    isPassed ? 'bg-green-500' : 'bg-red-500'
-                  }`}
+                <div
+                  className={`h-3 rounded-full transition-all duration-500 ${isPassed ? 'bg-green-500' : 'bg-red-500'
+                    }`}
                   style={{ width: `${percentage}%` }}
                 />
               </div>
             </div>
 
             {/* Feedback Message */}
-            <div className={`rounded-xl p-6 mb-6 ${
-              isPassed ? 'bg-green-50 border-2 border-green-200' : 'bg-amber-50 border-2 border-amber-200'
-            }`}>
+            <div className={`rounded-xl p-6 mb-6 ${isPassed ? 'bg-green-50 border-2 border-green-200' : 'bg-amber-50 border-2 border-amber-200'
+              }`}>
               <p className="text-center text-gray-700">
-                {isPassed 
+                {isPassed
                   ? `Xuất sắc! Bạn đã hoàn thành bài tập với ${submission.score}/${currentAssignment?.passing_score} điểm đạt!`
                   : `Bạn cần đạt tối thiểu ${currentAssignment?.passing_score} điểm để hoàn thành bài tập. Hãy thử lại nhé!`
                 }
@@ -1200,7 +1402,7 @@ export default function TeacherAssignmentPage() {
                 if (startId) {
                   router.push('/user/training');
                 } else {
-                  setView('list'); 
+                  setView('list');
                   fetchAvailableAssignments();
                 }
               }}
@@ -1245,10 +1447,10 @@ export default function TeacherAssignmentPage() {
   const filteredExamAssignments = selectedExamMonth === 'all'
     ? examAssignments
     : examAssignments.filter(item => {
-        const date = new Date(item.open_at);
-        const month = `${date.getMonth() + 1}`.padStart(2, '0');
-        return `${date.getFullYear()}-${month}` === selectedExamMonth;
-      });
+      const date = new Date(item.open_at);
+      const month = `${date.getMonth() + 1}`.padStart(2, '0');
+      return `${date.getFullYear()}-${month}` === selectedExamMonth;
+    });
 
   const formatRegistrationType = (type: 'official' | 'additional') =>
     type === 'official' ? 'Chính thức' : 'Bổ sung';
@@ -1256,7 +1458,7 @@ export default function TeacherAssignmentPage() {
   const getExamStatusLabel = (item: ExamAssignment) => {
     const now = new Date();
     const closeAt = new Date(item.close_at);
-    if (item.assignment_status === 'expired' || closeAt < now) return 'Quá hạn';
+    if (item.assignment_status === 'expired' || closeAt < now) return 'Đã đóng';
     if (item.assignment_status === 'submitted') return 'Đã nộp';
     if (item.assignment_status === 'graded') return 'Đã chấm';
     if (item.assignment_status === 'in_progress') return 'Đang làm';
@@ -1265,7 +1467,7 @@ export default function TeacherAssignmentPage() {
 
   const getExamStatusClass = (item: ExamAssignment) => {
     const status = getExamStatusLabel(item);
-    if (status === 'Quá hạn') return 'bg-red-100 text-red-700 border-red-300';
+    if (status === 'Đã đóng') return 'bg-red-100 text-red-700 border-red-300';
     if (status === 'Đã nộp' || status === 'Đã chấm') return 'bg-green-100 text-green-700 border-green-300';
     return 'bg-blue-100 text-blue-700 border-blue-300';
   };
@@ -1278,7 +1480,25 @@ export default function TeacherAssignmentPage() {
 
   return (
     <PageContainer>
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto assignments-page">
+        <style>{`
+          .assignments-page button, 
+          .assignments-page a, 
+          .assignments-page [role="button"],
+          .assignments-page select,
+          .assignments-page label,
+          .assignments-page summary,
+          .assignments-page input[type="button"],
+          .assignments-page input[type="submit"],
+          .assignments-page input[type="checkbox"],
+          .assignments-page input[type="radio"],
+          .assignments-page input[type="file"],
+          .assignments-page div[onClick],
+          .assignments-page span[onClick],
+          .assignments-page .fixed.inset-0.bg-opacity-60 {
+            cursor: pointer !important;
+          }
+        `}</style>
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Bài tập của tôi</h1>
           <p className="text-gray-600">Danh sách các bài tập được giao cho bạn</p>
@@ -1303,200 +1523,364 @@ export default function TeacherAssignmentPage() {
             </div>
           </div>
         ) : activeMainTab === 'scores' ? (
-          <div key="scores" className="mt-6 space-y-4 animate-tab-enter">
-            {/* ─── Sub-tabs: Điểm cao nhất + từng tháng ─── */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b border-gray-200 scrollbar-hide">
+          <div key="scores" className="mt-6 space-y-6 animate-tab-enter">
+            {/* 1. General Overview Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <button
-                onClick={() => setActiveExamSubTab('best')}
-                className={`flex shrink-0 items-center gap-1.5 rounded-t-md px-4 py-2 text-sm font-semibold transition-colors ${
-                  activeExamSubTab === 'best'
-                    ? 'border-b-2 border-amber-500 text-amber-700 bg-amber-50'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                }`}
+                onClick={() => setShowPassRateModal(true)}
+                className="text-left bg-white rounded-xl shadow-sm border border-gray-200 p-4 transition-all hover:border-blue-300 hover:shadow-md ring-offset-1"
               >
-                <Trophy className="h-4 w-4" />
-                Điểm cao nhất
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-gray-700">Tỉ lệ đạt</h3>
+                  <span className="ml-auto text-[10px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded-full font-semibold border border-blue-100">Xem chi tiết</span>
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{scoreStats.passRate}%</p>
+                <p className="text-xs text-gray-500 mt-1">{scoreStats.totalPassed} / {scoreStats.totalAssigned} bài trong 6 tháng gần đây</p>
               </button>
-              {examSubMonthTabs.map(ym => (
-                <button
-                  key={ym}
-                  onClick={() => setActiveExamSubTab(ym)}
-                  className={`shrink-0 rounded-t-md px-4 py-2 text-sm font-semibold transition-colors ${
-                    activeExamSubTab === ym
-                      ? 'border-b-2 border-blue-500 text-blue-700 bg-blue-50'
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  {formatMonthLabel(ym)}
-                </button>
-              ))}
+
+              <button
+                onClick={() => toggleStatCard('expertise')}
+                className={`text-left bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 ${activeStatCard === 'expertise' ? 'border-purple-400 ring-2 ring-purple-300' : 'border-gray-200 hover:border-purple-200'}`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`p-2 rounded-lg ${activeStatCard === 'expertise' ? 'bg-purple-200 text-purple-700' : 'bg-purple-100 text-purple-600'}`}>
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-gray-700">TB Chuyên môn</h3>
+                  {activeStatCard === 'expertise' && <span className="ml-auto text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded-full font-semibold">Đang lọc</span>}
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{scoreStats.avgExpertise}</p>
+                <p className="text-xs text-gray-500 mt-1">Tháng cao nhất (6 tháng)</p>
+              </button>
+
+              <button
+                onClick={() => toggleStatCard('experience')}
+                className={`text-left bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 ${activeStatCard === 'experience' ? 'border-green-400 ring-2 ring-green-300' : 'border-gray-200 hover:border-green-200'}`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`p-2 rounded-lg ${activeStatCard === 'experience' ? 'bg-green-200 text-green-700' : 'bg-green-100 text-green-600'}`}>
+                    <Trophy className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-gray-700">Điểm QT - KN trải nghiệm</h3>
+                  {activeStatCard === 'experience' && <span className="ml-auto text-[10px] bg-green-100 text-green-600 px-1.5 py-0.5 rounded-full font-semibold">Đang lọc</span>}
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{scoreStats.bestExperience}</p>
+                <p className="text-xs text-gray-500 mt-1">Trong 6 tháng gần nhất</p>
+              </button>
+
+              <button
+                onClick={() => toggleStatCard('missing')}
+                className={`text-left bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 ${activeStatCard === 'missing' ? 'border-amber-400 ring-2 ring-amber-300' : 'border-gray-200 hover:border-amber-200'}`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`p-2 rounded-lg ${activeStatCard === 'missing' ? 'bg-amber-200 text-amber-700' : 'bg-amber-100 text-amber-600'}`}>
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-gray-700">Cần giải trình</h3>
+                  {activeStatCard === 'missing' && <span className="ml-auto text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full font-semibold">Đang lọc</span>}
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{scoreStats.missingOrPending}</p>
+                <p className="text-xs text-gray-500 mt-1">Bài thi cần giải trình</p>
+              </button>
             </div>
 
+            {/* 1.5. Monthly Overview Timeline */}
+            {monthlyOverviewData.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-blue-500" />
+                  Tổng quan trạng thái theo tháng (Toàn thời gian)
+                </h3>
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x">
+                  {monthlyOverviewData.map((data) => {
+                    const now = new Date();
+                    const last6MonthsSet = new Set(
+                      Array.from({ length: 6 }, (_, i) => {
+                        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                      })
+                    );
+                    const isExpired = !last6MonthsSet.has(data.month);
+                    const isSelected = selectedExamMonth === data.month;
+
+                    // Stat card highlight logic
+                    const isExpertiseHighlight = activeStatCard === 'expertise' && data.month === scoreStats.bestExpertiseMonth;
+                    const isExperienceHighlight = activeStatCard === 'experience' && data.month === scoreStats.bestExperienceMonth;
+                    const isMissingHighlight = activeStatCard === 'missing' && scoreStats.missingMonths.has(data.month);
+                    const isStatHighlighted = isExpertiseHighlight || isExperienceHighlight || isMissingHighlight;
+                    const statHighlightClass = isExpertiseHighlight
+                      ? 'border-purple-400 ring-2 ring-purple-200 bg-purple-50 shadow-md'
+                      : isExperienceHighlight
+                        ? 'border-green-400 ring-2 ring-green-200 bg-green-50 shadow-md'
+                        : isMissingHighlight
+                          ? 'border-amber-400 ring-2 ring-amber-200 bg-amber-50 shadow-md'
+                          : '';
+
+                    return (
+                      <div
+                        key={data.month}
+                        className={`shrink-0 min-w-[160px] border rounded-lg p-3 snap-start transition-all cursor-pointer ${isStatHighlighted
+                          ? statHighlightClass
+                          : isSelected
+                            ? isExpired
+                              ? 'border-gray-400 bg-gray-100 shadow-sm'
+                              : 'border-blue-400 bg-blue-50 shadow-sm'
+                            : isExpired
+                              ? 'border-gray-200 bg-gray-50/60 opacity-70 hover:opacity-90 hover:border-gray-300'
+                              : 'border-gray-100 bg-gray-50 hover:border-blue-200 hover:bg-white'
+                          }`}
+                        onClick={() => setSelectedExamMonth(isSelected ? '6months' : data.month)}
+                      >
+                        <div className={`text-xs font-semibold mb-2 border-b pb-1 text-center flex items-center justify-center gap-1.5 ${isExpertiseHighlight ? 'text-purple-700 border-purple-200'
+                          : isExperienceHighlight ? 'text-green-700 border-green-200'
+                            : isMissingHighlight ? 'text-amber-700 border-amber-200'
+                              : isExpired ? 'text-gray-400 border-gray-200'
+                                : 'text-gray-600 border-gray-200'
+                          }`}>
+                          {formatMonthLabel(data.month)}
+                          {isExpired && !isStatHighlighted && <span className="text-[9px] bg-gray-200 text-gray-500 px-1 py-0.5 rounded font-normal">Quá hạn</span>}
+                          {isExpertiseHighlight && <span className="text-[9px] bg-purple-200 text-purple-700 px-1 py-0.5 rounded font-semibold">TB tốt nhất</span>}
+                          {isExperienceHighlight && <span className="text-[9px] bg-green-200 text-green-700 px-1 py-0.5 rounded font-semibold">Cao nhất</span>}
+                          {isMissingHighlight && <span className="text-[9px] bg-amber-200 text-amber-700 px-1 py-0.5 rounded font-semibold">Cần GT</span>}
+                        </div>
+                        <div className="space-y-2 text-[11px]">
+                          <div className={`flex justify-between items-center px-2 py-1.5 rounded border ${isExpertiseHighlight ? 'bg-purple-50 border-purple-100'
+                            : isExpired ? 'bg-gray-50 border-gray-100'
+                              : 'bg-white border-gray-100'
+                            }`}>
+                            <span className={`font-medium ${isExpired && !isStatHighlighted ? 'text-gray-400' : 'text-gray-500'}`}>CM Chuyên sâu:</span>
+                            <span className={`font-bold ml-2 text-sm ${isExpertiseHighlight ? 'text-purple-700'
+                              : isExpired ? 'text-gray-400'
+                                : data.avgExpertise ? 'text-purple-700' : 'text-gray-400'
+                              }`}>
+                              {data.avgExpertise ?? '-'}
+                            </span>
+                          </div>
+                          <div className={`flex justify-between items-center px-2 py-1.5 rounded border ${isExperienceHighlight ? 'bg-green-50 border-green-100'
+                            : isExpired ? 'bg-gray-50 border-gray-100'
+                              : 'bg-white border-gray-100'
+                            }`}>
+                            <span className={`font-medium ${isExpired && !isStatHighlighted ? 'text-gray-400' : 'text-gray-500'}`}>QT Trải nghiệm:</span>
+                            <span className={`font-bold ml-2 text-sm ${isExperienceHighlight ? 'text-green-700'
+                              : isExpired ? 'text-gray-400'
+                                : data.maxExperience !== null ? 'text-green-700' : 'text-gray-400'
+                              }`}>
+                              {data.maxExperience ?? '-'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 2. Filter Bar */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col md:flex-row gap-4 items-end transition-all">
+              <div className="w-full md:w-1/4">
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Môn học</label>
+                <input
+                  type="text"
+                  placeholder="Nhập mã môn/bộ đề..."
+                  value={scoreSubjectKeyword}
+                  onChange={(e) => setScoreSubjectKeyword(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="w-full md:w-1/4">
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Tháng</label>
+                <select
+                  value={selectedExamMonth}
+                  onChange={(e) => setSelectedExamMonth(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="6months">6 tháng gần nhất</option>
+                  <option value="all">Tất cả thời gian</option>
+                  {examMonthOptions.map(m => (
+                    <option key={m} value={m}>{formatMonthLabel(m)}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="w-full md:w-1/4">
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Loại kiểm tra</label>
+                <select
+                  value={scoreTypeFilter}
+                  onChange={(e) => setScoreTypeFilter(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">Tất cả</option>
+                  <option value="expertise">Chuyên môn</option>
+                  <option value="experience">Trải nghiệm</option>
+                </select>
+              </div>
+
+              <div className="w-full md:w-1/4">
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Kết quả</label>
+                <div className="flex gap-2 items-center">
+                  <select
+                    value={scoreResultFilter}
+                    onChange={(e) => setScoreResultFilter(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">Tất cả / Bất kỳ</option>
+                    <option value="passed">Đã đạt</option>
+                    <option value="failed">Chưa đạt</option>
+                    <option value="missing">Bỏ lỡ thi</option>
+                    <option value="needs_explanation">Cần giải trình</option>
+                    <option value="has_explanation">Đã giải trình</option>
+                  </select>
+
+                  {(scoreSubjectKeyword || selectedExamMonth !== '6months' || scoreTypeFilter !== 'all' || scoreResultFilter !== 'all') && (
+                    <button
+                      onClick={clearFilters}
+                      title="Xóa tất cả bộ lọc"
+                      className="shrink-0 p-2 text-red-600 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-lg transition-colors border border-red-100"
+                    >
+                      <FilterX className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Detailed Month View */}
             {examLoading ? (
               <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500 shadow-sm">
                 Đang tải danh sách bài thi...
               </div>
-            ) : activeExamSubTab === 'best' ? (
-              /* ─── Tab: Điểm cao nhất 6 tháng ─── */
-              <div key="best" className="animate-tab-enter">
-                <p className="mb-3 text-xs text-gray-500">
-                  Tổng hợp theo tháng trung bình cao nhất trong 6 tháng gần nhất ({formatMonthLabel(last6Months[last6Months.length - 1])} – {formatMonthLabel(last6Months[0])})
-                </p>
-                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                  {bestMonthAverage ? (
-                    <p>
-                      Điểm trung bình cao nhất theo tháng (không tính Kiểm tra quy trình & kỹ năng trải nghiệm):
-                      {' '}
-                      <span className="font-semibold">{bestMonthAverage.average.toFixed(2)}</span>
-                      {' '}
-                      ở
-                      {' '}
-                      <span className="font-semibold">{formatMonthLabel(bestMonthAverage.month)}</span>
-                      {' '}
-                      ({bestMonthAverage.count} bài).
-                    </p>
-                  ) : (
-                    <p>Chưa có dữ liệu điểm chuyên môn để tính điểm trung bình tháng cao nhất.</p>
-                  )}
-                </div>
-
-                {bestMonthAverage ? (
-                  <div className="mb-4 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        <tr>
-                          <th className="px-4 py-3 text-left">Môn học</th>
-                          <th className="px-4 py-3 text-center">Điểm</th>
-                          <th className="px-4 py-3 text-center">Ngày thi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {bestMonthAssignments.length === 0 ? (
-                          <tr>
-                            <td colSpan={3} className="px-4 py-4 text-center text-gray-500">
-                              Không có bài thi chuyên môn trong {formatMonthLabel(bestMonthAverage.month)}.
-                            </td>
-                          </tr>
-                        ) : (
-                          bestMonthAssignments.map(item => (
-                            <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                              <td className="px-4 py-3 font-medium text-gray-900">{item.subject_code}</td>
-                              <td className="px-4 py-3 text-center font-semibold text-gray-900">{item.score}</td>
-                              <td className="px-4 py-3 text-center text-gray-600">{new Date(item.open_at).toLocaleDateString('vi-VN')}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
-
-                {bestExperienceExamScore === null ? (
-                  <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-12 text-center">
-                    <Trophy className="mx-auto mb-3 h-12 w-12 text-gray-300" />
-                    <p className="text-sm text-gray-500">Chưa có điểm Kiểm tra quy trình & kỹ năng trải nghiệm trong 6 tháng qua.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        <tr>
-                          <th className="px-4 py-3 text-left">Kiểm tra quy trình & kỹ năng trải nghiệm</th>
-                          <th className="px-4 py-3 text-center">Điểm</th>
-                          <th className="px-4 py-3 text-center">Ngày thi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        <tr className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 font-medium text-gray-900">{bestExperienceExamScore.subject_code}</td>
-                          <td className="px-4 py-3 text-center font-semibold text-gray-900">{bestExperienceExamScore.score}</td>
-                          <td className="px-4 py-3 text-center text-gray-600">{new Date(bestExperienceExamScore.open_at).toLocaleDateString('vi-VN')}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+            ) : filteredGroupedExams.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
+                <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
+                <p className="text-sm text-gray-500">Không có bài thi nào phù hợp với bộ lọc hiện tại.</p>
               </div>
             ) : (
-              /* ─── Tab: Từng tháng ─── */
-              <div key={activeExamSubTab} className="animate-tab-enter">
-                <p className="mb-3 text-xs text-gray-500">
-                  {assignmentsForSubTab.length} bài thi trong {formatMonthLabel(activeExamSubTab)}
-                </p>
-                {assignmentsForSubTab.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
-                    <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
-                    <p className="text-sm text-gray-500">Không có bài thi nào trong tháng này.</p>
-                  </div>
-                ) : (
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {assignmentsForSubTab.map((item) => {
-                      const now = new Date();
-                      const closeAt = new Date(item.close_at);
-                      const isExpiredZero = (item.assignment_status === 'expired' || closeAt < now) && Number(item.score || 0) === 0;
+              <div className="space-y-6">
+                {filteredGroupedExams.map((group, index) => {
+                  const isExpanded = expandedMonths.has(group.month) || (expandedMonths.size === 0 && (selectedExamMonth === '6months' || selectedExamMonth === 'all') && index === 0);
 
-                      return (
-                        <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                          <div className="mb-2 flex items-start justify-between gap-2">
-                            <h3 className="line-clamp-2 text-sm font-bold text-gray-900">{item.subject_code}</h3>
-                            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getExamStatusClass(item)}`}>
-                              {getExamStatusLabel(item)}
-                            </span>
+                  return (
+                    <div key={group.month} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden mb-4">
+                      <div
+                        className="flex items-center justify-between cursor-pointer group p-4 sm:p-6 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+                        onClick={() => toggleMonthExpand(group.month)}
+                      >
+                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-3">
+                          <div className="p-2 bg-blue-50 rounded-lg text-blue-600 group-hover:scale-105 transition-transform border border-blue-100">
+                            <Clock className="w-5 h-5" />
                           </div>
+                          {formatMonthLabel(group.month)}
+                          <span className="text-xs font-medium text-gray-500 bg-white border border-gray-200 px-2.5 py-1 rounded-full ml-2 shadow-sm">
+                            {group.items.length} bài
+                          </span>
+                        </h3>
+                        <button className="p-2 rounded-full text-gray-400 group-hover:bg-white group-hover:text-gray-700 transition-colors border border-transparent group-hover:border-gray-200 shadow-sm">
+                          {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                        </button>
+                      </div>
 
-                          <div className="mb-3 space-y-1 text-xs text-gray-600">
-                            <p><span className="font-medium">Loại:</span> {formatRegistrationType(item.registration_type)}</p>
-                            <p><span className="font-medium">Bộ đề:</span> {item.set_code} – {item.set_name}</p>
-                            <p><span className="font-medium">Mở:</span> {new Date(item.open_at).toLocaleString('vi-VN')}</p>
-                            <p><span className="font-medium">Đóng:</span> {new Date(item.close_at).toLocaleString('vi-VN')}</p>
-                            <p>
-                              <span className="font-medium">Điểm: </span>
-                              {item.score === null ? (
-                                <span className="text-gray-400">Chưa có</span>
-                              ) : (
-                                <span className={`font-bold ${item.score >= item.passing_score ? 'text-green-600' : 'text-red-600'}`}>
-                                  {item.score} / {item.total_points}
-                                  {' '}
-                                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${item.score >= item.passing_score ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                                    {item.score >= item.passing_score ? 'Đạt' : 'Chưa đạt'}
-                                  </span>
-                                </span>
-                              )}
-                            </p>
+                      {isExpanded && (
+                        <div className="p-4 sm:p-6 pt-2 border-t border-gray-100 animate-tab-enter">
+                          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            {group.items.map(item => {
+                              const now = new Date();
+                              const closeAt = new Date(item.close_at);
+                              const { score: effectiveScore, isMissedCurrentMonth } = getEffectiveExamScore(item);
+
+                              return (
+                                <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:shadow-lg transition-all flex flex-col h-full">
+                                  <div className="mb-3 flex items-start justify-between gap-2">
+                                    <h4 className="line-clamp-2 text-base font-bold text-gray-900">{item.subject_code}</h4>
+                                    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getExamStatusClass(item)}`}>
+                                      {getExamStatusLabel(item)}
+                                    </span>
+                                  </div>
+
+                                  <div className="mb-4 space-y-2 text-sm text-gray-600 flex-1">
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-500">Loại:</span>
+                                      <span className="font-medium text-gray-900">{formatRegistrationType(item.registration_type)} ({item.exam_type === 'expertise' ? 'CC' : 'TN'})</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-500">Mở:</span>
+                                      <span>{new Date(item.open_at).toLocaleDateString('vi-VN')} {new Date(item.open_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-500">Đóng:</span>
+                                      <span>{new Date(item.close_at).toLocaleDateString('vi-VN')} {new Date(item.close_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center bg-gray-50 border border-gray-100 p-2.5 rounded-lg mt-3">
+                                      <span className="font-semibold text-gray-700">Điểm số:</span>
+                                      {item.explanation_status === 'accepted' ? (
+                                        <span className="text-blue-600 italic text-sm font-medium">Miễn thi (Đã duyệt GT)</span>
+                                      ) : effectiveScore === null ? (
+                                        <span className="text-gray-400 italic text-sm">Chưa có</span>
+                                      ) : (
+                                        <span className={`font-bold text-base flex items-center gap-2 ${effectiveScore >= item.passing_score ? 'text-green-600' : 'text-red-600'}`}>
+                                          {effectiveScore} <span className="text-xs font-normal text-gray-400">/ {item.total_points}</span>
+                                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${effectiveScore >= item.passing_score ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                            {effectiveScore >= item.passing_score ? 'ĐẠT' : 'KHÔNG ĐẠT'}
+                                          </span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-auto pt-4 border-t border-gray-100">
+                                    {item.can_take ? (
+                                      <Link
+                                        href={`/user/assignments/exam/${item.id}`}
+                                        className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
+                                      >
+                                        {item.score !== null || item.assignment_status === 'submitted' ? 'Làm lại bài' : 'Bắt đầu làm bài'}
+                                      </Link>
+                                    ) : isMissedCurrentMonth && !item.explanation_status ? (
+                                      <Link
+                                        href={`/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`}
+                                        className="inline-flex w-full items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition cursor-pointer"
+                                      >
+                                        Giải trình (Lỡ bài)
+                                      </Link>
+                                    ) : item.explanation_status ? (
+                                      item.explanation_status === 'rejected' ? (
+                                        <Link
+                                          href={`/user/giaitrinh`}
+                                          title={item.admin_note || 'Nhấn để xem chi tiết'}
+                                          className="inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold border bg-red-50 text-red-700 border-red-200 hover:bg-red-100 transition-colors cursor-pointer"
+                                        >
+                                          Giải trình: {formatExplanationStatus(item.explanation_status)}
+                                        </Link>
+                                      ) : (
+                                        <div className={`inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold border ${item.explanation_status === 'accepted' ? 'bg-green-50 text-green-700 border-green-200' :
+                                          'bg-amber-50 text-amber-700 border-amber-200'
+                                          }`}>
+                                          Giải trình: {formatExplanationStatus(item.explanation_status)}
+                                        </div>
+                                      )
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedExamInfo(item)}
+                                        className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 border border-blue-100 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
+                                      >
+                                        {new Date(item.open_at) > now ? 'Chưa tới giờ mở' : 'Chi tiết bài thi'}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
-
-                          {item.can_take ? (
-                            <Link
-                              href={`/user/assignments/exam/${item.id}`}
-                              className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                            >
-                              {item.score !== null || item.assignment_status === 'submitted' ? 'Làm lại bài' : 'Bắt đầu làm bài'}
-                            </Link>
-                          ) : isExpiredZero && !item.explanation_status ? (
-                            <Link
-                              href={`/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`}
-                              className="inline-flex w-full items-center justify-center rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
-                            >
-                              Giải trình
-                            </Link>
-                          ) : item.explanation_status ? (
-                            <div className="inline-flex w-full items-center justify-center rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-700">
-                              Đã giải trình ({item.explanation_status})
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedExamInfo(item)}
-                              className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
-                            >
-                              {new Date(item.open_at) > now ? 'Chưa tới giờ mở' : 'Thông tin bài thi'}
-                            </button>
-                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1550,16 +1934,14 @@ export default function TeacherAssignmentPage() {
                   </div>
 
                   {assignment.recent_submission && (
-                    <div className={`mb-2.5 p-2.5 rounded-lg border ${
-                      assignment.recent_submission.is_passed
-                        ? 'bg-green-50 border-green-300'
-                        : 'bg-amber-50 border-amber-300'
-                    }`}>
+                    <div className={`mb-2.5 p-2.5 rounded-lg border ${assignment.recent_submission.is_passed
+                      ? 'bg-green-50 border-green-300'
+                      : 'bg-amber-50 border-amber-300'
+                      }`}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[10px] font-semibold text-gray-700">Điểm gần nhất:</span>
-                        <span className={`text-lg font-bold ${
-                          assignment.recent_submission.is_passed ? 'text-green-600' : 'text-amber-600'
-                        }`}>
+                        <span className={`text-lg font-bold ${assignment.recent_submission.is_passed ? 'text-green-600' : 'text-amber-600'
+                          }`}>
                           {assignment.recent_submission.score}
                           <span className="text-xs text-gray-500">/{assignment.total_points}</span>
                         </span>
@@ -1570,11 +1952,10 @@ export default function TeacherAssignmentPage() {
                   <Button
                     onClick={() => startAssignment(assignment)}
                     disabled={assignment.status !== 'published'}
-                    className={`w-full py-2 text-sm font-semibold h-auto ${
-                      assignment.status === 'published'
-                        ? 'shadow-sm hover:shadow-md'
-                        : 'bg-gray-200 text-gray-500 hover:bg-gray-200'
-                    }`}
+                    className={`w-full py-2 text-sm font-semibold h-auto cursor-pointer disabled:cursor-not-allowed ${assignment.status === 'published'
+                      ? 'shadow-sm hover:shadow-md'
+                      : 'bg-gray-200 text-gray-500 hover:bg-gray-200'
+                      }`}
                   >
                     {assignment.status === 'published' ? (assignment.recent_submission ? 'Làm lại' : 'Bắt đầu') : 'Chưa mở'}
                   </Button>
@@ -1583,6 +1964,97 @@ export default function TeacherAssignmentPage() {
             ))}
           </div>
         )}
+
+        {/* Pass Rate Drill-down Modal */}
+        {(() => {
+          const now = new Date();
+          const last6Months = new Set(
+            Array.from({ length: 6 }, (_, i) => {
+              const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            })
+          );
+          const passRateItems = examAssignments.filter(item => {
+            const date = new Date(item.open_at);
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            const isExcluded = item.explanation_status === 'accepted';
+            const { score } = getEffectiveExamScore(item);
+            return last6Months.has(monthKey) && !isExcluded && score !== null;
+          }).sort((a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime());
+
+          const passed = passRateItems.filter(item => {
+            const { score } = getEffectiveExamScore(item);
+            return score !== null && score >= item.passing_score;
+          }).length;
+
+          return (
+            <Modal
+              isOpen={showPassRateModal}
+              onClose={() => setShowPassRateModal(false)}
+              title="Chi tiết Tỉ lệ đạt"
+              subtitle={`${passed} / ${passRateItems.length} bài đạt yêu cầu trong 6 tháng gần nhất`}
+              maxWidth="xl"
+              footer={
+                <div className="flex justify-end">
+                  <Button variant="outline" onClick={() => setShowPassRateModal(false)}>Đóng</Button>
+                </div>
+              }
+            >
+              {passRateItems.length === 0 ? (
+                <div className="py-10 text-center text-gray-400">
+                  <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm">Không có bài thi nào được tính trong 6 tháng gần nhất.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                  {passRateItems.map(item => {
+                    const { score: effectiveScore } = getEffectiveExamScore(item);
+                    const isPassed = effectiveScore !== null && effectiveScore >= item.passing_score;
+                    const date = new Date(item.open_at);
+                    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    return (
+                      <div
+                        key={item.id}
+                        className={`flex items-center gap-3 rounded-lg border px-4 py-3 transition-all ${isPassed
+                          ? 'border-green-200 bg-green-50'
+                          : 'border-red-200 bg-red-50'
+                          }`}
+                      >
+                        {/* Pass/Fail icon */}
+                        <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isPassed ? 'bg-green-200 text-green-700' : 'bg-red-200 text-red-700'
+                          }`}>
+                          {isPassed
+                            ? <CheckCircle className="w-4 h-4" />
+                            : <XCircle className="w-4 h-4" />}
+                        </div>
+
+                        {/* Subject & type */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm text-gray-900 truncate">{item.subject_code}</p>
+                          <p className="text-xs text-gray-500">
+                            {formatMonthLabel(monthKey)} · {item.exam_type === 'expertise' ? 'Chuyên môn' : 'Trải nghiệm'} · {item.registration_type === 'official' ? 'Chính thức' : 'Bổ sung'}
+                          </p>
+                        </div>
+
+                        {/* Score */}
+                        <div className="shrink-0 text-right">
+                          <p className={`text-base font-bold ${isPassed ? 'text-green-700' : 'text-red-700'
+                            }`}>
+                            {effectiveScore} <span className="text-xs font-normal text-gray-400">/ {item.total_points}</span>
+                          </p>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isPassed ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'
+                            }`}>
+                            {isPassed ? 'ĐẠT' : 'KHÔNG ĐẠT'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Modal>
+          );
+        })()}
 
         <Modal
           isOpen={selectedExamInfo !== null}
@@ -1625,12 +2097,20 @@ export default function TeacherAssignmentPage() {
                   <p className="text-xs text-gray-500">Đóng bài</p>
                   <p className="font-semibold text-gray-900">{new Date(selectedExamInfo.close_at).toLocaleString('vi-VN')}</p>
                 </div>
+                <div className="rounded-lg bg-gray-50 p-3 sm:col-span-2">
+                  <p className="text-xs text-gray-500">Tình trạng giải trình</p>
+                  <p className="font-semibold text-gray-900">{formatExplanationStatus(selectedExamInfo.explanation_status)}</p>
+                </div>
               </div>
 
               <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
                 <p className="text-xs text-blue-700">Điểm</p>
                 <p className="text-base font-bold text-blue-900">
-                  {selectedExamInfo.score === null ? 'Chưa có điểm' : `${selectedExamInfo.score} / ${selectedExamInfo.total_points}`}
+                  {(() => {
+                    const { score } = getEffectiveExamScore(selectedExamInfo);
+                    if (score === null) return 'Chưa có điểm';
+                    return `${score} / ${selectedExamInfo.total_points}`;
+                  })()}
                 </p>
               </div>
             </div>

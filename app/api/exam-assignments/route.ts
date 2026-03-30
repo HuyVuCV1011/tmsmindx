@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 async function ensureAssignmentsFromRegistrations(teacherCodes: string[]) {
   if (!teacherCodes.length) return;
 
@@ -161,10 +163,21 @@ export async function GET(request: NextRequest) {
         es.status AS set_status,
         es.valid_from AS set_valid_from,
         es.valid_to AS set_valid_to,
-        ex.status AS explanation_status
+        COALESCE(ex.status::text, old_ex.status::text) AS explanation_status,
+        COALESCE(ex.admin_note, old_ex.admin_note) AS admin_note
       FROM teacher_exam_assignments tea
       LEFT JOIN exam_sets es ON es.id = tea.selected_set_id
       LEFT JOIN exam_explanations ex ON ex.assignment_id = tea.id
+      LEFT JOIN LATERAL (
+        SELECT status, admin_note
+        FROM explanations
+        WHERE lms_code = tea.teacher_code
+          AND subject = tea.subject_code
+          AND EXTRACT(MONTH FROM test_date) = EXTRACT(MONTH FROM tea.open_at)
+          AND EXTRACT(YEAR FROM test_date) = EXTRACT(YEAR FROM tea.open_at)
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) old_ex ON TRUE
       WHERE TRUE
     `;
 
@@ -195,6 +208,22 @@ export async function GET(request: NextRequest) {
       values.push(month);
       query += `
         AND TO_CHAR(tea.open_at, 'YYYY-MM') = $${values.length}
+      `;
+    }
+
+    const since = searchParams.get('since');
+    if (since) {
+      values.push(since);
+      query += `
+        AND tea.open_at >= $${values.length}::date
+      `;
+    }
+
+    const before = searchParams.get('before');
+    if (before) {
+      values.push(before);
+      query += `
+        AND tea.open_at < $${values.length}::date
       `;
     }
 

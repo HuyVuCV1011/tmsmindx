@@ -1,12 +1,12 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
-import { AlertCircle, ArrowLeft, CheckCircle, Clock, Send, XCircle } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle, Clock, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Button } from '@/components/ui/button';
 
 interface ExamQuestion {
   id: number;
