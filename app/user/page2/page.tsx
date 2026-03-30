@@ -5,7 +5,7 @@ interface PageProps {
   searchParams: Promise<{ doc?: string | string[] }>;
 }
 
-export default async function Page2({ searchParams }: PageProps) {
+export default async function UserPage2({ searchParams }: PageProps) {
   const params = await searchParams;
   const docs = await loadK12Docs();
   const rawDoc = params.doc;
@@ -13,7 +13,7 @@ export default async function Page2({ searchParams }: PageProps) {
 
   return (
     <K12DocsClient
-      basePath="/admin/page2"
+      basePath="/user/page2"
       pageTitle="Quy trình quy định K12 Teaching"
       tree={docs.tree}
       documents={docs.documents}

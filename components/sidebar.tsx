@@ -3,7 +3,7 @@
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
-import { CalendarDays, ChevronDown, DollarSign, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, DollarSign, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -39,7 +39,7 @@ export function Sidebar() {
   const adminMenuItems = [
     { href: "/admin/dashboard", label: "Dashboard", icon: Home },
     { href: "/admin/page1", label: "Thông tin GV", icon: LayoutDashboard },
-    { href: "/admin/page2", label: "màn hình 2", icon: Users },
+    { href: "/admin/page2", label: "Quy trình quy định K12 Teaching", icon: BookOpen },
     { href: "/admin/page3", label: "Màn hình 3", icon: Users },
     { href: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện", icon: CalendarDays },
     {
@@ -77,6 +77,7 @@ export function Sidebar() {
   const userMenuItems = [
     { href: "/user/truyenthong", label: "Thông tin mới", icon: Megaphone },
     { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
+    { href: "/user/page2", label: "Quy trình quy định K12 Teaching", icon: BookOpen },
     { href: "/user/hoat-dong-hang-thang", label: "CÁC HOẠT ĐỘNG HÀNG THÁNG", icon: CalendarDays },
     { href: "/user/training", label: "Đào tạo nâng cao", icon: GraduationCap },
     { href: "/user/assignments", label: "My Assignments", icon: FileText },
