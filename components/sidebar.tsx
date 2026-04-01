@@ -5,7 +5,7 @@ import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
 import { CalendarDays, ChevronDown, DollarSign, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 export function Sidebar() {
@@ -13,6 +13,7 @@ export function Sidebar() {
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const { user, logout } = useAuth();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // Load expanded menus from localStorage on mount
   useEffect(() => {
@@ -49,8 +50,9 @@ export function Sidebar() {
           label: "Quản lý Deal Lương",
           icon: DollarSign,
           submenu: [
-            { href: "/admin/deal-luong", label: "Danh sách Deal Lương" }, 
-            { href: "/admin/tao-deal-luong", label: "Tạo Deal Lương Mới" },
+            { href: "/admin/deal-luong?type=salary_deal", label: "Thỏa thuận lương " },
+            { href: "/admin/deal-luong?type=salary_reduction", label: "Hạ lương" },
+            { href: "/admin/deal-luong?type=bonus", label: "Bonus" },
           ]
         },
       ]
@@ -106,6 +108,10 @@ export function Sidebar() {
 
   const isPathMatch = (href?: string) => {
     if (!href) return false;
+    if (href.includes('?')) {
+      const [hrefPath, hrefSearch] = href.split('?');
+      return pathname === hrefPath && searchParams.toString() === hrefSearch;
+    }
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
@@ -122,7 +128,13 @@ export function Sidebar() {
 
     if (user.role === 'super_admin') return adminMenuItems;
 
-    const permissions = user.permissions || [];
+    // manager và admin luôn có quyền truy cập deal-luong
+    const DEAL_LUONG_ROUTES = ['/admin/deal-luong', '/admin/tao-deal-luong'];
+    const basePermissions = user.permissions || [];
+    const permissions = ['manager', 'admin'].includes(user.role)
+      ? Array.from(new Set([...basePermissions, ...DEAL_LUONG_ROUTES]))
+      : basePermissions;
+
     if (permissions.length === 0) return [];
 
     const filterMenuItemsByPermissions = (items: any[]): any[] => {
@@ -135,7 +147,7 @@ export function Sidebar() {
             }
           }
 
-          if (item?.href && permissions.some((p) => item.href === p || item.href.startsWith(`${p}/`))) {
+          if (item?.href && permissions.some((p) => { const itemPath = item.href.split('?')[0]; return itemPath === p || itemPath.startsWith(`${p}/`); })) {
             return item;
           }
 
