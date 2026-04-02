@@ -19,6 +19,7 @@ export const AVAILABLE_ROUTES = [
     { path: "/admin/assignments", label: "Bài tập", group: "Đào tạo" },
     { path: "/admin/training-studio", label: "Training Studio", group: "Đào tạo" },
     { path: "/admin/giaitrinh", label: "QL Giải trình", group: "Nội dung" },
+    { path: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", group: "Nội dung" },
     { path: "/admin/truyenthong", label: "QL truyền thông", group: "Nội dung" },
     { path: "/admin/database", label: "Database Manager", group: "Hệ thống" },
     { path: "/admin/user-management", label: "QL tài khoản", group: "Hệ thống" },

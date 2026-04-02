@@ -70,6 +70,7 @@ export function Sidebar() {
     },
     { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
     { href: "/admin/giaitrinh", label: "Quản lý Giải trình", icon: MessageSquare },
+    { href: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", icon: FileText },
     { href: "/admin/database", label: "Database Manager", icon: LayoutDashboard },
     { href: "/admin/user-management", label: "Quản lý tài khoản", icon: Shield },
   ];
@@ -82,6 +83,14 @@ export function Sidebar() {
     { href: "/user/training", label: "Đào tạo nâng cao", icon: GraduationCap },
     { href: "/user/assignments", label: "My Assignments", icon: FileText },
     { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra", icon: MessageSquare },
+    {
+      label: "Quy trình xin nghỉ 1 buổi",
+      icon: Settings,
+      submenu: [
+        { href: "/user/xin-nghi-mot-buoi", label: "Gửi yêu cầu xin nghỉ" },
+        { href: "/user/nhan-lop-1-buoi", label: "Danh sách nhận lớp 1 buổi" },
+      ]
+    },
   ];
 
   // Filter admin menu items based on user permissions

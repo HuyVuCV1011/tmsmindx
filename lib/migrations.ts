@@ -804,6 +804,66 @@ const migrations: Migration[] = [
       ON CONFLICT DO NOTHING;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V37: Leave requests workflow (xin nghi 1 buoi)
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V37_leave_requests_workflow',
+    version: 37,
+    sql: `
+      CREATE TABLE IF NOT EXISTS leave_requests (
+        id SERIAL PRIMARY KEY,
+        teacher_name VARCHAR(255) NOT NULL,
+        lms_code VARCHAR(100) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        campus VARCHAR(255) NOT NULL,
+        leave_date DATE NOT NULL,
+        reason TEXT NOT NULL,
+        class_code VARCHAR(100),
+        student_count VARCHAR(50),
+        class_time VARCHAR(255),
+        leave_session VARCHAR(255),
+        has_substitute BOOLEAN DEFAULT FALSE,
+        substitute_teacher VARCHAR(255),
+        substitute_email VARCHAR(255),
+        class_status TEXT,
+        email_subject TEXT,
+        email_body TEXT,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending_admin'
+          CHECK (status IN (
+            'pending_admin',
+            'approved_unassigned',
+            'approved_assigned',
+            'rejected',
+            'substitute_confirmed'
+          )),
+        admin_note TEXT,
+        admin_name VARCHAR(255),
+        admin_email VARCHAR(255),
+        substitute_confirmed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_leave_requests_email ON leave_requests(email);
+      CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status);
+      CREATE INDEX IF NOT EXISTS idx_leave_requests_substitute_email ON leave_requests(substitute_email);
+      CREATE INDEX IF NOT EXISTS idx_leave_requests_created_at ON leave_requests(created_at DESC);
+
+      DROP TRIGGER IF EXISTS trg_leave_requests_updated_at ON leave_requests;
+      CREATE TRIGGER trg_leave_requests_updated_at
+      BEFORE UPDATE ON leave_requests
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+
+      INSERT INTO role_permissions (role_code, route_path)
+      VALUES
+        ('AD', '/admin/xin-nghi-mot-buoi'),
+        ('TM', '/admin/xin-nghi-mot-buoi')
+      ON CONFLICT DO NOTHING;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========
