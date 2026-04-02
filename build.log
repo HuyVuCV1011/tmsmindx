@@ -1,0 +1,259 @@
+
+> teachingms@0.1.0 build
+> next build
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   ▲ Next.js 16.0.10 (Turbopack)
+   - Environments: .env.local, .env
+   - Experiments (use with caution):
+     ⨯ webpackBuildWorker
+
+   Creating an optimized production build ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ✓ Compiled successfully in 8.9s
+   Running TypeScript ...
+   Collecting page data using 15 workers ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+✅ Gmail transporter configured successfully
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+   Generating static pages using 15 workers (0/117) ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+❌ Migration system error (Connection or Query failed): remaining connection slots are reserved for roles with the SUPERUSER attribute
+✅ Database is up to date. No new migrations.
+
+⚠️ 1 migration(s) had errors (may be already existing tables).
+
+❌ Migration system error (Connection or Query failed): remaining connection slots are reserved for roles with the SUPERUSER attribute
+✅ Database is up to date. No new migrations.
+
+⚠️ 1 migration(s) had errors (may be already existing tables).
+
+❌ Migration system error (Connection or Query failed): remaining connection slots are reserved for roles with the SUPERUSER attribute
+✅ Database is up to date. No new migrations.
+
+⚠️ 1 migration(s) had errors (may be already existing tables).
+
+
+🔄 Running database migrations...
+
+🔄 Running database migrations...
+   Generating static pages using 15 workers (29/117) 
+✅ Gmail transporter configured successfully
+   Generating static pages using 15 workers (58/117) 
+✅ Database is up to date. No new migrations.
+
+✅ Database is up to date. No new migrations.
+
+✅ Database is up to date. No new migrations.
+
+✅ Database is up to date. No new migrations.
+
+✅ Database is up to date. No new migrations.
+
+✅ Database is up to date. No new migrations.
+
+✅ Database is up to date. No new migrations.
+
+✅ Database is up to date. No new migrations.
+
+✅ Database is up to date. No new migrations.
+
+✅ Database is up to date. No new migrations.
+
+
+🔄 Running database migrations...
+   Generating static pages using 15 workers (87/117) 
+✅ Database is up to date. No new migrations.
+
+✅ Database is up to date. No new migrations.
+
+ ✓ Generating static pages using 15 workers (117/117) in 2.2s
+   Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin/assignment-questions
+├ ○ /admin/assignments
+├ ○ /admin/dashboard
+├ ○ /admin/database
+├ ○ /admin/database-migration
+├ ○ /admin/deal-luong
+├ ○ /admin/giaitrinh
+├ ○ /admin/page1
+├ ƒ /admin/page2
+├ ○ /admin/page2/custom
+├ ○ /admin/page2/manage
+├ ○ /admin/page3
+├ ○ /admin/page4/danh-sach-dang-ky
+├ ○ /admin/page4/form-dang-ky
+├ ○ /admin/page4/lich-danh-gia
+├ ○ /admin/page4/thu-vien-de
+├ ○ /admin/page4/thu-vien-de/questions
+├ ƒ /admin/page4/thu-vien-de/subjects/[subjectId]
+├ ○ /admin/page5
+├ ○ /admin/profile
+├ ○ /admin/tao-deal-luong
+├ ○ /admin/training-dashboard
+├ ○ /admin/truyenthong
+├ ○ /admin/truyenthong/posts
+├ ƒ /admin/truyenthong/posts/[slug]/edit
+├ ○ /admin/truyenthong/posts/create
+├ ○ /admin/truyenthong/sliders
+├ ○ /admin/user-management
+├ ○ /admin/video-detail
+├ ○ /admin/video-setup
+├ ○ /admin/xin-nghi-mot-buoi
+├ ○ /analytics
+├ ƒ /api/analytics
+├ ƒ /api/app-auth/data
+├ ƒ /api/app-auth/login
+├ ƒ /api/app-auth/permissions
+├ ƒ /api/app-auth/role-permissions
+├ ƒ /api/app-auth/user-roles
+├ ƒ /api/app-auth/users
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/availability
+├ ƒ /api/birthdays
+├ ƒ /api/birthdays/invalidate
+├ ƒ /api/check-admin
+├ ƒ /api/cloudinary-signature
+├ ƒ /api/cron/birthdays-prewarm
+├ ƒ /api/database
+├ ƒ /api/debug/birthdays
+├ ƒ /api/event-schedule-participants
+├ ƒ /api/event-schedules
+├ ƒ /api/exam-assignment-questions
+├ ƒ /api/exam-assignments
+├ ƒ /api/exam-assignments/expire
+├ ƒ /api/exam-registrations
+├ ƒ /api/exam-set-questions
+├ ƒ /api/exam-set-questions/export
+├ ƒ /api/exam-set-questions/import
+├ ƒ /api/exam-set-questions/template
+├ ƒ /api/exam-sets
+├ ƒ /api/exam-submissions
+├ ƒ /api/explanations
+├ ƒ /api/feedback
+├ ƒ /api/leave-requests
+├ ƒ /api/monthly-exam-selections
+├ ƒ /api/public/training-detail
+├ ƒ /api/public/training-submission-detail
+├ ƒ /api/rawdata
+├ ƒ /api/rawdata-experience
+├ ƒ /api/salary-deals
+├ ƒ /api/send-explanation-email
+├ ƒ /api/teacher-certificates
+├ ƒ /api/teacher-privacy
+├ ƒ /api/teachers
+├ ƒ /api/test-teachers
+├ ƒ /api/training
+├ ƒ /api/training-assignment-questions
+├ ƒ /api/training-assignment-questions/bulk
+├ ƒ /api/training-assignment-questions/export
+├ ƒ /api/training-assignment-questions/import
+├ ƒ /api/training-assignment-questions/template
+├ ƒ /api/training-assignments
+├ ƒ /api/training-db
+├ ƒ /api/training-progress
+├ ƒ /api/training-submissions
+├ ƒ /api/training-teacher-stats
+├ ƒ /api/training-teacher-stats-db
+├ ƒ /api/training-video-questions
+├ ƒ /api/training-video-stats
+├ ƒ /api/training-videos
+├ ƒ /api/truyenthong/comments/[commentId]
+├ ƒ /api/truyenthong/comments/[commentId]/react
+├ ƒ /api/truyenthong/init-comments
+├ ƒ /api/truyenthong/init-db
+├ ƒ /api/truyenthong/migrate-add-hidden-column
+├ ƒ /api/truyenthong/migrate-comments
+├ ƒ /api/truyenthong/migrate-slugs
+├ ƒ /api/truyenthong/posts
+├ ƒ /api/truyenthong/posts/[id]
+├ ƒ /api/truyenthong/posts/[id]/comments
+├ ƒ /api/truyenthong/posts/[id]/like
+├ ƒ /api/truyenthong/posts/[id]/view
+├ ƒ /api/truyenthong/stats
+├ ƒ /api/upload-question-image
+├ ƒ /api/upload-thumbnail
+├ ƒ /api/upload-video
+├ ○ /course-links-test
+├ ○ /dashboard
+├ ○ /lichgiaovien
+├ ○ /login
+├ ƒ /public/training-detail/[code]
+├ ƒ /public/training-submission-detail/[id]
+├ ○ /rawdata
+├ ○ /rawdata-experience
+├ ○ /test-teachers
+├ ○ /training-test
+├ ○ /user/assignments
+├ ƒ /user/assignments/exam/[id]
+├ ○ /user/deal-luong
+├ ○ /user/giaithich
+├ ○ /user/giaitrinh
+├ ○ /user/hoat-dong-hang-thang
+├ ○ /user/home
+├ ○ /user/nhan-lop-1-buoi
+├ ƒ /user/page2
+├ ○ /user/profile
+├ ○ /user/thongtingv
+├ ○ /user/training
+├ ○ /user/training/lesson
+├ ○ /user/truyenthong
+├ ƒ /user/truyenthong/[slug]
+└ ○ /user/xin-nghi-mot-buoi
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

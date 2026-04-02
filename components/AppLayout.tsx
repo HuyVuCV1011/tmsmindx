@@ -63,16 +63,22 @@ export default function AppLayout({
           return;
         }
 
+        // manager và admin luôn được phép vào deal-luong routes
+        const DEAL_LUONG_ROUTES = ['/admin/deal-luong', '/admin/tao-deal-luong'];
+        const effectivePermissions = ['manager', 'admin'].includes(user.role)
+          ? Array.from(new Set([...user.permissions, ...DEAL_LUONG_ROUTES]))
+          : user.permissions;
+
         // Check if user has permission for current route
         // Allow bypass for universal admin routes like /admin/profile
         if (pathname.startsWith('/admin') && pathname !== '/admin' && !pathname.startsWith('/admin/profile')) {
-          const hasPermission = user.permissions.some(p =>
+          const hasPermission = effectivePermissions.some(p =>
             pathname === p || pathname.startsWith(p + '/')
           );
 
           if (!hasPermission) {
             // Find first allowed valid admin route to redirect to
-            const firstAllowed = user.permissions.find(p => p.startsWith('/admin/'));
+            const firstAllowed = effectivePermissions.find(p => p.startsWith('/admin/'));
             if (firstAllowed) {
               router.replace(firstAllowed);
             } else {
