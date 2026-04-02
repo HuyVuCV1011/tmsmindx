@@ -3,12 +3,13 @@
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth-context';
 import { useEffect, useState, useMemo } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Stepper, StepItem } from '@/components/ui/stepper';
 import {
-  Search, Filter, CheckCircle, XCircle, Eye, DollarSign,
-  Award, TrendingDown, ChevronDown, MessageSquare
+  Search, CheckCircle, XCircle, DollarSign,
+  Award, TrendingDown, MessageSquare, Plus
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────
@@ -97,18 +98,23 @@ function getSteps(deal: SalaryDeal): StepItem[] {
 // ─── Component ──────────────────────────────────────
 export default function AdminDealLuongPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const dealTypeTab = (searchParams.get('type') as SalaryDeal['deal_type']) || 'bonus';
   const [deals, setDeals] = useState<SalaryDeal[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [dealTypeFilter, setDealTypeFilter] = useState<string>('all');
   const [selectedDeal, setSelectedDeal] = useState<SalaryDeal | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [rejectMode, setRejectMode] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
 
   // ─── Role check ──────────────────────────────────
   const userRole = user?.role;
-  const isAdmin = userRole === 'super_admin' || userRole === 'admin';
+  const isSuperAdmin = userRole === 'super_admin';
+  const isTegl = userRole === 'manager';
 
   // ─── Fetch ───────────────────────────────────────
   const fetchDeals = async () => {
@@ -122,17 +128,22 @@ export default function AdminDealLuongPage() {
   useEffect(() => { fetchDeals(); }, []);
 
   // ─── Filter ──────────────────────────────────────
+  // super_admin chỉ thấy deals đã qua TEGL duyệt (không thấy pending/tegl_rejected)
+  const visibleDeals = useMemo(() => {
+    if (isSuperAdmin) return deals.filter(d => !['pending', 'tegl_rejected'].includes(d.status));
+    return deals;
+  }, [deals, isSuperAdmin]);
+
   const filteredDeals = useMemo(() => {
-    return deals.filter(d => {
+    const dealsInCurrentType = visibleDeals.filter(d => d.deal_type === dealTypeTab);
+
+    return dealsInCurrentType.filter(d => {
       // Status filter
       if (statusFilter === 'rejected') {
         if (!['tegl_rejected', 'admin_rejected'].includes(d.status)) return false;
       } else if (statusFilter !== 'all' && d.status !== statusFilter) {
         return false;
       }
-
-      // Type filter
-      if (dealTypeFilter !== 'all' && d.deal_type !== dealTypeFilter) return false;
 
       // Search
       if (searchQuery) {
@@ -146,13 +157,14 @@ export default function AdminDealLuongPage() {
       }
       return true;
     });
-  }, [deals, statusFilter, dealTypeFilter, searchQuery]);
+  }, [visibleDeals, dealTypeTab, statusFilter, searchQuery]);
 
   // ─── Can review? ─────────────────────────────────
   const canReview = (deal: SalaryDeal) => {
-    if (!isAdmin) return false;
-    if (deal.status === 'pending') return true;
-    if (deal.status === 'tegl_approved') return true;
+    // Bước 2: chỉ TEGL (manager) duyệt pending
+    if (deal.status === 'pending' && isTegl) return true;
+    // Bước 3: chỉ super_admin duyệt cuối sau khi TEGL đã accept
+    if (deal.status === 'tegl_approved' && isSuperAdmin) return true;
     return false;
   };
 
@@ -168,7 +180,7 @@ export default function AdminDealLuongPage() {
         body: JSON.stringify({
           id: selectedDeal.id,
           action,
-          note: reviewNote,
+          note: action === 'reject' ? rejectReason : reviewNote,
           reviewer_email: user.email,
           reviewer_name: user.displayName || user.email,
         }),
@@ -178,6 +190,8 @@ export default function AdminDealLuongPage() {
         toast.success(data.message);
         setSelectedDeal(null);
         setReviewNote('');
+        setRejectMode(false);
+        setRejectReason('');
         fetchDeals();
       } else {
         toast.error(data.error);
@@ -188,13 +202,18 @@ export default function AdminDealLuongPage() {
   };
 
   // ─── Stats ────────────────────────────────────────
+  const dealsInCurrentType = useMemo(
+    () => visibleDeals.filter(d => d.deal_type === dealTypeTab),
+    [visibleDeals, dealTypeTab]
+  );
+
   const stats = useMemo(() => ({
-    total: deals.length,
-    pending: deals.filter(d => d.status === 'pending').length,
-    waitingAdmin: deals.filter(d => d.status === 'tegl_approved').length,
-    approved: deals.filter(d => d.status === 'admin_approved').length,
-    rejected: deals.filter(d => ['tegl_rejected', 'admin_rejected'].includes(d.status)).length,
-  }), [deals]);
+    total: dealsInCurrentType.length,
+    pending: dealsInCurrentType.filter(d => d.status === 'pending').length,
+    waitingAdmin: dealsInCurrentType.filter(d => d.status === 'tegl_approved').length,
+    approved: dealsInCurrentType.filter(d => d.status === 'admin_approved').length,
+    rejected: dealsInCurrentType.filter(d => ['tegl_rejected', 'admin_rejected'].includes(d.status)).length,
+  }), [dealsInCurrentType]);
 
   // ─── Render ──────────────────────────────────────
   if (loading) {
@@ -213,7 +232,7 @@ export default function AdminDealLuongPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
             <DollarSign className="w-5 h-5 text-white" />
           </div>
-          Quản lý Deal Lương
+          {`Quản lý ${DEAL_TYPE_LABELS[dealTypeTab]?.label || 'Deal lương'}`}
         </h1>
         <p className="text-slate-500 mt-2 text-sm">Duyệt yêu cầu bonus, hạ lương, deal lương từ Leader/TE/TC</p>
       </div>
@@ -265,7 +284,7 @@ export default function AdminDealLuongPage() {
         </div>
 
         {/* Search & type filter */}
-        <div className="p-4 flex flex-col sm:flex-row gap-3">
+        <div className="p-4 flex items-center gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
@@ -276,75 +295,75 @@ export default function AdminDealLuongPage() {
               className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
             />
           </div>
-          <select
-            value={dealTypeFilter}
-            onChange={e => setDealTypeFilter(e.target.value)}
-            className="px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all min-w-[160px]"
+          <Button
+            onClick={() => router.push(`/admin/tao-deal-luong?type=${dealTypeTab}`)}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/20 shrink-0"
           >
-            <option value="all">Tất cả loại</option>
-            <option value="bonus">Bonus</option>
-            <option value="salary_reduction">Hạ lương</option>
-            <option value="salary_deal">Deal lương</option>
-          </select>
+            <Plus className="w-4 h-4 mr-2" />
+            Tạo request
+          </Button>
         </div>
       </div>
 
       {/* Deal List */}
-      <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm overflow-hidden min-h-[420px] flex flex-col">
+        {/* Tab content */}
         {filteredDeals.length === 0 ? (
-          <div className="p-16 text-center">
-            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <DollarSign className="w-8 h-8 text-slate-300" />
+          <div className="flex-1 p-8 text-center flex flex-col items-center justify-center">
+            <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
+              <DollarSign className="w-7 h-7 text-slate-300" />
             </div>
-            <p className="text-slate-400 text-sm">Không có yêu cầu nào</p>
+            <p className="text-sm text-slate-400">Không có yêu cầu nào</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="flex-1 p-3 space-y-3 overflow-y-auto">
             {filteredDeals.map(deal => {
-              const typeInfo = DEAL_TYPE_LABELS[deal.deal_type];
               const reviewable = canReview(deal);
 
               return (
-                <div
+                <button
                   key={deal.id}
-                  className={`p-5 transition-colors cursor-pointer hover:bg-slate-50/50 ${reviewable ? 'border-l-4 border-l-blue-400' : ''}`}
-                  onClick={() => { setSelectedDeal(deal); setReviewNote(''); }}
+                  type="button"
+                  className={`w-full text-left rounded-xl border bg-white p-4 transition-all hover:border-slate-300 hover:bg-slate-50/60 ${reviewable ? 'border-blue-200 ring-1 ring-blue-100' : 'border-slate-200'}`}
+                  onClick={() => { setSelectedDeal(deal); setReviewNote(''); setRejectMode(false); setRejectReason(''); }}
                 >
-                  <div className="flex items-start justify-between gap-4 mb-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${typeInfo.color}`}>
-                          {typeInfo.icon} {typeInfo.label}
-                        </span>
-                        <span className="text-xs text-slate-400">#{deal.id}</span>
-                      </div>
-                      <p className="font-semibold text-slate-900 truncate">{deal.teacher_name}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Gửi bởi {deal.submitter_name} · {new Date(deal.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                      </p>
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{deal.submitter_name}</p>
+                      <p className="text-xs text-slate-500 mt-1 truncate">Giảng viên: {deal.teacher_name}</p>
                     </div>
-
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      {deal.deal_type === 'bonus' && deal.bonus_amount && (
-                        <span className="text-sm font-bold text-emerald-600">+{deal.bonus_amount.toLocaleString()}đ</span>
-                      )}
-                      {deal.deal_type === 'salary_reduction' && (
-                        <span className="text-sm font-medium text-amber-600">{deal.current_rate} → {deal.new_rate}</span>
-                      )}
-                      {deal.deal_type === 'salary_deal' && deal.deal_salary_amount && (
-                        <span className="text-sm font-bold text-blue-600">{deal.deal_salary_amount.toLocaleString()}đ</span>
-                      )}
-                      {getStatusBadge(deal.status)}
-                      {reviewable && (
-                        <span className="flex items-center gap-1 px-2 py-1 bg-blue-500 text-white rounded-lg text-[11px] font-bold animate-pulse">
-                          Cần duyệt
-                        </span>
-                      )}
-                    </div>
+                    <span className="text-[11px] text-slate-400 font-medium flex-shrink-0">#{deal.id}</span>
                   </div>
 
-                  <Stepper steps={getSteps(deal)} compact />
-                </div>
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    {getStatusBadge(deal.status)}
+                    {reviewable && (
+                      <span className="px-2 py-1 bg-blue-500 text-white rounded-lg text-[11px] font-bold animate-pulse">
+                        Cần duyệt
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="text-xs text-slate-500 space-y-1">
+                    <p>
+                      {new Date(deal.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </p>
+                    {deal.deal_type === 'bonus' && deal.bonus_amount && (
+                      <p className="font-semibold text-emerald-600">+{deal.bonus_amount.toLocaleString()}đ</p>
+                    )}
+                    {deal.deal_type === 'salary_reduction' && (
+                      <p className="font-semibold text-amber-600">{deal.current_rate} → {deal.new_rate}</p>
+                    )}
+                    {deal.deal_type === 'salary_deal' && deal.deal_salary_amount && (
+                      <p className="font-semibold text-blue-600">{deal.deal_salary_amount.toLocaleString()}đ</p>
+                    )}
+                    {deal.class_code && <p className="truncate">Mã lớp: {deal.class_code}</p>}
+                  </div>
+
+                  <div className="mt-4">
+                    <Stepper steps={getSteps(deal)} compact />
+                  </div>
+                </button>
               );
             })}
           </div>
@@ -354,7 +373,7 @@ export default function AdminDealLuongPage() {
       {/* ═══ Detail + Review Modal ═══ */}
       <Modal
         isOpen={!!selectedDeal}
-        onClose={() => { setSelectedDeal(null); setReviewNote(''); }}
+        onClose={() => { setSelectedDeal(null); setReviewNote(''); setRejectMode(false); setRejectReason(''); }}
         title={`Chi tiết yêu cầu #${selectedDeal?.id}`}
         maxWidth="4xl"
       >
@@ -474,54 +493,104 @@ export default function AdminDealLuongPage() {
             {/* Review Actions */}
             {canReview(selectedDeal) && (
               <div className="border-t border-slate-100 pt-5 space-y-4">
-                <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
-                  <p className="text-xs font-bold text-blue-700 mb-0.5">
-                    {selectedDeal.status === 'pending' ? '🔍 Duyệt Bước 1 (Xác nhận yêu cầu)' : '✅ Duyệt Bước 2 — Phê duyệt cuối cùng'}
-                  </p>
-                  <p className="text-[11px] text-blue-500">Vui lòng nhập ghi chú và chọn hành động</p>
-                </div>
+                {rejectMode ? (
+                  <>
+                    <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3">
+                      <p className="text-xs font-bold text-red-700 mb-0.5">⚠️ Xác nhận từ chối yêu cầu</p>
+                      <p className="text-[11px] text-red-500">Lý do từ chối không bắt buộc</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                        Lý do từ chối <span className="text-slate-400 font-normal">(tùy chọn)</span>
+                      </label>
+                      <textarea
+                        value={rejectReason}
+                        onChange={e => setRejectReason(e.target.value)}
+                        className="w-full px-3.5 py-2.5 border border-red-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all resize-none"
+                        rows={3}
+                        placeholder="Nhập lý do từ chối (không bắt buộc)..."
+                        autoFocus
+                      />
+                    </div>
+                    <div className="flex justify-end gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={() => { setRejectMode(false); setRejectReason(''); }}
+                        disabled={submitting}
+                      >
+                        Hủy
+                      </Button>
+                      <Button
+                        onClick={() => handleReview('reject')}
+                        disabled={submitting}
+                        className="bg-red-500 hover:bg-red-600 text-white"
+                      >
+                        {submitting ? (
+                          <span className="flex items-center gap-2">
+                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Đang xử lý...
+                          </span>
+                        ) : (
+                          <>
+                            <XCircle className="w-4 h-4 mr-1.5" />
+                            Xác nhận từ chối
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
+                      <p className="text-xs font-bold text-blue-700 mb-0.5">
+                        {selectedDeal.status === 'pending' ? '🔍 TEGL Duyệt — Xác nhận yêu cầu' : '✅ Super Admin Duyệt — Phê duyệt cuối cùng'}
+                      </p>
+                      <p className="text-[11px] text-blue-500">Vui lòng nhập ghi chú và chọn hành động</p>
+                    </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                    Ghi chú duyệt
-                  </label>
-                  <textarea
-                    value={reviewNote}
-                    onChange={e => setReviewNote(e.target.value)}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all resize-none"
-                    rows={3}
-                    placeholder="Nhập ghi chú cho quyết định duyệt/từ chối..."
-                  />
-                </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                        Ghi chú duyệt
+                      </label>
+                      <textarea
+                        value={reviewNote}
+                        onChange={e => setReviewNote(e.target.value)}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all resize-none"
+                        rows={3}
+                        placeholder="Nhập ghi chú cho quyết định duyệt..."
+                      />
+                    </div>
 
-                <div className="flex justify-end gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => handleReview('reject')}
-                    disabled={submitting}
-                    className="border-red-200 text-red-600 hover:bg-red-50"
-                  >
-                    <XCircle className="w-4 h-4 mr-1.5" />
-                    Từ chối
-                  </Button>
-                  <Button
-                    onClick={() => handleReview('approve')}
-                    disabled={submitting}
-                    className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg shadow-green-500/20"
-                  >
-                    {submitting ? (
-                      <span className="flex items-center gap-2">
-                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Đang xử lý...
-                      </span>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-1.5" />
-                        Duyệt
-                      </>
-                    )}
-                  </Button>
-                </div>
+                    <div className="flex justify-end gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={() => setRejectMode(true)}
+                        disabled={submitting}
+                        className="border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        <XCircle className="w-4 h-4 mr-1.5" />
+                        Từ chối
+                      </Button>
+                      <Button
+                        onClick={() => handleReview('approve')}
+                        disabled={submitting}
+                        className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg shadow-green-500/20"
+                      >
+                        {submitting ? (
+                          <span className="flex items-center gap-2">
+                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Đang xử lý...
+                          </span>
+                        ) : (
+                          <>
+                            <CheckCircle className="w-4 h-4 mr-1.5" />
+                            Duyệt
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
