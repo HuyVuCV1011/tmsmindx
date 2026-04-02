@@ -184,7 +184,8 @@ export default function GiaiTrinhPage() {
           teacher_name: updated.teacher_name,
           lms_code: updated.lms_code,
           email: updated.email,
-          campus: updated.campus
+          campus: updated.campus,
+          status: teacherProfile.status || ''
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
         

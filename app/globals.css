@@ -1,17 +1,82 @@
+.k12-markdown p {
+  margin: 0.75rem 0;
+  line-height: 1.75;
+}
+
+.k12-markdown ul,
+.k12-markdown ol {
+  margin: 0.75rem 0;
+  padding-left: 1.25rem;
+}
+
+.k12-markdown ul {
+  list-style: disc;
+}
+
+.k12-markdown ol {
+  list-style: decimal;
+}
+
+.k12-markdown li {
+  margin: 0.35rem 0;
+}
+
+.k12-markdown a {
+  color: #0f4c81;
+  text-decoration: underline;
+}
+
+.k12-markdown blockquote {
+  margin: 1rem 0;
+  border-left: 4px solid #e5e7eb;
+  padding-left: 0.85rem;
+  color: #4b5563;
+}
+
+.k12-markdown code {
+  border-radius: 0.25rem;
+  background: #f3f4f6;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.86em;
+}
+
+.k12-markdown pre {
+  margin: 1rem 0;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: #111827;
+  padding: 0.85rem;
+  color: #f9fafb;
+}
+
+.k12-markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
 @import "tailwindcss";
 @import "./z-index.css";
 
 @layer base {
   * {
-    font-family: 'Exo', system-ui, -apple-system, sans-serif;
+    font-family:
+      "Exo",
+      system-ui,
+      -apple-system,
+      sans-serif;
   }
-  
+
   body {
     background-color: white;
     color: rgb(17 24 39);
   }
-  
-  h1, h2, h3, h4, h5, h6 {
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-weight: 700;
   }
 
@@ -88,19 +153,28 @@
   }
 
   @keyframes shake {
-    0%, 100% {
+    0%,
+    100% {
       transform: translateX(0);
     }
-    10%, 30%, 50%, 70%, 90% {
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
       transform: translateX(-5px);
     }
-    20%, 40%, 60%, 80% {
+    20%,
+    40%,
+    60%,
+    80% {
       transform: translateX(5px);
     }
   }
 
   @keyframes gradient {
-    0%, 100% {
+    0%,
+    100% {
       background-position: 0% 50%;
     }
     50% {
@@ -109,7 +183,8 @@
   }
 
   @keyframes pulse-glow {
-    0%, 100% {
+    0%,
+    100% {
       box-shadow: 0 0 5px rgba(161, 0, 31, 0.3);
     }
     50% {
@@ -181,28 +256,41 @@
   }
 
   /* Smooth transitions for all interactive elements */
-  button, a, input:not([id^="react-select"]), textarea, select {
+  button,
+  a,
+  input:not([id^="react-select"]),
+  textarea,
+  select {
     transition: all 0.3s ease-in-out;
   }
 
   /* Focus states */
-  button:focus-visible, a:focus-visible, input:not([id^="react-select"]):focus-visible, 
-  textarea:focus-visible, select:focus-visible {
+  button:focus-visible,
+  a:focus-visible,
+  input:not([id^="react-select"]):focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px #a1001f, 0 0 0 4px white;
+    box-shadow:
+      0 0 0 2px #a1001f,
+      0 0 0 4px white;
   }
 
   /* Modern card styles */
   .card-modern {
     background-color: white;
     border-radius: 0.75rem;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    box-shadow:
+      0 4px 6px -1px rgb(0 0 0 / 0.1),
+      0 2px 4px -2px rgb(0 0 0 / 0.1);
     border: 1px solid rgb(243 244 246);
     transition: all 0.3s;
   }
-  
+
   .card-modern:hover {
-    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    box-shadow:
+      0 20px 25px -5px rgb(0 0 0 / 0.1),
+      0 8px 10px -6px rgb(0 0 0 / 0.1);
   }
 
   /* Glass morphism effect */
@@ -210,7 +298,9 @@
     backdrop-filter: blur(24px);
     background-color: rgba(255, 255, 255, 0.8);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    box-shadow:
+      0 10px 15px -3px rgb(0 0 0 / 0.1),
+      0 4px 6px -4px rgb(0 0 0 / 0.1);
   }
 
   /* Hide scrollbar utility */
@@ -352,7 +442,9 @@
 
 .ProseMirror img:hover {
   opacity: 0.8;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
 /* Selected image (NodeView) */
@@ -397,12 +489,12 @@ img.tiptap-image {
   border: 2px solid white;
   border-radius: 50%;
   z-index: 10;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   transition: all 0.2s;
 }
 
 .ProseMirror .image-wrapper .resize-handle::before {
-  content: '';
+  content: "";
   position: absolute;
   width: 100%;
   height: 100%;
@@ -446,9 +538,6 @@ img.tiptap-image {
   cursor: nwse-resize;
 }
 
-
-
-
 .ProseMirror p.is-editor-empty:first-child::before {
   color: #adb5bd;
   content: attr(data-placeholder);
@@ -456,4 +545,3 @@ img.tiptap-image {
   height: 0;
   pointer-events: none;
 }
-

@@ -766,6 +766,44 @@ const migrations: Migration[] = [
       WHERE view_count IS NULL OR view_count = 0;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V35: Add unique constraint to training_assignment_answers
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V35_fix_assignment_answers_constraint',
+    version: 35,
+    sql: `
+      -- Delete duplicates, keeping the latest one
+      DELETE FROM training_assignment_answers a
+      WHERE id < (
+        SELECT MAX(id)
+        FROM training_assignment_answers b
+        WHERE a.submission_id = b.submission_id
+          AND a.question_id = b.question_id
+      );
+
+      -- Add unique constraint to support ON CONFLICT
+      ALTER TABLE training_assignment_answers
+      DROP CONSTRAINT IF EXISTS unique_submission_question;
+
+      ALTER TABLE training_assignment_answers
+      ADD CONSTRAINT unique_submission_question UNIQUE (submission_id, question_id);
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V36: Grant K12 docs screen permission for TM
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V36_grant_page2_permission_to_tm',
+    version: 36,
+    sql: `
+      INSERT INTO role_permissions (role_code, route_path)
+      VALUES ('TM', '/admin/page2')
+      ON CONFLICT DO NOTHING;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

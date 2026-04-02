@@ -344,7 +344,7 @@ export default function MonthlyActivitiesPage() {
 
     (async () => {
       try {
-        const response = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+        const response = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
         const data = await response.json();
         if (data?.teacher?.code) {
           setTeacherCode(data.teacher.code);
