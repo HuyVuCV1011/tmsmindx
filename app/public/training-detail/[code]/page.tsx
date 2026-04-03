@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface VideoScore {
   video_id: string;
@@ -14,6 +14,19 @@ interface VideoScore {
   viewed_at: string | null;
   completed_at: string | null;
   submission_id: number | null;
+  attempt_logs: {
+    submission_id: number;
+    assignment_id: number;
+    attempt_number: number;
+    score: number | null;
+    total_points: number | null;
+    percentage: number | null;
+    status: string;
+    created_at: string | null;
+    submitted_at: string | null;
+    graded_at: string | null;
+    answers_count: number;
+  }[];
   answers: Record<string, string> | null;
 }
 
@@ -68,6 +81,25 @@ export default function TrainingDetailPage() {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'log'>('overview');
+  const videoScores = data?.video_scores || [];
+
+  const allAttemptLogs = useMemo(() => {
+    const flattened = videoScores.flatMap((video) =>
+      (video.attempt_logs || []).map((attempt) => ({
+        ...attempt,
+        video_id: video.video_id,
+        video_title: video.video_title,
+        latest_time: attempt.graded_at || attempt.submitted_at || attempt.created_at,
+      }))
+    );
+
+    return flattened.sort((a, b) => {
+      const aTime = a.latest_time ? new Date(a.latest_time).getTime() : 0;
+      const bTime = b.latest_time ? new Date(b.latest_time).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [videoScores]);
 
   useEffect(() => {
     if (!code) return;
@@ -166,83 +198,204 @@ export default function TrainingDetailPage() {
         </div>
 
         {/* Video Scores Table */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100">
-            <h3 className="font-semibold text-slate-800">Chi tiết từng video</h3>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 border-b border-slate-200">
+            <button
+              type="button"
+              onClick={() => setActiveTab('overview')}
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'overview'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Tong quan
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('log')}
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'log'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Log bai lam ({allAttemptLogs.length})
+            </button>
           </div>
-          {video_scores.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-sm">Chưa có dữ liệu video</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 text-left">
-                    <th className="px-4 py-3 font-medium text-slate-600">Video</th>
-                    <th className="px-4 py-3 font-medium text-slate-600 text-center">Trạng thái</th>
-                    <th className="px-4 py-3 font-medium text-slate-600 text-center">Điểm</th>
-                    <th className="px-4 py-3 font-medium text-slate-600 text-center">Minh chứng</th>
-                    <th className="px-4 py-3 font-medium text-slate-600 text-center">Thời gian xem</th>
-                    <th className="px-4 py-3 font-medium text-slate-600 text-center">Hoàn thành lúc</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {video_scores.map((v, i) => (
-                    <tr key={v.video_id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3">
-                        {v.video_link ? (
-                          <a 
-                            href={v.video_link} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="font-medium text-slate-800 hover:text-blue-600 hover:underline flex items-center gap-1 group"
-                          >
-                            {v.video_title}
-                            <svg className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                          </a>
-                        ) : (
-                          <div className="font-medium text-slate-800">{v.video_title}</div>
-                        )}
-                        {v.video_description && (
-                          <div className="text-xs text-slate-400 mt-0.5 line-clamp-1">{v.video_description}</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <StatusBadge status={v.completion_status} />
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {v.score != null ? (
-                          <span className="font-semibold text-blue-600">{v.score.toFixed(1)}</span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {v.submission_id ? (
-                          <a
-                            href={`/public/training-submission-detail/${v.submission_id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-100 rounded hover:bg-blue-100 transition-colors shadow-sm"
-                            title="Xem chi tiết bài làm"
-                          >
-                            <span>📝 Xem bài làm</span>
-                          </a>
-                        ) : (
-                          <span className="text-slate-300 text-xs italic">Chưa làm bài</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center text-slate-600">
-                        {formatTime(v.time_spent_seconds)}
-                      </td>
-                      <td className="px-4 py-3 text-center text-slate-500 text-xs">
-                        {v.completed_at
-                          ? new Date(v.completed_at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
-                          : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {activeTab === 'overview' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                <h3 className="font-semibold text-slate-800">Chi tiết từng video</h3>
+                <a
+                  href={`/api/public/training-detail-log?code=${encodeURIComponent(teacher.teacher_code)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  title="Xuất log JSON toàn bộ lượt làm"
+                >
+                  Tai log JSON
+                </a>
+              </div>
+              {video_scores.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-sm">Chưa có dữ liệu video</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 text-left">
+                        <th className="px-4 py-3 font-medium text-slate-600">Video</th>
+                        <th className="px-4 py-3 font-medium text-slate-600 text-center">Trạng thái</th>
+                        <th className="px-4 py-3 font-medium text-slate-600 text-center">Điểm</th>
+                        <th className="px-4 py-3 font-medium text-slate-600 text-center">Minh chứng</th>
+                        <th className="px-4 py-3 font-medium text-slate-600 text-center">Thời gian xem</th>
+                        <th className="px-4 py-3 font-medium text-slate-600 text-center">Hoàn thành lúc</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {video_scores.map((v) => (
+                        <tr key={v.video_id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-3">
+                            {v.video_link ? (
+                              <a
+                                href={v.video_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-medium text-slate-800 hover:text-blue-600 hover:underline flex items-center gap-1 group"
+                              >
+                                {v.video_title}
+                                <svg className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                              </a>
+                            ) : (
+                              <div className="font-medium text-slate-800">{v.video_title}</div>
+                            )}
+                            {v.video_description && (
+                              <div className="text-xs text-slate-400 mt-0.5 line-clamp-1">{v.video_description}</div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <StatusBadge status={v.completion_status} />
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {v.score != null ? (
+                              <span className="font-semibold text-blue-600">{v.score.toFixed(1)}</span>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {v.attempt_logs && v.attempt_logs.length > 0 ? (
+                              <div className="flex flex-col items-center gap-1.5">
+                                <span className="text-[11px] text-slate-500">
+                                  {v.attempt_logs.length} luot lam
+                                </span>
+                                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                                  {v.attempt_logs.slice(0, 3).map((attempt) => (
+                                    <a
+                                      key={attempt.submission_id}
+                                      href={`/public/training-submission-detail/${attempt.submission_id}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-blue-700 bg-blue-50 border border-blue-100 rounded hover:bg-blue-100 transition-colors"
+                                      title={`Lan ${attempt.attempt_number} - ${attempt.answers_count} cau tra loi`}
+                                    >
+                                      Lan {attempt.attempt_number}
+                                    </a>
+                                  ))}
+                                </div>
+                                {v.attempt_logs.length > 3 && (
+                                  <span className="text-[11px] text-slate-400">+{v.attempt_logs.length - 3} luot khac</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-300 text-xs italic">Chưa làm bài</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center text-slate-600">
+                            {formatTime(v.time_spent_seconds)}
+                          </td>
+                          <td className="px-4 py-3 text-center text-slate-500 text-xs">
+                            {v.completed_at
+                              ? new Date(v.completed_at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'log' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                <h3 className="font-semibold text-slate-800">Log bai lam (moi nhat truoc)</h3>
+                <a
+                  href={`/api/public/training-detail-log?code=${encodeURIComponent(teacher.teacher_code)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Mo JSON day du
+                </a>
+              </div>
+
+              {allAttemptLogs.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-sm">Chua co log bai lam</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 text-left">
+                        <th className="px-4 py-3 font-medium text-slate-600">Thoi gian</th>
+                        <th className="px-4 py-3 font-medium text-slate-600">Video</th>
+                        <th className="px-4 py-3 font-medium text-slate-600 text-center">Lan</th>
+                        <th className="px-4 py-3 font-medium text-slate-600 text-center">Diem</th>
+                        <th className="px-4 py-3 font-medium text-slate-600 text-center">Trang thai</th>
+                        <th className="px-4 py-3 font-medium text-slate-600 text-center">So cau TL</th>
+                        <th className="px-4 py-3 font-medium text-slate-600 text-center">Chi tiet</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {allAttemptLogs.map((attempt) => (
+                        <tr key={attempt.submission_id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
+                            {attempt.latest_time
+                              ? new Date(attempt.latest_time).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
+                              : '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-slate-800">{attempt.video_title}</div>
+                            <div className="text-[11px] text-slate-400">Video ID: {attempt.video_id}</div>
+                          </td>
+                          <td className="px-4 py-3 text-center font-medium text-slate-700">{attempt.attempt_number}</td>
+                          <td className="px-4 py-3 text-center">
+                            {attempt.score != null ? (
+                              <span className="font-semibold text-blue-600">{attempt.score.toFixed(1)}</span>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center text-xs text-slate-600">{attempt.status || '—'}</td>
+                          <td className="px-4 py-3 text-center text-slate-700">{attempt.answers_count || 0}</td>
+                          <td className="px-4 py-3 text-center">
+                            <a
+                              href={`/public/training-submission-detail/${attempt.submission_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-100 rounded hover:bg-blue-100 transition-colors"
+                            >
+                              Xem
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>

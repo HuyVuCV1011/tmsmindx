@@ -1,8 +1,9 @@
 'use client';
 
 import Modal from '@/components/Modal';
+import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Stepper, StepItem } from '@/components/ui/stepper';
+import { StepItem, Stepper } from '@/components/ui/stepper';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/lib/auth-context';
 import { findMatchingCampus } from '@/lib/campus-data';
@@ -316,22 +317,22 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
   return (
     <div className="min-h-screen bg-white p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Xin nghỉ 1 buổi dạy</h1>
-            <p className="mt-1 text-sm text-gray-600">Bấm tạo mail để gửi yêu cầu, sau đó theo dõi tiến trình 4 bước.</p>
-          </div>
-          <Button
-            size="lg"
-            onClick={() => {
-              resetFormForNew();
-              setShowModal(true);
-            }}
-            className="whitespace-nowrap border-2 border-[#f3c7d1] bg-[#fff5f7] text-[#a1001f] hover:border-[#a1001f] hover:bg-linear-to-r hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:shadow-md"
-          >
-            Tạo mail xin nghỉ
-          </Button>
-        </div>
+        <PageHeader
+          title="Xin nghỉ 1 buổi dạy"
+          description="Bấm tạo mail để gửi yêu cầu, sau đó theo dõi tiến trình 4 bước."
+          actions={
+            <Button
+              size="lg"
+              onClick={() => {
+                resetFormForNew();
+                setShowModal(true);
+              }}
+              className="whitespace-nowrap border-2 border-[#f3c7d1] bg-[#fff5f7] text-[#a1001f] hover:border-[#a1001f] hover:bg-linear-to-r hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:shadow-md"
+            >
+              Tạo mail xin nghỉ
+            </Button>
+          }
+        />
 
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-200 px-4 py-4 sm:px-6">

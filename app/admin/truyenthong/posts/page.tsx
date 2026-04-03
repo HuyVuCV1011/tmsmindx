@@ -10,8 +10,7 @@ import { Tabs } from '@/components/Tabs'
 import TruyenThongStats from '@/components/truyenthong-stats'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Edit, FileText, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Edit, FileText, Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
@@ -45,20 +44,20 @@ export default function PostsManagementPage() {
     )
 
     const getStatusBadge = (status: string) => {
-        const variantMap: Record<string, 'warning' | 'success' | 'secondary'> = {
-            draft: 'warning',
-            published: 'success',
-            hidden: 'secondary',
+        const styles: Record<string, string> = {
+            published: 'bg-green-100 text-green-700',
+            draft: 'bg-amber-100 text-amber-700',
+            hidden: 'bg-red-100 text-red-700',
         }
         const labels: Record<string, string> = {
+            published: 'Công bố',
             draft: 'Nháp',
-            published: 'Đã công bố',
             hidden: 'Ẩn',
         }
         return (
-            <Badge variant={variantMap[status] || 'secondary'}>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${styles[status] || 'bg-gray-100 text-gray-700'}`}>
                 {labels[status] || status}
-            </Badge>
+            </span>
         )
     }
 
@@ -112,22 +111,31 @@ export default function PostsManagementPage() {
             title="Quản lý bài viết"
             description={`Tổng cộng: ${posts?.length || 0} bài viết`}
         >
+            <div className="flex items-center justify-between mb-6">
+                <Button asChild variant="outline" size="sm" className="gap-2">
+                    <Link href="/admin/truyenthong">
+                        <ArrowLeft className="h-4 w-4" />
+                        Quay lại
+                    </Link>
+                </Button>
+                <Button asChild variant="mindx" className="gap-2 shadow-sm font-semibold">
+                    <Link href="/admin/truyenthong/posts/create">
+                        <Plus className="h-4 w-4" />
+                        Tạo bài viết
+                    </Link>
+                </Button>
+            </div>
+
             {/* Stats Dashboard */}
             <TruyenThongStats />
             
-            {/* Create Button */}
-            <div className="flex justify-between items-center mb-4">
+            {/* Actions Toolbar */}
+            <div className="mb-4">
                 <SearchBar
                     value={searchTerm}
                     onChange={setSearchTerm}
                     placeholder="Tìm kiếm bài viết..."
                 />
-                <Link href="/admin/truyenthong/posts/create">
-                    <Button variant="mindx">
-                        <Plus className="h-4 w-4" />
-                        Tạo bài viết
-                    </Button>
-                </Link>
             </div>
 
             {/* Tabs Filter */}
@@ -137,70 +145,76 @@ export default function PostsManagementPage() {
                 onChange={(id) => setFilterStatus(id as 'all' | 'draft' | 'published' | 'hidden')}
             />
 
-            {/* Posts Table */}
-            <Card>
+            {/* Posts List */}
+            <div className="mb-8">
                 {isLoading ? (
                     <TableSkeleton rows={5} columns={8} />
                 ) : !posts || posts.length === 0 ? (
-                    <EmptyState
-                        icon={FileText}
-                        title="Không tìm thấy bài viết"
-                        description="Thử thay đổi bộ lọc hoặc tạo bài viết mới"
-                        action={{
-                            label: "Tạo bài viết",
-                            onClick: () => window.location.href = '/admin/truyenthong/posts/create'
-                        }}
-                    />
+                    <Card>
+                        <EmptyState
+                            icon={FileText}
+                            title="Không tìm thấy bài viết"
+                            description="Thử thay đổi bộ lọc hoặc tạo bài viết mới"
+                            action={{
+                                label: "Tạo bài viết",
+                                onClick: () => window.location.href = '/admin/truyenthong/posts/create'
+                            }}
+                        />
+                    </Card>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>#</TableHead>
-                                    <TableHead>Tiêu đề</TableHead>
-                                    <TableHead>Loại</TableHead>
-                                    <TableHead className="text-center">Trạng thái</TableHead>
-                                    <TableHead>Ngày đăng</TableHead>
-                                    <TableHead>Đối tượng</TableHead>
-                                    <TableHead className="text-center">Lượt xem</TableHead>
-                                    <TableHead className="text-center">Thao tác</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {posts.map((post, idx) => (
-                                    <TableRow key={post.id}>
-                                        <TableCell>{idx + 1}</TableCell>
-                                        <TableCell className="font-medium max-w-xs truncate">
-                                            {post.title}
-                                        </TableCell>
-                                        <TableCell>{post.post_type}</TableCell>
-                                        <TableCell className="text-center">{getStatusBadge(post.status)}</TableCell>
-                                        <TableCell>
-                                            {post.published_at ? new Date(post.published_at).toLocaleDateString('vi-VN') : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-xs text-gray-600">
+                    <div className="space-y-2 relative border-t border-transparent">
+                        {posts.map((post, idx) => (
+                            <div key={post.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-blue-50 hover:border-blue-200 border border-gray-200 transition-all group">
+                                {/* Left Section - Info */}
+                                <div className="flex-1 min-w-0 pr-4 w-full sm:w-auto">
+                                    <p className="font-semibold text-sm truncate group-hover:text-blue-600 transition-colors">
+                                        {post.title}
+                                    </p>
+                                    
+                                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                                        <p className="text-xs text-gray-500">
+                                            {post.published_at ? new Date(post.published_at).toLocaleDateString('vi-VN') : 'N/A'}
+                                        </p>
+                                        
+                                        {getStatusBadge(post.status)}
+                                        
+                                        <span className="text-[10px] px-2 py-0.5 bg-gray-200/50 text-gray-600 rounded-full font-semibold border border-gray-100">
+                                            {post.post_type}
+                                        </span>
+                                        
+                                        <span className="text-[10px] px-2 py-0.5 bg-gray-200/50 text-gray-600 rounded-full font-semibold border border-gray-100 shrink-0 truncate max-w-[120px]">
                                             {post.audience}
-                                        </TableCell>
-                                        <TableCell className="text-center">{post.view_count?.toLocaleString('vi-VN') || 0}</TableCell>
-                                        <TableCell>
-                                            <div className="flex gap-1 justify-center">
-                                                <Link href={`/admin/truyenthong/posts/${post.slug}/edit`}>
-                                                    <Button variant="ghost" size="icon-sm" title="Sửa" className="text-blue-700 hover:bg-blue-100">
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                </Link>
-                                                <Button variant="ghost" size="icon-sm" onClick={() => handleDeleteClick(post.slug)} title="Xóa" className="text-red-700 hover:bg-red-100">
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                {/* Right Section - Stats & Actions */}
+                                <div className="flex items-center gap-4 mt-3 sm:mt-0 w-full sm:w-auto justify-end border-t sm:border-0 border-gray-200 pt-3 sm:pt-0">
+                                    {/* Views */}
+                                    <div className="text-right flex-shrink-0">
+                                        <div className="text-sm font-bold text-gray-900">
+                                            {post.view_count?.toLocaleString('vi-VN') || 0}
+                                        </div>
+                                        <div className="text-[10px] text-gray-500">lượt xem</div>
+                                    </div>
+                                    
+                                    {/* Actions */}
+                                    <div className="flex gap-1">
+                                        <Link href={`/admin/truyenthong/posts/${post.slug}/edit`}>
+                                            <Button variant="ghost" size="icon" title="Sửa" className="h-8 w-8 text-blue-600 hover:bg-blue-100 hover:text-blue-800 transition-colors">
+                                                <Edit className="h-4 w-4" />
+                                            </Button>
+                                        </Link>
+                                        <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(post.slug)} title="Xóa" className="h-8 w-8 text-red-500 hover:bg-red-100 hover:text-red-600 transition-colors">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
-            </Card>
+            </div>
 
             {/* Delete Confirmation */}
             <ConfirmDialog

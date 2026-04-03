@@ -34,16 +34,43 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       return NextResponse.json({ error: 'Teacher code is required' }, { status: 400 });
     }
 
-    // Fetch teacher stats - auto-create if not exists
+    // Fetch teacher stats - auto-create if not exists, but always enrich from teachers table when possible.
+    const teacherInfoQuery = `
+      SELECT
+        COALESCE(NULLIF(full_name, ''), $1) AS full_name,
+        COALESCE(NULLIF(user_name, ''), NULL) AS username,
+        COALESCE(NULLIF(work_email, ''), '') AS work_email,
+        COALESCE(NULLIF(main_centre, ''), NULL) AS center,
+        COALESCE(NULLIF(course_line, ''), NULL) AS teaching_block
+      FROM teachers
+      WHERE code = $1
+      LIMIT 1
+    `;
+    const teacherInfoResult = await pool.query(teacherInfoQuery, [teacherCode]);
+    const teacherInfo = teacherInfoResult.rows[0] || null;
+
     const teacherQuery = `
       INSERT INTO training_teacher_stats 
-      (teacher_code, full_name, work_email, status, total_score)
-      VALUES ($1, $1, '', 'Active', 0.00)
+      (teacher_code, full_name, username, work_email, center, teaching_block, status, total_score)
+      VALUES ($1, $2, $3, $4, $5, $6, 'Active', 0.00)
       ON CONFLICT (teacher_code) DO UPDATE 
-      SET updated_at = CURRENT_TIMESTAMP
+      SET
+        full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), training_teacher_stats.full_name),
+        username = COALESCE(NULLIF(EXCLUDED.username, ''), training_teacher_stats.username),
+        work_email = COALESCE(NULLIF(EXCLUDED.work_email, ''), training_teacher_stats.work_email),
+        center = COALESCE(NULLIF(EXCLUDED.center, ''), training_teacher_stats.center),
+        teaching_block = COALESCE(NULLIF(EXCLUDED.teaching_block, ''), training_teacher_stats.teaching_block),
+        updated_at = CURRENT_TIMESTAMP
       RETURNING *
     `;
-    const teacherResult = await pool.query(teacherQuery, [teacherCode]);
+    const teacherResult = await pool.query(teacherQuery, [
+      teacherCode,
+      teacherInfo?.full_name || teacherCode,
+      teacherInfo?.username || null,
+      teacherInfo?.work_email || '',
+      teacherInfo?.center || null,
+      teacherInfo?.teaching_block || null,
+    ]);
     const teacherStats = teacherResult.rows[0];
 
     console.log('[Training DB API] Teacher stats loaded:', teacherCode);

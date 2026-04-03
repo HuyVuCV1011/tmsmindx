@@ -97,7 +97,7 @@ export default function Slider({ posts }: SliderProps) {
                                 "flex flex-col gap-6 transform transition-all duration-1000 delay-300",
                                 index === currentSlide ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0'
                             )}>
-                                <div className="max-w-3xl rounded-3xl bg-white/5 border border-white/15 backdrop-blur-md p-6 md:p-8 shadow-2xl">
+                                <div className="max-w-3xl rounded-3xl bg-white/5 border border-white/15 backdrop-blur-md p-7 md:p-10 shadow-2xl">
                                 {/* Tag */}
                                 <div className="inline-flex">
                                     <span className="px-4 py-1.5 rounded-full text-xs md:text-sm font-bold tracking-wider uppercase bg-white/10 text-white backdrop-blur-md shadow-lg transition-colors border border-white/20">
@@ -106,21 +106,21 @@ export default function Slider({ posts }: SliderProps) {
                                 </div>
 
                                 {/* Title */}
-                                <h3 className="text-3xl md:text-5xl lg:text-6xl font-black leading-[1.05] tracking-tight text-white drop-shadow-lg">
+                                <h3 className="mt-4 text-2xl md:text-4xl lg:text-5xl font-black leading-[1.08] tracking-tight text-white drop-shadow-lg">
                                     <Link href={`/user/truyenthong/${post.slug || post.id}`} className="transition-all hover:text-white/90">
                                         {post.title}
                                     </Link>
                                 </h3>
 
-                                <div className="h-1 w-16 rounded-full bg-gradient-to-r from-white/90 via-white/60 to-transparent" />
+                                <div className="mt-5 h-1 w-16 rounded-full bg-gradient-to-r from-white/90 via-white/60 to-transparent" />
 
                                 {/* Description */}
-                                <p className="text-base md:text-lg text-white/80 line-clamp-2 max-w-2xl leading-relaxed font-light">
+                                <p className="mt-4 text-base md:text-lg text-white/80 line-clamp-2 max-w-2xl leading-relaxed font-light">
                                     {post.description}
                                 </p>
 
                                 {/* Action */}
-                                <div className="pt-2">
+                                <div className="pt-4 md:pt-5">
                                     <Link href={`/user/truyenthong/${post.slug || post.id}`}>
                                         <Button
                                             size="lg"

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { BookOpen, CalendarDays, ChevronDown, DollarSign, FileText, GraduationCap, Home, LogOut, Megaphone, Menu, Settings, Sparkles, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export function Sidebar() {
   const { isOpen, setIsOpen } = useSidebar();
@@ -14,6 +14,22 @@ export function Sidebar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const isNavLinkActive = useCallback((href?: string) => {
+    if (!href) return false;
+
+    const [targetPath, targetQuery] = href.split('?');
+    const pathMatched = pathname === targetPath || pathname.startsWith(`${targetPath}/`);
+    if (!pathMatched) return false;
+    if (!targetQuery) return true;
+
+    const queryParams = new URLSearchParams(targetQuery);
+    for (const [key, value] of queryParams.entries()) {
+      if (searchParams.get(key) !== value) return false;
+    }
+
+    return true;
+  }, [pathname, searchParams]);
 
   // Load expanded menus from localStorage on mount
   useEffect(() => {
@@ -41,6 +57,15 @@ export function Sidebar() {
     { href: "/admin/dashboard", label: "Bảng Điều Khiển", icon: Home },
     { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
     {
+      href: "/admin/hr-candidates",
+      label: "Đào tạo đầu vào",
+      icon: Users,
+      submenu: [
+        { href: "/admin/hr-candidates/gen-planner?region=south", label: "Miền Nam (HCM + Tỉnh Nam)" },
+        { href: "/admin/hr-candidates/gen-planner?region=north", label: "Miền Bắc (HN + Tỉnh Bắc + Tỉnh Trung)" },
+      ]
+    },
+    {
       label: "Quản lý Giáo viên & Vận hành",
       icon: Users,
       submenu: [
@@ -58,7 +83,7 @@ export function Sidebar() {
       ]
     },
     {
-      label: "Đào tạo & Thảo khí",
+      label: "Đào tạo & Khảo thí",
       icon: GraduationCap,
       submenu: [
         {
@@ -88,6 +113,7 @@ export function Sidebar() {
       submenu: [
         { href: "/admin/user-management", label: "Quản lý tài khoản"},
         { href: "/admin/database", label: "Database Manager"},
+        { href: "/admin/cloudinary", label: "Cloudinary Manager"},
       ]
     },
     { href: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", icon: FileText },
@@ -146,11 +172,23 @@ export function Sidebar() {
       ? Array.from(new Set([...basePermissions, ...DEAL_LUONG_ROUTES]))
       : basePermissions;
 
-    if (permissions.length === 0) return [];
+    const roleCodes = (user.userRoles || []).map((code) => code.toUpperCase());
+    const hasTrainingInputRole = roleCodes.some((code) => code === 'HR' || code === 'TE' || code === 'TF');
+    if (permissions.length === 0 && !hasTrainingInputRole) return [];
+
+    const hasPermissionForHref = (href: string) => {
+      const targetPath = href.split('?')[0];
+      return permissions.some((p) => targetPath === p || targetPath.startsWith(`${p}/`));
+    };
 
     const filterMenuItemsByPermissions = (items: any[]): any[] => {
       return items
         .map((item) => {
+          const isTrainingInputMenu = item?.href === '/admin/hr-candidates';
+          if (isTrainingInputMenu && hasTrainingInputRole) {
+            return item;
+          }
+
           if (item?.submenu && Array.isArray(item.submenu)) {
             const filteredChildren = filterMenuItemsByPermissions(item.submenu);
             if (filteredChildren.length > 0) {
@@ -158,7 +196,7 @@ export function Sidebar() {
             }
           }
 
-          if (item?.href && permissions.some((p) => { const itemPath = item.href.split('?')[0]; return itemPath === p || itemPath.startsWith(`${p}/`); })) {
+          if (item?.href && hasPermissionForHref(item.href)) {
             return item;
           }
 
@@ -170,16 +208,16 @@ export function Sidebar() {
     return filterMenuItemsByPermissions(adminMenuItems);
   };
 
-  const menuItems = useMemo(
-    () => (isUserArea ? userMenuItems : getFilteredAdminMenuItems()),
-    [isUserArea, user?.role, user?.permissions]
-  );
+  const menuItems = isUserArea ? userMenuItems : getFilteredAdminMenuItems();
 
   // Auto-expand submenu if current page is in it
   useEffect(() => {
     menuItems.forEach((item) => {
-      if ('submenu' in item && item.submenu && Array.isArray(item.submenu)) {
-        const isInSubmenu = item.submenu.some((sub: any) => isMenuItemActive(sub));
+      if ('submenu' in item && item.submenu) {
+        const isInSubmenu = item.submenu.some((sub: any) => {
+          if (!('href' in sub) || !sub.href) return false;
+          return isNavLinkActive(sub.href);
+        });
         if (isInSubmenu && !expandedMenus.includes(item.label)) {
           setExpandedMenus(prev => {
             const updated = [...prev, item.label];
@@ -189,18 +227,18 @@ export function Sidebar() {
         }
       }
     });
-  }, [menuItems, pathname]);
-
+  }, [menuItems, pathname, searchParams, expandedMenus, isNavLinkActive]);
   const toggleSubmenu = (label: string) => {
     setExpandedMenus(prev => {
-      const updated = prev.includes(label) 
+      const updated = prev.includes(label)
         ? prev.filter(item => item !== label)
         : [...prev, label];
-      
-      // Save to localStorage
-      localStorage.setItem('expandedMenus', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const handleTopLevelTabNavigation = () => {
+    setExpandedMenus([]);
   };
 
   const getRoleDisplay = () => {
@@ -282,8 +320,7 @@ export function Sidebar() {
                 <div key={item.href || item.label} className="group">
                   {hasSubmenu ? (
                     <div className="space-y-1">
-                      <button
-                        onClick={() => toggleSubmenu(item.label)}
+                      <div
                         className={cn(
                           "w-full flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-300 group/item",
                           isSubmenuActive || isExpanded
@@ -299,14 +336,25 @@ export function Sidebar() {
                         )}>
                           <Icon className="h-3.5 w-3.5" />
                         </div>
-                        <span className="flex-1 text-left">{item.label}</span>
-                        <div className={cn(
-                          "transition-transform duration-300",
-                          isExpanded ? "rotate-180" : ""
-                        )}>
+                        {item.href ? (
+                          <Link href={item.href} className="flex-1 text-left">
+                            {item.label}
+                          </Link>
+                        ) : (
+                          <span className="flex-1 text-left">{item.label}</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => toggleSubmenu(item.label)}
+                          className={cn(
+                            "rounded-md p-1 transition-transform duration-300 hover:bg-white/20",
+                            isExpanded ? "rotate-180" : ""
+                          )}
+                          aria-label={`Mở submenu ${item.label}`}
+                        >
                           <ChevronDown className="h-3.5 w-3.5" />
-                        </div>
-                      </button>
+                        </button>
+                      </div>
                       
                       {/* Submenu with slide animation */}
                       <div className={cn(
@@ -352,7 +400,6 @@ export function Sidebar() {
                             if (!subItem.href) {
                               return null;
                             }
-
                             return (
                               <Link
                                 key={subItem.href}
@@ -360,7 +407,7 @@ export function Sidebar() {
                                 className={cn(
                                   "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all duration-300 hover:scale-[1.01]",
                                   isSubActive
-                                    ? "bg-linear-to-r from-[#a1001f]/10 to-[#c41230]/10 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm"
+                                    ? "bg-linear-to-r from-[#a1001f]/15 to-[#c41230]/15 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm ring-1 ring-[#a1001f]/20"
                                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-3 hover:border-gray-300"
                                 )}
                               >
@@ -374,6 +421,7 @@ export function Sidebar() {
                   ) : (
                     <Link
                       href={item.href}
+                      onClick={handleTopLevelTabNavigation}
                       className={cn(
                         "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-300 group/item",
                         isActive

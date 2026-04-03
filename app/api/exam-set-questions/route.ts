@@ -3,6 +3,14 @@ import pool from '@/lib/db';
 
 type QuestionType = 'multiple_choice' | 'true_false' | 'short_answer' | 'essay';
 
+const stripUnstableImageSources = (value: unknown) => {
+  if (typeof value !== 'string') return value;
+  return value.replace(
+    /<img[^>]+src=["'](?:blob:[^"']*|data:image[^"']*)["'][^>]*>/gi,
+    ''
+  );
+};
+
 // GET: Fetch set questions by set_id
 export async function GET(request: NextRequest) {
   try {
@@ -78,7 +86,15 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedQuestionType: QuestionType = question_type;
-    const optionsValue = Array.isArray(options) && options.length > 0 ? JSON.stringify(options) : null;
+    const sanitizedQuestionText = String(stripUnstableImageSources(question_text) || '');
+    const sanitizedCorrectAnswer =
+      correct_answer == null ? null : String(stripUnstableImageSources(correct_answer) || '');
+    const sanitizedExplanation =
+      explanation == null ? null : String(stripUnstableImageSources(explanation) || '');
+    const sanitizedOptions = Array.isArray(options)
+      ? options.map((item) => String(stripUnstableImageSources(item) || '')).filter(Boolean)
+      : [];
+    const optionsValue = sanitizedOptions.length > 0 ? JSON.stringify(sanitizedOptions) : null;
 
     const query = `
       INSERT INTO exam_set_questions (
@@ -96,11 +112,11 @@ export async function POST(request: NextRequest) {
 
     const values = [
       set_id,
-      question_text,
+      sanitizedQuestionText,
       normalizedQuestionType,
-      correct_answer || null,
+      sanitizedCorrectAnswer,
       optionsValue,
-      explanation || null,
+      sanitizedExplanation,
       Number(points || 1),
       Number(order_number || 1),
     ];
@@ -156,9 +172,15 @@ export async function PUT(request: NextRequest) {
         setClauses.push(`${key} = $${paramIndex}`);
         if (key === 'options') {
           const optionValue = Array.isArray(updates[key]) && updates[key].length > 0
-            ? JSON.stringify(updates[key])
+            ? JSON.stringify(
+                updates[key]
+                  .map((item: unknown) => String(stripUnstableImageSources(item) || ''))
+                  .filter(Boolean)
+              )
             : null;
           values.push(optionValue);
+        } else if (['question_text', 'correct_answer', 'explanation'].includes(key)) {
+          values.push(stripUnstableImageSources(updates[key]));
         } else {
           values.push(updates[key]);
         }

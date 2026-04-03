@@ -4,12 +4,12 @@ import { Card } from "@/components/Card";
 import { PageContainer } from "@/components/PageContainer";
 import { useAuth } from "@/lib/auth-context";
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
 type CalendarView = "day" | "week" | "month";
 type EventCategory = "registration" | "exam" | "workshop_teaching" | "meeting" | "advanced_training_release" | "holiday";
-type ParticipationStatus = "accepted" | "declined";
 
 type RegistrationTemplate = "official" | "supplement";
 
@@ -30,7 +30,29 @@ interface ExamSetAvailability {
   subject_code: string;
 }
 
-const WEEKDAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+interface RegisteredExamParticipant {
+  id: number;
+  teacher_code: string;
+  teacher_name: string | null;
+  exam_type: "expertise" | "experience";
+  subject_code: string;
+  scheduled_at: string;
+  assignment_status: string | null;
+}
+
+interface CalendarExamAssignment {
+  id: number;
+  exam_type: "expertise" | "experience";
+  subject_code: string;
+  open_at: string;
+  close_at: string;
+  assignment_status: string;
+  can_take: boolean;
+  is_open: boolean;
+  is_set_active_now: boolean;
+}
+
+const WEEKDAY_LABELS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 const EVENT_TYPE_LABELS: Record<EventCategory, string> = {
   registration: "A: Lịch đăng ký kiểm tra",
   exam: "B: Lịch kiểm tra chuyên môn",
@@ -259,10 +281,12 @@ function isSameDate(first: Date, second: Date) {
   );
 }
 
-function getWeekStartSunday(date: Date) {
+function getWeekStartMonday(date: Date) {
   const current = startOfDay(date);
   const start = new Date(current);
-  start.setDate(current.getDate() - current.getDay());
+  const day = current.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  start.setDate(current.getDate() + mondayOffset);
   return start;
 }
 
@@ -289,9 +313,85 @@ function isPastDate(date: Date) {
   return startOfDay(date).getTime() < startOfDay(new Date()).getTime();
 }
 
+function normalizeSearchString(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function isSameMinute(firstValue: string, secondValue: string) {
+  const first = parseLocalDateTime(firstValue).getTime();
+  const second = parseLocalDateTime(secondValue).getTime();
+  return Math.abs(first - second) < 60 * 1000;
+}
+
+function toMinuteStamp(value: string) {
+  return Math.floor(parseLocalDateTime(value).getTime() / (60 * 1000));
+}
+
 function isRegistrationActive(event: EvaluationEvent) {
   const now = new Date();
   return now >= parseLocalDateTime(event.startAt) && now <= parseLocalDateTime(event.endAt);
+}
+
+function extractCodeFromEmail(email: string) {
+  return (email || "").split("@")[0]?.trim() || "";
+}
+
+function toMonthValue(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function mapEventToRegisterPayloads(event: EvaluationEvent) {
+  const eventTitle = normalizeSearchString(event.title || "");
+  const eventSpecialty = normalizeSearchString(event.specialty || "");
+  const eventText = `${eventTitle} ${eventSpecialty}`.trim();
+
+  return Object.values(REGISTER_OPTION_MAP).filter((mapped) =>
+    [...mapped.specialtyAliases, mapped.subject_code, mapped.optionLabel, ...mapped.subjectCodeCandidates].some(
+      (alias) => {
+        const normalizedAlias = normalizeSearchString(alias || "");
+        return (
+          normalizedAlias &&
+          (eventText.includes(normalizedAlias) || normalizedAlias.includes(eventText))
+        );
+      }
+    )
+  );
+}
+
+function resolveExamActionStatus(assignment: CalendarExamAssignment | null) {
+  if (!assignment) {
+    return "Chưa có bài thi cho lịch này";
+  }
+
+  if (assignment.can_take) {
+    return "Sẵn sàng làm bài";
+  }
+
+  if (!assignment.is_set_active_now) {
+    return "Bộ đề đang tạm ngưng";
+  }
+
+  if (!assignment.is_open) {
+    const now = Date.now();
+    const openAt = new Date(assignment.open_at).getTime();
+    const closeAt = new Date(assignment.close_at).getTime();
+    if (now < openAt) {
+      return "Chưa tới giờ mở bài";
+    }
+    if (now > closeAt) {
+      return "Đã quá hạn làm bài";
+    }
+  }
+
+  if (!["assigned", "in_progress"].includes(assignment.assignment_status)) {
+    return `Trạng thái hiện tại: ${assignment.assignment_status}`;
+  }
+
+  return "Chưa thể làm bài";
 }
 
 function buildCalendarCells(focusDate: Date, view: CalendarView) {
@@ -300,7 +400,7 @@ function buildCalendarCells(focusDate: Date, view: CalendarView) {
   }
 
   if (view === "week") {
-    const start = getWeekStartSunday(focusDate);
+    const start = getWeekStartMonday(focusDate);
     return Array.from({ length: 7 }, (_, index) => {
       const date = new Date(start);
       date.setDate(start.getDate() + index);
@@ -310,7 +410,9 @@ function buildCalendarCells(focusDate: Date, view: CalendarView) {
 
   const monthStart = new Date(focusDate.getFullYear(), focusDate.getMonth(), 1);
   const gridStart = new Date(monthStart);
-  gridStart.setDate(monthStart.getDate() - monthStart.getDay());
+  const monthStartDay = monthStart.getDay();
+  const monthStartOffset = monthStartDay === 0 ? 6 : monthStartDay - 1;
+  gridStart.setDate(monthStart.getDate() - monthStartOffset);
 
   return Array.from({ length: 35 }, (_, index) => {
     const date = new Date(gridStart);
@@ -321,6 +423,7 @@ function buildCalendarCells(focusDate: Date, view: CalendarView) {
 
 export default function MonthlyActivitiesPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [view, setView] = useState<CalendarView>("month");
   const [focusDate, setFocusDate] = useState(new Date());
   const [events, setEvents] = useState<EvaluationEvent[]>([]);
@@ -331,13 +434,17 @@ export default function MonthlyActivitiesPage() {
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [availableOptions, setAvailableOptions] = useState<Set<string>>(new Set());
   const [teacherCode, setTeacherCode] = useState("");
-  const [teacherName, setTeacherName] = useState("");
   const [teacherCenterCode, setTeacherCenterCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [respondingEventId, setRespondingEventId] = useState<string | null>(null);
-  const [participationByEvent, setParticipationByEvent] = useState<Record<string, ParticipationStatus>>({});
+  const [registeredParticipantsByEvent, setRegisteredParticipantsByEvent] = useState<Record<string, RegisteredExamParticipant[]>>({});
+  const [showParticipantsModal, setShowParticipantsModal] = useState(false);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
+  const [participantsForEvent, setParticipantsForEvent] = useState<RegisteredExamParticipant[]>([]);
+  const [participantsEvent, setParticipantsEvent] = useState<EvaluationEvent | null>(null);
   const [userRegisteredSubjects, setUserRegisteredSubjects] = useState<Set<string>>(new Set());
+  const [registeredScheduleTimesByOption, setRegisteredScheduleTimesByOption] = useState<Record<string, string[]>>({});
   const [selectedExamEventByOption, setSelectedExamEventByOption] = useState<Record<string, string>>({});
+  const [examAssignments, setExamAssignments] = useState<CalendarExamAssignment[]>([]);
 
   useEffect(() => {
     if (!user?.email) return;
@@ -348,9 +455,6 @@ export default function MonthlyActivitiesPage() {
         const data = await response.json();
         if (data?.teacher?.code) {
           setTeacherCode(data.teacher.code);
-          if (data?.teacher?.name) {
-            setTeacherName(String(data.teacher.name));
-          }
           if (data?.teacher?.branchCurrent) {
             setTeacherCenterCode(String(data.teacher.branchCurrent));
           }
@@ -361,7 +465,6 @@ export default function MonthlyActivitiesPage() {
 
       const fallback = user.email.split('@')[0] || '';
       setTeacherCode(fallback);
-      setTeacherName(user.displayName || fallback);
     })();
   }, [user?.email, user?.displayName]);
 
@@ -454,17 +557,81 @@ export default function MonthlyActivitiesPage() {
         const data = await response.json();
         if (!response.ok || !data?.success) return;
         const registeredSet = new Set<string>();
-        (data.data || []).forEach((row: { block_code: string; subject_code: string }) => {
+        const scheduleTimesByOption: Record<string, string[]> = {};
+
+        (data.data || []).forEach((row: { block_code: string; subject_code: string; scheduled_at: string }) => {
           Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
             if (mapped.block_code === row.block_code && mapped.subject_code === row.subject_code) {
               registeredSet.add(option);
+              if (!scheduleTimesByOption[option]) {
+                scheduleTimesByOption[option] = [];
+              }
+              if (row.scheduled_at) {
+                scheduleTimesByOption[option].push(row.scheduled_at);
+              }
             }
           });
         });
         setUserRegisteredSubjects(registeredSet);
-      } catch {}
+        setRegisteredScheduleTimesByOption(scheduleTimesByOption);
+      } catch {
+      }
     })();
   }, [teacherCode]);
+
+  const fetchExamAssignmentsForMonth = useCallback(
+    async (targetDate: Date) => {
+      const candidates = new Set<string>();
+      const normalizedTeacherCode = teacherCode?.trim();
+      if (normalizedTeacherCode) {
+        candidates.add(normalizedTeacherCode);
+        candidates.add(normalizedTeacherCode.toLowerCase());
+        candidates.add(normalizedTeacherCode.toUpperCase());
+      }
+
+      if (user?.email) {
+        const emailCode = extractCodeFromEmail(user.email);
+        if (emailCode) {
+          candidates.add(emailCode);
+          candidates.add(emailCode.toLowerCase());
+          candidates.add(emailCode.toUpperCase());
+        }
+      }
+
+      const candidateList = Array.from(candidates).filter(Boolean);
+      if (candidateList.length === 0) {
+        setExamAssignments([]);
+        return;
+      }
+
+      const teacherCodeParam = normalizedTeacherCode || candidateList[0];
+      const teacherCodesParam = encodeURIComponent(candidateList.join(","));
+      const month = toMonthValue(targetDate);
+
+      try {
+        const response = await fetch(
+          `/api/exam-assignments?teacher_code=${encodeURIComponent(
+            teacherCodeParam
+          )}&teacher_codes=${teacherCodesParam}&month=${month}`,
+          { cache: "no-store" }
+        );
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          setExamAssignments([]);
+          return;
+        }
+        setExamAssignments((data.data || []) as CalendarExamAssignment[]);
+      } catch {
+        setExamAssignments([]);
+      }
+    },
+    [teacherCode, user?.email]
+  );
+
+  useEffect(() => {
+    const targetDate = selectedDate || focusDate;
+    fetchExamAssignmentsForMonth(targetDate);
+  }, [fetchExamAssignmentsForMonth, focusDate, selectedDate]);
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -567,7 +734,7 @@ export default function MonthlyActivitiesPage() {
     }
 
     if (view === "week") {
-      const start = getWeekStartSunday(focusDate);
+      const start = getWeekStartMonday(focusDate);
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
       return `${start.toLocaleDateString("vi-VN")} - ${end.toLocaleDateString("vi-VN")}`;
@@ -581,6 +748,53 @@ export default function MonthlyActivitiesPage() {
     return visibleEventsByDateKey.get(formatDateKey(selectedDate)) || [];
   }, [visibleEventsByDateKey, selectedDate]);
 
+  const examAssignmentByEventId = useMemo(() => {
+    const next: Record<string, CalendarExamAssignment | null> = {};
+
+    selectedDayEvents.forEach((event) => {
+      if (event.eventType !== "exam") {
+        next[event.id] = null;
+        return;
+      }
+
+      const mappedPayloads = mapEventToRegisterPayloads(event);
+      if (mappedPayloads.length === 0) {
+        next[event.id] = null;
+        return;
+      }
+
+      const matches = examAssignments.filter((assignment) => {
+        const hasMappedSubject = mappedPayloads.some(
+          (mapped) =>
+            mapped.exam_type === assignment.exam_type &&
+            mapped.subject_code === assignment.subject_code
+        );
+
+        if (!hasMappedSubject) {
+          return false;
+        }
+
+        return isSameMinute(assignment.open_at, event.startAt);
+      });
+
+      if (matches.length === 0) {
+        next[event.id] = null;
+        return;
+      }
+
+      matches.sort((first, second) => {
+        if (first.can_take !== second.can_take) {
+          return first.can_take ? -1 : 1;
+        }
+        return parseLocalDateTime(second.open_at).getTime() - parseLocalDateTime(first.open_at).getTime();
+      });
+
+      next[event.id] = matches[0];
+    });
+
+    return next;
+  }, [selectedDayEvents, examAssignments]);
+
   const activeRegistrationEventsForSelectedDate = useMemo(() => {
     return selectedDayEvents.filter(
       (event) => event.eventType === "registration" && !isPastEvent(event)
@@ -588,41 +802,62 @@ export default function MonthlyActivitiesPage() {
   }, [selectedDayEvents]);
 
   useEffect(() => {
-    if (!showDayEventsModal || !teacherCode || selectedDayEvents.length === 0) {
+    if (!showDayEventsModal || selectedDayEvents.length === 0) {
       return;
     }
 
-    const eventIds = selectedDayEvents.map((event) => event.id).join(',');
+    const relevantEvents = selectedDayEvents.filter(
+      (event) => event.eventType === "exam" || !event.eventType
+    );
+
+    if (relevantEvents.length === 0) {
+      setRegisteredParticipantsByEvent({});
+      return;
+    }
 
     (async () => {
       try {
-        const response = await fetch(
-          `/api/event-schedule-participants?teacher_code=${encodeURIComponent(teacherCode)}&event_ids=${encodeURIComponent(eventIds)}`
-        );
+        const targetDate = selectedDate || parseLocalDateTime(relevantEvents[0].startAt);
+        const monthValue = `${targetDate.getFullYear()}-${`${targetDate.getMonth() + 1}`.padStart(2, "0")}`;
+        const response = await fetch(`/api/exam-registrations?month=${monthValue}`);
         const data = await response.json();
         if (!response.ok || !data?.success) {
-          throw new Error(data?.error || 'Không thể tải phản hồi tham gia');
+          throw new Error(data?.error || "Không thể tải danh sách đăng ký");
         }
 
-        const next: Record<string, ParticipationStatus> = {};
-        (data.data || []).forEach((row: { event_id: string; response_status: ParticipationStatus }) => {
-          if (row.event_id && row.response_status) {
-            next[row.event_id] = row.response_status;
-          }
+        const registrationRows = (data.data || []) as RegisteredExamParticipant[];
+        const next: Record<string, RegisteredExamParticipant[]> = {};
+
+        relevantEvents.forEach((event) => {
+          const matchedMappings = mapEventToRegisterPayloads(event);
+
+          const subjectCodes = new Set(matchedMappings.map((mapped) => mapped.subject_code));
+          const examTypes = new Set(matchedMappings.map((mapped) => mapped.exam_type));
+
+          next[event.id] = registrationRows.filter((row) => {
+            if (!subjectCodes.has(row.subject_code)) {
+              return false;
+            }
+            if (!examTypes.has(row.exam_type)) {
+              return false;
+            }
+            return isSameMinute(row.scheduled_at, event.startAt);
+          });
         });
-        setParticipationByEvent(next);
+
+        setRegisteredParticipantsByEvent(next);
       } catch (error) {
-        console.error('Failed to load participation response:', error);
-        setParticipationByEvent({});
+        console.error("Failed to load registered participants:", error);
+        setRegisteredParticipantsByEvent({});
       }
     })();
-  }, [showDayEventsModal, selectedDayEvents, teacherCode]);
+  }, [showDayEventsModal, selectedDayEvents, selectedDate]);
 
   useEffect(() => {
     if (!showRegisterModal) return;
     setSelectedExamEventByOption((prev) => {
       const next: Record<string, string> = {};
-      selectedOptions.forEach((option) => {
+      REGISTER_OPTIONS.forEach((option) => {
         const examEvents = upcomingExamEventsByOption[option] || [];
         next[option] =
           prev[option] && examEvents.some((e) => e.id === prev[option])
@@ -631,7 +866,42 @@ export default function MonthlyActivitiesPage() {
       });
       return next;
     });
-  }, [selectedOptions, upcomingExamEventsByOption, showRegisterModal]);
+  }, [upcomingExamEventsByOption, showRegisterModal]);
+
+  useEffect(() => {
+    const hasOpenModal = showParticipantsModal || showRegisterModal || showDayEventsModal;
+    if (!hasOpenModal) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      if (showParticipantsModal) {
+        setShowParticipantsModal(false);
+        setParticipantsEvent(null);
+        setParticipantsForEvent([]);
+        return;
+      }
+
+      if (showRegisterModal) {
+        setShowRegisterModal(false);
+        setSelectedRegistrationEvent(null);
+        return;
+      }
+
+      if (showDayEventsModal) {
+        setShowDayEventsModal(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [showDayEventsModal, showRegisterModal, showParticipantsModal]);
 
   const stepDate = (amount: number) => {
     const next = new Date(focusDate);
@@ -672,13 +942,28 @@ export default function MonthlyActivitiesPage() {
     const registrationEvent = dateEvents.find(
       (event) => event.eventType === "registration" && !isPastEvent(event)
     );
-    if (registrationEvent) {
+    if (registrationEvent && dateEvents.length === 1) {
       setSelectedDate(date);
       openRegisterModalForEvent(registrationEvent);
       return;
     }
 
     setSelectedDate(date);
+    setShowDayEventsModal(true);
+  };
+
+  const handleDayEventClick = (date: Date, event: EvaluationEvent) => {
+    if (isPastDate(date) || isPastEvent(event)) {
+      return;
+    }
+
+    setSelectedDate(date);
+
+    if (event.eventType === "registration") {
+      openRegisterModalForEvent(event);
+      return;
+    }
+
     setShowDayEventsModal(true);
   };
 
@@ -730,47 +1015,16 @@ export default function MonthlyActivitiesPage() {
     return "";
   };
 
-  const handleParticipationResponse = async (eventId: string, responseStatus: ParticipationStatus) => {
-    if (!teacherCode.trim()) {
-      toast.error("Không xác định được mã giáo viên");
-      return;
-    }
-
-    const event = events.find((item) => item.id === eventId);
-    if (event && isPastEvent(event)) {
-      toast.error("Sự kiện đã qua, không thể phản hồi");
-      return;
-    }
+  const openParticipantsList = async (event: EvaluationEvent) => {
+    setParticipantsEvent(event);
+    setShowParticipantsModal(true);
+    setParticipantsLoading(true);
 
     try {
-      setRespondingEventId(eventId);
-      const response = await fetch('/api/event-schedule-participants', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event_id: eventId,
-          teacher_code: teacherCode,
-          teacher_name: teacherName || user?.displayName || teacherCode,
-          teacher_email: user?.email || null,
-          response_status: responseStatus,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok || !data?.success) {
-        throw new Error(data?.error || 'Không thể cập nhật phản hồi tham gia');
-      }
-
-      setParticipationByEvent((previous) => ({
-        ...previous,
-        [eventId]: responseStatus,
-      }));
-
-      toast.success(responseStatus === 'accepted' ? 'Bạn đã xác nhận tham gia' : 'Bạn đã từ chối tham gia');
-    } catch (error: any) {
-      toast.error(error?.message || 'Không thể lưu phản hồi');
+      const list = registeredParticipantsByEvent[event.id] || [];
+      setParticipantsForEvent(list);
     } finally {
-      setRespondingEventId(null);
+      setParticipantsLoading(false);
     }
   };
 
@@ -800,6 +1054,7 @@ export default function MonthlyActivitiesPage() {
     const sourceForm = registrationEvent?.registrationTemplate === "supplement" ? "additional_form" : "main_form";
 
     const submittedOptions: string[] = [];
+    const submittedSlots: Array<{ option: string; scheduledAt: string }> = [];
     const failedOptions: string[] = [];
     const failedDetails: string[] = [];
 
@@ -807,11 +1062,7 @@ export default function MonthlyActivitiesPage() {
       setSubmitting(true);
 
       for (const option of selectedOptions) {
-        if (userRegisteredSubjects.has(option)) {
-          failedOptions.push(option);
-          failedDetails.push(`${option}: bạn đã đăng ký môn này trước đó`);
-          continue;
-        }
+        const examEvents = upcomingExamEventsByOption[option] || [];
 
         const mapped = REGISTER_OPTION_MAP[option];
         if (!mapped) {
@@ -828,13 +1079,23 @@ export default function MonthlyActivitiesPage() {
         }
 
         const examEventId = selectedExamEventByOption[option];
-        const matchedExamEvent = examEventId
-          ? events.find((e) => e.id === examEventId) || null
-          : null;
+        const matchedExamEvent =
+          (examEventId ? events.find((e) => e.id === examEventId) || null : null) ||
+          (examEvents.length === 1 ? examEvents[0] : null);
 
         if (!matchedExamEvent) {
           failedOptions.push(option);
           failedDetails.push(`${option}: chưa chọn lịch thi`);
+          continue;
+        }
+
+        const alreadyRegisteredSameSlot = (registeredScheduleTimesByOption[option] || []).some((registeredAt) =>
+          toMinuteStamp(registeredAt) === toMinuteStamp(matchedExamEvent.startAt)
+        );
+
+        if (alreadyRegisteredSameSlot) {
+          failedOptions.push(option);
+          failedDetails.push(`${option}: bạn đã đăng ký lịch thi này`);
           continue;
         }
 
@@ -861,6 +1122,7 @@ export default function MonthlyActivitiesPage() {
         const data = await response.json();
         if (response.ok && data.success) {
           submittedOptions.push(option);
+          submittedSlots.push({ option, scheduledAt: matchedExamEvent.startAt });
         } else {
           const errMsg = data?.error || 'lỗi không xác định';
           failedOptions.push(option);
@@ -878,10 +1140,31 @@ export default function MonthlyActivitiesPage() {
         submittedOptions.forEach((option) => next.add(option));
         return next;
       });
+
+      setRegisteredScheduleTimesByOption((prev) => {
+        const next: Record<string, string[]> = { ...prev };
+        submittedSlots.forEach(({ option, scheduledAt }) => {
+          const existing = next[option] || [];
+          const hasSameSlot = existing.some((value) => toMinuteStamp(value) === toMinuteStamp(scheduledAt));
+          if (!hasSameSlot) {
+            next[option] = [...existing, scheduledAt];
+          }
+        });
+        return next;
+      });
+
       toast.success(`Đăng ký thành công ${submittedOptions.length} nội dung`);
       setShowRegisterModal(false);
       setSelectedOptions([]);
       setSelectedRegistrationEvent(null);
+
+      const firstSubmittedOption = submittedOptions[0];
+      const firstSubmittedExamEventId = selectedExamEventByOption[firstSubmittedOption];
+      const firstSubmittedExamEvent = events.find((event) => event.id === firstSubmittedExamEventId);
+      const refreshDate = firstSubmittedExamEvent
+        ? parseLocalDateTime(firstSubmittedExamEvent.startAt)
+        : selectedDate || focusDate;
+      await fetchExamAssignmentsForMonth(refreshDate);
     }
 
     if (failedOptions.length > 0) {
@@ -1045,31 +1328,53 @@ export default function MonthlyActivitiesPage() {
 
                     if (event.eventType === "registration") {
                       return (
-                        <div
+                        <button
+                          type="button"
                           key={event.id}
                           className={`rounded-sm px-1 py-1 text-center text-[11px] leading-4 font-bold whitespace-pre-line ${calendarEventStyle.titleClassName}`}
                           title={event.title.replace(/\n/g, " ")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDayEventClick(date, event);
+                          }}
                         >
                           {event.title}
-                        </div>
+                        </button>
                       );
                     }
 
                     return (
-                      <div key={event.id} className="flex items-start gap-1">
+                      <button
+                        type="button"
+                        key={event.id}
+                        className="flex w-full items-start gap-1 text-left"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDayEventClick(date, event);
+                        }}
+                        title={event.title.replace(/\n/g, " ")}
+                      >
                         <div className={`w-18 shrink-0 text-[11px] font-semibold leading-4 ${calendarEventStyle.timeClassName}`}>
                           {formatEventTimeRange(event.startAt, event.endAt)}
                         </div>
                         <div className={`flex-1 rounded-sm px-1 py-1 text-[11px] leading-4 font-semibold text-center ${calendarEventStyle.titleClassName}`}>
                           {event.title}
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                   {dayEvents.length > 3 && (
-                    <div className="text-[11px] font-semibold text-gray-500">
+                    <button
+                      type="button"
+                      className="text-[11px] font-semibold text-gray-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedDate(date);
+                        setShowDayEventsModal(true);
+                      }}
+                    >
                       +{dayEvents.length - 3} sự kiện khác
-                    </div>
+                    </button>
                   )}
                 </div>
               </div>
@@ -1101,8 +1406,12 @@ export default function MonthlyActivitiesPage() {
               ) : (
                 selectedDayEvents.map((event) => {
                   const eventIsPast = isPastEvent(event);
-                  const canRespond = event.eventType !== "registration" && event.eventType !== "holiday" && !eventIsPast;
                   const canRegister = event.eventType === "registration" && !eventIsPast;
+                  const supportsParticipantList = event.eventType === "exam" || !event.eventType;
+                  const registeredCount = (registeredParticipantsByEvent[event.id] || []).length;
+                  const matchedExamAssignment = examAssignmentByEventId[event.id] || null;
+                  const examActionStatus = resolveExamActionStatus(matchedExamAssignment);
+                  const canTakeExamNow = Boolean(matchedExamAssignment?.can_take);
 
                   return (
                   <div key={event.id} className="rounded-lg border border-gray-200 p-3">
@@ -1156,42 +1465,65 @@ export default function MonthlyActivitiesPage() {
                       </div>
                     )}
 
-                    {canRespond && (
+                    {supportsParticipantList && (
                       <div className="mt-3 border-t border-gray-200 pt-3">
-                        <p className="mb-2 text-xs font-semibold text-gray-600">Xác nhận tham gia sự kiện</p>
+                        <p className="mb-2 text-xs font-semibold text-gray-600">Người tham gia</p>
                         <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                            {registeredCount} người đăng ký
+                          </span>
                           <button
-                            onClick={() => handleParticipationResponse(event.id, "accepted")}
-                            disabled={respondingEventId === event.id}
-                            className={`rounded-md border px-3 py-1.5 text-xs font-semibold ${
-                              participationByEvent[event.id] === "accepted"
-                                ? "border-green-500 bg-green-600 text-white"
-                                : "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
-                            }`}
+                            onClick={() => openParticipantsList(event)}
+                            className="rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
                           >
-                            {respondingEventId === event.id ? "Đang lưu..." : "Tham gia"}
+                            Xem danh sách
                           </button>
-                          <button
-                            onClick={() => handleParticipationResponse(event.id, "declined")}
-                            disabled={respondingEventId === event.id}
-                            className={`rounded-md border px-3 py-1.5 text-xs font-semibold ${
-                              participationByEvent[event.id] === "declined"
-                                ? "border-red-500 bg-red-600 text-white"
-                                : "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
-                            }`}
-                          >
-                            {respondingEventId === event.id ? "Đang lưu..." : "Từ chối"}
-                          </button>
-                          {participationByEvent[event.id] === "accepted" && (
-                            <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
-                              Bạn đã xác nhận tham gia
+                          {eventIsPast && (
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600">
+                              Sự kiện đã kết thúc
                             </span>
                           )}
-                          {participationByEvent[event.id] === "declined" && (
-                            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-                              Bạn đã từ chối tham gia
-                            </span>
-                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {event.eventType === "exam" && (
+                      <div className="mt-3 border-t border-gray-200 pt-3">
+                        <p className="mb-2 text-xs font-semibold text-gray-600">Làm bài kiểm tra</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                              canTakeExamNow
+                                ? "bg-green-100 text-green-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {examActionStatus}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!matchedExamAssignment) {
+                                toast.error("Chưa tạo assignment cho lịch thi này");
+                                return;
+                              }
+
+                              if (!matchedExamAssignment.can_take) {
+                                toast.error(examActionStatus);
+                                return;
+                              }
+
+                              setShowDayEventsModal(false);
+                              router.push(`/user/assignments/exam/${matchedExamAssignment.id}`);
+                            }}
+                            className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                              canTakeExamNow
+                                ? "bg-green-600 text-white hover:bg-green-700"
+                                : "cursor-not-allowed border border-gray-300 bg-gray-100 text-gray-500"
+                            }`}
+                          >
+                            Làm bài
+                          </button>
                         </div>
                       </div>
                     )}
@@ -1212,6 +1544,67 @@ export default function MonthlyActivitiesPage() {
               )}
               <button
                 onClick={() => setShowDayEventsModal(false)}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showParticipantsModal && participantsEvent && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Danh sách người đăng ký</h3>
+                <p className="mt-1 text-xs text-gray-600">{participantsEvent.title}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowParticipantsModal(false);
+                  setParticipantsEvent(null);
+                  setParticipantsForEvent([]);
+                }}
+                className="rounded-md p-1 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto p-4">
+              {participantsLoading ? (
+                <div className="py-8 text-center text-sm text-gray-500">Đang tải danh sách...</div>
+              ) : participantsForEvent.length === 0 ? (
+                <div className="rounded-md border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+                  Chưa có giáo viên đăng ký làm bài cho lịch này.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {participantsForEvent.map((participant, index) => (
+                    <div
+                      key={participant.id || `${participant.teacher_code}-${index}`}
+                      className="rounded-md border border-gray-200 px-3 py-2"
+                    >
+                      <p className="text-sm font-semibold text-gray-900">
+                        {participant.teacher_name || participant.teacher_code}
+                      </p>
+                      <p className="text-xs text-gray-600">Mã GV: {participant.teacher_code}</p>
+                      <p className="text-xs text-gray-600">Trạng thái bài: {participant.assignment_status || "pending"}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end border-t border-gray-200 px-4 py-3">
+              <button
+                onClick={() => {
+                  setShowParticipantsModal(false);
+                  setParticipantsEvent(null);
+                  setParticipantsForEvent([]);
+                }}
                 className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
               >
                 Đóng
@@ -1249,27 +1642,82 @@ export default function MonthlyActivitiesPage() {
                   </p>
                 </div>
               )}
-              <p className="text-sm text-gray-700 font-medium">
-                Nội dung đăng ký kiểm tra chuyên sâu <span className="text-red-600">*</span>
-              </p>
-              <p className="text-sm text-gray-500">Các bạn vui lòng chọn ít nhất 1 option</p>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <p className="font-semibold">Thứ tự thao tác</p>
+                <p className="mt-1">1. Chọn lịch thi theo từng môn trước.</p>
+                <p>2. Tick môn muốn đăng ký rồi bấm Gửi đăng ký.</p>
+              </div>
 
-              {REGISTER_OPTIONS.map((option) => {
+              {REGISTER_OPTIONS.filter((option) => (upcomingExamEventsByOption[option] || []).length > 0).map((option) => {
                 const isAvailable = availableOptions.has(option);
                 const isSelected = selectedOptions.includes(option);
                 const examEvents = upcomingExamEventsByOption[option] || [];
                 const hasExamEvents = examEvents.length > 0;
-                const isAlreadyRegistered = userRegisteredSubjects.has(option);
-                const isDisabled = !isAvailable || !hasExamEvents || isAlreadyRegistered;
                 const selectedEventId = selectedExamEventByOption[option] || "";
+                const selectedExamEvent =
+                  (selectedEventId ? examEvents.find((event) => event.id === selectedEventId) : null) ||
+                  examEvents[0] ||
+                  null;
+                const hasAnyRegistration = userRegisteredSubjects.has(option);
+                const isAlreadyRegisteredForSelectedEvent =
+                  !!selectedExamEvent &&
+                  (registeredScheduleTimesByOption[option] || []).some(
+                    (registeredAt) => toMinuteStamp(registeredAt) === toMinuteStamp(selectedExamEvent.startAt)
+                  );
+                const isDisabled = !isAvailable || !hasExamEvents || isAlreadyRegisteredForSelectedEvent;
 
                 return (
-                  <div key={option} className="space-y-1">
+                  <div
+                    key={option}
+                    className={`space-y-2 rounded-lg border p-3 ${
+                      isDisabled ? "border-gray-200 bg-gray-50" : "border-blue-200 bg-blue-50/40"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p className={`text-sm font-semibold ${isDisabled ? "text-gray-500" : "text-gray-900"}`}>
+                        {option}
+                      </p>
+                      {isSelected && !isDisabled && (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                          Đã chọn đăng ký
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="rounded-md border border-blue-200 bg-white px-3 py-2">
+                      <p className="mb-1 text-xs font-semibold text-blue-700">Lịch thi</p>
+                      {!hasExamEvents ? (
+                        <p className="text-sm text-gray-500">Chưa có lịch thi</p>
+                      ) : examEvents.length === 1 ? (
+                        <p className="text-sm text-blue-900">
+                          {formatDateTime(examEvents[0].startAt)} — {formatDateTime(examEvents[0].endAt)}
+                        </p>
+                      ) : (
+                        <select
+                          value={selectedEventId}
+                          onChange={(e) =>
+                            setSelectedExamEventByOption((prev) => ({
+                              ...prev,
+                              [option]: e.target.value,
+                            }))
+                          }
+                          disabled={!hasExamEvents}
+                          className="w-full rounded-md border border-blue-300 bg-white px-2 py-1 text-sm"
+                        >
+                          {examEvents.map((event) => (
+                            <option key={event.id} value={event.id}>
+                              {formatDateTime(event.startAt)} — {formatDateTime(event.endAt)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
                     <label
-                      className={`flex items-start gap-2 rounded-lg border px-3 py-2 ${
+                      className={`flex items-start gap-2 rounded-md border px-3 py-2 ${
                         isDisabled
-                          ? "border-gray-100 bg-gray-50 text-gray-400"
-                          : "border-gray-200 hover:bg-gray-50"
+                          ? "border-gray-200 bg-gray-100 text-gray-400"
+                          : "border-gray-300 bg-white hover:bg-gray-50"
                       }`}
                     >
                       <input
@@ -1280,40 +1728,12 @@ export default function MonthlyActivitiesPage() {
                         className="mt-0.5 h-4 w-4 rounded border-gray-300"
                       />
                       <span className={`text-sm ${isDisabled ? "text-gray-400" : "text-gray-900"}`}>
-                        {option}
-                        {isAlreadyRegistered && " (đã đăng ký)"}
+                        Đăng ký môn này
+                        {isAlreadyRegisteredForSelectedEvent && " (đã đăng ký lịch này)"}
+                        {!isAlreadyRegisteredForSelectedEvent && hasAnyRegistration && " (đã đăng ký lịch khác)"}
                         {!isAvailable && " (chưa có đề)"}
-                        {!isAlreadyRegistered && isAvailable && !hasExamEvents && " (chưa có lịch thi)"}
                       </span>
                     </label>
-
-                    {isSelected && !isDisabled && (
-                      <div className="ml-6 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
-                        <p className="mb-1 text-xs font-semibold text-blue-700">Lịch thi:</p>
-                        {examEvents.length === 1 ? (
-                          <p className="text-sm text-blue-900">
-                            {formatDateTime(examEvents[0].startAt)} — {formatDateTime(examEvents[0].endAt)}
-                          </p>
-                        ) : (
-                          <select
-                            value={selectedEventId}
-                            onChange={(e) =>
-                              setSelectedExamEventByOption((prev) => ({
-                                ...prev,
-                                [option]: e.target.value,
-                              }))
-                            }
-                            className="w-full rounded-md border border-blue-300 bg-white px-2 py-1 text-sm"
-                          >
-                            {examEvents.map((event) => (
-                              <option key={event.id} value={event.id}>
-                                {formatDateTime(event.startAt)} — {formatDateTime(event.endAt)}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    )}
                   </div>
                 );
               })}

@@ -365,7 +365,11 @@ export default function EditPostPage() {
                                         <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
                                         Hình ảnh nhỏ (Thumbnail)
                                     </Label>
-                                    <div onPaste={(e) => handlePaste(e, 'thumbnail')} className="group">
+                                    <div 
+                                        tabIndex={0} 
+                                        onPaste={(e) => handlePaste(e, 'thumbnail')} 
+                                        className="group focus:outline-none focus-within:ring-2 focus-within:ring-blue-500/50 rounded-xl transition-all"
+                                    >
                                         {thumbnailPreview ? (
                                             <div className="relative">
                                                 <div className="relative overflow-hidden rounded-xl border-2 border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 p-3">
@@ -388,7 +392,7 @@ export default function EditPostPage() {
                                                         setFiles(prev => ({ ...prev, thumbnail: null }))
                                                         toast.success('Đã xóa ảnh thumbnail. Nhấn Ctrl+Z để khôi phục')
                                                     }}
-                                                    className="absolute -top-2 -right-2 p-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full hover:from-red-600 hover:to-red-700 transition-all shadow-lg hover:shadow-xl hover:scale-110"
+                                                    className="absolute -top-2 -right-2 p-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full hover:from-red-600 hover:to-red-700 transition-all shadow-lg hover:shadow-xl hover:scale-110 cursor-pointer"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -441,7 +445,11 @@ export default function EditPostPage() {
                                         <span className="w-2 h-2 bg-indigo-600 rounded-full"></span>
                                         Hình ảnh lớn (Banner)
                                     </Label>
-                                    <div onPaste={(e) => handlePaste(e, 'banner')} className="group">
+                                    <div 
+                                        tabIndex={0} 
+                                        onPaste={(e) => handlePaste(e, 'banner')} 
+                                        className="group focus:outline-none focus-within:ring-2 focus-within:ring-indigo-500/50 rounded-xl transition-all"
+                                    >
                                         {bannerPreview ? (
                                             <div className="relative">
                                                 <div className="relative overflow-hidden rounded-xl border-2 border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 p-3">
@@ -464,7 +472,7 @@ export default function EditPostPage() {
                                                         setFiles(prev => ({ ...prev, banner: null }))
                                                         toast.success('Đã xóa ảnh banner. Nhấn Ctrl+Z để khôi phục')
                                                     }}
-                                                    className="absolute -top-2 -right-2 p-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full hover:from-red-600 hover:to-red-700 transition-all shadow-lg hover:shadow-xl hover:scale-110"
+                                                    className="absolute -top-2 -right-2 p-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full hover:from-red-600 hover:to-red-700 transition-all shadow-lg hover:shadow-xl hover:scale-110 cursor-pointer"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -475,7 +483,7 @@ export default function EditPostPage() {
                                             <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 hover:from-indigo-50 hover:to-purple-50 transition-all">
                                                 <div className="text-center">
                                                     <svg className="w-12 h-12 text-indigo-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h18M3 12h18M3 16h18" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                     </svg>
                                                     <p className="text-sm font-semibold text-gray-700 mb-1">Chọn hoặc dán ảnh banner</p>
                                                     <p className="text-xs text-gray-500 mb-3">

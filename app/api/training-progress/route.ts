@@ -10,6 +10,52 @@ export const POST = withApiProtection(async (request: NextRequest) => {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
+    // Ensure teacher profile is consistent even when only watching video (no submission yet).
+    try {
+      const teacherInfoResult = await pool.query(
+        `
+          SELECT
+            COALESCE(NULLIF(full_name, ''), $1) AS full_name,
+            COALESCE(NULLIF(user_name, ''), NULL) AS username,
+            COALESCE(NULLIF(work_email, ''), '') AS work_email,
+            COALESCE(NULLIF(main_centre, ''), NULL) AS center,
+            COALESCE(NULLIF(course_line, ''), NULL) AS teaching_block
+          FROM teachers
+          WHERE code = $1
+          LIMIT 1
+        `,
+        [teacherCode]
+      );
+
+      const teacherInfo = teacherInfoResult.rows[0] || null;
+
+      await pool.query(
+        `
+          INSERT INTO training_teacher_stats
+            (teacher_code, full_name, username, work_email, center, teaching_block, status, total_score)
+          VALUES ($1, $2, $3, $4, $5, $6, 'Active', 0.00)
+          ON CONFLICT (teacher_code)
+          DO UPDATE SET
+            full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), training_teacher_stats.full_name),
+            username = COALESCE(NULLIF(EXCLUDED.username, ''), training_teacher_stats.username),
+            work_email = COALESCE(NULLIF(EXCLUDED.work_email, ''), training_teacher_stats.work_email),
+            center = COALESCE(NULLIF(EXCLUDED.center, ''), training_teacher_stats.center),
+            teaching_block = COALESCE(NULLIF(EXCLUDED.teaching_block, ''), training_teacher_stats.teaching_block),
+            updated_at = NOW()
+        `,
+        [
+          teacherCode,
+          teacherInfo?.full_name || teacherCode,
+          teacherInfo?.username || null,
+          teacherInfo?.work_email || '',
+          teacherInfo?.center || null,
+          teacherInfo?.teaching_block || null,
+        ]
+      );
+    } catch (syncError) {
+      console.error('Failed to sync training_teacher_stats from teachers:', syncError);
+    }
+
     // Step 0: If totalDuration is provided, update the video metadata
     if (totalDuration && typeof totalDuration === 'number' && totalDuration > 0) {
         // Calculate minutes (rounded up, at least 1)

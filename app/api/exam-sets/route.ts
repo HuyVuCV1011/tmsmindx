@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
         es.subject_id,
         es.set_code,
         es.set_name,
+        COALESCE(qc.question_count, 0) AS question_count,
         es.total_points,
         es.passing_score,
         es.status,
@@ -79,6 +80,11 @@ export async function GET(request: NextRequest) {
         esc.subject_name
       FROM exam_sets es
       JOIN exam_subject_catalog esc ON esc.id = es.subject_id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS question_count
+        FROM exam_set_questions esq
+        WHERE esq.set_id = es.id
+      ) qc ON TRUE
     `;
 
     if (conditions.length > 0) {

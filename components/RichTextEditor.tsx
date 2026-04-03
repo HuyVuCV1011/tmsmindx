@@ -4,6 +4,10 @@ import { mergeAttributes, type Editor as TiptapEditor } from '@tiptap/core'
 import Color from '@tiptap/extension-color'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
+import { Table } from '@tiptap/extension-table'
+import { TableCell } from '@tiptap/extension-table-cell'
+import { TableHeader } from '@tiptap/extension-table-header'
+import { TableRow } from '@tiptap/extension-table-row'
 import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle } from '@tiptap/extension-text-style'
 import Underline from '@tiptap/extension-underline'
@@ -28,6 +32,7 @@ import {
     Minus,
     Quote,
     Redo,
+    Table as TableIcon,
     Trash2,
     Underline as UnderlineIcon,
     Undo
@@ -225,6 +230,31 @@ export default function RichTextEditor({
   const [selectedImageWidth, setSelectedImageWidth] = useState<string>('100%')
   const [selectedImageAlign, setSelectedImageAlign] = useState<string>('top')
   const [showImageControls, setShowImageControls] = useState(false)
+
+  const uploadImageFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      throw new Error('Chi ho tro dinh dang anh')
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('Kich thuoc anh toi da 5MB')
+    }
+
+    const formData = new FormData()
+    formData.append('image', file)
+
+    const res = await fetch('/api/upload-question-image', {
+      method: 'POST',
+      body: formData
+    })
+
+    const data = await res.json()
+    if (!res.ok || !data?.success || !data?.url) {
+      throw new Error(data?.error || 'Upload failed')
+    }
+
+    return String(data.url)
+  }, [])
   
   const editor = useEditor({
     immediatelyRender: false,
@@ -236,10 +266,27 @@ export default function RichTextEditor({
       }),
       ResizableImage.configure({
         inline: true,
-        allowBase64: true,
+        allowBase64: false,
         HTMLAttributes: {
           class: 'tiptap-image'
         }
+      }),
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: 'border-collapse border border-gray-300 w-full min-w-full my-4 overflow-x-auto block tiptap-table',
+        },
+      }),
+      TableRow,
+      TableHeader.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 bg-gray-100 p-2 font-bold text-left min-w-[100px]',
+        },
+      }),
+      TableCell.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 p-2 min-w-[100px]',
+        },
       }),
       Link.configure({
         openOnClick: false,
@@ -260,10 +307,77 @@ export default function RichTextEditor({
         class: `prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none ${minHeight} px-4 py-3 ${
           error ? 'border-red-500' : ''
         }`
+      },
+      handlePaste: (_view, event) => {
+        const items = event.clipboardData?.items
+        if (!items?.length) return false
+
+        for (const item of Array.from(items)) {
+          if (!item.type.startsWith('image/')) continue
+
+          const file = item.getAsFile()
+          if (!file) continue
+
+          event.preventDefault()
+          ;(async () => {
+            try {
+              toast.loading('Dang tai anh len cloud...', { id: 'richtext-image-upload' })
+              const imageUrl = await uploadImageFile(file)
+              editor?.chain().focus().setImage({ src: imageUrl, alt: file.name || 'image' }).run()
+              toast.success('Da chen anh thanh cong', { id: 'richtext-image-upload' })
+            } catch (error) {
+              console.error('Paste image upload error:', error)
+              toast.error(error instanceof Error ? error.message : 'Khong the tai anh len cloud', {
+                id: 'richtext-image-upload'
+              })
+            }
+          })()
+
+          return true
+        }
+
+        return false
+      },
+      handleDrop: (_view, event) => {
+        const files = Array.from(event.dataTransfer?.files || [])
+        const imageFile = files.find((file) => file.type.startsWith('image/'))
+        if (!imageFile) return false
+
+        event.preventDefault()
+        ;(async () => {
+          try {
+            toast.loading('Dang tai anh len cloud...', { id: 'richtext-image-upload' })
+            const imageUrl = await uploadImageFile(imageFile)
+            editor?.chain().focus().setImage({ src: imageUrl, alt: imageFile.name || 'image' }).run()
+            toast.success('Da chen anh thanh cong', { id: 'richtext-image-upload' })
+          } catch (error) {
+            console.error('Drop image upload error:', error)
+            toast.error(error instanceof Error ? error.message : 'Khong the tai anh len cloud', {
+              id: 'richtext-image-upload'
+            })
+          }
+        })()
+
+        return true
       }
     },
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML())
+      const html = editor.getHTML()
+
+      // Blob URLs are temporary browser-local references and become invalid
+      // after refresh. Persisting them causes broken rich text rendering later.
+      const hasUnstableSource = /<img[^>]+src=["'](?:blob:|data:image)/i.test(html)
+      if (hasUnstableSource) {
+        const sanitized = html.replace(/<img[^>]+src=["'](?:blob:[^"']*|data:image[^"']*)["'][^>]*>/gi, '')
+        if (sanitized !== html) {
+          editor.commands.setContent(sanitized, { emitUpdate: false })
+          onChange(sanitized)
+          toast.error('Anh paste tam thoi da duoc loai bo. Vui long doi upload len cloud truoc khi luu.')
+          return
+        }
+      }
+
+      onChange(html)
     },
     onSelectionUpdate: ({ editor }: { editor: TiptapEditor }) => {
       const selection = editor.state.selection
@@ -306,27 +420,20 @@ export default function RichTextEditor({
       if (!file || !editor) return
 
       try {
-        // Upload to server
-        const formData = new FormData()
-        formData.append('image', file)
-
-        const res = await fetch('/api/upload-thumbnail', {
-          method: 'POST',
-          body: formData
-        })
-
-        if (!res.ok) throw new Error('Upload failed')
-
-        const data = await res.json()
-        editor.chain().focus().setImage({ src: data.url }).run()
+        toast.loading('Dang tai anh len cloud...', { id: 'richtext-image-upload' })
+        const imageUrl = await uploadImageFile(file)
+        editor.chain().focus().setImage({ src: imageUrl, alt: file.name || 'image' }).run()
+        toast.success('Da chen anh thanh cong', { id: 'richtext-image-upload' })
       } catch (error) {
         console.error('Image upload error:', error)
-        toast.error('Không thể tải lên hình ảnh. Vui lòng thử lại.')
+        toast.error(error instanceof Error ? error.message : 'Khong the tai len hinh anh', {
+          id: 'richtext-image-upload'
+        })
       }
     }
 
     input.click()
-  }, [editor])
+  }, [editor, uploadImageFile])
 
   const setLink = useCallback(() => {
     if (!editor) return
@@ -595,6 +702,54 @@ export default function RichTextEditor({
           >
             <Minus className="h-4 w-4" />
           </Button>
+        </div>
+
+        {/* Table Operations */}
+        <div className="flex gap-1 pr-2 border-r">
+          <Button
+            type="button"
+            size="sm"
+            variant={editor.isActive('table') ? 'default' : 'ghost'}
+            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+            className=" h-8 w-8 p-0 cursor-pointer"
+            title="Thêm Bảng"
+          >
+            <TableIcon className="h-4 w-4" />
+          </Button>
+          {editor.isActive('table') && (
+            <div className="flex items-center bg-blue-50/50 rounded-md border border-blue-100 p-0.5 gap-0.5 ml-1">
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => editor.chain().focus().addColumnAfter().run()}
+                    className="h-7 px-2 text-[10px] text-blue-700 hover:bg-blue-100 cursor-pointer"
+                    title="Thêm cột"
+                >
+                    +Cột
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => editor.chain().focus().addRowAfter().run()}
+                    className="h-7 px-2 text-[10px] text-blue-700 hover:bg-blue-100 cursor-pointer"
+                    title="Thêm dòng"
+                >
+                    +Dòng
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => editor.chain().focus().deleteTable().run()}
+                    className="h-7 px-2 text-[10px] text-red-600 hover:bg-red-100 cursor-pointer"
+                    title="Xóa Bảng"
+                >
+                    Xóa
+                </Button>
+            </div>
+          )}
         </div>
 
         {/* Text Color */}

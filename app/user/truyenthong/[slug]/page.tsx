@@ -310,7 +310,7 @@ export default function PostDetailPage() {
                                     {post.description}
                                 </p>
 
-                                <div className="prose prose-sm md:prose-base max-w-none text-gray-900" dangerouslySetInnerHTML={{ __html: post.content }}></div>
+                                <div className="ProseMirror prose prose-sm md:prose-base max-w-none text-gray-900" dangerouslySetInnerHTML={{ __html: post.content }}></div>
 
                                 {/* Reactions Section - Exactly like Comments */}
                                 <div className="border-t border-gray-200 pt-5 mt-6">

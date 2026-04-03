@@ -1,4 +1,5 @@
 import { withApiProtection } from "@/lib/api-protection";
+import pool from "@/lib/db";
 import { Teacher } from "@/types/teacher";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -98,8 +99,15 @@ async function fetchTeachersFromSheet(): Promise<Teacher[]> {
       const dataLines = lines.slice(2).filter(line => line.trim());
       
       const teachers: Teacher[] = dataLines.map(line => {
-        // Parse CSV line (simple approach, may need improvement for quoted fields)
-        const columns = line.split(",").map(col => col.trim().replace(/^"|"$/g, ""));
+        const columns = parseCSVLine(line).map(col => col.trim().replace(/^"|"$/g, ""));
+
+        // Current sheet schema (row 2 header):
+        // 0 No, 1 Full name, 2 Code, 3 Work email, 4 Personal email,
+        // 5 Khoi final, 6 Centers, 7 Status update,
+        // 8 Status - month N-1, 9 Status - month N,
+        // 10 BU check, 11 Khoi check, 12 Rank K12 check,
+        // 13 Joined date, 14 Leader/TE
+        const latestStatus = columns[9] || columns[8] || columns[7] || "";
         
         return {
           stt: columns[0] || "",
@@ -107,12 +115,12 @@ async function fetchTeachersFromSheet(): Promise<Teacher[]> {
           code: columns[2] || "",
           emailMindx: columns[3] || "",
           emailPersonal: columns[4] || "",
-          status: columns[5] || "",
-          branchIn: columns[6] || "",
-          programIn: columns[7] || "",
-          branchCurrent: columns[8] || "",
-          programCurrent: columns[9] || "",
-          manager: columns[10] || "",
+          status: latestStatus,
+          branchIn: columns[10] || columns[6] || "",
+          programIn: columns[5] || "",
+          branchCurrent: columns[6] || "",
+          programCurrent: columns[11] || columns[5] || "",
+          manager: columns[14] || "",
           responsible: columns[11] || "",
           position: columns[12] || "",
           startDate: columns[13] || "",
@@ -346,6 +354,63 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
+function buildFallbackTeacher(code: string, email: string, fullName = ""): Teacher {
+  return {
+    stt: "",
+    name: fullName || code,
+    code,
+    emailMindx: email,
+    emailPersonal: "",
+    status: "Active",
+    branchIn: "",
+    programIn: "",
+    branchCurrent: "",
+    programCurrent: "",
+    manager: "",
+    responsible: "",
+    position: "",
+    startDate: "",
+    onboardBy: "",
+  };
+}
+
+async function resolveTeacherFallbackByEmail(email: string): Promise<Teacher | null> {
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    const byEmailResult = await pool.query(
+      `
+      SELECT teacher_code, full_name, work_email, center, teaching_block, position, status
+      FROM training_teacher_stats
+      WHERE LOWER(TRIM(work_email)) = LOWER(TRIM($1))
+      LIMIT 1
+      `,
+      [normalizedEmail]
+    );
+
+    if (byEmailResult.rows.length > 0) {
+      const row = byEmailResult.rows[0];
+      const teacher = buildFallbackTeacher(
+        String(row.teacher_code || "").trim(),
+        String(row.work_email || normalizedEmail).trim(),
+        String(row.full_name || "").trim()
+      );
+      teacher.branchCurrent = String(row.center || "").trim();
+      teacher.programCurrent = String(row.teaching_block || "").trim();
+      teacher.position = String(row.position || "").trim();
+      teacher.status = String(row.status || "Active").trim() || "Active";
+      return teacher;
+    }
+  } catch (error) {
+    console.warn("resolveTeacherFallbackByEmail query failed:", error);
+  }
+
+  const codeFromEmail = (email.split("@")[0] || "").trim();
+  if (!codeFromEmail) {
+    return null;
+  }
+  return buildFallbackTeacher(codeFromEmail, email);
+}
+
 export const GET = withApiProtection(async (request: NextRequest) => {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
@@ -397,10 +462,18 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     );
 
     if (!teacher) {
-      return NextResponse.json(
-        { error: `Không tìm thấy giáo viên với email "${emailParam}"` },
-        { status: 404 }
-      );
+      const fallbackTeacher = await resolveTeacherFallbackByEmail(normalizedEmail);
+      if (fallbackTeacher) {
+        if (isBasicLookup) {
+          return NextResponse.json({ teacher: fallbackTeacher, fallback: true });
+        }
+        teacher = fallbackTeacher;
+      } else {
+        return NextResponse.json(
+          { error: `Không tìm thấy giáo viên với email "${emailParam}"` },
+          { status: 404 }
+        );
+      }
     }
   }
 

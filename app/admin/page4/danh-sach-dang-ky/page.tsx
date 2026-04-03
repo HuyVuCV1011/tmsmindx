@@ -5,7 +5,7 @@ import { PageContainer } from "@/components/PageContainer";
 import { Stepper } from "@/components/ui/stepper";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { ClipboardList, Search } from "lucide-react";
+import { ClipboardList, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
@@ -40,6 +40,7 @@ export default function ExamRegistrationListPage() {
   const [loading, setLoading] = useState(true);
   const [searchTeacherCode, setSearchTeacherCode] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("all");
+  const [removingRegistrationId, setRemovingRegistrationId] = useState<number | null>(null);
 
   const fetchRows = async () => {
     try {
@@ -72,6 +73,43 @@ export default function ExamRegistrationListPage() {
   useEffect(() => {
     fetchRows();
   }, []);
+
+  const handleSetPending = async (row: RegistrationRow) => {
+    if (!row.assignment_id) {
+      toast.error("Đăng ký này đã ở trạng thái pending");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Đưa đăng ký của GV ${row.teacher_code} (${row.subject_name || row.subject_code}) về trạng thái pending?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setRemovingRegistrationId(row.id);
+
+      const response = await fetch('/api/exam-registrations', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registration_id: row.id }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Không thể đưa về pending');
+      }
+
+      toast.success('Đã đưa đăng ký về pending');
+      await fetchRows();
+    } catch (error: any) {
+      toast.error(error?.message || 'Không thể đưa về pending');
+    } finally {
+      setRemovingRegistrationId(null);
+    }
+  };
 
   const monthOptions = useMemo(() => {
     const options = new Set<string>();
@@ -184,6 +222,7 @@ export default function ExamRegistrationListPage() {
                   <TableHead>Điểm</TableHead>
                   <TableHead>Nguồn form</TableHead>
                   <TableHead>Ngày tạo</TableHead>
+                  <TableHead>Thao tác HO</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -237,7 +276,31 @@ export default function ExamRegistrationListPage() {
                     </TableCell>
                     <TableCell className="text-xs text-gray-700 capitalize">{row.source_form.replace("_", " ")}</TableCell>
                     <TableCell className="text-xs text-gray-600">
-                      {new Date(row.created_at).toLocaleString("vi-VN")}
+                      {new Date(row.created_at).toLocaleString("vi-VN", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                        hour12: false,
+                      })}
+                    </TableCell>
+                    <TableCell>
+                      {row.assignment_id ? (
+                        <button
+                          onClick={() => handleSetPending(row)}
+                          disabled={removingRegistrationId === row.id}
+                          className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {removingRegistrationId === row.id ? "Đang xử lý..." : "Đưa về pending"}
+                        </button>
+                      ) : (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                          Pending
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

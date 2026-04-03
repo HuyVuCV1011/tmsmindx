@@ -3,11 +3,12 @@
 import { Card } from "@/components/Card";
 import Modal from "@/components/Modal";
 import { PageContainer } from "@/components/PageContainer";
+import { SkeletonCard } from "@/components/skeletons";
 import { cn } from "@/lib/utils";
 import { BlockCode, ExamSetRecord, SUBJECT_CONFIGS, getSetsBySubject, inferLevel } from "./subject-mapping";
-import { Bot, CalendarDays, CheckCircle2, Code2, GripVertical, Palette, PlusCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Bot, CalendarDays, CheckCircle2, Code2, GripVertical, Palette, PlusCircle, ChevronLeft, ChevronRight, Settings2, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 interface EvaluationEvent {
@@ -23,12 +24,22 @@ interface PlannedEvent {
   subjectId: string;
   label: string;
   eventKind: "exam" | "registration";
+  durationMinutes: number;
   startDate: string;
   endDate: string;
   startTime: string;
   endTime: string;
   registrationTemplate: "official" | "supplement";
+  flowRound: number;
   selectedSetId: number | null;
+  isGeneratedSupplement?: boolean;
+}
+
+interface MonthlyDefaultSelection {
+  setId: number;
+  setCode: string;
+  setName: string;
+  selectionMode: "manual" | "random";
 }
 
 const WEEKDAY_LABELS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -51,14 +62,6 @@ function isSameDate(first: Date, second: Date) {
   );
 }
 
-function getDurationMins(startStr: string, endStr: string) {
-  const [h1, m1] = startStr.split(":").map(Number);
-  const [h2, m2] = endStr.split(":").map(Number);
-  let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
-  if (diff < 0) diff += 24 * 60;
-  return diff;
-}
-
 function addMinutesToTime(timeStr: string, minsToAdd: number) {
   const [h, m] = timeStr.split(":").map(Number);
   const totalMins = h * 60 + m + minsToAdd;
@@ -66,6 +69,34 @@ function addMinutesToTime(timeStr: string, minsToAdd: number) {
   const newM = totalMins % 60;
   return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
 }
+
+function splitTime(timeStr: string) {
+  const [hourRaw, minuteRaw] = timeStr.split(":");
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  return {
+    hour: Number.isNaN(hour) ? "00" : String(Math.min(23, Math.max(0, hour))).padStart(2, "0"),
+    minute: Number.isNaN(minute) ? "00" : String(Math.min(59, Math.max(0, minute))).padStart(2, "0"),
+  };
+}
+
+function normalizeTime(value: string, fallback = "00:00") {
+  const [hourRaw, minuteRaw] = value.split(":");
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) {
+    return splitTime(fallback);
+  }
+
+  return {
+    hour: String(Math.min(23, Math.max(0, hour))).padStart(2, "0"),
+    minute: String(Math.min(59, Math.max(0, minute))).padStart(2, "0"),
+  };
+}
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
+const MAX_EVENTS_PER_DAY_IN_CELL = 3;
 
 function formatDateKey(date: Date) {
   const pad = (v: number) => v.toString().padStart(2, "0");
@@ -80,6 +111,33 @@ function parseDateKey(value: string) {
 
   if (!year || !month || !day) return null;
   return { year, month, day };
+}
+
+function toIsoUtcFromLocal(dateKey: string, timeStr: string) {
+  const parsedDate = parseDateKey(dateKey);
+  const [hourText, minuteText] = timeStr.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+
+  if (!parsedDate || Number.isNaN(hour) || Number.isNaN(minute)) return null;
+
+  const date = new Date(parsedDate.year, parsedDate.month - 1, parsedDate.day, hour, minute, 0, 0);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absoluteOffset = Math.abs(offsetMinutes);
+  const offsetHour = Math.floor(absoluteOffset / 60);
+  const offsetMinute = absoluteOffset % 60;
+
+  // Keep local wall-clock time with explicit offset to avoid day-shift across services.
+  return `${parsedDate.year}-${pad(parsedDate.month)}-${pad(parsedDate.day)}T${pad(hour)}:${pad(minute)}:00${sign}${pad(offsetHour)}:${pad(offsetMinute)}`;
+}
+
+function getSubjectDurationMinutes(subjectId: string) {
+  const subject = SUBJECT_CONFIGS.find((item) => item.id === subjectId);
+  return subject?.durationMinutes ?? 120;
 }
 
 function daysInMonth(year: number, month: number) {
@@ -131,6 +189,11 @@ function buildCalendarCells(focusDate: Date) {
     date.setDate(gridStart.getDate() + index);
     return { date, inCurrentMonth: date.getMonth() === focusDate.getMonth() };
   });
+}
+
+function isInteractiveTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest("input, select, button, textarea, label"));
 }
 
 const normalizeText = (value: string) =>
@@ -221,7 +284,9 @@ export default function ProfessionalAssignmentLibraryPage() {
   const [scheduleEvents, setScheduleEvents] = useState<EvaluationEvent[]>([]);
 
   const [isAutoCreateModalOpen, setIsAutoCreateModalOpen] = useState(false);
+  const [isPreparingAutoCreateModal, setIsPreparingAutoCreateModal] = useState(false);
   const [isAutoCreating, setIsAutoCreating] = useState(false);
+  const [isPlannedEventsViewerOpen, setIsPlannedEventsViewerOpen] = useState(false);
   
   const [autoStartDate, setAutoStartDate] = useState(() => {
     const start = new Date();
@@ -234,14 +299,73 @@ export default function ProfessionalAssignmentLibraryPage() {
     return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
   });
   const [autoStartTime, setAutoStartTime] = useState("19:00");
-  const [autoEndTime, setAutoEndTime] = useState("21:00");
+  const [isDurationSettingsOpen, setIsDurationSettingsOpen] = useState(false);
+  const [durationFocusSubjectId, setDurationFocusSubjectId] = useState<string | null>(null);
+  const [subjectDurations, setSubjectDurations] = useState<Record<string, number>>(() => {
+    const next: Record<string, number> = {};
+    SUBJECT_CONFIGS.filter((s) => s.examType === "expertise" || s.examType === "experience").forEach((s) => {
+      next[s.id] = s.durationMinutes ?? 120;
+    });
+    return next;
+  });
 
   const [plannedEvents, setPlannedEvents] = useState<PlannedEvent[]>([]);
+  const [monthlyDefaultBySubjectId, setMonthlyDefaultBySubjectId] = useState<Record<string, MonthlyDefaultSelection>>({});
   const [history, setHistory] = useState<PlannedEvent[][]>([]);
   const [future, setFuture] = useState<PlannedEvent[][]>([]);
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
+  const dragOverDateKeyRef = useRef<string | null>(null);
+  const dragOverRafRef = useRef<number | null>(null);
+  const pendingDragOverDateKeyRef = useRef<string | null>(null);
+  const [selectedCalendarEventIds, setSelectedCalendarEventIds] = useState<string[]>([]);
+  const [leftPanelTab, setLeftPanelTab] = useState<"both" | "setup" | "queue">("both");
+  const [leftTopSectionHeight, setLeftTopSectionHeight] = useState(320);
+  const [isLeftPanelResizing, setIsLeftPanelResizing] = useState(false);
+  const leftPanelRef = useRef<HTMLDivElement | null>(null);
+  const leftTopSectionRef = useRef<HTMLDivElement | null>(null);
+  const leftDividerRef = useRef<HTMLDivElement | null>(null);
+  const liveLeftTopSectionHeightRef = useRef(320);
+  const resizeGrabOffsetYRef = useRef(0);
+  const autoCreatePrepareTokenRef = useRef(0);
   const [focusDate, setFocusDate] = useState(new Date());
+
+  const examDurationConfigSubjects = useMemo(() => {
+    return SUBJECT_CONFIGS.filter((s) => s.examType === "expertise" || s.examType === "experience");
+  }, []);
+
+  const durationSubjectsForModal = useMemo(() => {
+    if (!durationFocusSubjectId) return examDurationConfigSubjects;
+    return examDurationConfigSubjects.filter((subject) => subject.id === durationFocusSubjectId);
+  }, [examDurationConfigSubjects, durationFocusSubjectId]);
+
+  const getEffectiveDurationMinutes = (subjectId: string) => {
+    return subjectDurations[subjectId] ?? getSubjectDurationMinutes(subjectId);
+  };
+
+  const openDurationSettings = (subjectId?: string) => {
+    setDurationFocusSubjectId(subjectId || null);
+    setIsDurationSettingsOpen(true);
+  };
+
+  const closeDurationSettings = () => {
+    setIsDurationSettingsOpen(false);
+    setDurationFocusSubjectId(null);
+  };
+
+  const setDragOverDateKeyThrottled = useCallback((nextKey: string | null) => {
+    pendingDragOverDateKeyRef.current = nextKey;
+    if (dragOverRafRef.current !== null) return;
+
+    dragOverRafRef.current = window.requestAnimationFrame(() => {
+      dragOverRafRef.current = null;
+      const next = pendingDragOverDateKeyRef.current;
+      if (dragOverDateKeyRef.current === next) return;
+      dragOverDateKeyRef.current = next;
+      setDragOverDateKey(next);
+    });
+  }, []);
 
   const commitPlannedEvents = (nextState: PlannedEvent[]) => {
     setHistory((prev) => [...prev, plannedEvents]);
@@ -249,50 +373,291 @@ export default function ProfessionalAssignmentLibraryPage() {
     setPlannedEvents(nextState);
   };
 
-  const handleOpenAutoCreateModal = () => {
+  const createRegistrationPlannedEvent = (
+    template: "official" | "supplement",
+    flowRound = 0
+  ): PlannedEvent => {
+    const baseLabel = REGISTRATION_EVENT_LABELS[template];
+    return {
+      id: `registration-${template}-${crypto.randomUUID()}`,
+      subjectId: `registration-${template}-${flowRound || "official"}`,
+      label: template === "supplement" ? `${baseLabel} #${flowRound}` : baseLabel,
+      eventKind: "registration",
+      durationMinutes: 24 * 60 - 1,
+      startDate: autoStartDate,
+      endDate: autoEndDate,
+      startTime: "00:00",
+      endTime: "23:59",
+      registrationTemplate: template,
+      flowRound,
+      selectedSetId: null,
+      isGeneratedSupplement: template === "supplement",
+    };
+  };
+
+  const toggleOfficialRegistrationEvent = (enabled: boolean) => {
+    const hasOfficial = plannedEvents.some(
+      (event) => event.eventKind === "registration" && event.registrationTemplate === "official"
+    );
+
+    if (enabled && !hasOfficial) {
+      commitPlannedEvents([createRegistrationPlannedEvent("official"), ...plannedEvents]);
+      return;
+    }
+
+    if (!enabled && hasOfficial) {
+      commitPlannedEvents(
+        plannedEvents.filter(
+          (event) => !(event.eventKind === "registration" && event.registrationTemplate === "official")
+        )
+      );
+    }
+  };
+
+  const addSupplementRegistrationEvent = () => {
+    const supplementCount = plannedEvents.filter(
+      (event) => event.eventKind === "registration" && event.registrationTemplate === "supplement"
+    ).length;
+    const nextRound = supplementCount + 1;
+
+    const baseOfficialExams = plannedEvents
+      .filter((event) => event.eventKind === "exam" && event.flowRound === 0)
+      .map((event) => ({
+        ...event,
+        id: `${event.subjectId}-supplement-${nextRound}-${crypto.randomUUID()}`,
+        label: `${event.label} (Bổ sung #${nextRound})`,
+        registrationTemplate: "supplement" as const,
+        flowRound: nextRound,
+        isGeneratedSupplement: true,
+      }));
+
+    if (baseOfficialExams.length === 0) {
+      toast.error("Không có môn kiểm tra luồng chính thức để tạo đợt bổ sung.");
+      return;
+    }
+
+    const next = [
+      ...plannedEvents,
+      createRegistrationPlannedEvent("supplement", nextRound),
+      ...baseOfficialExams,
+    ];
+
+    commitPlannedEvents(next);
+  };
+
+  const removePlannedEvent = (eventId: string) => {
+    const target = plannedEvents.find((event) => event.id === eventId);
+    if (!target) return;
+
+    if (target.eventKind === "registration" && target.registrationTemplate === "supplement") {
+      commitPlannedEvents(
+        plannedEvents.filter(
+          (event) =>
+            !(
+              event.registrationTemplate === "supplement" &&
+              event.flowRound === target.flowRound
+            )
+        )
+      );
+      return;
+    }
+
+    commitPlannedEvents(plannedEvents.filter((event) => event.id !== eventId));
+  };
+
+  const loadMonthlyDefaultsForAutoCreate = async (dateKey?: string) => {
+    const parsed = dateKey ? parseDateKey(dateKey) : null;
+    const fallbackNow = new Date();
+    const year = parsed?.year ?? fallbackNow.getFullYear();
+    const month = parsed?.month ?? (fallbackNow.getMonth() + 1);
+
+    const subjectSelections = await Promise.all(
+      SUBJECT_CONFIGS
+        .filter((s) => s.examType === "expertise" || s.examType === "experience")
+        .map(async (subjectConfig) => {
+          const matchedSets = getSetsBySubject(sets, subjectConfig);
+          const candidateSubjectDbIds = Array.from(
+            new Set(
+              matchedSets
+                .map((set) => Number(set.subject_id))
+                .filter((subjectId) => Number.isFinite(subjectId) && subjectId > 0)
+            )
+          );
+
+          if (candidateSubjectDbIds.length === 0) {
+            return null;
+          }
+
+          const candidateSelections = await Promise.all(
+            candidateSubjectDbIds.map(async (subjectDbId) => {
+              const response = await fetch(
+                `/api/monthly-exam-selections?subject_id=${subjectDbId}&year=${year}&month=${month}`
+              );
+              const data = await response.json();
+
+              if (!response.ok || !data?.success || !data?.data?.set_id) {
+                return null;
+              }
+
+              const questionCount = Number(data.data.question_count || 0);
+              if (questionCount <= 0) {
+                return null;
+              }
+
+              return {
+                setId: Number(data.data.set_id),
+                setCode: String(data.data.set_code || ""),
+                setName: String(data.data.set_name || ""),
+                selectionMode: (data.data.selection_mode || "manual") as "manual" | "random",
+              } satisfies MonthlyDefaultSelection;
+            })
+          );
+
+          const activeSetOptions = activeSetsBySubjectId.get(subjectConfig.id) || [];
+          const chosenSelection = candidateSelections.find((selection) => {
+            if (!selection) return false;
+            return activeSetOptions.some((set) => Number(set.id) === selection.setId);
+          });
+
+          if (!chosenSelection) {
+            return null;
+          }
+
+          return {
+            subjectId: subjectConfig.id,
+            selection: chosenSelection,
+          };
+        })
+    );
+
+    const next: Record<string, MonthlyDefaultSelection> = {};
+    subjectSelections.forEach((item) => {
+      if (!item) return;
+
+      next[item.subjectId] = item.selection;
+    });
+
+    setMonthlyDefaultBySubjectId(next);
+    return next;
+  };
+
+  const handleCloseAutoCreateModal = () => {
+    autoCreatePrepareTokenRef.current += 1;
+    setIsPreparingAutoCreateModal(false);
+    setIsAutoCreateModalOpen(false);
+  };
+
+  const handleOpenAutoCreateModal = async () => {
+    const prepareToken = autoCreatePrepareTokenRef.current + 1;
+    autoCreatePrepareTokenRef.current = prepareToken;
+
+    const openDate = new Date();
+    const startDateForCreate = formatDateKey(openDate);
+    const endOfOpenMonth = new Date(openDate.getFullYear(), openDate.getMonth() + 1, 0);
+    const endDateForCreate = formatDateKey(endOfOpenMonth);
+
+    setAutoStartDate(startDateForCreate);
+    setAutoEndDate(endDateForCreate);
+    setFocusDate(openDate);
+
+    setIsAutoCreateModalOpen(true);
+    setIsPreparingAutoCreateModal(true);
     setHistory([]);
     setFuture([]);
-    setPlannedEvents(
-      [
-        {
-          id: "registration-official",
-          subjectId: "registration-official",
-          label: REGISTRATION_EVENT_LABELS.official,
-          eventKind: "registration" as const,
-          startDate: autoStartDate,
-          endDate: autoEndDate,
-          startTime: "00:00",
-          endTime: "23:59",
-          registrationTemplate: "official" as const,
-          selectedSetId: null,
-        },
-        {
-          id: "registration-supplement",
-          subjectId: "registration-supplement",
-          label: REGISTRATION_EVENT_LABELS.supplement,
-          eventKind: "registration" as const,
-          startDate: autoStartDate,
-          endDate: autoEndDate,
-          startTime: "00:00",
-          endTime: "23:59",
-          registrationTemplate: "supplement" as const,
-          selectedSetId: null,
-        },
-        ...SUBJECT_CONFIGS.filter((s) => s.examType === "expertise" || s.examType === "experience").map((s) => ({
-          id: s.id,
-          subjectId: s.id,
-          label: s.label,
-          eventKind: "exam" as const,
-          startDate: autoStartDate,
-          endDate: autoEndDate,
-          startTime: "19:00",
-          endTime: "21:00",
-          registrationTemplate: "official" as const,
-          selectedSetId: null,
-        })),
-      ]
-    );
-    setIsAutoCreateModalOpen(true);
+    setPlannedEvents([]);
+    setLeftPanelTab("both");
+    setLeftTopSectionHeight(320);
+
+    try {
+      if (sets.length === 0) {
+        await fetchSets();
+      }
+
+      if (autoCreatePrepareTokenRef.current !== prepareToken) return;
+
+      const monthlyDefaults = await loadMonthlyDefaultsForAutoCreate(startDateForCreate);
+      if (autoCreatePrepareTokenRef.current !== prepareToken) return;
+
+      const eligibleExamSubjects = SUBJECT_CONFIGS
+        .filter((s) => (s.examType === "expertise" || s.examType === "experience") && monthlyDefaults[s.id]);
+
+      if (eligibleExamSubjects.length === 0) {
+        toast.error("Không có môn đủ điều kiện: cần có bộ đề tháng và bộ đề phải có câu hỏi.");
+        setPlannedEvents([]);
+        return;
+      }
+
+      const registrationEvent = {
+        ...createRegistrationPlannedEvent("official"),
+        startDate: startDateForCreate,
+        endDate: endDateForCreate,
+      };
+
+      setPlannedEvents(
+        [
+          registrationEvent,
+          ...eligibleExamSubjects.map((s) => ({
+            id: s.id,
+            subjectId: s.id,
+            label: s.label,
+            eventKind: "exam" as const,
+            durationMinutes: getEffectiveDurationMinutes(s.id),
+            startDate: startDateForCreate,
+            endDate: endDateForCreate,
+            startTime: "19:00",
+            endTime: addMinutesToTime("19:00", getEffectiveDurationMinutes(s.id)),
+            registrationTemplate: "official" as const,
+            flowRound: 0,
+            selectedSetId: monthlyDefaults[s.id]?.setId ?? null,
+            isGeneratedSupplement: false,
+          })),
+        ]
+      );
+    } finally {
+      if (autoCreatePrepareTokenRef.current === prepareToken) {
+        setIsPreparingAutoCreateModal(false);
+      }
+    }
+  };
+
+  const handleChangeSubjectDuration = (subjectId: string, value: number) => {
+    setSubjectDurations((prev) => ({
+      ...prev,
+      [subjectId]: Math.max(1, value || 1),
+    }));
+  };
+
+  const handleResetSubjectDurations = () => {
+    if (durationFocusSubjectId) {
+      const defaultMinutes = getSubjectDurationMinutes(durationFocusSubjectId);
+      setSubjectDurations((prev) => ({
+        ...prev,
+        [durationFocusSubjectId]: defaultMinutes,
+      }));
+      return;
+    }
+
+    const next: Record<string, number> = {};
+    examDurationConfigSubjects.forEach((s) => {
+      next[s.id] = s.durationMinutes ?? 120;
+    });
+    setSubjectDurations(next);
+  };
+
+  const applyDurationSettingsToPlannedEvents = () => {
+    const next = plannedEvents.map((evt) => {
+      if (evt.eventKind !== "exam") return evt;
+      const durationMinutes = getEffectiveDurationMinutes(evt.subjectId);
+      return {
+        ...evt,
+        durationMinutes,
+        endTime: addMinutesToTime(evt.startTime, durationMinutes),
+      };
+    });
+
+    commitPlannedEvents(next);
+    closeDurationSettings();
+    toast.success("Đã áp dụng thời lượng cho từng bộ môn");
   };
 
   const groupedByBlock = useMemo(() => {
@@ -312,6 +677,19 @@ export default function ProfessionalAssignmentLibraryPage() {
       };
     });
   }, [sets]);
+
+  const calendarCells = useMemo(() => buildCalendarCells(focusDate), [focusDate]);
+
+  const plannedEventsByDate = useMemo(() => {
+    const byDate = new Map<string, PlannedEvent[]>();
+    plannedEvents.forEach((event) => {
+      if (!event.startDate) return;
+      const existing = byDate.get(event.startDate) || [];
+      existing.push(event);
+      byDate.set(event.startDate, existing);
+    });
+    return byDate;
+  }, [plannedEvents]);
 
   const blockOptions = useMemo(() => {
     const blockMap = new Map<BlockCode, string>();
@@ -351,6 +729,29 @@ export default function ProfessionalAssignmentLibraryPage() {
   }, [sets]);
 
   useEffect(() => {
+    if (sets.length === 0) return;
+
+    let cancelled = false;
+    const dateKey = formatDateKey(new Date());
+
+    (async () => {
+      try {
+        const defaults = await loadMonthlyDefaultsForAutoCreate(dateKey);
+        if (cancelled) return;
+        setMonthlyDefaultBySubjectId(defaults);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Error loading monthly defaults for subject cards:", error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sets, activeSetsBySubjectId]);
+
+  useEffect(() => {
     if (!isAutoCreateModalOpen || sets.length === 0) return;
 
     setPlannedEvents((prev) =>
@@ -360,18 +761,24 @@ export default function ProfessionalAssignmentLibraryPage() {
           return { ...event, selectedSetId: null };
         }
 
+        const monthlyDefault = monthlyDefaultBySubjectId[event.subjectId];
+        if (monthlyDefault) {
+          if (event.selectedSetId === monthlyDefault.setId) return event;
+          return { ...event, selectedSetId: monthlyDefault.setId };
+        }
+
         const options = activeSetsBySubjectId.get(event.subjectId) || [];
         if (options.length === 0) {
           if (event.selectedSetId === null) return event;
           return { ...event, selectedSetId: null };
         }
 
-        const hasCurrent = options.some((set) => set.id === event.selectedSetId);
+        const hasCurrent = options.some((set) => Number(set.id) === event.selectedSetId);
         if (hasCurrent) return event;
-        return { ...event, selectedSetId: options[0].id };
+        return { ...event, selectedSetId: Number(options[0].id) };
       })
     );
-  }, [isAutoCreateModalOpen, sets, activeSetsBySubjectId]);
+  }, [isAutoCreateModalOpen, sets, activeSetsBySubjectId, monthlyDefaultBySubjectId]);
 
   const fetchSets = async () => {
     try {
@@ -491,6 +898,8 @@ export default function ProfessionalAssignmentLibraryPage() {
   const handleDragStart = (e: React.DragEvent, id: string) => {
     setDraggedId(id);
     e.dataTransfer.effectAllowed = "move";
+    // Some browsers only start/propagate HTML5 drag smoothly when payload is set.
+    e.dataTransfer.setData("text/plain", id);
   };
 
   const isPlannedEventScheduled = (event: PlannedEvent) => {
@@ -499,6 +908,21 @@ export default function ProfessionalAssignmentLibraryPage() {
 
   const handleDragEnd = () => {
     setDraggedId(null);
+    setDragOverDateKeyThrottled(null);
+  };
+
+  const handleCalendarEventClick = (eventId: string, additive: boolean) => {
+    setSelectedCalendarEventIds((prev) => {
+      if (!additive) {
+        return [eventId];
+      }
+
+      if (prev.includes(eventId)) {
+        return prev.filter((id) => id !== eventId);
+      }
+
+      return [...prev, eventId];
+    });
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -520,6 +944,7 @@ export default function ProfessionalAssignmentLibraryPage() {
     next.splice(dropIndex, 0, removed);
     commitPlannedEvents(next);
     setDraggedId(null);
+    setDragOverDateKeyThrottled(null);
   };
 
   const handleRemoveZoneDragOver = (e: React.DragEvent) => {
@@ -552,12 +977,14 @@ export default function ProfessionalAssignmentLibraryPage() {
 
     commitPlannedEvents(next);
     setDraggedId(null);
+    setDragOverDateKeyThrottled(null);
   };
 
   const handleCalendarDrop = (e: React.DragEvent, dateKey: string) => {
     e.preventDefault();
     e.stopPropagation();
     if (!draggedId) return;
+    setDragOverDateKeyThrottled(null);
 
     const draggedEvent = plannedEvents.find((item) => item.id === draggedId);
     if (!draggedEvent) return;
@@ -573,7 +1000,7 @@ export default function ProfessionalAssignmentLibraryPage() {
       return;
     }
 
-    const durationMins = getDurationMins(autoStartTime, autoEndTime) || 120;
+    const durationMins = draggedEvent.durationMinutes || getEffectiveDurationMinutes(draggedEvent.subjectId);
     
     let newStart = autoStartTime;
     const existingOnDate = plannedEvents.filter(
@@ -599,13 +1026,50 @@ export default function ProfessionalAssignmentLibraryPage() {
     setDraggedId(null);
   };
 
+  useEffect(() => {
+    return () => {
+      if (dragOverRafRef.current !== null) {
+        window.cancelAnimationFrame(dragOverRafRef.current);
+      }
+    };
+  }, []);
+
   const updatePlannedEvent = <K extends keyof PlannedEvent>(id: string, field: K, value: PlannedEvent[K]) => {
-    const next = plannedEvents.map((evt) => (evt.id === id ? { ...evt, [field]: value } : evt));
+    const next = plannedEvents.map((evt) => {
+      if (evt.id !== id) return evt;
+
+      const updated = { ...evt, [field]: value } as PlannedEvent;
+      if (field === "startTime") {
+        const normalized = normalizeTime(String(value), evt.startTime);
+        updated.startTime = `${normalized.hour}:${normalized.minute}`;
+      }
+      if (updated.eventKind === "registration" && field === "registrationTemplate") {
+        if (updated.registrationTemplate === "official") {
+          updated.label = REGISTRATION_EVENT_LABELS.official;
+          updated.flowRound = 0;
+          updated.isGeneratedSupplement = false;
+        } else {
+          const existingSupplementCount = plannedEvents.filter(
+            (event) =>
+              event.eventKind === "registration" &&
+              event.registrationTemplate === "supplement" &&
+              event.id !== id
+          ).length;
+          updated.flowRound = existingSupplementCount + 1;
+          updated.label = `${REGISTRATION_EVENT_LABELS.supplement} #${updated.flowRound}`;
+          updated.isGeneratedSupplement = true;
+        }
+      }
+
+      if (updated.eventKind === "exam" && (field === "startTime" || field === "durationMinutes")) {
+        updated.endTime = addMinutesToTime(updated.startTime, updated.durationMinutes || 120);
+      }
+      return updated;
+    });
     commitPlannedEvents(next);
   };
 
   const applyMasterDatesToAll = () => {
-    const durationMins = getDurationMins(autoStartTime, autoEndTime) || 120;
     let currentStart = autoStartTime;
     
     const next = plannedEvents.map((evt) => {
@@ -620,7 +1084,10 @@ export default function ProfessionalAssignmentLibraryPage() {
       }
 
       const assignedStart = currentStart;
-      const assignedEnd = addMinutesToTime(assignedStart, durationMins);
+      const assignedEnd = addMinutesToTime(
+        assignedStart,
+        evt.durationMinutes || getEffectiveDurationMinutes(evt.subjectId)
+      );
       currentStart = assignedEnd;
 
       return {
@@ -657,7 +1124,7 @@ export default function ProfessionalAssignmentLibraryPage() {
         startDate: dateKey,
         endDate: dateKey,
         startTime: autoStartTime,
-        endTime: autoEndTime,
+        endTime: addMinutesToTime(autoStartTime, evt.durationMinutes || getEffectiveDurationMinutes(evt.subjectId)),
       };
     });
     commitPlannedEvents(next);
@@ -720,11 +1187,112 @@ export default function ProfessionalAssignmentLibraryPage() {
           handleAutoCreateEvents();
         }
       }
+
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedCalendarEventIds.length > 0) {
+        e.preventDefault();
+        const selectedSet = new Set(selectedCalendarEventIds);
+        commitPlannedEvents(plannedEvents.filter((event) => !selectedSet.has(event.id)));
+        setSelectedCalendarEventIds([]);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isAutoCreateModalOpen, history, future, plannedEvents, isAutoCreating]);
+  }, [
+    isAutoCreateModalOpen,
+    history,
+    future,
+    plannedEvents,
+    isAutoCreating,
+    selectedCalendarEventIds,
+  ]);
+
+  useEffect(() => {
+    if (selectedCalendarEventIds.length === 0) return;
+    const validIds = new Set(plannedEvents.map((event) => event.id));
+    setSelectedCalendarEventIds((prev) => prev.filter((id) => validIds.has(id)));
+  }, [plannedEvents, selectedCalendarEventIds.length]);
+
+  useEffect(() => {
+    liveLeftTopSectionHeightRef.current = leftTopSectionHeight;
+  }, [leftTopSectionHeight]);
+
+  useEffect(() => {
+    if (!isAutoCreateModalOpen || !isLeftPanelResizing) return;
+
+    let rafId: number | null = null;
+    let pendingClientY: number | null = null;
+
+    const updatePanelHeightByClientY = (clientY: number) => {
+      const host = leftPanelRef.current;
+      const topPanel = leftTopSectionRef.current;
+      if (!host || !topPanel) return;
+
+      const hostRect = host.getBoundingClientRect();
+      const topPanelRect = topPanel.getBoundingClientRect();
+      const rawHeight = clientY - topPanelRect.top - resizeGrabOffsetYRef.current;
+      const minTop = 220;
+      const maxTop = Math.max(minTop, hostRect.bottom - topPanelRect.top - 220);
+      const nextHeight = Math.min(maxTop, Math.max(minTop, rawHeight));
+      liveLeftTopSectionHeightRef.current = nextHeight;
+
+      topPanel.style.height = `${nextHeight}px`;
+    };
+
+    const scheduleHeightUpdate = (clientY: number) => {
+      pendingClientY = clientY;
+      if (rafId !== null) return;
+
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        if (pendingClientY === null) return;
+        updatePanelHeightByClientY(pendingClientY);
+      });
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      scheduleHeightUpdate(event.clientY);
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (event.touches.length === 0) return;
+      scheduleHeightUpdate(event.touches[0].clientY);
+      event.preventDefault();
+    };
+
+    const handleMouseUp = () => {
+      setLeftTopSectionHeight(Math.round(liveLeftTopSectionHeightRef.current));
+      setIsLeftPanelResizing(false);
+    };
+
+    const handleTouchEnd = () => {
+      setLeftTopSectionHeight(Math.round(liveLeftTopSectionHeightRef.current));
+      setIsLeftPanelResizing(false);
+    };
+
+    const previousUserSelect = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "row-resize";
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd);
+    window.addEventListener("touchcancel", handleTouchEnd);
+    return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchcancel", handleTouchEnd);
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
+    };
+  }, [isAutoCreateModalOpen, isLeftPanelResizing]);
 
   const getAutoEventTitle = (label: string) => {
     if (label.toLowerCase().includes("quy trình")) {
@@ -782,17 +1350,23 @@ export default function ProfessionalAssignmentLibraryPage() {
           const monthlyDateKeys = generateMonthlyDateKeys(planned.startDate, planned.endDate);
 
           for (const occurrenceDate of monthlyDateKeys) {
+            const startAtIso = toIsoUtcFromLocal(occurrenceDate, planned.startTime);
+            const endAtIso = toIsoUtcFromLocal(occurrenceDate, planned.endTime);
+            if (!startAtIso || !endAtIso) {
+              throw new Error(`Thời gian không hợp lệ cho lịch đăng ký ${planned.label}`);
+            }
+
             const response = await fetch("/api/event-schedules", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 id: crypto.randomUUID(),
-                title: REGISTRATION_EVENT_LABELS[planned.registrationTemplate],
+                title: planned.label,
                 event_type: "registration",
                 specialty: "Lịch đăng ký kiểm tra",
                 registration_template: planned.registrationTemplate,
-                start_at: `${occurrenceDate}T${planned.startTime}:00`,
-                end_at: `${occurrenceDate}T${planned.endTime}:00`,
+                start_at: startAtIso,
+                end_at: endAtIso,
                 note: "Lịch đăng ký kiểm tra tạo tự động theo tháng",
                 metadata: {
                   recurrence: "monthly",
@@ -800,6 +1374,15 @@ export default function ProfessionalAssignmentLibraryPage() {
                   range_end_date: planned.endDate,
                   occurrence_date: occurrenceDate,
                   auto_created_from: planned.id,
+                  flow_round: planned.flowRound,
+                  subject_list: plannedEvents
+                    .filter(
+                      (event) =>
+                        event.eventKind === "exam" &&
+                        event.registrationTemplate === planned.registrationTemplate &&
+                        event.flowRound === planned.flowRound
+                    )
+                    .map((event) => event.label),
                 },
               }),
             });
@@ -813,7 +1396,7 @@ export default function ProfessionalAssignmentLibraryPage() {
           continue;
         }
 
-        const selectedSet = sets.find((set) => set.id === planned.selectedSetId);
+        const selectedSet = sets.find((set) => Number(set.id) === planned.selectedSetId);
         if (!selectedSet) {
           continue;
         }
@@ -821,6 +1404,12 @@ export default function ProfessionalAssignmentLibraryPage() {
         const monthlyDateKeys = generateMonthlyDateKeys(planned.startDate, planned.endDate);
 
         for (const occurrenceDate of monthlyDateKeys) {
+          const startAtIso = toIsoUtcFromLocal(occurrenceDate, planned.startTime);
+          const endAtIso = toIsoUtcFromLocal(occurrenceDate, planned.endTime);
+          if (!startAtIso || !endAtIso) {
+            throw new Error(`Thời gian không hợp lệ cho môn ${planned.label}`);
+          }
+
           const { year, month } = parseYearMonthFromDate(occurrenceDate);
           const selectionKey = `${selectedSet.subject_id}-${year}-${month}`;
           if (!selectionUpdated.has(selectionKey)) {
@@ -853,14 +1442,15 @@ export default function ProfessionalAssignmentLibraryPage() {
               event_type: "exam",
               specialty: planned.label,
               registration_template: planned.registrationTemplate,
-              start_at: `${occurrenceDate}T${planned.startTime}:00`,
-              end_at: `${occurrenceDate}T${planned.endTime}:00`,
+              start_at: startAtIso,
+              end_at: endAtIso,
               note: "Lịch kiểm tra tạo tự động theo tháng",
               metadata: {
                 recurrence: "monthly",
                 range_start_date: planned.startDate,
                 range_end_date: planned.endDate,
                 occurrence_date: occurrenceDate,
+                  flow_round: planned.flowRound,
                 subject_id: selectedSet.subject_id,
                 selected_set_id: selectedSet.id,
                 selected_set_code: selectedSet.set_code,
@@ -948,6 +1538,7 @@ export default function ProfessionalAssignmentLibraryPage() {
         <button
           type="button"
           onClick={handleOpenAutoCreateModal}
+          disabled={loading}
           className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
         >
           <CalendarDays className="h-4 w-4" />
@@ -964,9 +1555,19 @@ export default function ProfessionalAssignmentLibraryPage() {
       </div>
 
       <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50/70 p-3">
-        <div className="mb-2 flex items-center gap-2">
-          <CalendarDays className="h-4 w-4 text-blue-700" />
-          <p className="text-sm font-semibold text-blue-900">Bộ môn mở sắp tới trong tháng</p>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-blue-700" />
+            <p className="text-sm font-semibold text-blue-900">Bộ môn mở sắp tới trong tháng</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => openDurationSettings()}
+            className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+            Cấu hình tất cả
+          </button>
         </div>
         {upcomingSubjectsInMonth.length === 0 ? (
           <p className="text-xs text-blue-800/80">Chưa có lịch mở bộ môn nào trong tháng hiện tại.</p>
@@ -981,14 +1582,33 @@ export default function ProfessionalAssignmentLibraryPage() {
                     ? "border-green-300 bg-green-50 text-green-800"
                     : "border-blue-200 bg-white text-blue-800"
                 )}
-                title={`Mở từ ${item.startAt.toLocaleString("vi-VN")} đến ${item.endAt.toLocaleString("vi-VN")}`}
+                title={`Mở từ ${item.startAt.toLocaleString("vi-VN", {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                  hour12: false,
+                })} đến ${item.endAt.toLocaleString("vi-VN", {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                  hour12: false,
+                })}`}
               >
                 {item.isOpenNow && <span className="mr-1 font-semibold">Đang mở •</span>}
-                {item.label} • {item.startAt.toLocaleDateString("vi-VN")} • {item.startAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} - {item.endAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+                {item.label} • {item.startAt.toLocaleDateString("vi-VN")} • {item.startAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false })} - {item.endAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false })}
               </span>
             ))}
           </div>
         )}
+        <p className="mt-2 text-[11px] font-medium text-blue-900/80">
+          Chuẩn lưu thời gian: ISO 8601 (UTC). Giao diện hiển thị theo múi giờ máy của bạn (24h).
+        </p>
       </div>
 
       <div className="space-y-4">
@@ -1009,47 +1629,72 @@ export default function ProfessionalAssignmentLibraryPage() {
 
               <div className={cn("grid gap-3", group.columnsClass)}>
                 {group.subjects.map((subject) => (
-                  <Link
-                    key={`${group.blockCode}-${subject.id}`}
-                    href={`/admin/page4/thu-vien-de/subjects/${subject.id}`}
-                    className={cn(
-                      "block rounded-lg border border-gray-200 bg-gray-50 p-3 transition-colors",
-                      "min-h-30 hover:border-red-200 hover:bg-red-50/40"
-                    )}
-                  >
-                    <p className="text-sm font-semibold text-gray-900 hover:text-red-700">
-                      {subject.label}
-                    </p>
-                    {subject.sets.length > 0 && (
-                      <p className="mt-1 text-xs text-gray-500">{subject.sets.length} bộ đề</p>
-                    )}
+                  <div key={`${group.blockCode}-${subject.id}`} className="relative">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openDurationSettings(subject.id);
+                      }}
+                      className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white/95 px-2 py-1 text-[11px] font-semibold text-indigo-700 shadow-sm hover:bg-indigo-50"
+                      title="Chỉnh cấu hình thời gian bộ môn"
+                    >
+                      <Settings2 className="h-3.5 w-3.5" />
+                      Cấu hình
+                    </button>
 
-                    {subject.sets.length === 0 ? (
-                      <p className="mt-1 text-xs text-gray-500">Chưa có bộ đề.</p>
-                    ) : (
-                      <>
-                        <div className="mt-2 space-y-1.5">
-                          {subject.sets.slice(0, 3).map((set) => {
-                            const level = inferLevel(set);
+                    <Link
+                      href={`/admin/page4/thu-vien-de/subjects/${subject.id}`}
+                      className={cn(
+                        "block rounded-lg border border-gray-200 bg-gray-50 p-3 pr-24 transition-colors",
+                        "min-h-30 hover:border-red-200 hover:bg-red-50/40"
+                      )}
+                    >
+                      <p className="text-sm font-semibold text-gray-900 hover:text-red-700">
+                        {subject.label}
+                      </p>
+                      {subject.sets.length > 0 && (
+                        <p className="mt-1 text-xs text-gray-500">{subject.sets.length} bộ đề</p>
+                      )}
 
-                            return (
-                              <div key={set.id} className="flex items-center gap-2 rounded-md bg-white px-2 py-1">
-                                <div className="flex min-w-0 items-center gap-2">
-                                  <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", level.className)}>
-                                    {level.label}
-                                  </span>
-                                  <span className="truncate text-xs text-gray-700">{set.set_code}</span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                          {subject.sets.length > 3 && (
-                            <p className="text-[11px] text-gray-500">+ {subject.sets.length - 3} bộ đề khác</p>
-                          )}
+                      {monthlyDefaultBySubjectId[subject.id] ? (
+                        <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-800">
+                          Đề tháng đang áp dụng ({monthlyDefaultBySubjectId[subject.id].selectionMode === "random" ? "ngẫu nhiên" : "mặc định"}): {monthlyDefaultBySubjectId[subject.id].setCode} - {monthlyDefaultBySubjectId[subject.id].setName}
                         </div>
-                      </>
-                    )}
-                  </Link>
+                      ) : (
+                        <div className="mt-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[11px] text-gray-600">
+                          Đề tháng đang áp dụng: chưa chọn
+                        </div>
+                      )}
+
+                      {subject.sets.length === 0 ? (
+                        <p className="mt-1 text-xs text-gray-500">Chưa có bộ đề.</p>
+                      ) : (
+                        <>
+                          <div className="mt-2 space-y-1.5">
+                            {subject.sets.slice(0, 3).map((set) => {
+                              const level = inferLevel(set);
+
+                              return (
+                                <div key={set.id} className="flex items-center gap-2 rounded-md bg-white px-2 py-1">
+                                  <div className="flex min-w-0 items-center gap-2">
+                                    <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", level.className)}>
+                                      {level.label}
+                                    </span>
+                                    <span className="truncate text-xs text-gray-700">{set.set_code}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {subject.sets.length > 3 && (
+                              <p className="text-[11px] text-gray-500">+ {subject.sets.length - 3} bộ đề khác</p>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </Link>
+                  </div>
                 ))}
               </div>
 
@@ -1171,195 +1816,367 @@ export default function ProfessionalAssignmentLibraryPage() {
 
       <Modal
         isOpen={isAutoCreateModalOpen}
-        onClose={() => setIsAutoCreateModalOpen(false)}
+        onClose={handleCloseAutoCreateModal}
         title="Khởi tạo lịch kiểm tra hằng tháng (Visual Calendar)"
         subtitle="Kéo các môn học từ danh sách bên trái và thả vào Lịch để gán ngày kiểm tra."
         maxWidth="6xl"
         headerColor="from-[#1e3a8a] to-[#2563eb]"
       >
-        <form onSubmit={handleAutoCreateEvents} className="flex flex-col h-[650px]">
+        {isPreparingAutoCreateModal ? (
+          <div className="flex h-[82vh] flex-col gap-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
+              <SkeletonCard height="h-[300px]" className="w-full" />
+              <SkeletonCard height="h-[420px]" className="w-full" />
+            </div>
+            <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+              <div className="h-10 w-24 animate-pulse rounded-md bg-gray-200" />
+              <div className="h-10 w-40 animate-pulse rounded-md bg-blue-200" />
+            </div>
+          </div>
+        ) : (
+        <form onSubmit={handleAutoCreateEvents} className="flex flex-col h-[82vh]">
           <div className="flex flex-1 gap-6 overflow-hidden">
-            <div className="w-[360px] flex flex-col border-r border-gray-200 pr-4">
+            <div ref={leftPanelRef} className="w-[360px] h-full min-h-0 flex flex-col border-r border-gray-200 pr-4">
               <div className="flex items-center justify-between mb-2">
                  <h3 className="font-bold text-gray-800 text-sm">Danh sách chờ lên lịch</h3>
-              </div>
-              
-              <div className="text-xs text-blue-600 bg-blue-50 p-2 mb-3 rounded border border-blue-100">
-                 * Kéo từ đây thả vào Lịch bên phải. Môn đứng trên cùng sẽ được tạo đầu tiên.
-              </div>
-
-              <div
-                onDragOver={handleRemoveZoneDragOver}
-                onDrop={handleRemoveFromCalendarDrop}
-                className={cn(
-                  "mb-3 rounded border border-dashed px-3 py-2 text-xs",
-                  draggedId && (() => {
-                    const draggedEvent = plannedEvents.find((item) => item.id === draggedId);
-                    return draggedEvent ? isPlannedEventScheduled(draggedEvent) : false;
-                  })()
-                    ? "border-rose-300 bg-rose-50 text-rose-700"
-                    : "border-gray-300 bg-gray-50 text-gray-600"
-                )}
-              >
-                Kéo môn từ ô lịch thả vào đây để xóa khỏi calendar.
-              </div>
-              
-              <div className="flex flex-col gap-2 p-2 mb-3 bg-gray-50 rounded border border-gray-200">
-                <div className="flex gap-2 w-full">
-                  <div className="flex-1">
-                    <label className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-gray-500">Từ ngày (Chung)</label>
-                    <input
-                      type="date"
-                      value={autoStartDate}
-                      onChange={(e) => setAutoStartDate(e.target.value)}
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-gray-500">Đến (Chung)</label>
-                    <input
-                      type="date"
-                      value={autoEndDate}
-                      onChange={(e) => setAutoEndDate(e.target.value)}
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2 w-full mt-2">
-                  <div className="flex-1">
-                    <label className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-gray-500">Giờ BĐ (Chung)</label>
-                    <input
-                      type="time"
-                      value={autoStartTime}
-                      onChange={(e) => setAutoStartTime(e.target.value)}
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-gray-500">Giờ KT (Chung)</label>
-                    <input
-                      type="time"
-                      value={autoEndTime}
-                      onChange={(e) => setAutoEndTime(e.target.value)}
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2 w-full mt-2">
-                  <button
-                    type="button"
-                    title="Gán tất cả môn chung 1 khoảng thời gian"
-                    onClick={applyMasterDatesToAll}
-                    className="flex-1 rounded bg-gray-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-gray-700"
-                  >
-                    Cùng ngày
-                  </button>
-                  <button
-                    type="button"
-                    title="Từ ngày bắt đầu, gán tuần tự mỗi ngày 1 môn"
-                    onClick={applyMasterDatesSequentially}
-                    className="flex-1 rounded bg-blue-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-                  >
-                    Tuần tự (+1)
-                  </button>
-                </div>
+                 <button
+                   type="button"
+                   onClick={() => setIsPlannedEventsViewerOpen(true)}
+                   className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                 >
+                   Mở xem riêng
+                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 pb-4">
-                {plannedEvents.map((evt) => (
+              <div className="mb-2 grid grid-cols-3 gap-1 rounded border border-gray-200 bg-gray-50 p-1">
+                <button
+                  type="button"
+                  onClick={() => setLeftPanelTab("setup")}
+                  className={cn(
+                    "rounded px-2 py-1 text-[11px] font-semibold",
+                    leftPanelTab === "setup" ? "bg-white text-blue-700 shadow-sm" : "text-gray-600 hover:bg-white"
+                  )}
+                >
+                  Tab Trên
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeftPanelTab("both")}
+                  className={cn(
+                    "rounded px-2 py-1 text-[11px] font-semibold",
+                    leftPanelTab === "both" ? "bg-white text-blue-700 shadow-sm" : "text-gray-600 hover:bg-white"
+                  )}
+                >
+                  Chia 2
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeftPanelTab("queue")}
+                  className={cn(
+                    "rounded px-2 py-1 text-[11px] font-semibold",
+                    leftPanelTab === "queue" ? "bg-white text-blue-700 shadow-sm" : "text-gray-600 hover:bg-white"
+                  )}
+                >
+                  Tab Dưới
+                </button>
+              </div>
+              
+              {leftPanelTab !== "queue" && (
+                <div
+                  ref={leftTopSectionRef}
+                  className={cn(
+                    "flex flex-col",
+                    leftPanelTab === "both" ? "overflow-y-auto" : "flex-1 overflow-y-auto"
+                  )}
+                  style={leftPanelTab === "both" ? { height: leftTopSectionHeight } : undefined}
+                >
+                  <div className="text-xs text-blue-600 bg-blue-50 p-2 mb-3 rounded border border-blue-100">
+                    * Kéo từ đây thả vào Lịch bên phải. Môn đứng trên cùng sẽ được tạo đầu tiên.
+                  </div>
+
                   <div
-                    key={evt.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, evt.id)}
-                    onDragEnd={handleDragEnd}
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, evt.id)}
+                    onDragOver={handleRemoveZoneDragOver}
+                    onDrop={handleRemoveFromCalendarDrop}
                     className={cn(
-                      "flex flex-col gap-2 rounded-md border p-2 bg-white transition-colors cursor-move",
-                      draggedId === evt.id ? "opacity-50 border-blue-400 shadow-sm" : "border-gray-200 hover:border-gray-300 shadow-sm"
+                      "mb-3 rounded border border-dashed px-3 py-2 text-xs",
+                      draggedId && (() => {
+                        const draggedEvent = plannedEvents.find((item) => item.id === draggedId);
+                        return draggedEvent ? isPlannedEventScheduled(draggedEvent) : false;
+                      })()
+                        ? "border-rose-300 bg-rose-50 text-rose-700"
+                        : "border-gray-300 bg-gray-50 text-gray-600"
                     )}
                   >
-                    <div className="flex items-center gap-2">
-                       <GripVertical className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                       <span className="font-semibold text-sm text-gray-900 truncate" title={evt.label}>{evt.label}</span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 pl-6">
-                       <select
-                         value={evt.registrationTemplate}
-                         onChange={(e) => updatePlannedEvent(evt.id, "registrationTemplate", e.target.value as PlannedEvent["registrationTemplate"])}
-                         className="flex-1 rounded border border-gray-300 px-2 py-1 text-[11px] bg-gray-50"
-                       >
-                         <option value="official">ĐK Chính thức</option>
-                         <option value="supplement">ĐK Bổ sung</option>
-                       </select>
-                    </div>
+                    Kéo môn từ ô lịch thả vào đây để xóa khỏi calendar.
+                  </div>
 
-                    {evt.eventKind === "exam" ? (
+                  <div className="flex flex-col gap-2 p-2 mb-3 bg-gray-50 rounded border border-gray-200">
+                    <div className="flex gap-2 w-full">
+                      <div className="flex-1">
+                        <label className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-gray-500">Từ ngày (Chung)</label>
+                        <input
+                          type="date"
+                          value={autoStartDate}
+                          onChange={(e) => setAutoStartDate(e.target.value)}
+                          className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-gray-500">Đến (Chung)</label>
+                        <input
+                          type="date"
+                          value={autoEndDate}
+                          onChange={(e) => setAutoEndDate(e.target.value)}
+                          className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 w-full mt-2">
+                      <div className="w-full">
+                        <label className="mb-1 block text-[10px] uppercase tracking-wider font-semibold text-gray-500">Giờ BĐ (Chung)</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={splitTime(autoStartTime).hour}
+                            onChange={(e) => {
+                              const current = normalizeTime(autoStartTime, "19:00");
+                              const next = normalizeTime(`${e.target.value}:${current.minute}`, "19:00");
+                              setAutoStartTime(`${next.hour}:${next.minute}`);
+                            }}
+                            className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                          >
+                            {HOUR_OPTIONS.map((hour) => (
+                              <option key={hour} value={hour}>{hour}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={splitTime(autoStartTime).minute}
+                            onChange={(e) => {
+                              const current = normalizeTime(autoStartTime, "19:00");
+                              const next = normalizeTime(`${current.hour}:${e.target.value}`, "19:00");
+                              setAutoStartTime(`${next.hour}:${next.minute}`);
+                            }}
+                            className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                          >
+                            {MINUTE_OPTIONS.map((minute) => (
+                              <option key={minute} value={minute}>{minute}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 w-full mt-2">
+                      <button
+                        type="button"
+                        onClick={() => openDurationSettings()}
+                        className="w-full inline-flex items-center justify-center gap-2 rounded border border-indigo-300 bg-indigo-50 px-2 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                      >
+                        <Settings2 className="h-3.5 w-3.5" />
+                        Cài đặt thời gian từng bộ môn
+                      </button>
+                    </div>
+                    <div className="flex gap-2 w-full mt-2">
+                      <label className="inline-flex flex-1 items-center gap-2 rounded border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={plannedEvents.some((event) => event.eventKind === "registration" && event.registrationTemplate === "official")}
+                          onChange={(e) => toggleOfficialRegistrationEvent(e.target.checked)}
+                        />
+                        Bật đăng ký chính thức
+                      </label>
+                      <button
+                        type="button"
+                        onClick={addSupplementRegistrationEvent}
+                        className="flex-1 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                      >
+                        + Đăng ký bổ sung
+                      </button>
+                    </div>
+                    <div className="flex gap-2 w-full mt-2">
+                      <button
+                        type="button"
+                        title="Gán tất cả môn chung 1 khoảng thời gian"
+                        onClick={applyMasterDatesToAll}
+                        className="flex-1 rounded bg-gray-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-gray-700"
+                      >
+                        Cùng ngày
+                      </button>
+                      <button
+                        type="button"
+                        title="Từ ngày bắt đầu, gán tuần tự mỗi ngày 1 môn"
+                        onClick={applyMasterDatesSequentially}
+                        className="flex-1 rounded bg-blue-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                      >
+                        Tuần tự (+1)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {leftPanelTab === "both" && (
+                <div
+                  ref={leftDividerRef}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    const dividerRect = leftDividerRef.current?.getBoundingClientRect();
+                    resizeGrabOffsetYRef.current = dividerRect ? event.clientY - dividerRect.top : 0;
+                    setIsLeftPanelResizing(true);
+                  }}
+                  onTouchStart={(event) => {
+                    event.preventDefault();
+                    const dividerRect = leftDividerRef.current?.getBoundingClientRect();
+                    const touchClientY = event.touches[0]?.clientY ?? 0;
+                    resizeGrabOffsetYRef.current = dividerRect ? touchClientY - dividerRect.top : 0;
+                    setIsLeftPanelResizing(true);
+                  }}
+                  className={cn(
+                    "mb-2 h-3 cursor-row-resize rounded transition-colors",
+                    isLeftPanelResizing ? "bg-blue-400" : "bg-gray-200 hover:bg-blue-300"
+                  )}
+                  title="Kéo để tăng/giảm phần trên và dưới"
+                />
+              )}
+
+              {leftPanelTab !== "setup" && (
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1 pb-4">
+                  {plannedEvents.map((evt) => (
+                    <div
+                      key={evt.id}
+                      draggable
+                      onDragStart={(e) => {
+                        if (isInteractiveTarget(e.target)) {
+                          e.preventDefault();
+                          return;
+                        }
+                        handleDragStart(e, evt.id);
+                      }}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, evt.id)}
+                      className={cn(
+                        "flex flex-col gap-2 rounded-md border p-2 bg-white transition-colors cursor-move",
+                        draggedId === evt.id ? "opacity-50 border-blue-400 shadow-sm" : "border-gray-200 hover:border-gray-300 shadow-sm"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <GripVertical className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                        <span className="font-semibold text-sm text-gray-900 truncate" title={evt.label}>{evt.label}</span>
+                        {evt.isGeneratedSupplement && (
+                          <button
+                            type="button"
+                            onClick={() => removePlannedEvent(evt.id)}
+                            className="ml-auto rounded border border-gray-300 p-1 text-gray-600 hover:bg-gray-100"
+                            title="Xóa đợt bổ sung"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+
                       <div className="flex items-center gap-2 pl-6">
                         <select
-                          value={evt.selectedSetId ?? ""}
-                          onChange={(e) => updatePlannedEvent(evt.id, "selectedSetId", e.target.value ? Number(e.target.value) : null)}
+                          value={evt.registrationTemplate}
+                          onChange={(e) => updatePlannedEvent(evt.id, "registrationTemplate", e.target.value as PlannedEvent["registrationTemplate"])}
                           className="flex-1 rounded border border-gray-300 px-2 py-1 text-[11px] bg-gray-50"
                         >
-                          {(activeSetsBySubjectId.get(evt.subjectId) || []).length === 0 ? (
-                            <option value="">Chưa có bộ đề active</option>
-                          ) : (
-                            <>
-                              {(activeSetsBySubjectId.get(evt.subjectId) || []).map((set) => (
-                                <option key={set.id} value={set.id}>
-                                  {set.set_code} - {set.set_name}
-                                </option>
-                              ))}
-                            </>
-                          )}
+                          <option value="official">ĐK Chính thức</option>
+                          <option value="supplement">ĐK Bổ sung</option>
                         </select>
                       </div>
-                    ) : (
-                      <div className="pl-6 text-[11px] font-medium text-blue-700">
-                        Event đăng ký, không cần chọn bộ đề.
-                      </div>
-                    )}
 
-                    <div className="flex items-center gap-1 pl-6">
-                       <input
-                         type="date"
-                         value={evt.startDate}
-                         onChange={(e) => updatePlannedEvent(evt.id, "startDate", e.target.value)}
-                         className="w-[45%] rounded border border-gray-300 px-1 py-1 text-[11px]"
-                       />
-                       <span className="text-gray-400 text-xs text-center w-[10%]">-</span>
-                       <input
-                         type="date"
-                         value={evt.endDate}
-                         onChange={(e) => updatePlannedEvent(evt.id, "endDate", e.target.value)}
-                         className="w-[45%] rounded border border-gray-300 px-1 py-1 text-[11px]"
-                       />
+                      {evt.eventKind === "exam" ? (
+                        <div className="flex items-center gap-2 pl-6">
+                          {monthlyDefaultBySubjectId[evt.subjectId] ? (
+                            <div className="w-full rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-800">
+                              Bộ đề tháng ({monthlyDefaultBySubjectId[evt.subjectId].selectionMode === "random" ? "ngẫu nhiên" : "mặc định"}): {monthlyDefaultBySubjectId[evt.subjectId].setCode} - {monthlyDefaultBySubjectId[evt.subjectId].setName}
+                            </div>
+                          ) : (
+                            <div className="w-full rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-700">
+                              Môn này chưa có bộ đề tháng hợp lệ (có câu hỏi).
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="pl-6 text-[11px] font-medium text-blue-700">
+                          Event đăng ký, không cần chọn bộ đề.
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1 pl-6">
+                        <input
+                          type="date"
+                          value={evt.startDate}
+                          onChange={(e) => updatePlannedEvent(evt.id, "startDate", e.target.value)}
+                          className="w-[45%] rounded border border-gray-300 px-1 py-1 text-[11px]"
+                        />
+                        <span className="text-gray-400 text-xs text-center w-[10%]">-</span>
+                        <input
+                          type="date"
+                          value={evt.endDate}
+                          onChange={(e) => updatePlannedEvent(evt.id, "endDate", e.target.value)}
+                          className="w-[45%] rounded border border-gray-300 px-1 py-1 text-[11px]"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 pl-6">
+                        <div className="grid w-[45%] grid-cols-2 gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={23}
+                            inputMode="numeric"
+                            value={Number(splitTime(evt.startTime).hour)}
+                            onChange={(e) => {
+                              const current = splitTime(evt.startTime);
+                              const normalized = normalizeTime(`${e.target.value}:${current.minute}`, evt.startTime);
+                              updatePlannedEvent(evt.id, "startTime", `${normalized.hour}:${normalized.minute}`);
+                            }}
+                            className="w-full rounded border border-gray-300 px-1 py-1 text-center text-[11px]"
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            max={59}
+                            inputMode="numeric"
+                            value={Number(splitTime(evt.startTime).minute)}
+                            onChange={(e) => {
+                              const current = splitTime(evt.startTime);
+                              const normalized = normalizeTime(`${current.hour}:${e.target.value}`, evt.startTime);
+                              updatePlannedEvent(evt.id, "startTime", `${normalized.hour}:${normalized.minute}`);
+                            }}
+                            className="w-full rounded border border-gray-300 px-1 py-1 text-center text-[11px]"
+                          />
+                        </div>
+                        {evt.eventKind === "exam" ? (
+                          <>
+                            <input
+                              type="number"
+                              min={1}
+                              value={evt.durationMinutes}
+                              onChange={(e) => updatePlannedEvent(evt.id, "durationMinutes", Math.max(1, Number(e.target.value || 1)))}
+                              className="w-[25%] rounded border border-gray-300 px-1 py-1 text-[11px]"
+                            />
+                            <span className="w-[20%] text-center text-[10px] font-medium text-gray-600">
+                              phút<br />
+                              KT {evt.endTime}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="w-[55%] text-center text-[10px] font-medium text-gray-600">Kết thúc tự động 23:59</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 pl-6">
-                       <input
-                         type="time"
-                         value={evt.startTime}
-                         onChange={(e) => updatePlannedEvent(evt.id, "startTime", e.target.value)}
-                         className="w-[45%] rounded border border-gray-300 px-1 py-1 text-[11px]"
-                       />
-                       <span className="text-gray-400 text-xs text-center w-[10%]">-</span>
-                       <input
-                         type="time"
-                         value={evt.endTime}
-                         onChange={(e) => updatePlannedEvent(evt.id, "endTime", e.target.value)}
-                         className="w-[45%] rounded border border-gray-300 px-1 py-1 text-[11px]"
-                       />
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex-1 flex flex-col min-w-0">
                <div className="flex items-center justify-between mb-3 bg-gray-50 p-2 rounded border border-gray-200">
                   <div className="font-bold text-lg text-blue-900">
                     Tháng {focusDate.getMonth() + 1} - Năm {focusDate.getFullYear()}
+                    <div className="text-[11px] font-normal text-blue-700">
+                      Ctrl/Cmd + Click để chọn nhiều mục, nhấn Delete để xóa.
+                    </div>
                   </div>
                   <div className="flex items-center gap-1">
                      <button
@@ -1402,21 +2219,35 @@ export default function ProfessionalAssignmentLibraryPage() {
                        </div>
                     ))}
                  </div>
-                 <div className="grid grid-cols-7 flex-1 min-h-0">
-                    {buildCalendarCells(focusDate).map((cell, idx) => {
+                  <div className="grid grid-cols-7 flex-1 min-h-0">
+                    {calendarCells.map((cell, idx) => {
                        const cellKey = formatDateKey(cell.date);
-                       const eventsOnDay = plannedEvents.filter(p => p.startDate === cellKey);
+                      const eventsOnDay = plannedEventsByDate.get(cellKey) || [];
+                      const visibleEvents = eventsOnDay.slice(0, MAX_EVENTS_PER_DAY_IN_CELL);
+                      const hiddenEventsCount = Math.max(0, eventsOnDay.length - visibleEvents.length);
                        const isToday = isSameDate(startOfDay(cell.date), startOfDay(new Date()));
                        
                        return (
                           <div
                             key={idx}
-                            onDragOver={(e) => e.preventDefault()}
+                            onDragEnter={() => {
+                              if (draggedId) {
+                                setDragOverDateKeyThrottled(cellKey);
+                              }
+                            }}
+                            onDragOver={(e) => {
+                              handleDragOver(e);
+                              if (draggedId) {
+                                setDragOverDateKeyThrottled(cellKey);
+                              }
+                            }}
                             onDrop={(e) => handleCalendarDrop(e, cellKey)}
+                            onClick={() => setSelectedCalendarEventIds([])}
                             className={cn(
-                              "border-r border-b border-gray-200 p-1 flex flex-col gap-1 transition-colors min-h-[50px]",
+                              "border-r border-b border-gray-200 p-1 flex flex-col gap-1 min-h-[50px] transition-colors duration-150",
                               !cell.inCurrentMonth ? "bg-gray-50/50 text-gray-400" : "bg-white",
-                              "hover:bg-blue-50/30"
+                              "hover:bg-blue-50/30",
+                              draggedId && dragOverDateKey === cellKey && "ring-2 ring-blue-400 ring-inset border-blue-300 bg-blue-50/40"
                             )}
                           >
                              <div className="w-full flex justify-end">
@@ -1429,15 +2260,20 @@ export default function ProfessionalAssignmentLibraryPage() {
                              </div>
                              
                              <div className="flex-1 overflow-y-auto space-y-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                {eventsOnDay.map((evt) => (
+                                {visibleEvents.map((evt) => (
                                    <div
                                      key={evt.id}
                                      draggable
                                      onDragStart={(e) => handleDragStart(e, evt.id)}
                                      onDragEnd={handleDragEnd}
+                                     onClick={(e) => {
+                                       e.stopPropagation();
+                                       handleCalendarEventClick(evt.id, e.ctrlKey || e.metaKey);
+                                     }}
                                      title={evt.label}
                                      className={cn(
                                        "text-[10px] leading-tight px-1.5 py-1 rounded truncate border cursor-move transition-transform active:scale-95 shadow-sm",
+                                       selectedCalendarEventIds.includes(evt.id) && "ring-2 ring-offset-1 ring-blue-500",
                                         evt.eventKind === "registration"
                                           ? evt.registrationTemplate === "official"
                                             ? "bg-blue-100 text-blue-800 border-blue-200"
@@ -1450,6 +2286,11 @@ export default function ProfessionalAssignmentLibraryPage() {
                                       {evt.label}
                                    </div>
                                 ))}
+                                  {hiddenEventsCount > 0 && (
+                                   <div className="rounded border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">
+                                    +{hiddenEventsCount} sự kiện
+                                   </div>
+                                  )}
                              </div>
                           </div>
                        );
@@ -1462,7 +2303,7 @@ export default function ProfessionalAssignmentLibraryPage() {
           <div className="flex justify-end gap-3 pt-4 border-t mt-4 border-gray-200 shrink-0">
             <button
               type="button"
-              onClick={() => setIsAutoCreateModalOpen(false)}
+              onClick={handleCloseAutoCreateModal}
               className="rounded-md border border-gray-300 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               Hủy
@@ -1477,6 +2318,115 @@ export default function ProfessionalAssignmentLibraryPage() {
             </button>
           </div>
         </form>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={isPlannedEventsViewerOpen}
+        onClose={() => setIsPlannedEventsViewerOpen(false)}
+        title="Danh sách chờ lên lịch"
+        subtitle="Xem toàn bộ event theo dạng danh sách cuộn dài"
+        maxWidth="4xl"
+        headerColor="from-blue-700 to-cyan-600"
+      >
+        <div className="max-h-[76vh] space-y-2 overflow-y-auto pr-1">
+          {plannedEvents.map((evt) => (
+            <div key={`viewer-${evt.id}`} className="rounded-lg border border-gray-200 bg-white p-3">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <p className="truncate text-sm font-semibold text-gray-900">{evt.label}</p>
+                <span className={cn(
+                  "rounded px-2 py-0.5 text-[10px] font-semibold",
+                  evt.eventKind === "registration"
+                    ? evt.registrationTemplate === "official"
+                      ? "bg-blue-100 text-blue-700"
+                      : "bg-amber-100 text-amber-800"
+                    : evt.registrationTemplate === "official"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-red-100 text-red-700"
+                )}>
+                  {evt.registrationTemplate === "official" ? "Chính thức" : `Bổ sung #${evt.flowRound}`}
+                </span>
+              </div>
+              <p className="text-xs text-gray-600">
+                {evt.startDate} - {evt.endDate} | {evt.startTime} - {evt.endTime}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setIsPlannedEventsViewerOpen(false)}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Đóng
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isDurationSettingsOpen}
+        onClose={closeDurationSettings}
+        title={durationFocusSubjectId ? "Cài đặt thời gian bộ môn" : "Cài đặt thời gian theo bộ môn"}
+        subtitle="Thời gian làm bài (phút) sẽ dùng để tự tính giờ kết thúc"
+        maxWidth="lg"
+        headerColor="from-indigo-700 to-indigo-500"
+      >
+        <div className="space-y-3">
+          <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+            {durationSubjectsForModal.map((subject) => (
+              <div
+                key={subject.id}
+                className={cn(
+                  "flex items-center justify-between gap-3 rounded-lg border bg-white px-3 py-2",
+                  durationFocusSubjectId && subject.id === durationFocusSubjectId
+                    ? "border-indigo-400 ring-2 ring-indigo-100"
+                    : "border-gray-200"
+                )}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-gray-900">{subject.label}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    value={subjectDurations[subject.id] ?? getSubjectDurationMinutes(subject.id)}
+                    onChange={(e) => handleChangeSubjectDuration(subject.id, Number(e.target.value || 1))}
+                    className="w-24 rounded border border-gray-300 px-2 py-1 text-right text-sm"
+                  />
+                  <span className="text-xs font-medium text-gray-600">phút</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-between gap-2 border-t border-gray-200 pt-3">
+            <button
+              type="button"
+              onClick={handleResetSubjectDurations}
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              {durationFocusSubjectId ? "Khôi phục môn này" : "Khôi phục mặc định"}
+            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={closeDurationSettings}
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={applyDurationSettingsToPlannedEvents}
+                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+              >
+                Áp dụng
+              </button>
+            </div>
+          </div>
+        </div>
       </Modal>
     </PageContainer>
   );

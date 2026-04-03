@@ -5,8 +5,8 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 import Modal from '@/components/Modal';
 import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
-import { ExplanationSection } from '@/components/user/ExplanationSection';
 import { Button } from '@/components/ui/button';
+import { ExplanationSection } from '@/components/user/ExplanationSection';
 import { useAuth } from '@/lib/auth-context';
 import { useTeacher } from '@/lib/teacher-context';
 import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, ChevronDown, ChevronUp, Clock, FileText, FilterX, RefreshCw, Send, Trophy, XCircle } from 'lucide-react';
@@ -151,6 +151,7 @@ export default function TeacherAssignmentPage() {
     setScoreResultFilter('all');
   };
   const [view, setView] = useState<'list' | 'taking' | 'result'>('list');
+  const [nowTs, setNowTs] = useState(() => Date.now());
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [timerActive, setTimerActive] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -250,6 +251,16 @@ export default function TeacherAssignmentPage() {
       fetchExamAssignments();
     }
   }, [teacherCode]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowTs(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const fetchAvailableAssignments = async (isBackgroundUpdate = false) => {
     try {
@@ -560,10 +571,20 @@ export default function TeacherAssignmentPage() {
   };
 
   const decodeEscapedHtml = (value: string) => {
-    if (!value || !value.includes('&lt;')) return value;
-    const textarea = document.createElement('textarea');
-    textarea.innerHTML = value;
-    return textarea.value;
+    if (!value) return '';
+    let decoded = String(value);
+
+    // Some records are escaped multiple times (e.g. &amp;lt;img...&amp;gt;).
+    for (let i = 0; i < 4; i += 1) {
+      if (!decoded.includes('&')) break;
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = decoded;
+      const next = textarea.value;
+      if (next === decoded) break;
+      decoded = next;
+    }
+
+    return decoded;
   };
 
   const hasHtmlMarkup = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value);
@@ -738,8 +759,22 @@ export default function TeacherAssignmentPage() {
     let totalPassed = 0;
     let bestExperience = 0;
     let missingOrPending = 0;
+    let explanationsApproved = 0;
+    let explanationsRejected = 0;
+    let explanationsPending = 0;
 
     const now = new Date();
+    
+    // Determine the target month dynamically (realtime with filter)
+    let targetMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
+    if (selectedExamMonth !== 'all' && selectedExamMonth !== '6months') {
+      targetMonthKey = selectedExamMonth;
+    } else if (examAssignments.length > 0) {
+      const maxDate = new Date(Math.max(...examAssignments.map(a => new Date(a.open_at).getTime())));
+      targetMonthKey = `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, '0')}`;
+    }
+
     const last6Months = new Set(
       Array.from({ length: 6 }, (_, i) => {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -752,6 +787,12 @@ export default function TeacherAssignmentPage() {
       const { score, isMissedCurrentMonth } = getEffectiveExamScore(item);
       const date = new Date(item.open_at);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+      if (monthKey === targetMonthKey) {
+        if (item.explanation_status === 'accepted') explanationsApproved++;
+        else if (item.explanation_status === 'rejected') explanationsRejected++;
+        else if (item.explanation_status === 'pending') explanationsPending++;
+      }
 
       // Tính Tỉ lệ đạt trong 6 tháng: Loại bỏ bài được duyệt, chỉ đếm các bài đã được phép tính điểm (score !== null)
       if (last6Months.has(monthKey)) {
@@ -833,8 +874,12 @@ export default function TeacherAssignmentPage() {
       bestExperienceMonth,
       missingOrPending,
       missingMonths,
+      explanationsApproved,
+      explanationsRejected,
+      explanationsPending,
+      targetMonthKey,
     };
-  }, [examAssignments]);
+  }, [examAssignments, selectedExamMonth]);
 
   const monthlyOverviewData = useMemo(() => {
     const dataMap = new Map<string, {
@@ -935,6 +980,18 @@ export default function TeacherAssignmentPage() {
         items: items.sort((a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime())
       }));
   }, [examAssignments, scoreSubjectKeyword, selectedExamMonth, scoreTypeFilter, scoreResultFilter]);
+
+  const currentMonthExams = (() => {
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return examAssignments
+      .filter((item) => {
+        const date = new Date(item.open_at);
+        const itemMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        return itemMonth === monthKey;
+      })
+      .sort((a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime());
+  })();
 
   // Loading state when auto-starting assignment
   if (startId && view === 'list') {
@@ -1480,6 +1537,40 @@ export default function TeacherAssignmentPage() {
     return 'bg-blue-100 text-blue-700 border-blue-300';
   };
 
+  const formatCountdown = (seconds: number) => {
+    const safe = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(safe / 3600).toString().padStart(2, '0');
+    const minutes = Math.floor((safe % 3600) / 60).toString().padStart(2, '0');
+    const secs = Math.floor(safe % 60).toString().padStart(2, '0');
+    return `${hours}:${minutes}:${secs}`;
+  };
+
+  const getExamCountdownInfo = (item: ExamAssignment) => {
+    const openMs = new Date(item.open_at).getTime();
+    const closeMs = new Date(item.close_at).getTime();
+
+    if (nowTs < openMs) {
+      return {
+        label: 'Mở sau',
+        value: formatCountdown((openMs - nowTs) / 1000),
+        className: 'text-amber-700 bg-amber-50 border-amber-200',
+      };
+    }
+
+    if (nowTs >= closeMs) {
+      return {
+        label: 'Đã hết giờ',
+        value: '00:00:00',
+        className: 'text-red-700 bg-red-50 border-red-200',
+      };
+    }
+
+    return {
+      label: 'Còn lại',
+      value: formatCountdown((closeMs - nowTs) / 1000),
+      className: 'text-blue-700 bg-blue-50 border-blue-200',
+    };
+  };
 
   const mainTabs = [
     { id: 'exam', label: 'Kiểm tra chuyên môn & Quy trình - kỹ năng trải nghiệm' },
@@ -1526,10 +1617,71 @@ export default function TeacherAssignmentPage() {
           </div>
         ) : activeMainTab === 'exam' ? (
           <div key="exam" className="mt-6 animate-tab-enter">
-            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-16 text-center">
-              <BookOpen className="mx-auto mb-4 h-16 w-16 text-gray-300" />
-              <p className="text-gray-400 text-sm">Nội dung đang được cập nhật...</p>
-            </div>
+            {examLoading ? (
+              <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500 shadow-sm">
+                Đang tải bài thi tháng này...
+              </div>
+            ) : currentMonthExams.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
+                <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
+                <p className="text-sm text-gray-500">Tháng này chưa có bộ môn/bài thi nào được giao.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {currentMonthExams.map((item) => {
+                  const now = new Date();
+                  const countdown = getExamCountdownInfo(item);
+                  return (
+                    <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:shadow-md transition-all flex flex-col">
+                      <div className="mb-3 flex items-start justify-between gap-2">
+                        <h4 className="line-clamp-2 text-base font-bold text-gray-900">{item.subject_code}</h4>
+                        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getExamStatusClass(item)}`}>
+                          {getExamStatusLabel(item)}
+                        </span>
+                      </div>
+
+                      <div className="mb-4 space-y-2 text-sm text-gray-600 flex-1">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Mở:</span>
+                          <span>{new Date(item.open_at).toLocaleDateString('vi-VN')} {new Date(item.open_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Đóng:</span>
+                          <span>{new Date(item.close_at).toLocaleDateString('vi-VN')} {new Date(item.close_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Loại:</span>
+                          <span className="font-medium text-gray-900">{item.exam_type === 'expertise' ? 'Chuyên môn' : 'Quy trình - KN trải nghiệm'}</span>
+                        </div>
+                        <div className={`mt-3 flex items-center justify-between rounded-md border px-3 py-2 ${countdown.className}`}>
+                          <span className="text-xs font-semibold">{countdown.label}</span>
+                          <span className="font-mono text-sm font-bold">{countdown.value}</span>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-gray-100">
+                        {item.can_take ? (
+                          <Link
+                            href={`/user/assignments/exam/${item.id}`}
+                            className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
+                          >
+                            {item.score !== null || item.assignment_status === 'submitted' ? 'Làm lại bài' : 'Bắt đầu làm bài'}
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedExamInfo(item)}
+                            className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 border border-blue-100 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
+                          >
+                            {new Date(item.open_at) > now ? 'Chưa tới giờ mở' : 'Chi tiết bài thi'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ) : activeMainTab === 'scores' ? (
           <div key="scores" className="mt-6 space-y-6 animate-tab-enter">
@@ -1594,6 +1746,31 @@ export default function TeacherAssignmentPage() {
                 <p className="text-2xl font-bold text-gray-900">{scoreStats.missingOrPending}</p>
                 <p className="text-xs text-gray-500 mt-1">Bài thi cần giải trình</p>
               </button>
+            </div>
+
+            {/* Explanation Stats for Current Month */}
+            <div className="flex flex-col md:flex-row bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-5 gap-6 md:items-center justify-between">
+               <div className="flex-1">
+                 <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                   <AlertCircle className="w-5 h-5 text-blue-500" />
+                   Tình trạng giải trình ({formatMonthLabel(scoreStats.targetMonthKey)})
+                 </h3>
+                 <p className="text-sm text-gray-500 mt-1">Thống kê các bài thi được yêu cầu giải trình trong tháng đánh giá gần nhất</p>
+               </div>
+               <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+                 <div className="flex-1 md:flex-none text-center bg-green-50 text-green-700 px-5 py-2.5 rounded-lg border border-green-200 min-w-[100px] hover:shadow-sm transition-all">
+                    <div className="text-2xl font-bold">{scoreStats.explanationsApproved}</div>
+                    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mt-0.5">Thành công</div>
+                 </div>
+                 <div className="flex-1 md:flex-none text-center bg-red-50 text-red-700 px-5 py-2.5 rounded-lg border border-red-200 min-w-[100px] hover:shadow-sm transition-all">
+                    <div className="text-2xl font-bold">{scoreStats.explanationsRejected}</div>
+                    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mt-0.5">Thất bại</div>
+                 </div>
+                 <div className="flex-1 md:flex-none text-center bg-amber-50 text-amber-700 px-5 py-2.5 rounded-lg border border-amber-200 min-w-[100px] hover:shadow-sm transition-all">
+                    <div className="text-2xl font-bold">{scoreStats.explanationsPending}</div>
+                    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mt-0.5">Đang chờ</div>
+                 </div>
+               </div>
             </div>
 
             {/* 1.5. Monthly Overview Timeline */}

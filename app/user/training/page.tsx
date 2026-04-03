@@ -287,7 +287,7 @@ export default function TrainingPage() {
       <div className="w-full">
         {/* Header */}
 
-        <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg p-6 mb-6">
+        <div className="bg-linear-to-r from-[#a1001f] to-[#c41230] text-white rounded-lg p-6 mb-6">
           <div className="flex items-center gap-3">
             <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
               <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z" />
@@ -304,7 +304,7 @@ export default function TrainingPage() {
           <button
             className={`pb-3 px-2 border-b-2 font-bold transition-colors ${
               tab === 'lessons' 
-                ? 'border-purple-500 text-purple-700' 
+                ? 'border-[#a1001f] text-[#a1001f]' 
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
             onClick={() => setTab('lessons')}
@@ -314,7 +314,7 @@ export default function TrainingPage() {
           <button
             className={`pb-3 px-2 border-b-2 font-bold transition-colors ${
               tab === 'stats' 
-                ? 'border-yellow-500 text-yellow-700' 
+                ? 'border-[#a1001f] text-[#a1001f]' 
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
             onClick={() => setTab('stats')}
@@ -324,7 +324,7 @@ export default function TrainingPage() {
           <button
             className={`pb-3 px-2 border-b-2 font-bold transition-colors ${
               tab === 'tests' 
-                ? 'border-blue-500 text-blue-700' 
+                ? 'border-[#a1001f] text-[#a1001f]' 
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
             onClick={() => setTab('tests')}
@@ -356,17 +356,17 @@ export default function TrainingPage() {
             {tab === 'lessons' && (
               <div className="bg-white rounded-lg shadow-md p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-purple-700">Danh sách bài học</h2>
+                  <h2 className="text-xl font-bold text-[#a1001f]">Danh sách bài học</h2>
                   
                   {/* Progress Bar */}
                   <div className="flex items-center gap-4">
                     <div className="flex flex-col items-end">
                       <div className="text-sm text-gray-600 mb-1">
-                        Tiến độ: <span className="font-bold text-purple-600">{completedLessons}/{trainingData.lessons.length}</span>
+                        Tiến độ: <span className="font-bold text-[#a1001f]">{completedLessons}/{trainingData.lessons.length}</span>
                       </div>
                       <div className="w-48 h-3 bg-gray-200 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-gradient-to-r from-purple-500 to-purple-600 transition-all duration-500 ease-out"
+                          className="h-full bg-linear-to-r from-[#a1001f] to-[#c41230] transition-all duration-500 ease-out"
                           style={{ 
                             width: `${trainingData.lessons.length > 0 ? (completedLessons / trainingData.lessons.length * 100) : 0}%` 
                           }}
@@ -401,7 +401,7 @@ export default function TrainingPage() {
                           onClick={() => handleLessonClick(lesson, idx)}
                         >
                           {/* Thumbnail */}
-                          <div className="flex-shrink-0 relative">
+                          <div className="shrink-0 relative">
                             <div className="w-40 h-24 bg-gray-200 rounded-lg overflow-hidden">
                               {lesson.thumbnail_url ? (
                                 <img 
@@ -414,8 +414,8 @@ export default function TrainingPage() {
                                   }}
                                 />
                               ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-100 to-purple-200">
-                                  <svg className="w-12 h-12 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
+                                <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-rose-100 to-red-100">
+                                  <svg className="w-12 h-12 text-[#a1001f]/60" fill="currentColor" viewBox="0 0 20 20">
                                     <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" />
                                   </svg>
                                 </div>
@@ -438,14 +438,14 @@ export default function TrainingPage() {
                           </div>
 
                           {/* Video Info */}
-                          <div className="flex-grow min-w-0">
+                          <div className="grow min-w-0">
                             <div className="flex items-start justify-between gap-2 mb-2">
-                              <div className="flex-grow">
+                              <div className="grow">
                                 <h3 className="font-semibold text-gray-900 line-clamp-2 mb-1">
                                   {lesson.name}
                                 </h3>
                                 {lessonNumber && (
-                                  <span className="inline-block bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded">
+                                  <span className="inline-block bg-rose-100 text-[#a1001f] text-xs font-medium px-2 py-1 rounded">
                                     LESSON {lessonNumber.toString().padStart(2, '0')}
                                   </span>
                                 )}
@@ -466,12 +466,12 @@ export default function TrainingPage() {
                             {/* Progress info if not completed but started */}
                             {!isCompleted && (lesson.time_spent_seconds ?? 0) > 0 && (
                                 <div className="mb-2">
-                                    <div className="flex justify-between text-xs text-blue-600 mb-1">
+                                    <div className="flex justify-between text-xs text-[#a1001f] mb-1">
                                         <span>Đang học</span>
                                         <span>{Math.round(((lesson.time_spent_seconds || 0) / ((lesson.duration_minutes || 1) * 60)) * 100)}%</span>
                                     </div>
                                     <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                        <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${Math.min(100, Math.round(((lesson.time_spent_seconds || 0) / ((lesson.duration_minutes || 1) * 60)) * 100))}%` }}></div>
+                                      <div className="bg-[#c41230] h-1.5 rounded-full" style={{ width: `${Math.min(100, Math.round(((lesson.time_spent_seconds || 0) / ((lesson.duration_minutes || 1) * 60)) * 100))}%` }}></div>
                                     </div>
                                 </div>
                             )}
@@ -501,7 +501,7 @@ export default function TrainingPage() {
                                     disabled={!isCompleted}
                                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                                       isCompleted 
-                                        ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:scale-105 active:scale-95' 
+                                        ? 'bg-[#a1001f] text-white hover:bg-[#8a001a] shadow-md hover:scale-105 active:scale-95' 
                                         : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
                                     }`}
                                   >
@@ -544,7 +544,7 @@ export default function TrainingPage() {
             {/* Tab: Thống kê điểm số */}
             {tab === 'stats' && (
               <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-bold mb-4 text-yellow-700">Thống kê điểm số các bài học</h2>
+                <h2 className="text-xl font-bold mb-4 text-[#a1001f]">Thống kê điểm số các bài học</h2>
                 
                 <div className="overflow-x-auto">
                   <Table>
@@ -563,7 +563,7 @@ export default function TrainingPage() {
                         
                         return (
                           <TableRow key={idx} className="hover:bg-gray-50 transition-colors">
-                            <TableCell className="font-medium text-purple-600">
+                            <TableCell className="font-medium text-[#a1001f]">
                               {idx + 1}
                             </TableCell>
                             <TableCell className="text-gray-900">
@@ -596,9 +596,9 @@ export default function TrainingPage() {
 
                 {/* Stats Summary */}
                 <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                  <div className="bg-rose-50 rounded-lg p-4 border border-rose-200">
                     <div className="text-sm text-gray-600 mb-1">Điểm trung bình</div>
-                    <div className="text-2xl font-bold text-purple-600">
+                    <div className="text-2xl font-bold text-[#a1001f]">
                       {trainingData.averageScore?.toFixed(2) || '0.00'}
                     </div>
                   </div>
@@ -621,7 +621,7 @@ export default function TrainingPage() {
             {/* Tab: Bài kiểm tra */}
             {tab === 'tests' && (
               <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-bold mb-4 text-blue-700">Bài kiểm tra & Bài tập</h2>
+                <h2 className="text-xl font-bold mb-4 text-[#a1001f]">Bài kiểm tra & Bài tập</h2>
                 {isLoadingAssignments ? (
                    <div className="text-center py-4">Đang tải danh sách bài tập...</div>
                 ) : (
@@ -650,7 +650,7 @@ export default function TrainingPage() {
                               isLocked ? 'border-gray-200 opacity-75' : 'border-gray-200'
                             }`}
                           >
-                            <div className={`p-3 text-white ${isLocked ? 'bg-gray-400' : 'bg-gradient-to-br from-blue-500 to-blue-600'}`}>
+                            <div className={`p-3 text-white ${isLocked ? 'bg-gray-400' : 'bg-linear-to-br from-[#a1001f] to-[#c41230]'}`}>
                               <div className="flex items-start justify-between mb-1.5">
                                 <BookOpen className="w-5 h-5 shrink-0" />
                                 {!isLocked && (
@@ -661,7 +661,7 @@ export default function TrainingPage() {
                                 )}
                               </div>
                               <h3 className="text-sm font-bold mb-1 line-clamp-2 leading-tight min-h-[2.5em]">{assignment.assignment_title}</h3>
-                              <p className="text-[11px] text-blue-50 line-clamp-1 opacity-90">
+                              <p className="text-[11px] text-rose-50 line-clamp-1 opacity-90">
                                 {linkedVideo?.name ? linkedVideo.name.replace(/^Lesson \d+:\s*/, '') : 'Unknown Video'}
                               </p>
                             </div>
@@ -713,7 +713,7 @@ export default function TrainingPage() {
                                     disabled={isLocked}
                                     variant={isLocked ? "secondary" : "default"}
                                     className={`w-full h-9 text-xs font-semibold ${
-                                      !isLocked ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : ''
+                                      !isLocked ? 'bg-[#a1001f] hover:bg-[#8a001a] text-white shadow-sm' : ''
                                     }`}
                                 >
                                     {isLocked ? 'Hoàn thành video để mở' : ((linkedVideo?.score > 0 || assignment.recent_submission) ? 'Làm lại' : 'Làm bài')}

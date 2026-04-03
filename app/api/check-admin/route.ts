@@ -48,8 +48,14 @@ export async function GET(request: Request) {
         rolePerms.rows.forEach((r: { route_path: string }) => allPerms.add(r.route_path));
 
         const permissions = Array.from(allPerms);
+        const roleCodes = userRoles.rows.map((r: { role_code: string }) => (r.role_code || '').toUpperCase());
+        const hasTrainingInputRole = roleCodes.some((code) => code === 'HR' || code === 'TE' || code === 'TF');
         const hasAdminPerms = permissions.some(p => p.startsWith('/admin'));
-        const isAdmin = appUser.is_active && (['super_admin', 'admin', 'manager'].includes(appUser.role) || hasAdminPerms);
+        const isAdmin = appUser.is_active && (
+          ['super_admin', 'admin', 'manager'].includes(appUser.role) ||
+          hasAdminPerms ||
+          hasTrainingInputRole
+        );
 
         return NextResponse.json({
           success: true,
