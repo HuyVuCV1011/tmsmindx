@@ -34,6 +34,10 @@ export default function AppLayout({
   useEffect(() => {
     if (isLoading) return;
 
+    const roleCodes = (user?.userRoles || []).map((code) => String(code).toUpperCase());
+    const hasTrainingInputRole = roleCodes.some((code) => code === 'HR' || code === 'TE' || code === 'TF');
+    const isTrainingInputRoute = pathname === '/admin/hr-candidates' || pathname.startsWith('/admin/hr-candidates/');
+
     // Redirect to login if authentication required but not authenticated
     if (requireAuth && !user && !hasRedirected.current) {
       hasRedirected.current = true;
@@ -45,6 +49,7 @@ export default function AppLayout({
     if (requireAdmin && user) {
       const isSuperAdmin = user.role === 'super_admin';
       const isAdminUser = user.isAdmin || ['super_admin', 'admin', 'manager'].includes(user.role);
+      const permissions = user.permissions || [];
 
       if (!isAdminUser) {
         // Not an admin at all — redirect to user area
@@ -58,21 +63,33 @@ export default function AppLayout({
       // Super admin bypasses all permission checks
       if (!isSuperAdmin) {
         // If they have no permissions, show contact message
-        if (!user.permissions || user.permissions.length === 0) {
-          setNoPermission(true);
-          return;
+        if (permissions.length === 0) {
+          if (hasTrainingInputRole && isTrainingInputRoute) {
+            setNoPermission(false);
+          } else if (hasTrainingInputRole) {
+            router.replace('/admin/hr-candidates/gen-planner');
+            return;
+          } else {
+            setNoPermission(true);
+            return;
+          }
         }
 
         // Check if user has permission for current route
         // Allow bypass for universal admin routes like /admin/profile
         if (pathname.startsWith('/admin') && pathname !== '/admin' && !pathname.startsWith('/admin/profile')) {
-          const hasPermission = user.permissions.some(p =>
+          const hasPermission = (hasTrainingInputRole && isTrainingInputRoute) || permissions.some(p =>
             pathname === p || pathname.startsWith(p + '/')
           );
 
           if (!hasPermission) {
+            if (hasTrainingInputRole) {
+              router.replace('/admin/hr-candidates/gen-planner');
+              return;
+            }
+
             // Find first allowed valid admin route to redirect to
-            const firstAllowed = user.permissions.find(p => p.startsWith('/admin/'));
+            const firstAllowed = permissions.find(p => p.startsWith('/admin/'));
             if (firstAllowed) {
               router.replace(firstAllowed);
             } else {
@@ -161,7 +178,7 @@ export default function AppLayout({
   }
 
   if (requireAdmin && user) {
-    const isAdminUser = user.isAdmin || ['super_admin', 'admin'].includes(user.role);
+    const isAdminUser = user.isAdmin || ['super_admin', 'admin', 'manager'].includes(user.role);
     if (!isAdminUser) {
       return null;
     }

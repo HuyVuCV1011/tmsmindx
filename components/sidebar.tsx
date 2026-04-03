@@ -5,14 +5,31 @@ import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
 import { CalendarDays, ChevronDown, DollarSign, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 
 export function Sidebar() {
   const { isOpen, setIsOpen } = useSidebar();
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const { user, logout } = useAuth();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const isNavLinkActive = useCallback((href?: string) => {
+    if (!href) return false;
+
+    const [targetPath, targetQuery] = href.split('?');
+    const pathMatched = pathname === targetPath || pathname.startsWith(`${targetPath}/`);
+    if (!pathMatched) return false;
+    if (!targetQuery) return true;
+
+    const queryParams = new URLSearchParams(targetQuery);
+    for (const [key, value] of queryParams.entries()) {
+      if (searchParams.get(key) !== value) return false;
+    }
+
+    return true;
+  }, [pathname, searchParams]);
 
   // Load expanded menus from localStorage on mount
   useEffect(() => {
@@ -41,6 +58,15 @@ export function Sidebar() {
     { href: "/admin/page1", label: "Thông tin GV", icon: LayoutDashboard },
     { href: "/admin/page2", label: "màn hình 2", icon: Users },
     { href: "/admin/page3", label: "Màn hình 3", icon: Users },
+    {
+      href: "/admin/hr-candidates",
+      label: "Đào tạo đầu vào",
+      icon: Users,
+      submenu: [
+        { href: "/admin/hr-candidates/gen-planner?region=south", label: "Miền Nam (HCM + Tỉnh Nam)" },
+        { href: "/admin/hr-candidates/gen-planner?region=north", label: "Miền Bắc (HN + Tỉnh Bắc + Tỉnh Trung)" },
+      ]
+    },
     { href: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện", icon: CalendarDays },
     {
       label: "Đánh giá năng lực GV",
@@ -90,41 +116,64 @@ export function Sidebar() {
     if (user.role === 'super_admin') return adminMenuItems;
 
     const permissions = user.permissions || [];
-    if (permissions.length === 0) return [];
+    const roleCodes = (user.userRoles || []).map((code) => code.toUpperCase());
+    const hasTrainingInputRole = roleCodes.some((code) => code === 'HR' || code === 'TE' || code === 'TF');
+    if (permissions.length === 0 && !hasTrainingInputRole) return [];
+
+    const hasPermissionForHref = (href: string) => {
+      const targetPath = href.split('?')[0];
+      return permissions.some((p) => targetPath === p || targetPath.startsWith(`${p}/`));
+    };
 
     return adminMenuItems
       .filter(item => {
-        if ('submenu' in item && item.submenu) {
-          const filteredSubmenu = item.submenu.filter(sub =>
-            permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
-          );
-          return filteredSubmenu.length > 0;
+        if (item.href === '/admin/hr-candidates') {
+          return hasTrainingInputRole || hasPermissionForHref('/admin/hr-candidates');
         }
 
-        return permissions.some(p => item.href === p || (item.href && item.href.startsWith(p + '/')));
+        if ('submenu' in item && item.submenu) {
+          const filteredSubmenu = item.submenu.filter((sub) => {
+            if ('isGroupLabel' in sub && sub.isGroupLabel) return true;
+            if (!('href' in sub) || !sub.href) return false;
+            return hasPermissionForHref(sub.href);
+          });
+          return filteredSubmenu.some((sub) => !('isGroupLabel' in sub && sub.isGroupLabel));
+        }
+
+        return Boolean(item.href && hasPermissionForHref(item.href));
       })
       .map(item => {
         if ('submenu' in item && item.submenu) {
-          const filteredSubmenu = item.submenu.filter(sub =>
-            permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
-          );
-          return { ...item, submenu: filteredSubmenu };
+          const filteredSubmenu = item.submenu.filter((sub) => {
+            if ('isGroupLabel' in sub && sub.isGroupLabel) return true;
+            if (!('href' in sub) || !sub.href) return false;
+            if (item.href === '/admin/hr-candidates' && hasTrainingInputRole) return true;
+            return hasPermissionForHref(sub.href);
+          });
+
+          const cleanedSubmenu = filteredSubmenu.filter((sub, index, arr) => {
+            if (!('isGroupLabel' in sub && sub.isGroupLabel)) return true;
+            const next = arr[index + 1];
+            return Boolean(next && !('isGroupLabel' in next && next.isGroupLabel));
+          });
+
+          return { ...item, submenu: cleanedSubmenu };
         }
 
         return item;
       });
   };
 
-  const menuItems = useMemo(
-    () => (isUserArea ? userMenuItems : getFilteredAdminMenuItems()),
-    [isUserArea, user?.role, user?.permissions]
-  );
+  const menuItems = isUserArea ? userMenuItems : getFilteredAdminMenuItems();
 
   // Auto-expand submenu if current page is in it
   useEffect(() => {
     menuItems.forEach((item) => {
       if ('submenu' in item && item.submenu) {
-        const isInSubmenu = item.submenu.some(sub => pathname === sub.href || pathname.startsWith(sub.href + '/'));
+        const isInSubmenu = item.submenu.some((sub) => {
+          if (!('href' in sub) || !sub.href) return false;
+          return isNavLinkActive(sub.href);
+        });
         if (isInSubmenu && !expandedMenus.includes(item.label)) {
           setExpandedMenus(prev => {
             const updated = [...prev, item.label];
@@ -134,7 +183,7 @@ export function Sidebar() {
         }
       }
     });
-  }, [menuItems, pathname]);
+  }, [menuItems, pathname, searchParams, expandedMenus, isNavLinkActive]);
 
   const toggleSubmenu = (label: string) => {
     setExpandedMenus(prev => {
@@ -221,37 +270,53 @@ export function Sidebar() {
               const hasSubmenu = 'submenu' in item;
               const isExpanded = expandedMenus.includes(item.label);
               const isActive = !hasSubmenu && (pathname === item.href || pathname.startsWith(item.href + '/'));
-              const isSubmenuActive = hasSubmenu && item.submenu?.some(sub => pathname === sub.href || pathname.startsWith(sub.href + '/'));
+              const isParentActive = hasSubmenu && item.href ? isNavLinkActive(item.href) : false;
+              const isSubmenuActive =
+                hasSubmenu &&
+                item.submenu?.some((sub) => {
+                  if (!('href' in sub) || !sub.href) return false;
+                  return isNavLinkActive(sub.href);
+                });
 
               return (
                 <div key={item.href || item.label} className="group">
                   {hasSubmenu ? (
                     <div className="space-y-1">
-                      <button
-                        onClick={() => toggleSubmenu(item.label)}
+                      <div
                         className={cn(
                           "w-full flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-300 group/item",
-                          isSubmenuActive || isExpanded
+                          isSubmenuActive || isExpanded || isParentActive
                             ? "bg-linear-to-r from-[#a1001f] to-[#c41230] text-white shadow-md shadow-[#a1001f]/20 scale-[1.01]"
                             : "text-gray-700 hover:bg-linear-to-r hover:from-gray-100 hover:to-gray-50 hover:shadow-sm hover:scale-[1.01]"
                         )}
                       >
                         <div className={cn(
                           "p-1.5 rounded-md transition-all duration-300",
-                          isSubmenuActive || isExpanded
+                          isSubmenuActive || isExpanded || isParentActive
                             ? "bg-white/20"
                             : "bg-gray-100 group-hover/item:bg-white group-hover/item:shadow-sm"
                         )}>
                           <Icon className="h-3.5 w-3.5" />
                         </div>
-                        <span className="flex-1 text-left">{item.label}</span>
-                        <div className={cn(
-                          "transition-transform duration-300",
-                          isExpanded ? "rotate-180" : ""
-                        )}>
+                        {item.href ? (
+                          <Link href={item.href} className="flex-1 text-left">
+                            {item.label}
+                          </Link>
+                        ) : (
+                          <span className="flex-1 text-left">{item.label}</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => toggleSubmenu(item.label)}
+                          className={cn(
+                            "rounded-md p-1 transition-transform duration-300 hover:bg-white/20",
+                            isExpanded ? "rotate-180" : ""
+                          )}
+                          aria-label={`Mở submenu ${item.label}`}
+                        >
                           <ChevronDown className="h-3.5 w-3.5" />
-                        </div>
-                      </button>
+                        </button>
+                      </div>
                       
                       {/* Submenu with slide animation */}
                       <div className={cn(
@@ -260,7 +325,20 @@ export function Sidebar() {
                       )}>
                         <div className="ml-3 mt-1 space-y-0.5 border-l-2 border-gray-200 pl-2">
                           {item.submenu?.map((subItem) => {
-                            const isSubActive = pathname === subItem.href || pathname.startsWith(subItem.href + '/');
+                            if ('isGroupLabel' in subItem && subItem.isGroupLabel) {
+                              return (
+                                <p
+                                  key={subItem.label}
+                                  className="pt-2 pb-1 text-[10px] font-bold uppercase tracking-wide text-gray-400"
+                                >
+                                  {subItem.label}
+                                </p>
+                              );
+                            }
+
+                            if (!('href' in subItem) || !subItem.href) return null;
+
+                            const isSubActive = isNavLinkActive(subItem.href);
                             return (
                               <Link
                                 key={subItem.href}
@@ -268,7 +346,7 @@ export function Sidebar() {
                                 className={cn(
                                   "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all duration-300 hover:scale-[1.01]",
                                   isSubActive
-                                    ? "bg-linear-to-r from-[#a1001f]/10 to-[#c41230]/10 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm"
+                                    ? "bg-linear-to-r from-[#a1001f]/15 to-[#c41230]/15 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm ring-1 ring-[#a1001f]/20"
                                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-3 hover:border-gray-300"
                                 )}
                               >

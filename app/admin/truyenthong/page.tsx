@@ -1,8 +1,10 @@
 'use client'
 
+import { EmptyState } from '@/components/EmptyState'
 import { PageContainer } from '@/components/PageContainer'
 import { StatCard } from '@/components/StatCard'
 import { StatCardSkeleton } from '@/components/skeletons'
+import { Button } from '@/components/ui/button'
 import { ChevronRight, Edit, Eye, FileText, Heart, Image, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import useSWR from 'swr'
@@ -71,18 +73,18 @@ export default function AdminDashboard() {
             description="Tổng quan và quản lý nội dung truyền thông"
         >
             {/* Action Buttons */}
-            <div className="flex flex-wrap gap-2 mb-5">
+            <div className="flex flex-wrap gap-3 mb-6">
                 <Link href="/admin/truyenthong/posts">
-                    <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-semibold transition-colors text-sm shadow-sm">
+                    <Button variant="mindx" className="gap-2 shadow-sm font-semibold">
                         <Edit className="h-4 w-4" />
                         Quản lý bài viết
-                    </button>
+                    </Button>
                 </Link>
                 <Link href="/admin/truyenthong/sliders">
-                    <button className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-lg font-semibold transition-colors text-sm shadow-sm">
+                    <Button variant="outline" className="gap-2 shadow-sm font-semibold border-gray-300">
                         <Image className="h-4 w-4" />
                         Quản lý Slider
-                    </button>
+                    </Button>
                 </Link>
             </div>
 
@@ -168,11 +170,15 @@ export default function AdminDashboard() {
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-8">
-                        <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                        <h3 className="text-sm font-semibold text-gray-900 mb-1">Chưa có bài viết</h3>
-                        <p className="text-xs text-gray-500">Tạo bài viết mới để bắt đầu</p>
-                    </div>
+                    <EmptyState
+                        icon={FileText}
+                        title="Chưa có bài viết"
+                        description="Tạo bài viết mới để bắt đầu"
+                        action={{
+                            label: "Tạo bài viết",
+                            onClick: () => window.location.href = '/admin/truyenthong/posts/create'
+                        }}
+                    />
                 )}
             </div>
         </PageContainer>

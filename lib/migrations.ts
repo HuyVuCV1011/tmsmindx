@@ -766,6 +766,165 @@ const migrations: Migration[] = [
       WHERE view_count IS NULL OR view_count = 0;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V35: HR Candidate GEN Assignment Management
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V35_hr_candidate_gen_assignment',
+    version: 35,
+    sql: `
+      CREATE TABLE IF NOT EXISTS hr_candidate_gen_assignments (
+        id SERIAL PRIMARY KEY,
+        candidate_key VARCHAR(64) NOT NULL UNIQUE,
+        candidate_fingerprint TEXT NOT NULL,
+        candidate_name VARCHAR(255),
+        candidate_email VARCHAR(255),
+        candidate_phone VARCHAR(50),
+        source_sheet_id VARCHAR(128),
+        source_gid VARCHAR(64),
+        assigned_gen VARCHAR(100) NOT NULL,
+        note TEXT,
+        assigned_by_email VARCHAR(255) NOT NULL,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_hr_gen_assignments_assigned_gen
+        ON hr_candidate_gen_assignments(assigned_gen);
+      CREATE INDEX IF NOT EXISTS idx_hr_gen_assignments_candidate_email
+        ON hr_candidate_gen_assignments(candidate_email);
+      CREATE INDEX IF NOT EXISTS idx_hr_gen_assignments_updated_at
+        ON hr_candidate_gen_assignments(updated_at DESC);
+
+      DROP TRIGGER IF EXISTS trg_hr_candidate_gen_assignments_updated_at ON hr_candidate_gen_assignments;
+      CREATE TRIGGER trg_hr_candidate_gen_assignments_updated_at
+      BEFORE UPDATE ON hr_candidate_gen_assignments
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+
+      CREATE TABLE IF NOT EXISTS hr_candidate_gen_assignment_history (
+        id SERIAL PRIMARY KEY,
+        assignment_id INTEGER REFERENCES hr_candidate_gen_assignments(id) ON DELETE SET NULL,
+        candidate_key VARCHAR(64) NOT NULL,
+        previous_gen VARCHAR(100),
+        new_gen VARCHAR(100),
+        changed_by_email VARCHAR(255) NOT NULL,
+        change_note TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_hr_gen_assignment_history_candidate
+        ON hr_candidate_gen_assignment_history(candidate_key);
+      CREATE INDEX IF NOT EXISTS idx_hr_gen_assignment_history_created
+        ON hr_candidate_gen_assignment_history(created_at DESC);
+
+      -- Super admin gets access to the HR candidate management screen.
+      INSERT INTO app_permissions (user_id, route_path, can_access)
+      SELECT u.id, '/admin/hr-candidates', true
+      FROM app_users u
+      WHERE u.role = 'super_admin'
+      ON CONFLICT (user_id, route_path) DO NOTHING;
+
+      -- Grant role-based access for Admin and HR if those roles exist in DB.
+      DO $$
+      BEGIN
+        IF to_regclass('public.roles') IS NOT NULL AND to_regclass('public.role_permissions') IS NOT NULL THEN
+          INSERT INTO role_permissions (role_code, route_path)
+          SELECT r.role_code, '/admin/hr-candidates'
+          FROM roles r
+          WHERE r.role_code IN ('AD', 'HR')
+          ON CONFLICT DO NOTHING;
+        END IF;
+      END $$;
+    `,
+  },
+
+    // ═══════════════════════════════════════════════════════
+    // V36: HR GEN catalog for planner page
+    // ═══════════════════════════════════════════════════════
+    {
+      name: 'V36_hr_gen_catalog',
+      version: 36,
+      sql: `
+        CREATE TABLE IF NOT EXISTS hr_gen_catalog (
+          id SERIAL PRIMARY KEY,
+          gen_name VARCHAR(100) NOT NULL UNIQUE,
+          source VARCHAR(30) NOT NULL DEFAULT 'manual',
+          created_by_email VARCHAR(255),
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          metadata JSONB DEFAULT '{}'::jsonb,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_hr_gen_catalog_active
+          ON hr_gen_catalog(is_active, gen_name);
+
+        DROP TRIGGER IF EXISTS trg_hr_gen_catalog_updated_at ON hr_gen_catalog;
+        CREATE TRIGGER trg_hr_gen_catalog_updated_at
+        BEFORE UPDATE ON hr_gen_catalog
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+
+        INSERT INTO app_permissions (user_id, route_path, can_access)
+        SELECT u.id, '/admin/hr-candidates/gen-planner', true
+        FROM app_users u
+        WHERE u.role = 'super_admin'
+        ON CONFLICT (user_id, route_path) DO NOTHING;
+
+        DO $$
+        BEGIN
+          IF to_regclass('public.roles') IS NOT NULL AND to_regclass('public.role_permissions') IS NOT NULL THEN
+            INSERT INTO role_permissions (role_code, route_path)
+            SELECT r.role_code, '/admin/hr-candidates/gen-planner'
+            FROM roles r
+            WHERE r.role_code IN ('AD', 'HR')
+            ON CONFLICT DO NOTHING;
+          END IF;
+        END $$;
+      `,
+    },
+
+  // ═══════════════════════════════════════════════════════
+  // V37: HR GEN Candidate Attendance Records
+  // Lưu điểm danh & điểm kiểm tra theo buổi (1-4) cho từng ứng viên
+  // Không phụ thuộc vào teacherCode hay videoId
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V37_hr_gen_attendance_records',
+    version: 37,
+    sql: `
+      CREATE TABLE IF NOT EXISTS hr_gen_attendance_records (
+        id SERIAL PRIMARY KEY,
+        candidate_key VARCHAR(64) NOT NULL,
+        gen_code VARCHAR(100) NOT NULL,
+        session_number SMALLINT NOT NULL CHECK (session_number BETWEEN 1 AND 4),
+        attendance BOOLEAN NOT NULL DEFAULT FALSE,
+        score DECIMAL(4, 1) CHECK (score IS NULL OR (score >= 0 AND score <= 10)),
+        recorded_by_email VARCHAR(255) NOT NULL,
+        note TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(candidate_key, session_number)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_hr_gen_attendance_candidate
+        ON hr_gen_attendance_records(candidate_key);
+      CREATE INDEX IF NOT EXISTS idx_hr_gen_attendance_gen
+        ON hr_gen_attendance_records(gen_code);
+      CREATE INDEX IF NOT EXISTS idx_hr_gen_attendance_gen_session
+        ON hr_gen_attendance_records(gen_code, session_number);
+
+      DROP TRIGGER IF EXISTS trg_hr_gen_attendance_updated_at ON hr_gen_attendance_records;
+      CREATE TRIGGER trg_hr_gen_attendance_updated_at
+      BEFORE UPDATE ON hr_gen_attendance_records
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

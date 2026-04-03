@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/sidebar";
 import { useAuth } from "@/lib/auth-context";
 import { SidebarProvider, useSidebar } from "@/lib/sidebar-context";
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 
 function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -25,7 +26,11 @@ function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-white">
-      {shouldShowSidebar && <Sidebar />}
+      {shouldShowSidebar && (
+        <Suspense fallback={null}>
+          <Sidebar />
+        </Suspense>
+      )}
       <main
         className={`
           transition-all duration-500 ease-in-out min-h-screen will-change-transform

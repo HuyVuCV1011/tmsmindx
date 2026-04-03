@@ -8,11 +8,12 @@ import toast from 'react-hot-toast';
 interface User {
   email: string;
   displayName: string;
-  role: 'teacher' | 'manager' | 'super_admin' | 'admin';
+  role: 'teacher' | 'manager' | 'super_admin' | 'admin' | 'hr';
   localId: string;
   isAdmin?: boolean;
   isAppUser?: boolean;
   permissions?: string[];
+  userRoles?: string[];
 }
 
 interface AuthContextType {
@@ -117,12 +118,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const newPerms = JSON.stringify([...data.permissions].sort());
         const currentRole = user.role;
         const newRole = data.role;
+        const currentUserRoles = JSON.stringify([...(user.userRoles || [])].sort());
+        const nextUserRoles = JSON.stringify([...(data.userRoles || [])].sort());
 
-        if (currentPerms !== newPerms || currentRole !== newRole) {
+        if (currentPerms !== newPerms || currentRole !== newRole || currentUserRoles !== nextUserRoles) {
           const updatedUser = {
             ...user,
             role: newRole,
             permissions: data.permissions,
+            userRoles: data.userRoles || [],
             isAdmin: data.isAdmin
           };
 

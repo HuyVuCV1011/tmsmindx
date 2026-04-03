@@ -577,8 +577,22 @@ export default function TeacherAssignmentPage() {
     let totalPassed = 0;
     let bestExperience = 0;
     let missingOrPending = 0;
+    let explanationsApproved = 0;
+    let explanationsRejected = 0;
+    let explanationsPending = 0;
 
     const now = new Date();
+    
+    // Determine the target month dynamically (realtime with filter)
+    let targetMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
+    if (selectedExamMonth !== 'all' && selectedExamMonth !== '6months') {
+      targetMonthKey = selectedExamMonth;
+    } else if (examAssignments.length > 0) {
+      const maxDate = new Date(Math.max(...examAssignments.map(a => new Date(a.open_at).getTime())));
+      targetMonthKey = `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, '0')}`;
+    }
+
     const last6Months = new Set(
       Array.from({ length: 6 }, (_, i) => {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -591,6 +605,12 @@ export default function TeacherAssignmentPage() {
       const { score, isMissedCurrentMonth } = getEffectiveExamScore(item);
       const date = new Date(item.open_at);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+      if (monthKey === targetMonthKey) {
+        if (item.explanation_status === 'accepted') explanationsApproved++;
+        else if (item.explanation_status === 'rejected') explanationsRejected++;
+        else if (item.explanation_status === 'pending') explanationsPending++;
+      }
 
       // Tính Tỉ lệ đạt trong 6 tháng: Loại bỏ bài được duyệt, chỉ đếm các bài đã được phép tính điểm (score !== null)
       if (last6Months.has(monthKey)) {
@@ -672,8 +692,12 @@ export default function TeacherAssignmentPage() {
       bestExperienceMonth,
       missingOrPending,
       missingMonths,
+      explanationsApproved,
+      explanationsRejected,
+      explanationsPending,
+      targetMonthKey,
     };
-  }, [examAssignments]);
+  }, [examAssignments, selectedExamMonth]);
 
   const monthlyOverviewData = useMemo(() => {
     const dataMap = new Map<string, {
@@ -872,7 +896,7 @@ export default function TeacherAssignmentPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2 mb-2">
                               <div
-                                className="prose prose-sm max-w-none flex-1"
+                                className="ProseMirror prose prose-sm max-w-none flex-1"
                                 dangerouslySetInnerHTML={{ __html: question.question_text }}
                               />
                               <span className="self-start px-2 md:px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] md:text-xs font-semibold shrink-0">
@@ -1364,6 +1388,31 @@ export default function TeacherAssignmentPage() {
                 <p className="text-2xl font-bold text-gray-900">{scoreStats.missingOrPending}</p>
                 <p className="text-xs text-gray-500 mt-1">Bài thi cần giải trình</p>
               </button>
+            </div>
+
+            {/* Explanation Stats for Current Month */}
+            <div className="flex flex-col md:flex-row bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-5 gap-6 md:items-center justify-between">
+               <div className="flex-1">
+                 <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                   <AlertCircle className="w-5 h-5 text-blue-500" />
+                   Tình trạng giải trình ({formatMonthLabel(scoreStats.targetMonthKey)})
+                 </h3>
+                 <p className="text-sm text-gray-500 mt-1">Thống kê các bài thi được yêu cầu giải trình trong tháng đánh giá gần nhất</p>
+               </div>
+               <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+                 <div className="flex-1 md:flex-none text-center bg-green-50 text-green-700 px-5 py-2.5 rounded-lg border border-green-200 min-w-[100px] hover:shadow-sm transition-all">
+                    <div className="text-2xl font-bold">{scoreStats.explanationsApproved}</div>
+                    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mt-0.5">Thành công</div>
+                 </div>
+                 <div className="flex-1 md:flex-none text-center bg-red-50 text-red-700 px-5 py-2.5 rounded-lg border border-red-200 min-w-[100px] hover:shadow-sm transition-all">
+                    <div className="text-2xl font-bold">{scoreStats.explanationsRejected}</div>
+                    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mt-0.5">Thất bại</div>
+                 </div>
+                 <div className="flex-1 md:flex-none text-center bg-amber-50 text-amber-700 px-5 py-2.5 rounded-lg border border-amber-200 min-w-[100px] hover:shadow-sm transition-all">
+                    <div className="text-2xl font-bold">{scoreStats.explanationsPending}</div>
+                    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mt-0.5">Đang chờ</div>
+                 </div>
+               </div>
             </div>
 
             {/* 1.5. Monthly Overview Timeline */}
