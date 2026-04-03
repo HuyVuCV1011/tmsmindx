@@ -94,7 +94,7 @@ export default function UsersTab() {
             });
             const d = await r.json();
             if (d.success) {
-                toast.success("Đã phân quyền cho tài khoản Firebase");
+                toast.success("Đã phân quyền cho tài khoản LMS");
                 setExEmail(""); setExName(""); setExUserRoles([]); close(); loadUsers();
             } else { toast.error(d.error || "Lỗi"); }
         } catch { toast.error("Lỗi mạng"); } finally { setAdding(false); }
@@ -172,7 +172,7 @@ export default function UsersTab() {
                             <h3 className="text-lg font-bold flex items-center gap-2 text-gray-900"><UserCheck className="h-5 w-5 text-green-600" />Thêm tài khoản đã có & phân quyền</h3>
                             <button onClick={close} className="text-gray-400 hover:text-gray-600 rounded-full p-1 hover:bg-gray-100 transition-colors"><X className="h-5 w-5" /></button>
                         </div>
-                        <p className="text-sm text-gray-500 mb-5 border-b pb-3">Dành cho tài khoản Firebase. Nhập email đã có, đặt tên, chọn quyền.</p>
+                        <p className="text-sm text-gray-500 mb-5 border-b pb-3">Dành cho tài khoản LMS. Nhập email đã có, đặt tên, chọn quyền.</p>
                         <form onSubmit={handleAddExisting} className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
@@ -312,7 +312,7 @@ export default function UsersTab() {
 
                         {sel.auth_type === 'firebase' ? (
                             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
-                                <p className="text-sm text-amber-800">⚠️ Tài khoản Firebase — Mật khẩu được quản lý và đặt lại qua hệ thống Firebase Auth.</p>
+                                <p className="text-sm text-amber-800">⚠️ Tài khoản LMS — Mật khẩu được quản lý và đặt lại qua hệ thống LMS Auth.</p>
                             </div>
                         ) : (
                             <form onSubmit={handleChPw} className="space-y-4">
@@ -355,7 +355,7 @@ export default function UsersTab() {
                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${u.role === 'super_admin' ? 'bg-amber-100 text-amber-800' : u.role === 'admin' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
                                                     {u.role === 'super_admin' ? '👑 Super Admin' : u.role === 'admin' ? 'Admin' : 'Manager'}</span>
                                                 <span className={`px-1.5 py-0.5 rounded text-xs ${u.auth_type === 'firebase' ? 'bg-orange-50 text-orange-600' : 'bg-purple-50 text-purple-600'}`}>
-                                                    {u.auth_type === 'firebase' ? '🔥 Firebase' : '🔐 App'}</span>
+                                                    {u.auth_type === 'firebase' ? '🔥 LMS' : '🔐 App'}</span>
                                                 {!u.is_active && <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">Vô hiệu</span>}
                                             </div>
                                             <p className="text-xs text-gray-500">{u.email}</p>

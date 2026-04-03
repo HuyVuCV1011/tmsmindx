@@ -28,6 +28,13 @@ const iconMap: Record<string, React.ComponentType<any>> = {
 
 export function AssignmentPreview({ assignment, questions, onClose }: AssignmentPreviewProps) {
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const decodeEscapedHtml = (value: string) => {
+    if (!value || !value.includes('&lt;')) return value;
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = value;
+    return textarea.value;
+  };
+  const hasHtmlMarkup = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value);
   const totalPoints = questions.reduce((sum, q) => {
     const points = Number(q.points) || 0;
     return sum + points;
@@ -177,7 +184,7 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
                         {question.options.map((option, idx) => (
                           <label
                             key={idx}
-                            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${answers[question.id] === option
+                            className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${answers[question.id] === option
                                 ? 'border-blue-500 bg-blue-50'
                                 : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
                               }`}
@@ -190,7 +197,21 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
                               onChange={(e) => setAnswers({ ...answers, [question.id]: e.target.value })}
                               className="w-5 h-5"
                             />
-                            <span className="flex-1 font-medium text-gray-900">{option}</span>
+                            {(() => {
+                              const normalizedOption = decodeEscapedHtml(String(option));
+                              const renderAsHtml = hasHtmlMarkup(normalizedOption);
+
+                              if (renderAsHtml) {
+                                return (
+                                  <div
+                                    className="prose prose-sm max-w-none flex-1 font-medium text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
+                                    dangerouslySetInnerHTML={{ __html: normalizedOption }}
+                                  />
+                                );
+                              }
+
+                              return <span className="flex-1 font-medium text-gray-900">{normalizedOption}</span>;
+                            })()}
                           </label>
                         ))}
                       </div>

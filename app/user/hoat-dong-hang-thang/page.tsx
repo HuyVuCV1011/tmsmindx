@@ -344,7 +344,7 @@ export default function MonthlyActivitiesPage() {
 
     (async () => {
       try {
-        const response = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+        const response = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
         const data = await response.json();
         if (data?.teacher?.code) {
           setTeacherCode(data.teacher.code);
@@ -999,21 +999,22 @@ export default function MonthlyActivitiesPage() {
           {calendarCells.map(({ date, inCurrentMonth }) => {
             const isToday = isSameDate(startOfDay(date), startOfDay(new Date()));
             const dateKey = formatDateKey(date);
-            const dayEvents = visibleEventsByDateKey.get(dateKey) || [];
-            const hasRegistrationEvent = Boolean(registrationEventByDate(date));
-            const hasActiveRegistration = Boolean(activeRegistrationEventByDate(date));
             const isPastCalendarDate = isPastDate(date);
+            const dayEvents = isPastCalendarDate ? [] : visibleEventsByDateKey.get(dateKey) || [];
+            const hasActiveRegistration = !isPastCalendarDate && Boolean(activeRegistrationEventByDate(date));
 
             return (
               <div
                 key={dateKey}
                 className={`min-h-28 border-r border-b border-gray-200 p-2 ${
-                  isToday
+                  isPastCalendarDate
+                    ? "bg-gray-100"
+                    : isToday
                     ? "bg-yellow-50 border-yellow-300"
                     : inCurrentMonth
                       ? "bg-white"
                       : "bg-gray-50"
-                  } ${dayEvents.length > 0 && !isPastCalendarDate ? "cursor-pointer hover:bg-blue-50" : ""} ${isPastCalendarDate ? "opacity-60" : ""}`}
+                  } ${dayEvents.length > 0 && !isPastCalendarDate ? "cursor-pointer hover:bg-blue-50" : ""}`}
                 onClick={() => handleDayClick(date)}
               >
                 <div className="mb-1 flex items-center justify-between">
@@ -1034,11 +1035,6 @@ export default function MonthlyActivitiesPage() {
                   {hasActiveRegistration && !isPastCalendarDate && (
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
                       Đăng ký
-                    </span>
-                  )}
-                  {(isPastCalendarDate || (hasRegistrationEvent && !hasActiveRegistration)) && (
-                    <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
-                      Quá hạn
                     </span>
                   )}
                 </div>

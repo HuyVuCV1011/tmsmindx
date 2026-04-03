@@ -1,12 +1,14 @@
 'use client';
 
+
 import Modal from '@/components/Modal';
+import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Stepper } from '@/components/ui/stepper';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/lib/auth-context';
-import { useTeacher } from '@/lib/teacher-context';
 import { CAMPUS_LIST, findMatchingCampus } from '@/lib/campus-data';
+import { useTeacher } from '@/lib/teacher-context';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -100,7 +102,8 @@ export default function GiaiTrinhPage() {
           teacher_name: updated.teacher_name,
           lms_code: updated.lms_code,
           email: updated.email,
-          campus: updated.campus
+          campus: updated.campus,
+          status: teacherProfile.status || ''
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
         
@@ -228,7 +231,7 @@ export default function GiaiTrinhPage() {
 
   const getStatusBadge = (status: string) => {
     return (
-      <div className="min-w-[240px] px-2 py-1 mx-auto">
+      <div className="min-w-60 px-2 py-1 mx-auto">
         <Stepper 
           compact
           steps={[
@@ -283,12 +286,10 @@ export default function GiaiTrinhPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="w-full mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Giải Trình Không Tham Gia Kiểm Tra</h1>
-            <p className="mt-1 text-sm text-gray-600">Quản lý và theo dõi các giải trình của bạn</p>
-          </div>
+      <PageHeader
+        title="Giải Trình Không Tham Gia Kiểm Tra"
+        description="Quản lý và theo dõi các giải trình của bạn"
+        actions={
           <Button
             onClick={() => setShowModal(true)}
             size="lg"
@@ -299,8 +300,8 @@ export default function GiaiTrinhPage() {
             </svg>
             Tạo Giải Trình Mới
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Modal Form - Responsive for mobile */}
       <Modal

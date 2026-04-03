@@ -79,8 +79,7 @@ async function main() {
         { name: 'create_teacher_certificates', file: 'create_teacher_certificates_table.sql' },
         { name: 'create_teacher_privacy_settings', file: 'create_teacher_privacy_settings_table.sql' },
         { name: 'create_truyenthong_comments', file: 'create_truyenthong_comments_tables.sql' },
-        { name: 'create_training_tables', file: 'create_training_tables_postgres.sql' },
-    ];
+        { name: 'create_training_tables', file: 'create_training_tables_postgres.sql' },        { name: 'fix_assignment_answers_constraint', file: 'fix_assignment_answers_constraint.sql' }    ];
 
     let appliedCount = 0;
     let errorCount = 0;

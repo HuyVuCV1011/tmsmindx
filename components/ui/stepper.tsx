@@ -27,9 +27,8 @@ export function Stepper({ steps, compact = false }: { steps: StepItem[], compact
           return (
             <div key={step.id} className={`flex flex-col ${isLast ? 'items-center' : 'flex-1'}`}>
               <div className="flex items-center w-full">
-                <button
-                  type="button"
-                  className={`flex-shrink-0 ${circleSize} rounded-full flex items-center justify-center font-semibold ${titleSize} transition-all duration-300 shadow-md cursor-pointer hover:scale-110
+                <div
+                  className={`flex-shrink-0 ${circleSize} rounded-full flex items-center justify-center font-semibold ${titleSize} transition-all duration-300 shadow-md
                     ${(isCompleted && !isError && !isSuccess) ? 'bg-[#1152D4] text-white shadow-[#1152D4]/30' : ''}
                     ${isSuccess ? 'bg-green-500 text-white shadow-green-500/30' : ''}
                     ${isCurrent ? 'bg-[#1152D4] text-white ring-4 ring-[#1152D4]/20' : ''}
@@ -44,7 +43,7 @@ export function Stepper({ steps, compact = false }: { steps: StepItem[], compact
                   ) : (
                     index + 1
                   )}
-                </button>
+                </div>
                 {!isLast && (
                   <div className={`flex-1 h-0.5 mx-1.5 rounded-full transition-all duration-500 ${(isCompleted || isError || isSuccess) ? 'bg-[#1152D4]' : 'bg-slate-200'}`}></div>
                 )}

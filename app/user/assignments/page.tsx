@@ -1,16 +1,20 @@
 'use client';
 
-import { PageContainer } from '@/components/PageContainer';
-import { Tabs } from '@/components/Tabs';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import Modal from '@/components/Modal';
+import { PageContainer } from '@/components/PageContainer';
+import { Tabs } from '@/components/Tabs';
+import { ExplanationSection } from '@/components/user/ExplanationSection';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
-import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, ChevronDown, ChevronUp, Clock, FileText, FilterX, Send, Trophy, XCircle } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { useTeacher } from '@/lib/teacher-context';
+import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, ChevronDown, ChevronUp, Clock, FileText, FilterX, RefreshCw, Send, Trophy, XCircle } from 'lucide-react';
+
 import NextImage from 'next/image';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface Assignment {
@@ -89,7 +93,8 @@ interface EffectiveExamScore {
 }
 
 export default function TeacherAssignmentPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
   const router = useRouter();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [examAssignments, setExamAssignments] = useState<ExamAssignment[]>([]);
@@ -101,7 +106,7 @@ export default function TeacherAssignmentPage() {
   const [examLoading, setExamLoading] = useState(true);
   const [error, setError] = useState('');
   const [teacherCode, setTeacherCode] = useState('');
-  const [activeMainTab, setActiveMainTab] = useState<'exam' | 'scores' | 'training'>('exam');
+  const [activeMainTab, setActiveMainTab] = useState<'exam' | 'scores' | 'explanations' | 'training'>('exam');
 
   const [selectedExamMonth, setSelectedExamMonth] = useState('6months');
   const [scoreTypeFilter, setScoreTypeFilter] = useState<'all' | 'expertise' | 'experience'>('all');
@@ -148,10 +153,20 @@ export default function TeacherAssignmentPage() {
   const [view, setView] = useState<'list' | 'taking' | 'result'>('list');
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [timerActive, setTimerActive] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [selectedExamInfo, setSelectedExamInfo] = useState<ExamAssignment | null>(null);
 
   const searchParams = useSearchParams();
   const startId = searchParams.get('start_assignment_id');
+  const tabParam = searchParams.get('tab');
+
+  useEffect(() => {
+    if (tabParam === 'explanations' && activeMainTab !== 'explanations') {
+      setActiveMainTab('explanations');
+    }
+  }, [tabParam, activeMainTab]);
 
   // Auto-start assignment logic
   useEffect(() => {
@@ -182,11 +197,35 @@ export default function TeacherAssignmentPage() {
 
   // Get teacher code from user email
   useEffect(() => {
-    if (user && user.email && !teacherCode) {
+    if (teacherCode) return; // Already have code
+
+    // 1. Try from context first (fastest)
+    if (teacherProfile?.code) {
+      setTeacherCode(teacherProfile.code);
+      return;
+    }
+
+    // 2. Try from localStorage (fast)
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('teacher_auto_fill_data');
+        if (cached) {
+          const data = JSON.parse(cached);
+          if (data.lms_code) {
+            setTeacherCode(data.lms_code);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse local teacher data", e);
+      }
+    }
+
+    // 3. Last reort: fetch from API (slowest)
+    if (user && user.email) {
       (async () => {
         try {
-          // Try to get teacher code from API
-          const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+          const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
           const data = await res.json();
           if (data?.teacher?.code) {
             setTeacherCode(data.teacher.code);
@@ -203,7 +242,7 @@ export default function TeacherAssignmentPage() {
         }
       })();
     }
-  }, [user, teacherCode]);
+  }, [user, teacherCode, teacherProfile]);
 
   useEffect(() => {
     if (teacherCode) {
@@ -214,38 +253,53 @@ export default function TeacherAssignmentPage() {
 
   const fetchAvailableAssignments = async (isBackgroundUpdate = false) => {
     try {
-      if (!isBackgroundUpdate) setTrainingLoading(true);
-      const response = await fetch('/api/training-assignments?status=published', { cache: 'no-store' });
+      setTrainingLoading(true);
+      
+      // 1. Fetch assignments list
+      const response = await fetch('/api/training-assignments?status=published');
       const data = await response.json();
+      
       if (data.success) {
-        // Fetch recent submissions for each assignment
-        const assignmentsWithScores = await Promise.all(
-          data.data.map(async (assignment: Assignment) => {
+        let submissionsMap = new Map<number, any>();
+
+        // 2. Fetch all submissions for teacher (instead of N+1 requests)
+        if (teacherCode) {
             try {
-              const submissionRes = await fetch(
-                `/api/training-submissions?teacher_code=${teacherCode}&assignment_id=${assignment.id}&latest=true`,
-                { cache: 'no-store' }
-              );
-              const submissionData = await submissionRes.json();
-              if (submissionData.success && submissionData.data?.length > 0) {
-                const latestSubmission = submissionData.data[0];
-                return {
-                  ...assignment,
-                  recent_submission: {
-                    score: latestSubmission.score,
-                    percentage: latestSubmission.percentage,
-                    is_passed: latestSubmission.is_passed,
-                    submitted_at: latestSubmission.submitted_at,
-                    attempt_number: latestSubmission.attempt_number
-                  }
-                };
-              }
+                // Fetch ALL submissions for this teacher, ordered by created_at DESC
+                const subRes = await fetch(`/api/training-submissions?teacher_code=${teacherCode}`);
+                const subData = await subRes.json();
+                
+                if (subData.success && Array.isArray(subData.data)) {
+                    // Map assignment_id to its LATEST submission
+                    subData.data.forEach((sub: any) => {
+                        if (!submissionsMap.has(sub.assignment_id)) {
+                            submissionsMap.set(sub.assignment_id, sub);
+                        }
+                    });
+                }
             } catch (err) {
-              console.warn('Failed to fetch submission for assignment:', assignment.id);
+                console.warn('Failed to batch fetch submissions', err);
+            }
+        }
+
+        // 3. Merge data
+        const assignmentsWithScores = data.data.map((assignment: Assignment) => {
+            const latestSubmission = submissionsMap.get(assignment.id);
+            if (latestSubmission) {
+                return {
+                    ...assignment,
+                    recent_submission: {
+                        score: latestSubmission.score,
+                        percentage: latestSubmission.percentage,
+                        is_passed: latestSubmission.is_passed,
+                        submitted_at: latestSubmission.submitted_at, 
+                        attempt_number: latestSubmission.attempt_number
+                    }
+                };
             }
             return assignment;
-          })
-        );
+        });
+        
         setAssignments(assignmentsWithScores);
       }
     } catch (err) {
@@ -330,6 +384,29 @@ export default function TeacherAssignmentPage() {
 
   const startAssignment = async (assignment: Assignment) => {
     try {
+      // 1. Check teacher profile from context to insure data integrity
+      if (isTeacherLoading) {
+        toast('Đang đồng bộ dữ liệu giáo viên, vui lòng thử lại sau giây lát...');
+        return;
+      }
+
+      if (!teacherProfile) {
+        toast.error('Thiếu thông tin giáo viên. Vui lòng đăng xuất và đăng nhập lại.');
+        setTimeout(() => {
+           logout();
+        }, 1500);
+        return;
+      }
+
+      // Check required fields directly from profile
+      const teacherBranch = teacherProfile.branchCurrent || teacherProfile.branchIn;
+      // Note: teacherProfile.status might be mapped differently, but checking basic existence is safer
+      // We assume if profile loaded, it's good enough or we can check branch
+      if (!teacherBranch) {
+        toast.error('Thiếu thông tin Cơ sở (Branch). Vui lòng cập nhật thông tin.');
+        return;
+      }
+
       // Fetch questions
       const questionsRes = await fetch(`/api/training-assignment-questions?assignment_id=${assignment.id}`);
       const questionsData = await questionsRes.json();
@@ -346,7 +423,13 @@ export default function TeacherAssignmentPage() {
         body: JSON.stringify({
           teacher_code: teacherCode,
           assignment_id: assignment.id,
-          attempt_number: 1
+          attempt_number: 1,
+          teacher_info: {
+            full_name: teacherProfile?.name || teacherCode,
+            center: teacherProfile?.branchCurrent || '',
+            teaching_block: teacherProfile?.programCurrent || '', 
+            work_email: user?.email || '',
+          }
         })
       });
 
@@ -359,30 +442,51 @@ export default function TeacherAssignmentPage() {
       setCurrentAssignment(assignment);
       setQuestions(questionsData.data);
       setSubmission(submissionData.data);
-      setAnswers({});
+      
+      // Load saved answers if this is a continuing submission
+      if (submissionData.existing_answers && Object.keys(submissionData.existing_answers).length > 0) {
+         setAnswers(submissionData.existing_answers);
+         toast.success('Đã tải lại bài làm cũ của bạn');
+      } else {
+         setAnswers({});
+      }
+      
       setView('taking');
-
-      // Start timer - check if there's a saved endTime
+      
+      // Start timer - logic updated to use server started_at and server_time
       if (assignment.time_limit_minutes > 0) {
-        const savedEndTime = localStorage.getItem(`assignment_${assignment.id}_endTime`);
-        const now = Date.now();
+        let remainingSeconds = assignment.time_limit_minutes * 60;
+        
+        if (submissionData.data.started_at) {
+           const startTime = new Date(submissionData.data.started_at).getTime();
+           
+           // Use server time if available to avoid clock drift, fallback to local
+           const serverNow = submissionData.server_time ? new Date(submissionData.server_time).getTime() : Date.now();
+           const elapsedSeconds = Math.floor((serverNow - startTime) / 1000);
+           
+           // Calculate offset for local countdown
+           const clientNow = Date.now();
+           // How much ahead/behind is the client vs server?
+           const clockOffset = clientNow - serverNow; // e.g. +5000ms if client is 5s ahead
+           
+           remainingSeconds = Math.max(0, (assignment.time_limit_minutes * 60) - elapsedSeconds);
+           
+           console.log('[Assignment] Timer init:', {
+             serverStarted: submissionData.data.started_at,
+             serverNow: submissionData.server_time,
+             elapsed: elapsedSeconds,
+             limit: assignment.time_limit_minutes * 60,
+             remaining: remainingSeconds,
+             offset: clockOffset
+           });
+        }
 
-        if (savedEndTime) {
-          // Calculate remaining time from saved endTime
-          const remainingSeconds = Math.max(0, Math.floor((parseInt(savedEndTime) - now) / 1000));
-          setTimeRemaining(remainingSeconds);
-          setTimerActive(remainingSeconds > 0);
-
-          if (remainingSeconds === 0) {
-            // Time's up - auto submit
-            setTimeout(() => submitAssignment(), 100);
-          }
-        } else {
-          // First time - set new endTime
-          const endTime = now + (assignment.time_limit_minutes * 60 * 1000);
-          localStorage.setItem(`assignment_${assignment.id}_endTime`, endTime.toString());
-          setTimeRemaining(assignment.time_limit_minutes * 60);
-          setTimerActive(true);
+        setTimeRemaining(remainingSeconds);
+        setTimerActive(remainingSeconds > 0);
+          
+        if (remainingSeconds === 0) {
+          // If already expired according to server, submit immediately
+          setTimeout(() => submitAssignment(true), 100);
         }
       }
     } catch (err) {
@@ -391,31 +495,63 @@ export default function TeacherAssignmentPage() {
     }
   };
 
+  // Create debounced save function
+  const saveAnswerToDb = async (submissionId: number, questionId: number, answer: string) => {
+    try {
+        await fetch('/api/training-submissions', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: submissionId,
+                action: 'save_draft',
+                answers: [{ question_id: questionId, answer_text: answer }]
+            })
+        });
+    } catch (e) {
+        console.error("Failed to auto-save answer", e);
+    }
+  };
+
+  const handleAnswerChange = (questionId: number, answer: string) => {
+    setAnswers(prev => ({ ...prev, [questionId]: answer }));
+    if (submission?.id) {
+        saveAnswerToDb(submission.id, questionId, answer);
+    }
+  };
+
+  const scrollToQuestion = (questionId: number) => {
+    const element = document.getElementById(`question-${questionId}`);
+    if (!element) return;
+
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    element.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+    setTimeout(() => {
+      element.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
+    }, 1200);
+  };
+
+  const handleStopAndSubmit = () => {
+    setIsStopConfirmOpen(false);
+    submitAssignment(true);
+  };
+
   // Timer countdown
   useEffect(() => {
     if (!timerActive || timeRemaining === null || timeRemaining <= 0) return;
 
     const interval = setInterval(() => {
-      if (!currentAssignment) return;
-
-      const savedEndTime = localStorage.getItem(`assignment_${currentAssignment.id}_endTime`);
-      if (!savedEndTime) return;
-
-      const now = Date.now();
-      const endTime = parseInt(savedEndTime);
-      const remainingSeconds = Math.max(0, Math.floor((endTime - now) / 1000));
-
-      setTimeRemaining(remainingSeconds);
-
-      if (remainingSeconds === 0) {
-        setTimerActive(false);
-        // Auto submit when time's up
-        submitAssignment();
-      }
+      setTimeRemaining(prev => {
+        if (prev === null || prev <= 0) {
+            setTimerActive(false);
+            submitAssignment();
+            return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [timerActive, timeRemaining, currentAssignment]);
+  }, [timerActive, timeRemaining]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -423,8 +559,18 @@ export default function TeacherAssignmentPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const decodeEscapedHtml = (value: string) => {
+    if (!value || !value.includes('&lt;')) return value;
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = value;
+    return textarea.value;
+  };
+
+  const hasHtmlMarkup = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value);
+
   const submitAssignment = async (skipConfirm?: boolean | React.MouseEvent) => {
     if (!submission) return;
+    if (isSubmittingRef.current) return;
 
     const isConfirmed = typeof skipConfirm === 'boolean' ? skipConfirm : false;
 
@@ -447,6 +593,10 @@ export default function TeacherAssignmentPage() {
     }
 
     try {
+      isSubmittingRef.current = true;
+      setIsSubmitting(true);
+      setTimerActive(false);
+
       // Calculate score synchronously
       let totalScore = 0;
       console.log('[Assignment] Starting score calculation for', questions.length, 'questions');
@@ -481,6 +631,23 @@ export default function TeacherAssignmentPage() {
 
       // Update submission
       const isPassed = totalScore >= currentAssignment!.passing_score;
+      
+      // Prepare answers payload
+      const answersPayload = questions.map(q => {
+        const userAnswer = answers[q.id] || '';
+        const correctAnswer = (q.correct_answer || '').trim().toLowerCase();
+        const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer;
+        const points = parseFloat(q.points?.toString() || '0');
+        const pointsEarned = isCorrect ? points : 0;
+        
+        return {
+          question_id: q.id,
+          answer_text: userAnswer,
+          is_correct: isCorrect,
+          points_earned: pointsEarned
+        };
+      });
+
       const response = await fetch('/api/training-submissions', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -488,19 +655,14 @@ export default function TeacherAssignmentPage() {
           id: submission.id,
           action: 'grade',
           score: totalScore,
-          is_passed: isPassed
+          is_passed: isPassed,
+          answers: answersPayload
         })
       });
 
       const data = await response.json();
       if (data.success) {
         setSubmission(data.data);
-
-        // Clear saved timer
-        if (currentAssignment) {
-          localStorage.removeItem(`assignment_${currentAssignment.id}_endTime`);
-        }
-
         setView('result');
       } else {
         toast.error('Lỗi khi nộp bài: ' + data.error);
@@ -508,11 +670,10 @@ export default function TeacherAssignmentPage() {
     } catch (err) {
       console.error('Error submitting assignment:', err);
       toast.error('Lỗi khi nộp bài');
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
-  };
-
-  const handleAnswerChange = (questionId: number, answer: string) => {
-    setAnswers(prev => ({ ...prev, [questionId]: answer }));
   };
 
   const getProgress = () => {
@@ -852,7 +1013,7 @@ export default function TeacherAssignmentPage() {
   if (view === 'taking' && currentAssignment) {
     const progress = getProgress();
     const answeredCount = Object.keys(answers).length;
-
+    
     return (
       <PageContainer>
         <div className="w-full">
@@ -870,273 +1031,326 @@ export default function TeacherAssignmentPage() {
 
               {/* Questions */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
-                {questions.map((question, idx) => {
-                  // Determine if question should span full width
-                  const isFullWidth = question.question_type === 'essay' ||
-                    question.question_type === 'multiple_choice' ||
-                    question.image_url; // Questions with images also take full width
-
-                  return (
-                    <div
-                      key={question.id}
-                      className={`bg-white rounded-xl shadow-sm border-2 transition-all ${answers[question.id]
-                        ? 'border-green-200 bg-green-50/30'
-                        : 'border-gray-200 hover:border-blue-200'
-                        } ${isFullWidth ? 'lg:col-span-2' : 'lg:col-span-1'}`}
-                    >
-                      <div className="p-4 md:p-6">
-                        {/* Question Header */}
-                        <div className="flex items-start gap-3 md:gap-4 mb-3 md:mb-4">
-                          <div className={`shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-sm md:text-base font-bold ${answers[question.id]
-                            ? 'bg-green-600 text-white'
-                            : 'bg-gray-200 text-gray-700'
-                            }`}>
-                            {idx + 1}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2 mb-2">
-                              <div
-                                className="ProseMirror prose prose-sm max-w-none flex-1"
-                                dangerouslySetInnerHTML={{ __html: question.question_text }}
-                              />
-                              <span className="self-start px-2 md:px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] md:text-xs font-semibold shrink-0">
-                                {question.points} điểm
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Question Image */}
-                        {question.image_url && (
-                          <div className="mb-3 md:mb-4 ml-11 md:ml-14">
-                            <NextImage
-                              src={question.image_url}
-                              alt="Question"
-                              width={400}
-                              height={300}
-                              className="rounded-lg border border-gray-300 w-full h-auto"
-                            />
-                          </div>
-                        )}
-
-                        {/* Answer Options */}
-                        <div className="ml-11 md:ml-14">
-                          {question.question_type === 'multiple_choice' && Array.isArray(question.options) ? (
-                            <div className="space-y-2">
-                              {question.options.map((option: string, optIdx: number) => (
-                                <label
-                                  key={optIdx}
-                                  className={`flex items-center gap-2 md:gap-3 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${answers[question.id] === option
-                                    ? 'border-blue-500 bg-blue-50 shadow-sm'
-                                    : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
-                                    }`}
-                                >
-                                  <input
-                                    type="radio"
-                                    name={`question-${question.id}`}
-                                    value={option}
-                                    checked={answers[question.id] === option}
-                                    onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                                    className="w-4 md:w-5 h-4 md:h-5 text-blue-600"
-                                  />
-                                  <span className="flex-1 text-sm md:text-base font-medium text-gray-900">{option}</span>
-                                </label>
-                              ))}
-                            </div>
-                          ) : question.question_type === 'true_false' ? (
-                            <div className="grid grid-cols-2 gap-2 md:gap-3">
-                              {['Đúng', 'Sai'].map((option) => (
-                                <label
-                                  key={option}
-                                  className={`flex items-center justify-center gap-2 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${answers[question.id] === option
-                                    ? 'border-blue-500 bg-blue-50 shadow-sm'
-                                    : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
-                                    }`}
-                                >
-                                  <input
-                                    type="radio"
-                                    name={`question-${question.id}`}
-                                    value={option}
-                                    checked={answers[question.id] === option}
-                                    onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                                    className="w-4 md:w-5 h-4 md:h-5 text-blue-600"
-                                  />
-                                  <span className="text-sm md:text-base font-semibold text-gray-900">{option}</span>
-                                </label>
-                              ))}
-                            </div>
-                          ) : (
-                            <textarea
-                              value={answers[question.id] || ''}
-                              onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                              placeholder="Nhập câu trả lời của bạn..."
-                              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-none"
-                              rows={question.question_type === 'essay' ? 6 : 3}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Submit Footer */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6 sticky bottom-0 lg:hidden">
-                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 md:gap-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (confirm('Bạn có chắc muốn dừng và nộp bài luôn không? Kết quả hiện tại sẽ được lưu.')) {
-                        submitAssignment(true);
-                      }
-                    }}
-                    className="flex items-center justify-center gap-2 px-4 md:px-6 py-3 font-medium text-gray-700 text-sm md:text-base h-auto"
-                  >
-                    <ArrowLeft className="w-4 md:w-5 h-4 md:h-5" />
-                    Hủy bài làm
-                  </Button>
-
-                  <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-4">
-                    {answeredCount < questions.length && (
-                      <div className="flex items-center justify-center gap-2 text-amber-600 py-2 md:py-0">
-                        <AlertCircle className="w-4 md:w-5 h-4 md:h-5" />
-                        <span className="text-xs md:text-sm font-medium">
-                          Còn {questions.length - answeredCount} câu chưa trả lời
-                        </span>
-                      </div>
-                    )}
-
-                    <Button
-                      onClick={submitAssignment}
-                      className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 font-semibold shadow-md text-sm md:text-base h-auto"
-                    >
-                      <Send className="w-4 md:w-5 h-4 md:h-5" />
-                      Nộp bài
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Sidebar - Desktop only */}
-            <div className="hidden lg:block w-72 shrink-0">
-              <div className="sticky top-4 space-y-3">
-                {/* Assignment Info Card */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <h2 className="text-base font-bold text-gray-900 mb-1 line-clamp-2">{currentAssignment.assignment_title}</h2>
-                  <p className="text-xs text-gray-600 flex items-center gap-1.5 line-clamp-1">
-                    <BookOpen className="w-3.5 h-3.5" />
-                    {currentAssignment.video_title}
-                  </p>
-                </div>
-
-                {/* Timer Card */}
-                {timeRemaining !== null && (
-                  <div className={`rounded-lg shadow-sm border-2 p-4 ${timeRemaining < 300 ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-300'
+            {questions.map((question, idx) => {
+              // Determine if question should span full width
+              const isFullWidth = question.question_type === 'essay' || 
+                                  question.question_type === 'multiple_choice' ||
+                                  question.image_url; // Questions with images also take full width
+              
+              return (
+              <div 
+                key={question.id} 
+                id={`question-${question.id}`}
+                className={`bg-white rounded-xl shadow-sm border-2 transition-all ${
+                  answers[question.id] 
+                    ? 'border-green-200 bg-green-50/30' 
+                    : 'border-gray-200 hover:border-blue-200'
+                } ${isFullWidth ? 'lg:col-span-2' : 'lg:col-span-1'}`}
+              >
+                <div className="p-4 md:p-6">
+                  {/* Question Header */}
+                  <div className="flex items-start gap-3 md:gap-4 mb-3 md:mb-4">
+                    <div className={`shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-sm md:text-base font-bold ${
+                      answers[question.id] 
+                        ? 'bg-green-600 text-white' 
+                        : 'bg-gray-200 text-gray-700'
                     }`}>
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <Clock className={`w-4 h-4 ${timeRemaining < 300 ? 'text-red-600' : 'text-blue-600'}`} />
-                      <span className={`text-xs font-semibold ${timeRemaining < 300 ? 'text-red-700' : 'text-blue-700'}`}>
-                        Thời gian còn lại
-                      </span>
+                      {idx + 1}
                     </div>
-                    <div className={`font-mono text-2xl font-bold ${timeRemaining < 300 ? 'text-red-700' : 'text-blue-700'}`}>
-                      {formatTime(timeRemaining)}
-                    </div>
-                  </div>
-                )}
-
-                {/* Progress Card */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-gray-700">Tiến độ</span>
-                    <span className="text-xl font-bold text-blue-600">{progress}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                    <div
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-600 text-center">
-                    {answeredCount}/{questions.length} câu đã trả lời
-                  </p>
-                </div>
-
-                {/* Stats Card */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <h3 className="text-xs font-semibold text-gray-700 mb-3">Thông tin bài tập</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <FileText className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-gray-500">Số câu hỏi</p>
-                        <p className="text-base font-bold text-gray-900">{questions.length}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                        <Award className="w-4 h-4 text-green-600" />
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-gray-500">Tổng điểm</p>
-                        <p className="text-base font-bold text-gray-900">{currentAssignment.total_points}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                        <CheckCircle className="w-4 h-4 text-purple-600" />
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-gray-500">Điểm đạt yêu cầu</p>
-                        <p className="text-base font-bold text-gray-900">{currentAssignment.passing_score}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="space-y-2.5">
-                  {answeredCount < questions.length && (
-                    <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3">
-                      <div className="flex items-start gap-2 text-amber-700">
-                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                        <span className="text-xs font-medium">
-                          Còn {questions.length - answeredCount} câu chưa trả lời
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2 mb-2">
+                        <div 
+                          className="prose prose-sm max-w-none flex-1"
+                          dangerouslySetInnerHTML={{ __html: question.question_text }}
+                        />
+                        <span className="self-start px-2 md:px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] md:text-xs font-semibold shrink-0">
+                          {question.points} điểm
                         </span>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Question Image */}
+                  {question.image_url && (
+                    <div className="mb-3 md:mb-4 ml-11 md:ml-14">
+                      <NextImage
+                        src={question.image_url}
+                        alt="Question"
+                        width={400}
+                        height={300}
+                        className="rounded-lg border border-gray-300 w-full h-auto"
+                      />
                     </div>
                   )}
 
-                  <Button
-                    onClick={submitAssignment}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-semibold shadow-md h-auto"
-                  >
-                    <Send className="w-4 h-4" />
-                    Nộp bài
-                  </Button>
+                  {/* Answer Options */}
+                  <div className="ml-11 md:ml-14">
+                    {question.question_type === 'multiple_choice' && Array.isArray(question.options) ? (
+                      <div className="space-y-2">
+                        {question.options.map((option: string, optIdx: number) => (
+                          <label
+                            key={optIdx}
+                            className={`flex items-start gap-2 md:gap-3 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                              answers[question.id] === option
+                                ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`question-${question.id}`}
+                              value={option}
+                              checked={answers[question.id] === option}
+                              onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                              className="w-4 md:w-5 h-4 md:h-5 text-blue-600"
+                            />
+                            {(() => {
+                              const normalizedOption = decodeEscapedHtml(String(option));
+                              const renderAsHtml = hasHtmlMarkup(normalizedOption);
 
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (confirm('Bạn có chắc muốn dừng và nộp bài luôn không? Kết quả hiện tại sẽ được lưu.')) {
-                        submitAssignment(true);
-                      }
-                    }}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-gray-700 h-auto"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    Hủy bài làm
-                  </Button>
+                              if (renderAsHtml) {
+                                return (
+                                  <div
+                                    className="prose prose-sm md:prose-base max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
+                                    dangerouslySetInnerHTML={{ __html: normalizedOption }}
+                                  />
+                                );
+                              }
+
+                              return <span className="flex-1 text-sm md:text-base font-medium text-gray-900">{normalizedOption}</span>;
+                            })()}
+                          </label>
+                        ))}
+                      </div>
+                    ) : question.question_type === 'true_false' ? (
+                      <div className="grid grid-cols-2 gap-2 md:gap-3">
+                        {['Đúng', 'Sai'].map((option) => (
+                          <label
+                            key={option}
+                            className={`flex items-center justify-center gap-2 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                              answers[question.id] === option
+                                ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`question-${question.id}`}
+                              value={option}
+                              checked={answers[question.id] === option}
+                              onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                              className="w-4 md:w-5 h-4 md:h-5 text-blue-600"
+                            />
+                            <span className="text-sm md:text-base font-semibold text-gray-900">{option}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <textarea
+                        value={answers[question.id] || ''}
+                        onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                        placeholder="Nhập câu trả lời của bạn..."
+                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-none"
+                        rows={question.question_type === 'essay' ? 6 : 3}
+                      />
+                    )}
+                  </div>
                 </div>
+              </div>
+              );
+            })}
+          </div>
+
+          {/* Submit Footer */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6 sticky bottom-0 lg:hidden">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 md:gap-4">
+              <Button
+                variant="outline"
+                onClick={() => setIsStopConfirmOpen(true)}
+                className="flex items-center justify-center gap-2 px-4 md:px-6 py-3 font-medium text-gray-700 text-sm md:text-base h-auto"
+              >
+                <ArrowLeft className="w-4 md:w-5 h-4 md:h-5" />
+                Hủy bài làm
+              </Button>
+              
+              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-4">
+                {answeredCount < questions.length && (
+                  <div className="flex items-center justify-center gap-2 text-amber-600 py-2 md:py-0">
+                    <AlertCircle className="w-4 md:w-5 h-4 md:h-5" />
+                    <span className="text-xs md:text-sm font-medium">
+                      Còn {questions.length - answeredCount} câu chưa trả lời
+                    </span>
+                  </div>
+                )}
+                
+                <Button
+                  disabled={isSubmitting}
+                  onClick={submitAssignment}
+                  className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 font-semibold shadow-md text-sm md:text-base h-auto"
+                >
+                  <Send className="w-4 md:w-5 h-4 md:h-5" />
+                  {isSubmitting ? 'Đang nộp...' : 'Nộp bài'}
+                </Button>
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Sidebar - Desktop only */}
+        <div className="hidden lg:block w-72 shrink-0">
+          <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+            {/* Assignment Info Card */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <h2 className="text-base font-bold text-gray-900 mb-1 line-clamp-2">{currentAssignment.assignment_title}</h2>
+              <p className="text-xs text-gray-600 flex items-center gap-1.5 line-clamp-1">
+                <BookOpen className="w-3.5 h-3.5" />
+                {currentAssignment.video_title}
+              </p>
+            </div>
+
+            {/* Timer Card */}
+            {timeRemaining !== null && (
+              <div className={`rounded-lg shadow-sm border-2 p-4 ${
+                timeRemaining < 300 ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-300'
+              }`}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Clock className={`w-4 h-4 ${timeRemaining < 300 ? 'text-red-600' : 'text-blue-600'}`} />
+                  <span className={`text-xs font-semibold ${timeRemaining < 300 ? 'text-red-700' : 'text-blue-700'}`}>
+                    Thời gian còn lại
+                  </span>
+                </div>
+                <div className={`font-mono text-2xl font-bold ${timeRemaining < 300 ? 'text-red-700' : 'text-blue-700'}`}>
+                  {formatTime(timeRemaining)}
+                </div>
+              </div>
+            )}
+
+            {/* Progress Card */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-gray-700">Tiến độ</span>
+                <span className="text-xl font-bold text-blue-600">{progress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-600 text-center">
+                {answeredCount}/{questions.length} câu đã trả lời
+              </p>
+
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-[10px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">Ma trận câu hỏi</p>
+                <div className="grid grid-cols-5 gap-2">
+                  {questions.map((q, index) => {
+                    const isAnswered = answers[q.id] !== undefined && answers[q.id] !== '';
+                    return (
+                      <button
+                        type="button"
+                        key={q.id}
+                        onClick={() => scrollToQuestion(q.id)}
+                        className={`
+                          flex items-center justify-center text-[10px] font-bold h-7 rounded transition-all duration-200 cursor-pointer
+                          ${isAnswered 
+                            ? 'bg-green-500 text-white shadow-sm ring-1 ring-green-600' 
+                            : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                          }
+                        `}
+                        title={`Câu ${index + 1}: ${isAnswered ? 'Đã làm' : 'Chưa làm'}`}
+                        aria-label={`Đi tới câu ${index + 1}`}
+                      >
+                        {index + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Card */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <h3 className="text-xs font-semibold text-gray-700 mb-3">Thông tin bài tập</h3>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500">Số câu hỏi</p>
+                    <p className="text-base font-bold text-gray-900">{questions.length}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                    <Award className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500">Tổng điểm</p>
+                    <p className="text-base font-bold text-gray-900">{currentAssignment.total_points}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <CheckCircle className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500">Điểm đạt yêu cầu</p>
+                    <p className="text-base font-bold text-gray-900">{currentAssignment.passing_score}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2.5">
+              {answeredCount < questions.length && (
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3">
+                  <div className="flex items-start gap-2 text-amber-700">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span className="text-xs font-medium">
+                      Còn {questions.length - answeredCount} câu chưa trả lời
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              <Button
+                disabled={isSubmitting}
+                onClick={submitAssignment}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-semibold shadow-md h-auto"
+              >
+                <Send className="w-4 h-4" />
+                {isSubmitting ? 'Đang nộp...' : 'Nộp bài'}
+              </Button>
+              
+              <Button
+                variant="outline"
+                onClick={() => setIsStopConfirmOpen(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-gray-700 h-auto"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Hủy bài làm
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <ConfirmDialog
+          isOpen={isStopConfirmOpen}
+          onClose={() => setIsStopConfirmOpen(false)}
+          onConfirm={handleStopAndSubmit}
+          title="Xác nhận nộp bài"
+          message="Bạn có chắc muốn dừng và nộp bài luôn không? Kết quả hiện tại sẽ được lưu."
+          confirmText="Nộp bài"
+          cancelText="Tiếp tục làm"
+          type="warning"
+          icon="warning"
+        />
+      </div>
         </div>
       </PageContainer>
     );
@@ -1224,11 +1438,26 @@ export default function TeacherAssignmentPage() {
                   fetchAvailableAssignments();
                 }
               }}
+              variant="outline"
               className="w-full flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto"
             >
               <ArrowLeft className="w-5 h-5" />
               {startId ? 'Quay lại bài học' : 'Quay lại danh sách'}
             </Button>
+            
+            {currentAssignment?.max_attempts && submission && submission.attempt_number < currentAssignment.max_attempts && (
+               <Button
+                 onClick={() => {
+                   if (confirm('Bạn có chắc muốn làm lại bài tập này? Kết quả mới sẽ được tính là một lần làm bài mới.')) {
+                        startAssignment(currentAssignment);
+                   }
+                 }}
+                 className="w-full mt-3 flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto shadow-md"
+               >
+                 <RefreshCw className="w-5 h-5" />
+                 Làm lại bài tập
+               </Button>
+            )}
           </div>
         </div>
       </PageContainer>
@@ -1279,6 +1508,7 @@ export default function TeacherAssignmentPage() {
   const mainTabs = [
     { id: 'exam', label: 'Kiểm tra chuyên môn & Quy trình - kỹ năng trải nghiệm' },
     { id: 'scores', label: 'Điểm kiểm tra', count: examAssignments.length },
+    { id: 'explanations', label: 'Giải trình điểm kiểm tra' },
   ];
 
   return (
@@ -1310,7 +1540,7 @@ export default function TeacherAssignmentPage() {
         <Tabs
           tabs={mainTabs}
           activeTab={activeMainTab}
-          onChange={(tabId) => setActiveMainTab(tabId as 'exam' | 'scores' | 'training')}
+          onChange={(tabId) => setActiveMainTab(tabId as 'exam' | 'scores' | 'explanations' | 'training')}
         />
 
         {error ? (
@@ -1704,6 +1934,7 @@ export default function TeacherAssignmentPage() {
                               );
                             })}
                           </div>
+
                         </div>
                       )}
                     </div>
@@ -1711,6 +1942,10 @@ export default function TeacherAssignmentPage() {
                 })}
               </div>
             )}
+          </div>
+        ) : activeMainTab === 'explanations' ? (
+          <div key="explanations" className="mt-6 animate-tab-enter">
+            <ExplanationSection compact />
           </div>
         ) : assignments.length === 0 ? (
           <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">

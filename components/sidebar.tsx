@@ -3,7 +3,7 @@
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
-import { CalendarDays, ChevronDown, DollarSign, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, DollarSign, FileText, GraduationCap, Home, LogOut, Megaphone, Menu, Settings, Sparkles, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -54,10 +54,8 @@ export function Sidebar() {
   const isUserArea = pathname.startsWith('/user');
 
   const adminMenuItems = [
-    { href: "/admin/dashboard", label: "Dashboard", icon: Home },
-    { href: "/admin/page1", label: "Thông tin GV", icon: LayoutDashboard },
-    { href: "/admin/page2", label: "màn hình 2", icon: Users },
-    { href: "/admin/page3", label: "Màn hình 3", icon: Users },
+    { href: "/admin/dashboard", label: "Bảng Điều Khiển", icon: Home },
+    { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
     {
       href: "/admin/hr-candidates",
       label: "Đào tạo đầu vào",
@@ -67,47 +65,98 @@ export function Sidebar() {
         { href: "/admin/hr-candidates/gen-planner?region=north", label: "Miền Bắc (HN + Tỉnh Bắc + Tỉnh Trung)" },
       ]
     },
-    { href: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện", icon: CalendarDays },
     {
-      label: "Đánh giá năng lực GV",
+      label: "Quản lý Giáo viên & Vận hành",
+      icon: Users,
+      submenu: [
+        { href: "/admin/page1", label: "Hồ sơ Giáo viên" },
+        { href: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện" },
+        {
+          label: "Quản lý Deal Lương",
+          icon: DollarSign,
+          submenu: [
+            { href: "/admin/deal-luong?type=salary_deal", label: "Thỏa thuận lương " },
+            { href: "/admin/deal-luong?type=salary_reduction", label: "Hạ lương" },
+            { href: "/admin/deal-luong?type=bonus", label: "Bonus" },
+          ]
+        },
+      ]
+    },
+    {
+      label: "Đào tạo & Khảo thí",
+      icon: GraduationCap,
+      submenu: [
+        {
+          label: "Đào Tạo Nâng Cao",
+          icon: FileText,
+          submenu: [
+            { href: "/admin/page5", label: "Quản lý đào tạo nâng cao" },
+            { href: "/admin/assignments", label: "Cấu hình bài kiểm tra" },
+            { href: "/admin/training-dashboard", label: "Thống kê" },
+          ]
+        },
+        {
+          label: "Đánh giá năng lực Giáo Viên",
+          icon: Settings,
+          submenu: [
+            // { href: "/admin/page4/form-dang-ky", label: "Form đăng ký kiểm tra" }, 
+            { href: "/admin/page4/danh-sach-dang-ky", label: "Danh sách Giáo viên đăng ký" },
+            { href: "/admin/giaitrinh", label: "Quản lý Giải trình"},
+            { href: "/admin/page4/thu-vien-de", label: "Thư viện đề chuyên môn" },
+          ]
+        },
+      ]
+    },
+    {
+      label: "Cấu Hình Hệ Thống",
       icon: Settings,
       submenu: [
-        // { href: "/admin/page4/form-dang-ky", label: "Form đăng ký kiểm tra" }, 
-        { href: "/admin/page4/danh-sach-dang-ky", label: "Danh sách đăng ký" },
-        { href: "/admin/page4/thu-vien-de", label: "Library đề chuyên môn" },
+        { href: "/admin/user-management", label: "Quản lý tài khoản"},
+        { href: "/admin/database", label: "Database Manager"},
       ]
     },
-    { 
-      label: "Đào tạo nâng cao", 
-      icon: FileText,
-      submenu: [
-        { href: "/admin/page5", label: "Quản lý đào tạo nâng cao" },
-        { href: "/admin/assignments", label: "Kiểm tra e-learning" },
-        { href: "/admin/training-dashboard", label: "Thống kê" },
-      ]
-    },
-    {
-      label: "Quản lý Deal Lương",
-      icon: DollarSign,
-      submenu: [
-        { href: "/admin/tao-deal-luong", label: "Tạo Deal Lương" },
-        { href: "/admin/deal-luong", label: "Danh sách Deal Lương" },
-      ]
-    },
-    { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
-    { href: "/admin/giaitrinh", label: "Quản lý Giải trình", icon: MessageSquare },
-    { href: "/admin/database", label: "Database Manager", icon: LayoutDashboard },
-    { href: "/admin/user-management", label: "Quản lý tài khoản", icon: Shield },
+    { href: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", icon: FileText },
   ];
 
   const userMenuItems = [
-    { href: "/user/truyenthong", label: "Thông tin mới", icon: Megaphone },
-    { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
-    { href: "/user/hoat-dong-hang-thang", label: "CÁC HOẠT ĐỘNG HÀNG THÁNG", icon: CalendarDays },
-    { href: "/user/training", label: "Đào tạo nâng cao", icon: GraduationCap },
-    { href: "/user/assignments", label: "My Assignments", icon: FileText },
-    { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra", icon: MessageSquare },
+    { href: "/user/truyenthong", label: "Truyền Thông Nội Bộ", icon: Megaphone },
+    { href: "/user/thongtingv", label: "Thông Tin Của Tôi", icon: Home },
+    { href: "/user/page2", label: "Quy trình quy định K12 Teaching", icon: BookOpen },
+    { href: "/user/hoat-dong-hang-thang", label: "Hoạt Động Hàng Tháng", icon: CalendarDays },
+    {
+      label: "Đào tạo & Khảo thí",
+      icon: GraduationCap,
+      submenu: [
+        { href: "/user/training", label: "Đào tạo nâng cao" },
+        { href: "/user/assignments", label: "Kiểm tra Chuyên Môn" },
+        { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
+      ]
+    },
+    {
+      label: "Quy trình xin nghỉ 1 buổi",
+      icon: Settings,
+      submenu: [
+        { href: "/user/xin-nghi-mot-buoi", label: "Gửi yêu cầu xin nghỉ" },
+        { href: "/user/nhan-lop-1-buoi", label: "Danh sách nhận lớp 1 buổi" },
+      ]
+    },
   ];
+
+  const isPathMatch = (href?: string) => {
+    if (!href) return false;
+    if (href.includes('?')) {
+      const [hrefPath, hrefSearch] = href.split('?');
+      return pathname === hrefPath && searchParams.toString() === hrefSearch;
+    }
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
+
+  const isMenuItemActive = (item: any): boolean => {
+    if (item?.submenu && Array.isArray(item.submenu)) {
+      return item.submenu.some((child: any) => isMenuItemActive(child));
+    }
+    return isPathMatch(item?.href);
+  };
 
   // Filter admin menu items based on user permissions
   const getFilteredAdminMenuItems = () => {
@@ -115,7 +164,13 @@ export function Sidebar() {
 
     if (user.role === 'super_admin') return adminMenuItems;
 
-    const permissions = user.permissions || [];
+    // manager và admin luôn có quyền truy cập deal-luong
+    const DEAL_LUONG_ROUTES = ['/admin/deal-luong', '/admin/tao-deal-luong'];
+    const basePermissions = user.permissions || [];
+    const permissions = ['manager', 'admin'].includes(user.role)
+      ? Array.from(new Set([...basePermissions, ...DEAL_LUONG_ROUTES]))
+      : basePermissions;
+
     const roleCodes = (user.userRoles || []).map((code) => code.toUpperCase());
     const hasTrainingInputRole = roleCodes.some((code) => code === 'HR' || code === 'TE' || code === 'TF');
     if (permissions.length === 0 && !hasTrainingInputRole) return [];
@@ -125,43 +180,31 @@ export function Sidebar() {
       return permissions.some((p) => targetPath === p || targetPath.startsWith(`${p}/`));
     };
 
-    return adminMenuItems
-      .filter(item => {
-        if (item.href === '/admin/hr-candidates') {
-          return hasTrainingInputRole || hasPermissionForHref('/admin/hr-candidates');
-        }
+    const filterMenuItemsByPermissions = (items: any[]): any[] => {
+      return items
+        .map((item) => {
+          const isTrainingInputMenu = item?.href === '/admin/hr-candidates';
+          if (isTrainingInputMenu && hasTrainingInputRole) {
+            return item;
+          }
 
-        if ('submenu' in item && item.submenu) {
-          const filteredSubmenu = item.submenu.filter((sub) => {
-            if ('isGroupLabel' in sub && sub.isGroupLabel) return true;
-            if (!('href' in sub) || !sub.href) return false;
-            return hasPermissionForHref(sub.href);
-          });
-          return filteredSubmenu.some((sub) => !('isGroupLabel' in sub && sub.isGroupLabel));
-        }
+          if (item?.submenu && Array.isArray(item.submenu)) {
+            const filteredChildren = filterMenuItemsByPermissions(item.submenu);
+            if (filteredChildren.length > 0) {
+              return { ...item, submenu: filteredChildren };
+            }
+          }
 
-        return Boolean(item.href && hasPermissionForHref(item.href));
-      })
-      .map(item => {
-        if ('submenu' in item && item.submenu) {
-          const filteredSubmenu = item.submenu.filter((sub) => {
-            if ('isGroupLabel' in sub && sub.isGroupLabel) return true;
-            if (!('href' in sub) || !sub.href) return false;
-            if (item.href === '/admin/hr-candidates' && hasTrainingInputRole) return true;
-            return hasPermissionForHref(sub.href);
-          });
+          if (item?.href && hasPermissionForHref(item.href)) {
+            return item;
+          }
 
-          const cleanedSubmenu = filteredSubmenu.filter((sub, index, arr) => {
-            if (!('isGroupLabel' in sub && sub.isGroupLabel)) return true;
-            const next = arr[index + 1];
-            return Boolean(next && !('isGroupLabel' in next && next.isGroupLabel));
-          });
+          return null;
+        })
+        .filter(Boolean);
+    };
 
-          return { ...item, submenu: cleanedSubmenu };
-        }
-
-        return item;
-      });
+    return filterMenuItemsByPermissions(adminMenuItems);
   };
 
   const menuItems = isUserArea ? userMenuItems : getFilteredAdminMenuItems();
@@ -170,7 +213,7 @@ export function Sidebar() {
   useEffect(() => {
     menuItems.forEach((item) => {
       if ('submenu' in item && item.submenu) {
-        const isInSubmenu = item.submenu.some((sub) => {
+        const isInSubmenu = item.submenu.some((sub: any) => {
           if (!('href' in sub) || !sub.href) return false;
           return isNavLinkActive(sub.href);
         });
@@ -184,17 +227,17 @@ export function Sidebar() {
       }
     });
   }, [menuItems, pathname, searchParams, expandedMenus, isNavLinkActive]);
-
   const toggleSubmenu = (label: string) => {
     setExpandedMenus(prev => {
-      const updated = prev.includes(label) 
+      const updated = prev.includes(label)
         ? prev.filter(item => item !== label)
         : [...prev, label];
-      
-      // Save to localStorage
-      localStorage.setItem('expandedMenus', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const handleTopLevelTabNavigation = () => {
+    setExpandedMenus([]);
   };
 
   const getRoleDisplay = () => {
@@ -269,14 +312,8 @@ export function Sidebar() {
               const Icon = item.icon;
               const hasSubmenu = 'submenu' in item;
               const isExpanded = expandedMenus.includes(item.label);
-              const isActive = !hasSubmenu && (pathname === item.href || pathname.startsWith(item.href + '/'));
-              const isParentActive = hasSubmenu && item.href ? isNavLinkActive(item.href) : false;
-              const isSubmenuActive =
-                hasSubmenu &&
-                item.submenu?.some((sub) => {
-                  if (!('href' in sub) || !sub.href) return false;
-                  return isNavLinkActive(sub.href);
-                });
+              const isActive = !hasSubmenu && isPathMatch(item.href);
+              const isSubmenuActive = hasSubmenu && isMenuItemActive(item);
 
               return (
                 <div key={item.href || item.label} className="group">
@@ -285,14 +322,14 @@ export function Sidebar() {
                       <div
                         className={cn(
                           "w-full flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-300 group/item",
-                          isSubmenuActive || isExpanded || isParentActive
+                          isSubmenuActive || isExpanded
                             ? "bg-linear-to-r from-[#a1001f] to-[#c41230] text-white shadow-md shadow-[#a1001f]/20 scale-[1.01]"
                             : "text-gray-700 hover:bg-linear-to-r hover:from-gray-100 hover:to-gray-50 hover:shadow-sm hover:scale-[1.01]"
                         )}
                       >
                         <div className={cn(
                           "p-1.5 rounded-md transition-all duration-300",
-                          isSubmenuActive || isExpanded || isParentActive
+                          isSubmenuActive || isExpanded
                             ? "bg-white/20"
                             : "bg-gray-100 group-hover/item:bg-white group-hover/item:shadow-sm"
                         )}>
@@ -324,21 +361,44 @@ export function Sidebar() {
                         isExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
                       )}>
                         <div className="ml-3 mt-1 space-y-0.5 border-l-2 border-gray-200 pl-2">
-                          {item.submenu?.map((subItem) => {
-                            if ('isGroupLabel' in subItem && subItem.isGroupLabel) {
+                          {item.submenu?.map((subItem: any) => {
+                            const subHasSubmenu = 'submenu' in subItem && Array.isArray(subItem.submenu);
+                            const isSubActive = isMenuItemActive(subItem);
+
+                            if (subHasSubmenu) {
                               return (
-                                <p
-                                  key={subItem.label}
-                                  className="pt-2 pb-1 text-[10px] font-bold uppercase tracking-wide text-gray-400"
-                                >
-                                  {subItem.label}
-                                </p>
+                                <div key={subItem.label} className="space-y-1 py-1">
+                                  <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                    {subItem.label}
+                                  </div>
+                                  <div className="ml-2 space-y-0.5 border-l border-gray-200 pl-2">
+                                    {subItem.submenu?.map((nestedItem: any) => {
+                                      const isNestedActive = isPathMatch(nestedItem.href);
+                                      if (!nestedItem.href) return null;
+
+                                      return (
+                                        <Link
+                                          key={nestedItem.href}
+                                          href={nestedItem.href}
+                                          className={cn(
+                                            "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all duration-300 hover:scale-[1.01]",
+                                            isNestedActive
+                                              ? "bg-linear-to-r from-[#a1001f]/10 to-[#c41230]/10 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm"
+                                              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-3 hover:border-gray-300"
+                                          )}
+                                        >
+                                          <span>{nestedItem.label}</span>
+                                        </Link>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               );
                             }
 
-                            if (!('href' in subItem) || !subItem.href) return null;
-
-                            const isSubActive = isNavLinkActive(subItem.href);
+                            if (!subItem.href) {
+                              return null;
+                            }
                             return (
                               <Link
                                 key={subItem.href}
@@ -360,6 +420,7 @@ export function Sidebar() {
                   ) : (
                     <Link
                       href={item.href}
+                      onClick={handleTopLevelTabNavigation}
                       className={cn(
                         "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-300 group/item",
                         isActive

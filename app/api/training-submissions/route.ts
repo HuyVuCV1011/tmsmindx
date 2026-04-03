@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
 
 // GET: Fetch teacher submissions with filters
 export async function GET(request: NextRequest) {
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       WHERE 1=1
     `;
 
-    const values: any[] = [];
+    const values = [];
     let paramIndex = 1;
 
     if (teacherCode) {
@@ -76,12 +76,72 @@ export async function POST(request: NextRequest) {
       assignment_id,
       attempt_number = 1
     } = body;
+    let { teacher_info } = body;
 
     if (!teacher_code || !assignment_id) {
       return NextResponse.json(
         { error: 'teacher_code and assignment_id are required' },
         { status: 400 }
       );
+    }
+
+    // Sync teacher info if provided
+    if (teacher_info && (teacher_info.center || teacher_info.teaching_block)) {
+        // Try to fetch latest info from teachers table to ensure accuracy
+        try {
+            const teacherRes = await pool.query(
+                `SELECT full_name, main_centre, course_line, work_email FROM teachers WHERE code = $1`,
+                [teacher_code]
+            );
+            
+            if (teacherRes.rows.length > 0) {
+                const updatedTeacher = teacherRes.rows[0];
+                console.log(`[Sync] Updating teacher stats for ${teacher_code} from DB:`, updatedTeacher);
+                
+                // Override with DB values if available
+                teacher_info.full_name = updatedTeacher.full_name || teacher_info.full_name;
+                teacher_info.center = updatedTeacher.main_centre || teacher_info.center;
+                teacher_info.teaching_block = updatedTeacher.course_line || teacher_info.teaching_block;
+                // Only update email if DB has one
+                if (updatedTeacher.work_email) {
+                    teacher_info.work_email = updatedTeacher.work_email;
+                }
+            }
+        } catch (e) {
+            console.error("Error fetching teacher details from DB", e);
+        }
+
+      try {
+        await pool.query(`
+          INSERT INTO training_teacher_stats (
+            teacher_code, 
+            full_name, 
+            center, 
+            teaching_block, 
+            work_email, 
+            status,
+            created_at,
+            updated_at
+          ) VALUES ($1, $2, $3, $4, $5, 'Active', NOW(), NOW())
+          ON CONFLICT (teacher_code) 
+          DO UPDATE SET 
+            full_name = EXCLUDED.full_name,
+            center = EXCLUDED.center,
+            teaching_block = EXCLUDED.teaching_block,
+            work_email = EXCLUDED.work_email,
+            updated_at = NOW()
+        `, [
+           teacher_code,
+           teacher_info.full_name || teacher_code,
+           teacher_info.center,
+           teacher_info.teaching_block,
+           teacher_info.work_email || ''
+        ]);
+        console.log(`Synced stats for teacher ${teacher_code}`);
+      } catch (err) {
+        console.error('Error syncing teacher stats:', err);
+        // Continue even if sync fails, as the main goal is starting the assignment
+      }
     }
 
     // Check if there's already an in-progress submission
@@ -94,16 +154,32 @@ export async function POST(request: NextRequest) {
     const existingResult = await pool.query(existingQuery, [teacher_code, assignment_id]);
     
     if (existingResult.rows.length > 0) {
+      // 1. Fetch Draft Answers
+      const submissionId = existingResult.rows[0].id;
+      const answersQuery = `
+          SELECT question_id, answer_text 
+          FROM training_assignment_answers 
+          WHERE submission_id = $1
+      `;
+      const answersResult = await pool.query(answersQuery, [submissionId]);
+      
+      const existingAnswers: Record<number, string> = {};
+      answersResult.rows.forEach(row => {
+          existingAnswers[row.question_id] = row.answer_text;
+      });
+
       // Return existing in-progress submission
       return NextResponse.json({
         success: true,
         data: existingResult.rows[0],
+        existing_answers: existingAnswers,
+        server_time: new Date().toISOString(),
         message: 'Continuing existing submission'
       });
     }
 
     // Get total points from assignment
-    const assignmentQuery = 'SELECT total_points FROM training_video_assignments WHERE id = $1';
+    const assignmentQuery = 'SELECT total_points, max_attempts FROM training_video_assignments WHERE id = $1';
     const assignmentResult = await pool.query(assignmentQuery, [assignment_id]);
 
     if (assignmentResult.rows.length === 0) {
@@ -113,7 +189,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const totalPoints = assignmentResult.rows[0].total_points;
+    const { total_points: totalPoints, max_attempts: maxAttempts } = assignmentResult.rows[0];
 
     // Calculate next attempt number
     const attemptQuery = `
@@ -123,6 +199,14 @@ export async function POST(request: NextRequest) {
     `;
     const attemptResult = await pool.query(attemptQuery, [teacher_code, assignment_id]);
     const nextAttempt = attemptResult.rows[0].next_attempt;
+
+    // Check max attempts (if set)
+    if (maxAttempts > 0 && nextAttempt > maxAttempts) {
+        return NextResponse.json(
+            { error: `Bạn đã hết lượt làm bài (Tối đa ${maxAttempts} lượt)` },
+            { status: 400 }
+        );
+    }
 
     const query = `
       INSERT INTO training_assignment_submissions (
@@ -142,21 +226,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: result.rows[0],
+      server_time: new Date().toISOString(),
       message: 'Submission started successfully'
     }, { status: 201 });
   } catch (error: any) {
     console.error('Error creating submission:', error);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      stack: error.stack
-    });
     return NextResponse.json(
       { 
         error: 'Failed to create submission',
-        details: error.message,
-        code: error.code
+        details: error.message
       },
       { status: 500 }
     );
@@ -177,7 +255,7 @@ export async function PUT(request: NextRequest) {
     }
 
     let query = '';
-    let values: any[] = [];
+    let values = [];
 
     if (action === 'submit') {
       // Teacher submits assignment
@@ -282,7 +360,7 @@ export async function PUT(request: NextRequest) {
             END,
             updated_at = NOW()
         `;
-        
+
         await pool.query(updateVideoScoreQuery, [
           submission.teacher_code,
           submission.video_id,
@@ -290,61 +368,174 @@ export async function PUT(request: NextRequest) {
           status,
           is_passed
         ]);
+        
+        // Sync teacher answers in one bulk query and only for valid training_video_questions IDs.
+        // Assignment question IDs can differ from video question IDs; filtering here prevents FK errors.
+        if (updates.answers && Array.isArray(updates.answers)) {
+          try {
+            const syncTeacherAnswersQuery = `
+              WITH incoming AS (
+                SELECT *
+                FROM jsonb_to_recordset($3::jsonb) AS x(
+                  question_id INT,
+                  answer_text TEXT,
+                  is_correct BOOLEAN,
+                  points_earned NUMERIC
+                )
+              )
+              INSERT INTO training_teacher_answers (
+                teacher_code,
+                video_id,
+                question_id,
+                answer_text,
+                is_correct,
+                points_earned
+              )
+              SELECT
+                $1,
+                $2,
+                incoming.question_id,
+                incoming.answer_text,
+                COALESCE(incoming.is_correct, false),
+                COALESCE(incoming.points_earned, 0)
+              FROM incoming
+              INNER JOIN training_video_questions tvq
+                ON tvq.id = incoming.question_id
+               AND tvq.video_id = $2
+            `;
 
-        console.log('[Submission] Video stats updated successfully');
+            await pool.query(syncTeacherAnswersQuery, [
+              submission.teacher_code,
+              submission.video_id,
+              JSON.stringify(updates.answers)
+            ]);
+          } catch (err: any) {
+            console.warn('[Submission] Skipped syncing answers to teacher_answers:', err.message);
+          }
+        }
+      }
+
+      // Save submission answers if provided (for view detail later)
+      if (updates.answers && Array.isArray(updates.answers)) {
+        try {
+          console.log('[Submission] Saving answers count:', updates.answers.length);
+          const saveAnswersQuery = `
+            WITH incoming AS (
+              SELECT *
+              FROM jsonb_to_recordset($2::jsonb) AS x(
+                question_id INT,
+                answer_text TEXT,
+                is_correct BOOLEAN,
+                points_earned NUMERIC
+              )
+              WHERE question_id IS NOT NULL
+            )
+            INSERT INTO training_assignment_answers (
+              submission_id,
+              question_id,
+              answer_text,
+              is_correct,
+              points_earned
+            )
+            SELECT
+              $1,
+              incoming.question_id,
+              incoming.answer_text,
+              COALESCE(incoming.is_correct, false),
+              COALESCE(incoming.points_earned, 0)
+            FROM incoming
+            ON CONFLICT (submission_id, question_id) DO UPDATE SET
+              answer_text = EXCLUDED.answer_text,
+              is_correct = EXCLUDED.is_correct,
+              points_earned = EXCLUDED.points_earned,
+              answered_at = NOW()
+          `;
+
+          await pool.query(saveAnswersQuery, [id, JSON.stringify(updates.answers)]);
+        } catch (err) {
+            console.error('[Submission] Error saving answers:', err);
+        }
       }
 
       return NextResponse.json({
         success: true,
         data: submission,
+        message: 'Submission graded successfully'
+      });
+    } else if (action === 'save_draft') {
+        const { answers } = updates;
+        if (answers && Array.isArray(answers)) {
+            try {
+                for (const answer of answers) {
+                    await pool.query(
+                      `INSERT INTO training_assignment_answers (
+                         submission_id, question_id, answer_text
+                       ) VALUES ($1, $2, $3)
+                       ON CONFLICT (submission_id, question_id) DO UPDATE SET
+                       answer_text = EXCLUDED.answer_text,
+                       answered_at = NOW()`,
+                      [
+                        id,
+                        answer.question_id,
+                        answer.answer_text
+                      ]
+                    );
+                }
+                return NextResponse.json({ success: true, message: 'Draft saved' });
+            } catch (e) {
+                console.error("Save draft error", e);
+                return NextResponse.json({ error: 'Failed to save draft' }, { status: 500 });
+            }
+        }
+        return NextResponse.json({ success: true, message: 'No answers to save' });
+    } else {
+      // General update (if not 'grade' or 'submit')
+      const setClauses = [];
+      const updateValues = [];
+      let paramIndex = 1;
+
+      for (const [key, value] of Object.entries(updates)) {
+        if (key === 'answers') continue;
+        
+        setClauses.push(`${key} = $${paramIndex}`);
+        updateValues.push(value);
+        paramIndex++;
+      }
+      
+      if (setClauses.length > 0) {
+        updateValues.push(id);
+        query = `
+          UPDATE training_assignment_submissions
+          SET ${setClauses.join(', ')}
+          WHERE id = $${paramIndex}
+          RETURNING *
+        `;
+        values = updateValues;
+      }
+    }
+
+    if (query) {
+      const result = await pool.query(query, values);
+
+      if (result.rows.length === 0) {
+        return NextResponse.json(
+          { error: 'Submission not found' },
+          { status: 404 }
+        );
+      }
+      
+      return NextResponse.json({
+        success: true,
+        data: result.rows[0],
         message: 'Submission updated successfully'
       });
     } else {
-      // General update
-      const allowedFields = ['score', 'status', 'time_spent_seconds'];
-      const setClauses: string[] = [];
-      const updateValues: any[] = [];
-      let paramIndex = 1;
-
-      Object.keys(updates).forEach((key) => {
-        if (allowedFields.includes(key)) {
-          setClauses.push(`${key} = $${paramIndex}`);
-          updateValues.push(updates[key]);
-          paramIndex++;
-        }
-      });
-
-      if (setClauses.length === 0) {
         return NextResponse.json(
-          { error: 'No valid fields to update' },
+          { error: 'No update action specified' },
           { status: 400 }
         );
-      }
-
-      updateValues.push(id);
-      query = `
-        UPDATE training_assignment_submissions
-        SET ${setClauses.join(', ')}
-        WHERE id = $${paramIndex}
-        RETURNING *
-      `;
-      values = updateValues;
     }
 
-    const result = await pool.query(query, values);
-
-    if (result.rows.length === 0) {
-      return NextResponse.json(
-        { error: 'Submission not found' },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: result.rows[0],
-      message: 'Submission updated successfully'
-    });
   } catch (error) {
     console.error('Error updating submission:', error);
     return NextResponse.json(
@@ -354,7 +545,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE: Delete submission
+// DELETE: Delete submission (fixed sync)
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -389,3 +580,4 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+// Force recompile 

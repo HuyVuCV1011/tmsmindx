@@ -73,8 +73,8 @@ export default function Slider({ posts }: SliderProps) {
                     <div
                         key={post.id}
                         className={cn(
-                            "absolute inset-0 transition-all duration-1000 ease-in-out will-change-transform transform",
-                            index === currentSlide ? 'opacity-100 scale-100 z-10' : 'opacity-0 scale-110 z-0'
+                            "absolute inset-0 transition-all duration-1000 ease-in-out transform",
+                            index === currentSlide ? 'opacity-100 scale-100 z-10 will-change-transform' : 'opacity-0 scale-[1.05] z-0 pointer-events-none'
                         )}
                     >
                         {/* Image with Parallax-like feel */}
@@ -84,6 +84,7 @@ export default function Slider({ posts }: SliderProps) {
                             fill
                             className="object-cover"
                             priority={index === 0}
+                            sizes="100vw"
                         />
 
                         {/* Contrast Overlay */}
@@ -96,7 +97,7 @@ export default function Slider({ posts }: SliderProps) {
                                 "flex flex-col gap-6 transform transition-all duration-1000 delay-300",
                                 index === currentSlide ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0'
                             )}>
-                                <div className="max-w-3xl rounded-3xl bg-white/5 border border-white/15 backdrop-blur-md p-6 md:p-8 shadow-[0_20px_60px_-30px_rgba(0,0,0,0.6)]">
+                                <div className="max-w-3xl rounded-3xl bg-white/5 border border-white/15 backdrop-blur-md p-7 md:p-10 shadow-2xl">
                                 {/* Tag */}
                                 <div className="inline-flex">
                                     <span className="px-4 py-1.5 rounded-full text-xs md:text-sm font-bold tracking-wider uppercase bg-white/10 text-white backdrop-blur-md shadow-lg transition-colors border border-white/20">
@@ -105,25 +106,25 @@ export default function Slider({ posts }: SliderProps) {
                                 </div>
 
                                 {/* Title */}
-                                <h3 className="text-3xl md:text-5xl lg:text-6xl font-black leading-[1.05] tracking-tight text-white drop-shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                                <h3 className="mt-4 text-2xl md:text-4xl lg:text-5xl font-black leading-[1.08] tracking-tight text-white drop-shadow-lg">
                                     <Link href={`/user/truyenthong/${post.slug || post.id}`} className="transition-all hover:text-white/90">
                                         {post.title}
                                     </Link>
                                 </h3>
 
-                                <div className="h-1 w-16 rounded-full bg-gradient-to-r from-white/90 via-white/60 to-transparent" />
+                                <div className="mt-5 h-1 w-16 rounded-full bg-gradient-to-r from-white/90 via-white/60 to-transparent" />
 
                                 {/* Description */}
-                                <p className="text-base md:text-lg text-white/80 line-clamp-2 max-w-2xl leading-relaxed font-light">
+                                <p className="mt-4 text-base md:text-lg text-white/80 line-clamp-2 max-w-2xl leading-relaxed font-light">
                                     {post.description}
                                 </p>
 
                                 {/* Action */}
-                                <div className="pt-2">
+                                <div className="pt-4 md:pt-5">
                                     <Link href={`/user/truyenthong/${post.slug || post.id}`}>
                                         <Button
                                             size="lg"
-                                            className="bg-white text-gray-900 hover:bg-gray-100 font-bold rounded-full px-8 py-6 text-base shadow-[0_10px_30px_rgba(0,0,0,0.35)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.45)] transition-all duration-300 hover:-translate-y-1"
+                                            className="bg-white text-gray-900 hover:bg-gray-100 font-bold rounded-full px-8 py-6 text-base shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5"
                                         >
                                             Đọc ngay
                                         </Button>
@@ -140,7 +141,7 @@ export default function Slider({ posts }: SliderProps) {
             <div className="absolute bottom-12 right-12 z-20 flex gap-4 hidden md:flex">
                 <button
                     onClick={goToPrevious}
-                    className="p-4 rounded-full border border-white/20 bg-black/20 text-white backdrop-blur-md hover:bg-white hover:text-black transition-all hover:scale-110 active:scale-95 group"
+                    className="p-4 rounded-full border border-white/20 bg-black/20 text-white backdrop-blur-sm hover:bg-white hover:text-black transition-all active:scale-95 group"
                     aria-label="Previous slide"
                 >
                     <ChevronLeft className="w-6 h-6 group-hover:-translate-x-0.5 transition-transform" />

@@ -768,11 +768,143 @@ const migrations: Migration[] = [
   },
 
   // ═══════════════════════════════════════════════════════
-  // V35: HR Candidate GEN Assignment Management
+  // V35: Add unique constraint to training_assignment_answers
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V35_fix_assignment_answers_constraint',
+    version: 35,
+    sql: `
+      -- Delete duplicates, keeping the latest one
+      DELETE FROM training_assignment_answers a
+      WHERE id < (
+        SELECT MAX(id)
+        FROM training_assignment_answers b
+        WHERE a.submission_id = b.submission_id
+          AND a.question_id = b.question_id
+      );
+
+      -- Add unique constraint to support ON CONFLICT
+      ALTER TABLE training_assignment_answers
+      DROP CONSTRAINT IF EXISTS unique_submission_question;
+
+      ALTER TABLE training_assignment_answers
+      ADD CONSTRAINT unique_submission_question UNIQUE (submission_id, question_id);
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V36: Grant K12 docs screen permission for TM
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V36_grant_page2_permission_to_tm',
+    version: 36,
+    sql: `
+      INSERT INTO role_permissions (role_code, route_path)
+      VALUES ('TM', '/admin/page2')
+      ON CONFLICT DO NOTHING;
+    `
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V37: Birthday wishes table for teacher popup
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V37_create_birthday_wishes',
+    version: 37,
+    sql: `
+      CREATE TABLE IF NOT EXISTS birthday_wishes (
+        id SERIAL PRIMARY KEY,
+        month INTEGER NOT NULL CHECK (month >= 1 AND month <= 12),
+        week INTEGER NOT NULL CHECK (week >= 1 AND week <= 4),
+        year INTEGER NOT NULL CHECK (year >= 2000),
+        area VARCHAR(255),
+        birthday_names TEXT,
+        sender_name VARCHAR(255) NOT NULL,
+        sender_email VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_birthday_wishes_scope
+      ON birthday_wishes(year, month, week, area);
+
+      CREATE INDEX IF NOT EXISTS idx_birthday_wishes_created_at
+      ON birthday_wishes(created_at DESC);
+
+      DROP TRIGGER IF EXISTS trg_birthday_wishes_updated_at ON birthday_wishes;
+      CREATE TRIGGER trg_birthday_wishes_updated_at
+      BEFORE UPDATE ON birthday_wishes
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();`
+  },
+
+
+  // V38: Leave requests workflow (xin nghi 1 buoi)
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V37_leave_requests_workflow',
+    version: 38,
+    sql: `
+      CREATE TABLE IF NOT EXISTS leave_requests (
+        id SERIAL PRIMARY KEY,
+        teacher_name VARCHAR(255) NOT NULL,
+        lms_code VARCHAR(100) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        campus VARCHAR(255) NOT NULL,
+        leave_date DATE NOT NULL,
+        reason TEXT NOT NULL,
+        class_code VARCHAR(100),
+        student_count VARCHAR(50),
+        class_time VARCHAR(255),
+        leave_session VARCHAR(255),
+        has_substitute BOOLEAN DEFAULT FALSE,
+        substitute_teacher VARCHAR(255),
+        substitute_email VARCHAR(255),
+        class_status TEXT,
+        email_subject TEXT,
+        email_body TEXT,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending_admin'
+          CHECK (status IN (
+            'pending_admin',
+            'approved_unassigned',
+            'approved_assigned',
+            'rejected',
+            'substitute_confirmed'
+          )),
+        admin_note TEXT,
+        admin_name VARCHAR(255),
+        admin_email VARCHAR(255),
+        substitute_confirmed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_leave_requests_email ON leave_requests(email);
+      CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status);
+      CREATE INDEX IF NOT EXISTS idx_leave_requests_substitute_email ON leave_requests(substitute_email);
+      CREATE INDEX IF NOT EXISTS idx_leave_requests_created_at ON leave_requests(created_at DESC);
+
+      DROP TRIGGER IF EXISTS trg_leave_requests_updated_at ON leave_requests;
+      CREATE TRIGGER trg_leave_requests_updated_at
+      BEFORE UPDATE ON leave_requests
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+
+      INSERT INTO role_permissions (role_code, route_path)
+      VALUES
+        ('AD', '/admin/xin-nghi-mot-buoi'),
+        ('TM', '/admin/xin-nghi-mot-buoi')
+      ON CONFLICT DO NOTHING;
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V39: HR Candidate GEN Assignment Management
   // ═══════════════════════════════════════════════════════
   {
     name: 'V35_hr_candidate_gen_assignment',
-    version: 35,
+    version: 39,
     sql: `
       CREATE TABLE IF NOT EXISTS hr_candidate_gen_assignments (
         id SERIAL PRIMARY KEY,
@@ -821,14 +953,12 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_hr_gen_assignment_history_created
         ON hr_candidate_gen_assignment_history(created_at DESC);
 
-      -- Super admin gets access to the HR candidate management screen.
       INSERT INTO app_permissions (user_id, route_path, can_access)
       SELECT u.id, '/admin/hr-candidates', true
       FROM app_users u
       WHERE u.role = 'super_admin'
       ON CONFLICT (user_id, route_path) DO NOTHING;
 
-      -- Grant role-based access for Admin and HR if those roles exist in DB.
       DO $$
       BEGIN
         IF to_regclass('public.roles') IS NOT NULL AND to_regclass('public.role_permissions') IS NOT NULL THEN
@@ -842,60 +972,60 @@ const migrations: Migration[] = [
     `,
   },
 
-    // ═══════════════════════════════════════════════════════
-    // V36: HR GEN catalog for planner page
-    // ═══════════════════════════════════════════════════════
-    {
-      name: 'V36_hr_gen_catalog',
-      version: 36,
-      sql: `
-        CREATE TABLE IF NOT EXISTS hr_gen_catalog (
-          id SERIAL PRIMARY KEY,
-          gen_name VARCHAR(100) NOT NULL UNIQUE,
-          source VARCHAR(30) NOT NULL DEFAULT 'manual',
-          created_by_email VARCHAR(255),
-          is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          metadata JSONB DEFAULT '{}'::jsonb,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
+  // ═══════════════════════════════════════════════════════
+  // V40: HR GEN catalog for planner page
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V36_hr_gen_catalog',
+    version: 40,
+    sql: `
+      CREATE TABLE IF NOT EXISTS hr_gen_catalog (
+        id SERIAL PRIMARY KEY,
+        gen_name VARCHAR(100) NOT NULL UNIQUE,
+        source VARCHAR(30) NOT NULL DEFAULT 'manual',
+        created_by_email VARCHAR(255),
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
 
-        CREATE INDEX IF NOT EXISTS idx_hr_gen_catalog_active
-          ON hr_gen_catalog(is_active, gen_name);
+      CREATE INDEX IF NOT EXISTS idx_hr_gen_catalog_active
+        ON hr_gen_catalog(is_active, gen_name);
 
-        DROP TRIGGER IF EXISTS trg_hr_gen_catalog_updated_at ON hr_gen_catalog;
-        CREATE TRIGGER trg_hr_gen_catalog_updated_at
-        BEFORE UPDATE ON hr_gen_catalog
-        FOR EACH ROW
-        EXECUTE FUNCTION update_updated_at_column();
+      DROP TRIGGER IF EXISTS trg_hr_gen_catalog_updated_at ON hr_gen_catalog;
+      CREATE TRIGGER trg_hr_gen_catalog_updated_at
+      BEFORE UPDATE ON hr_gen_catalog
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
 
-        INSERT INTO app_permissions (user_id, route_path, can_access)
-        SELECT u.id, '/admin/hr-candidates/gen-planner', true
-        FROM app_users u
-        WHERE u.role = 'super_admin'
-        ON CONFLICT (user_id, route_path) DO NOTHING;
+      INSERT INTO app_permissions (user_id, route_path, can_access)
+      SELECT u.id, '/admin/hr-candidates/gen-planner', true
+      FROM app_users u
+      WHERE u.role = 'super_admin'
+      ON CONFLICT (user_id, route_path) DO NOTHING;
 
-        DO $$
-        BEGIN
-          IF to_regclass('public.roles') IS NOT NULL AND to_regclass('public.role_permissions') IS NOT NULL THEN
-            INSERT INTO role_permissions (role_code, route_path)
-            SELECT r.role_code, '/admin/hr-candidates/gen-planner'
-            FROM roles r
-            WHERE r.role_code IN ('AD', 'HR')
-            ON CONFLICT DO NOTHING;
-          END IF;
-        END $$;
-      `,
-    },
+      DO $$
+      BEGIN
+        IF to_regclass('public.roles') IS NOT NULL AND to_regclass('public.role_permissions') IS NOT NULL THEN
+          INSERT INTO role_permissions (role_code, route_path)
+          SELECT r.role_code, '/admin/hr-candidates/gen-planner'
+          FROM roles r
+          WHERE r.role_code IN ('AD', 'HR')
+          ON CONFLICT DO NOTHING;
+        END IF;
+      END $$;
+    `,
+  },
 
   // ═══════════════════════════════════════════════════════
-  // V37: HR GEN Candidate Attendance Records
+  // V41: HR GEN Candidate Attendance Records
   // Lưu điểm danh & điểm kiểm tra theo buổi (1-4) cho từng ứng viên
   // Không phụ thuộc vào teacherCode hay videoId
   // ═══════════════════════════════════════════════════════
   {
     name: 'V37_hr_gen_attendance_records',
-    version: 37,
+    version: 41,
     sql: `
       CREATE TABLE IF NOT EXISTS hr_gen_attendance_records (
         id SERIAL PRIMARY KEY,

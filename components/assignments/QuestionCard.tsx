@@ -18,6 +18,15 @@ export function QuestionCard({ question, index, onEdit, onDelete, isDraggable = 
   const difficultyLevel = DIFFICULTY_LEVELS.find(d => d.value === question.difficulty);
   const IconComponent = template.icon;
 
+  const decodeEscapedHtml = (value: string) => {
+    if (!value || !value.includes('&lt;')) return value;
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = value;
+    return textarea.value;
+  };
+
+  const hasHtmlMarkup = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value);
+
   // Map Bloom colors to Tailwind classes
   const getDifficultyColor = () => {
     const colorMap: Record<string, { bg: string; text: string }> = {
@@ -84,16 +93,32 @@ export function QuestionCard({ question, index, onEdit, onDelete, isDraggable = 
               {question.options.map((option, idx) => (
                 <div
                   key={idx}
-                  className={`flex items-center gap-2 p-2 rounded text-sm ${
+                  className={`flex items-start gap-2 p-2 rounded text-sm ${
                     option === question.correct_answer
                       ? 'bg-green-50 border border-green-300 font-semibold'
                       : 'bg-gray-50'
                   }`}
                 >
+                  {(() => {
+                    const normalizedOption = decodeEscapedHtml(String(option));
+                    const renderAsHtml = hasHtmlMarkup(normalizedOption);
+
+                    return (
+                      <>
                   <span className="w-6 h-6 flex items-center justify-center rounded-full bg-white border border-gray-300 text-xs">
                     {String.fromCharCode(65 + idx)}
                   </span>
-                  <span>{option}</span>
+                        {renderAsHtml ? (
+                          <div
+                            className="prose prose-sm max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
+                            dangerouslySetInnerHTML={{ __html: normalizedOption }}
+                          />
+                        ) : (
+                          <span className="flex-1">{normalizedOption}</span>
+                        )}
+                      </>
+                    );
+                  })()}
                   {option === question.correct_answer && (
                     <span className="ml-auto text-green-600 text-xs">✓ Đúng</span>
                   )}
