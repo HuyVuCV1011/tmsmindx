@@ -6,6 +6,7 @@ import { useMemo, useState, useEffect } from 'react'
 import useSWR from 'swr'
 
 import { PageContainer } from '@/components/PageContainer'
+import { PageHeader } from '@/components/PageHeader'
 import PostCard from '@/components/post-card'
 import Slider from '@/components/slider'
 import { Input } from '@/components/ui/input'
@@ -89,23 +90,24 @@ export default function CommunicationsPage() {
                 )}
 
                 {/* Header Section - Now after slider */}
-                <div className="bg-white border-b border-gray-200">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div>
-                                <h1 className="text-3xl font-black text-gray-900 tracking-tight">Truyền Thông Nội Bộ</h1>
-                                <p className="text-gray-500 mt-2 font-light text-lg">Cập nhật tin tức, sự kiện và thông báo mới nhất</p>
-                            </div>
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                <Input
-                                    placeholder="Tìm kiếm bài viết..."
-                                    className="pl-10 w-full md:w-80 bg-white border-gray-200 focus:bg-white transition-all"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                />
-                            </div>
-                        </div>
+                <div className="bg-white">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10">
+                        <PageHeader
+                            title="Truyền Thông Nội Bộ"
+                            description="Cập nhật tin tức, sự kiện và thông báo mới nhất"
+                            className="mb-0"
+                            actions={
+                                <div className="relative w-full md:w-80">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                    <Input
+                                        placeholder="Tìm kiếm bài viết..."
+                                        className="pl-10 w-full bg-white border-gray-200 focus:bg-white transition-all"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                    />
+                                </div>
+                            }
+                        />
                     </div>
                 </div>
 

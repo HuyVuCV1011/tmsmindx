@@ -493,6 +493,20 @@ img.tiptap-image {
   transition: all 0.2s;
 }
 
+/* Consistent pointer cursor for semantic interactive controls */
+button:not(:disabled),
+a[href],
+[role="button"]:not([aria-disabled="true"]),
+summary,
+label[for],
+input[type="button"]:not(:disabled),
+input[type="submit"]:not(:disabled),
+input[type="reset"]:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled) {
+  cursor: pointer;
+}
+
 .ProseMirror .image-wrapper .resize-handle::before {
   content: "";
   position: absolute;

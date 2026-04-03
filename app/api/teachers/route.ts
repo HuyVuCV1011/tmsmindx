@@ -98,8 +98,15 @@ async function fetchTeachersFromSheet(): Promise<Teacher[]> {
       const dataLines = lines.slice(2).filter(line => line.trim());
       
       const teachers: Teacher[] = dataLines.map(line => {
-        // Parse CSV line (simple approach, may need improvement for quoted fields)
-        const columns = line.split(",").map(col => col.trim().replace(/^"|"$/g, ""));
+        const columns = parseCSVLine(line).map(col => col.trim().replace(/^"|"$/g, ""));
+
+        // Current sheet schema (row 2 header):
+        // 0 No, 1 Full name, 2 Code, 3 Work email, 4 Personal email,
+        // 5 Khoi final, 6 Centers, 7 Status update,
+        // 8 Status - month N-1, 9 Status - month N,
+        // 10 BU check, 11 Khoi check, 12 Rank K12 check,
+        // 13 Joined date, 14 Leader/TE
+        const latestStatus = columns[9] || columns[8] || columns[7] || "";
         
         return {
           stt: columns[0] || "",
@@ -107,12 +114,12 @@ async function fetchTeachersFromSheet(): Promise<Teacher[]> {
           code: columns[2] || "",
           emailMindx: columns[3] || "",
           emailPersonal: columns[4] || "",
-          status: columns[5] || "",
-          branchIn: columns[6] || "",
-          programIn: columns[7] || "",
-          branchCurrent: columns[8] || "",
-          programCurrent: columns[9] || "",
-          manager: columns[10] || "",
+          status: latestStatus,
+          branchIn: columns[10] || columns[6] || "",
+          programIn: columns[5] || "",
+          branchCurrent: columns[6] || "",
+          programCurrent: columns[11] || columns[5] || "",
+          manager: columns[14] || "",
           responsible: columns[11] || "",
           position: columns[12] || "",
           startDate: columns[13] || "",

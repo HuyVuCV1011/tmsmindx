@@ -1076,8 +1076,8 @@ export default function Page1() {
                 {teacher.branchCurrent && teacher.branchCurrent !== "N/A" && (
                   <InfoItem icon={<MapPin className="h-4 w-4" />} label="Chi nhánh hiện tại" value={teacher.branchCurrent} />
                 )}
-                {teacher.status && teacher.status !== "N/A" && (
-                  <InfoItem icon={<Briefcase className="h-4 w-4" />} label="Program" value={teacher.status} />
+                {teacher.programCurrent && teacher.programCurrent !== "N/A" && (
+                  <InfoItem icon={<Briefcase className="h-4 w-4" />} label="Program" value={teacher.programCurrent} />
                 )}
                 {teacher.position && teacher.position !== "N/A" && (
                   <InfoItem icon={<User className="h-4 w-4" />} label="Vị trí" value={teacher.position} />
@@ -1103,7 +1103,7 @@ export default function Page1() {
                   </div>
                   <div className="text-xs">
                     <span className="text-gray-600">Program đầu vào:</span>
-                    <span className="ml-2 font-medium">{teacher.status}</span>
+                    <span className="ml-2 font-medium">{teacher.programIn}</span>
                   </div>
                   <div className="text-xs">
                     <span className="text-gray-600">Onboard bởi:</span>
@@ -1111,8 +1111,8 @@ export default function Page1() {
                   </div>
                   <div className="text-xs">
                     <span className="text-gray-600">Trạng thái hoạt động:</span>
-                    <span className={`ml-2 font-medium ${teacher.programIn === "Active" ? "text-green-600" : "text-gray-600"
-                      }`}>{teacher.programIn}</span>
+                    <span className={`ml-2 font-medium ${teacher.status === "Active" ? "text-green-600" : "text-gray-600"
+                      }`}>{teacher.status}</span>
                   </div>
                 </div>
               </div>
