@@ -804,6 +804,41 @@ const migrations: Migration[] = [
       ON CONFLICT DO NOTHING;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V37: Birthday wishes table for teacher popup
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V37_create_birthday_wishes',
+    version: 37,
+    sql: `
+      CREATE TABLE IF NOT EXISTS birthday_wishes (
+        id SERIAL PRIMARY KEY,
+        month INTEGER NOT NULL CHECK (month >= 1 AND month <= 12),
+        week INTEGER NOT NULL CHECK (week >= 1 AND week <= 4),
+        year INTEGER NOT NULL CHECK (year >= 2000),
+        area VARCHAR(255),
+        birthday_names TEXT,
+        sender_name VARCHAR(255) NOT NULL,
+        sender_email VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_birthday_wishes_scope
+      ON birthday_wishes(year, month, week, area);
+
+      CREATE INDEX IF NOT EXISTS idx_birthday_wishes_created_at
+      ON birthday_wishes(created_at DESC);
+
+      DROP TRIGGER IF EXISTS trg_birthday_wishes_updated_at ON birthday_wishes;
+      CREATE TRIGGER trg_birthday_wishes_updated_at
+      BEFORE UPDATE ON birthday_wishes
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========
