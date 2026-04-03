@@ -3,9 +3,9 @@
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
-import { BookOpen, CalendarDays, ChevronDown, DollarSign, FileText, GraduationCap, Home, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Settings, Shield, Sparkles, Users, X } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, DollarSign, FileText, GraduationCap, Home, LogOut, Megaphone, Menu, Settings, Sparkles, Users, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 export function Sidebar() {
@@ -13,6 +13,7 @@ export function Sidebar() {
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const { user, logout } = useAuth();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // Load expanded menus from localStorage on mount
   useEffect(() => {
@@ -37,52 +38,100 @@ export function Sidebar() {
   const isUserArea = pathname.startsWith('/user');
 
   const adminMenuItems = [
-    { href: "/admin/dashboard", label: "Dashboard", icon: Home },
-    { href: "/admin/page1", label: "Thông tin GV", icon: LayoutDashboard },
-    { href: "/admin/page2", label: "Quy trình quy định K12 Teaching", icon: BookOpen },
-    { href: "/admin/page3", label: "Màn hình 3", icon: Users },
-    { href: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện", icon: CalendarDays },
+    { href: "/admin/dashboard", label: "Bảng Điều Khiển", icon: Home },
+    { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
     {
-      label: "Đánh giá năng lực GV",
+      label: "Quản lý Giáo viên & Vận hành",
+      icon: Users,
+      submenu: [
+        { href: "/admin/page1", label: "Hồ sơ Giáo viên" },
+        { href: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện" },
+        {
+          label: "Quản lý Deal Lương",
+          icon: DollarSign,
+          submenu: [
+            { href: "/admin/deal-luong?type=salary_deal", label: "Thỏa thuận lương " },
+            { href: "/admin/deal-luong?type=salary_reduction", label: "Hạ lương" },
+            { href: "/admin/deal-luong?type=bonus", label: "Bonus" },
+          ]
+        },
+      ]
+    },
+    {
+      label: "Đào tạo & Thảo khí",
+      icon: GraduationCap,
+      submenu: [
+        {
+          label: "Đào Tạo Nâng Cao",
+          icon: FileText,
+          submenu: [
+            { href: "/admin/page5", label: "Quản lý đào tạo nâng cao" },
+            { href: "/admin/assignments", label: "Cấu hình bài kiểm tra" },
+            { href: "/admin/training-dashboard", label: "Thống kê" },
+          ]
+        },
+        {
+          label: "Đánh giá năng lực Giáo Viên",
+          icon: Settings,
+          submenu: [
+            // { href: "/admin/page4/form-dang-ky", label: "Form đăng ký kiểm tra" }, 
+            { href: "/admin/page4/danh-sach-dang-ky", label: "Danh sách Giáo viên đăng ký" },
+            { href: "/admin/giaitrinh", label: "Quản lý Giải trình"},
+            { href: "/admin/page4/thu-vien-de", label: "Thư viện đề chuyên môn" },
+          ]
+        },
+      ]
+    },
+    {
+      label: "Cấu Hình Hệ Thống",
       icon: Settings,
       submenu: [
-        // { href: "/admin/page4/form-dang-ky", label: "Form đăng ký kiểm tra" }, 
-        { href: "/admin/page4/danh-sach-dang-ky", label: "Danh sách đăng ký" },
-        { href: "/admin/page4/thu-vien-de", label: "Library đề chuyên môn" },
+        { href: "/admin/user-management", label: "Quản lý tài khoản"},
+        { href: "/admin/database", label: "Database Manager"},
       ]
     },
-    { 
-      label: "Đào tạo nâng cao", 
-      icon: FileText,
-      submenu: [
-        { href: "/admin/page5", label: "Quản lý đào tạo nâng cao" },
-        { href: "/admin/assignments", label: "Kiểm tra e-learning" },
-        { href: "/admin/training-dashboard", label: "Thống kê" },
-      ]
-    },
-    {
-      label: "Quản lý Deal Lương",
-      icon: DollarSign,
-      submenu: [
-        { href: "/admin/tao-deal-luong", label: "Tạo Deal Lương" },
-        { href: "/admin/deal-luong", label: "Danh sách Deal Lương" },
-      ]
-    },
-    { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
-    { href: "/admin/giaitrinh", label: "Quản lý Giải trình", icon: MessageSquare },
-    { href: "/admin/database", label: "Database Manager", icon: LayoutDashboard },
-    { href: "/admin/user-management", label: "Quản lý tài khoản", icon: Shield },
+    { href: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", icon: FileText },
   ];
 
   const userMenuItems = [
-    { href: "/user/truyenthong", label: "Thông tin mới", icon: Megaphone },
-    { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
+    { href: "/user/truyenthong", label: "Truyền Thông Nội Bộ", icon: Megaphone },
+    { href: "/user/thongtingv", label: "Thông Tin Của Tôi", icon: Home },
     { href: "/user/page2", label: "Quy trình quy định K12 Teaching", icon: BookOpen },
-    { href: "/user/hoat-dong-hang-thang", label: "CÁC HOẠT ĐỘNG HÀNG THÁNG", icon: CalendarDays },
-    { href: "/user/training", label: "Đào tạo nâng cao", icon: GraduationCap },
-    { href: "/user/assignments", label: "My Assignments", icon: FileText },
-    { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra", icon: MessageSquare },
+    { href: "/user/hoat-dong-hang-thang", label: "Hoạt Động Hàng Tháng", icon: CalendarDays },
+    {
+      label: "Đào tạo & Khảo thí",
+      icon: GraduationCap,
+      submenu: [
+        { href: "/user/training", label: "Đào tạo nâng cao" },
+        { href: "/user/assignments", label: "Kiểm tra Chuyên Môn" },
+        { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
+      ]
+    },
+    {
+      label: "Quy trình xin nghỉ 1 buổi",
+      icon: Settings,
+      submenu: [
+        { href: "/user/xin-nghi-mot-buoi", label: "Gửi yêu cầu xin nghỉ" },
+        { href: "/user/nhan-lop-1-buoi", label: "Danh sách nhận lớp 1 buổi" },
+      ]
+    },
   ];
+
+  const isPathMatch = (href?: string) => {
+    if (!href) return false;
+    if (href.includes('?')) {
+      const [hrefPath, hrefSearch] = href.split('?');
+      return pathname === hrefPath && searchParams.toString() === hrefSearch;
+    }
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
+
+  const isMenuItemActive = (item: any): boolean => {
+    if (item?.submenu && Array.isArray(item.submenu)) {
+      return item.submenu.some((child: any) => isMenuItemActive(child));
+    }
+    return isPathMatch(item?.href);
+  };
 
   // Filter admin menu items based on user permissions
   const getFilteredAdminMenuItems = () => {
@@ -90,30 +139,35 @@ export function Sidebar() {
 
     if (user.role === 'super_admin') return adminMenuItems;
 
-    const permissions = user.permissions || [];
+    // manager và admin luôn có quyền truy cập deal-luong
+    const DEAL_LUONG_ROUTES = ['/admin/deal-luong', '/admin/tao-deal-luong'];
+    const basePermissions = user.permissions || [];
+    const permissions = ['manager', 'admin'].includes(user.role)
+      ? Array.from(new Set([...basePermissions, ...DEAL_LUONG_ROUTES]))
+      : basePermissions;
+
     if (permissions.length === 0) return [];
 
-    return adminMenuItems
-      .filter(item => {
-        if ('submenu' in item && item.submenu) {
-          const filteredSubmenu = item.submenu.filter(sub =>
-            permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
-          );
-          return filteredSubmenu.length > 0;
-        }
+    const filterMenuItemsByPermissions = (items: any[]): any[] => {
+      return items
+        .map((item) => {
+          if (item?.submenu && Array.isArray(item.submenu)) {
+            const filteredChildren = filterMenuItemsByPermissions(item.submenu);
+            if (filteredChildren.length > 0) {
+              return { ...item, submenu: filteredChildren };
+            }
+          }
 
-        return permissions.some(p => item.href === p || (item.href && item.href.startsWith(p + '/')));
-      })
-      .map(item => {
-        if ('submenu' in item && item.submenu) {
-          const filteredSubmenu = item.submenu.filter(sub =>
-            permissions.some(p => sub.href === p || sub.href.startsWith(p + '/'))
-          );
-          return { ...item, submenu: filteredSubmenu };
-        }
+          if (item?.href && permissions.some((p) => { const itemPath = item.href.split('?')[0]; return itemPath === p || itemPath.startsWith(`${p}/`); })) {
+            return item;
+          }
 
-        return item;
-      });
+          return null;
+        })
+        .filter(Boolean);
+    };
+
+    return filterMenuItemsByPermissions(adminMenuItems);
   };
 
   const menuItems = useMemo(
@@ -124,8 +178,8 @@ export function Sidebar() {
   // Auto-expand submenu if current page is in it
   useEffect(() => {
     menuItems.forEach((item) => {
-      if ('submenu' in item && item.submenu) {
-        const isInSubmenu = item.submenu.some(sub => pathname === sub.href || pathname.startsWith(sub.href + '/'));
+      if ('submenu' in item && item.submenu && Array.isArray(item.submenu)) {
+        const isInSubmenu = item.submenu.some((sub: any) => isMenuItemActive(sub));
         if (isInSubmenu && !expandedMenus.includes(item.label)) {
           setExpandedMenus(prev => {
             const updated = [...prev, item.label];
@@ -221,8 +275,8 @@ export function Sidebar() {
               const Icon = item.icon;
               const hasSubmenu = 'submenu' in item;
               const isExpanded = expandedMenus.includes(item.label);
-              const isActive = !hasSubmenu && (pathname === item.href || pathname.startsWith(item.href + '/'));
-              const isSubmenuActive = hasSubmenu && item.submenu?.some(sub => pathname === sub.href || pathname.startsWith(sub.href + '/'));
+              const isActive = !hasSubmenu && isPathMatch(item.href);
+              const isSubmenuActive = hasSubmenu && isMenuItemActive(item);
 
               return (
                 <div key={item.href || item.label} className="group">
@@ -260,8 +314,45 @@ export function Sidebar() {
                         isExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
                       )}>
                         <div className="ml-3 mt-1 space-y-0.5 border-l-2 border-gray-200 pl-2">
-                          {item.submenu?.map((subItem) => {
-                            const isSubActive = pathname === subItem.href || pathname.startsWith(subItem.href + '/');
+                          {item.submenu?.map((subItem: any) => {
+                            const subHasSubmenu = 'submenu' in subItem && Array.isArray(subItem.submenu);
+                            const isSubActive = isMenuItemActive(subItem);
+
+                            if (subHasSubmenu) {
+                              return (
+                                <div key={subItem.label} className="space-y-1 py-1">
+                                  <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                    {subItem.label}
+                                  </div>
+                                  <div className="ml-2 space-y-0.5 border-l border-gray-200 pl-2">
+                                    {subItem.submenu?.map((nestedItem: any) => {
+                                      const isNestedActive = isPathMatch(nestedItem.href);
+                                      if (!nestedItem.href) return null;
+
+                                      return (
+                                        <Link
+                                          key={nestedItem.href}
+                                          href={nestedItem.href}
+                                          className={cn(
+                                            "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all duration-300 hover:scale-[1.01]",
+                                            isNestedActive
+                                              ? "bg-linear-to-r from-[#a1001f]/10 to-[#c41230]/10 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm"
+                                              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-3 hover:border-gray-300"
+                                          )}
+                                        >
+                                          <span>{nestedItem.label}</span>
+                                        </Link>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            if (!subItem.href) {
+                              return null;
+                            }
+
                             return (
                               <Link
                                 key={subItem.href}

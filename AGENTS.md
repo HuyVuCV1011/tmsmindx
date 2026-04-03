@@ -46,6 +46,22 @@ Mở `lib/migrations.ts`, thêm 1 entry cuối mảng `migrations`:
 ```
 Restart app → table tự tạo.
 
+## Skills & Knowledge Base
+
+Tất cả AI Agent skills được tập trung tại một nơi:
+
+**📍 Vị trí chính:** `.agents/skills/`
+
+- `frontend-design/` - Thiết kế UI web production-grade
+- `nextjs/` - Next.js 16 App Router + Server Components
+- `shadcn-ui/` - Hướng dẫn shadcn/ui components
+- `ui-ux-pro-max/` - UI/UX design (50 styles, 21 palettes)
+- `web-accessibility/` - WCAG accessibility guidelines
+- `postman/` - API lifecycle management
+- Và nhiều skills khác...
+
+👉 Mở `.agents/` folder trong VS Code để tìm skill bạn cần.
+
 ## Project Info
 
 - **Stack**: Next.js 15 + TypeScript + PostgreSQL + Tailwind CSS

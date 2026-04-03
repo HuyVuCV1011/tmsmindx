@@ -128,6 +128,28 @@ export async function PATCH(request: Request) {
     }
 
     const deal = current.rows[0];
+
+    // Kiểm tra role của reviewer
+    const reviewerResult = await client.query(
+      'SELECT role FROM app_users WHERE LOWER(email) = $1 AND is_active = true',
+      [reviewer_email.toLowerCase()]
+    );
+    const reviewerRole = reviewerResult.rows[0]?.role;
+
+    if (deal.status === 'pending' && reviewerRole !== 'manager') {
+      return NextResponse.json({
+        success: false,
+        error: 'Chỉ TEGL (Manager) mới có thể duyệt bước này',
+      }, { status: 403 });
+    }
+
+    if (deal.status === 'tegl_approved' && reviewerRole !== 'super_admin') {
+      return NextResponse.json({
+        success: false,
+        error: 'Chỉ Super Admin mới có thể phê duyệt cuối cùng',
+      }, { status: 403 });
+    }
+
     let newStatus: string;
     let updateFields: string;
     let updateValues: any[];
