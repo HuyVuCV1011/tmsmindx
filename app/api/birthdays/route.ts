@@ -18,6 +18,7 @@ interface Birthday {
     username?: string
     area?: string
     masked?: boolean
+    isCurrentUser?: boolean
 }
 
 interface TeacherListRecord {
@@ -178,6 +179,7 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url)
         const loginEmail = (searchParams.get('email') || '').trim()
+        const normalizedLoginEmail = loginEmail.toLowerCase()
         const fallbackUsername = (searchParams.get('username') || '').trim()
 
         // Ưu tiên lấy usernameLms chính xác từ emailCongViec
@@ -255,6 +257,11 @@ export async function GET(request: Request) {
                 b.masked = true
                 maskedCount++
             }
+
+            b.isCurrentUser = Boolean(
+                (normalizedLoginEmail && b.email?.toLowerCase() === normalizedLoginEmail) ||
+                (resolvedUsername && b.username === resolvedUsername)
+            )
         }
         
         console.log(`[Birthdays API] Privacy applied - total: ${weekBirthdays.length}, masked: ${maskedCount}`)

@@ -15,25 +15,6 @@ export function Sidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Load expanded menus from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('expandedMenus');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && Array.isArray(parsed)) {
-          // Use setTimeout to avoid synchronous setState during effect execution
-          const timer = setTimeout(() => {
-            setExpandedMenus(parsed);
-          }, 0);
-          return () => clearTimeout(timer);
-        }
-      } catch {
-        // Ignore parse errors
-      }
-    }
-  }, []);
-
   // Determine menu items based on current path (admin or user)
   const isUserArea = pathname.startsWith('/user');
 
@@ -58,7 +39,7 @@ export function Sidebar() {
       ]
     },
     {
-      label: "Đào tạo & Thảo khí",
+      label: "Đào tạo & Khảo thí",
       icon: GraduationCap,
       submenu: [
         {
@@ -175,32 +156,17 @@ export function Sidebar() {
     [isUserArea, user?.role, user?.permissions]
   );
 
-  // Auto-expand submenu if current page is in it
-  useEffect(() => {
-    menuItems.forEach((item) => {
-      if ('submenu' in item && item.submenu && Array.isArray(item.submenu)) {
-        const isInSubmenu = item.submenu.some((sub: any) => isMenuItemActive(sub));
-        if (isInSubmenu && !expandedMenus.includes(item.label)) {
-          setExpandedMenus(prev => {
-            const updated = [...prev, item.label];
-            localStorage.setItem('expandedMenus', JSON.stringify(updated));
-            return updated;
-          });
-        }
-      }
-    });
-  }, [menuItems, pathname]);
-
   const toggleSubmenu = (label: string) => {
     setExpandedMenus(prev => {
-      const updated = prev.includes(label) 
+      const updated = prev.includes(label)
         ? prev.filter(item => item !== label)
         : [...prev, label];
-      
-      // Save to localStorage
-      localStorage.setItem('expandedMenus', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const handleTopLevelTabNavigation = () => {
+    setExpandedMenus([]);
   };
 
   const getRoleDisplay = () => {
@@ -286,14 +252,14 @@ export function Sidebar() {
                         onClick={() => toggleSubmenu(item.label)}
                         className={cn(
                           "w-full flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-300 group/item",
-                          isSubmenuActive || isExpanded
+                          isSubmenuActive
                             ? "bg-linear-to-r from-[#a1001f] to-[#c41230] text-white shadow-md shadow-[#a1001f]/20 scale-[1.01]"
                             : "text-gray-700 hover:bg-linear-to-r hover:from-gray-100 hover:to-gray-50 hover:shadow-sm hover:scale-[1.01]"
                         )}
                       >
                         <div className={cn(
                           "p-1.5 rounded-md transition-all duration-300",
-                          isSubmenuActive || isExpanded
+                          isSubmenuActive
                             ? "bg-white/20"
                             : "bg-gray-100 group-hover/item:bg-white group-hover/item:shadow-sm"
                         )}>
@@ -374,6 +340,7 @@ export function Sidebar() {
                   ) : (
                     <Link
                       href={item.href}
+                      onClick={handleTopLevelTabNavigation}
                       className={cn(
                         "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-300 group/item",
                         isActive

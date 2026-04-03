@@ -43,6 +43,7 @@ interface Birthday {
     day: number
     teachingLevel: string
     masked?: boolean
+    isCurrentUser?: boolean
 }
 
 interface SenderCandidate {
@@ -258,6 +259,11 @@ export function UpcomingEventsSidebar() {
         return birthdaysResponse?.data || []
     }, [birthdaysResponse])
 
+    const hasCurrentUserBirthday = useMemo(
+        () => upcomingBirthdays.some((person) => person.isCurrentUser),
+        [upcomingBirthdays]
+    )
+
     const showBirthdaysLoading = (isBirthdaysLoading || isBirthdaysValidating) && upcomingBirthdays.length === 0
 
     const currentWeek = birthdaysResponse?.week ?? getCurrentWeek(vietnamNow.day)
@@ -270,7 +276,7 @@ export function UpcomingEventsSidebar() {
 
     useEffect(() => {
         if (showBirthdaysLoading || isWishPopupOpen || isSendWishPopupOpen) return
-        if (upcomingBirthdays.length === 0) return
+        if (!hasCurrentUserBirthday) return
 
         const showNextLogin = window.localStorage.getItem(BIRTHDAY_POPUP_SHOW_NEXT_LOGIN_KEY)
         if (showNextLogin === '0') return
@@ -281,7 +287,7 @@ export function UpcomingEventsSidebar() {
         window.sessionStorage.setItem(popupShownThisSessionKey, '1')
         setIsWishPopupOpen(true)
     }, [
-        upcomingBirthdays.length,
+        hasCurrentUserBirthday,
         showBirthdaysLoading,
         isWishPopupOpen,
         isSendWishPopupOpen,

@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/PageHeader";
+
 interface PageContainerProps {
   children: React.ReactNode;
   title?: string;
@@ -37,18 +39,7 @@ export function PageContainer({
     <div className={`${paddingClasses[padding]} ${className}`}>
       {/* Page Header */}
       {(title || description) && (
-        <div className="mb-6">
-          {title && (
-            <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">
-              {title}
-            </h1>
-          )}
-          {description && (
-            <p className="text-sm lg:text-base text-gray-600">
-              {description}
-            </p>
-          )}
-        </div>
+        <PageHeader title={title || ""} description={description} />
       )}
 
       {/* Page Content */}
