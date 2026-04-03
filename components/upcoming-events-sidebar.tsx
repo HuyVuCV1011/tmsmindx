@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 
 import { useAuth } from '@/lib/auth-context'
+import { BirthdayWishPopup } from '@/components/birthday-wish-popup'
+import { BirthdaySendWishPopup } from '@/components/birthday-send-wish-popup'
 
 interface Post {
     id: string | number
@@ -41,6 +43,12 @@ interface Birthday {
     day: number
     teachingLevel: string
     masked?: boolean
+    isCurrentUser?: boolean
+}
+
+interface SenderCandidate {
+    name: string
+    email?: string
 }
 
 interface BirthdaysResponse {
@@ -59,6 +67,8 @@ interface BirthdaysResponse {
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 const BIRTHDAY_PRIVACY_SYNC_KEY = 'birthday-privacy-updated-at'
 const VIETNAM_TIMEZONE = 'Asia/Ho_Chi_Minh'
+const BIRTHDAY_POPUP_SHOW_NEXT_LOGIN_KEY = 'birthday-popup-show-next-login'
+const BIRTHDAY_POPUP_SESSION_SHOWN_PREFIX = 'birthday-popup-session-shown'
 
 function getCurrentWeek(day: number): number {
     if (day <= 7) return 1
@@ -97,6 +107,9 @@ function toYmdNumber(year: number, month: number, day: number): number {
 export function UpcomingEventsSidebar() {
     const { user } = useAuth()
     const [privacySyncToken, setPrivacySyncToken] = useState<string | null>(null)
+    const [isWishPopupOpen, setIsWishPopupOpen] = useState(false)
+    const [isSendWishPopupOpen, setIsSendWishPopupOpen] = useState(false)
+    const [isPopupPreferenceDialogOpen, setIsPopupPreferenceDialogOpen] = useState(false)
 
     // Fallback username từ email nếu backend không resolve được từ emailCongViec
     const fallbackUsernameLms = useMemo(() => {
@@ -246,11 +259,78 @@ export function UpcomingEventsSidebar() {
         return birthdaysResponse?.data || []
     }, [birthdaysResponse])
 
+    const hasCurrentUserBirthday = useMemo(
+        () => upcomingBirthdays.some((person) => person.isCurrentUser),
+        [upcomingBirthdays]
+    )
+
     const showBirthdaysLoading = (isBirthdaysLoading || isBirthdaysValidating) && upcomingBirthdays.length === 0
 
     const currentWeek = birthdaysResponse?.week ?? getCurrentWeek(vietnamNow.day)
     const currentMonth = birthdaysResponse?.month ?? vietnamNow.month
-    const userArea = birthdaysResponse?.userArea
+    const currentYear = vietnamNow.year
+    const userArea = birthdaysResponse?.userArea ?? null
+
+    const userLoginKey = useMemo(() => user?.email?.toLowerCase() || 'guest', [user?.email])
+    const popupShownThisSessionKey = `${BIRTHDAY_POPUP_SESSION_SHOWN_PREFIX}:${userLoginKey}`
+
+    useEffect(() => {
+        if (showBirthdaysLoading || isWishPopupOpen || isSendWishPopupOpen) return
+        if (!hasCurrentUserBirthday) return
+
+        const showNextLogin = window.localStorage.getItem(BIRTHDAY_POPUP_SHOW_NEXT_LOGIN_KEY)
+        if (showNextLogin === '0') return
+
+        const hasShownThisSession = window.sessionStorage.getItem(popupShownThisSessionKey)
+        if (hasShownThisSession === '1') return
+
+        window.sessionStorage.setItem(popupShownThisSessionKey, '1')
+        setIsWishPopupOpen(true)
+    }, [
+        hasCurrentUserBirthday,
+        showBirthdaysLoading,
+        isWishPopupOpen,
+        isSendWishPopupOpen,
+        popupShownThisSessionKey,
+    ])
+
+    const handleWishPopupClose = () => {
+        setIsWishPopupOpen(false)
+        setIsPopupPreferenceDialogOpen(true)
+    }
+
+    const handleEnablePopupNextLogin = () => {
+        window.localStorage.setItem(BIRTHDAY_POPUP_SHOW_NEXT_LOGIN_KEY, '1')
+        setIsPopupPreferenceDialogOpen(false)
+    }
+
+    const handleDisablePopupNextLogin = () => {
+        window.localStorage.setItem(BIRTHDAY_POPUP_SHOW_NEXT_LOGIN_KEY, '0')
+        setIsPopupPreferenceDialogOpen(false)
+    }
+
+    const shouldHideSidebarCards = isWishPopupOpen
+
+    const senderCandidates = useMemo<SenderCandidate[]>(() => {
+        const map = new Map<string, SenderCandidate>()
+
+        if (user?.displayName?.trim()) {
+            map.set(user.displayName.trim(), {
+                name: user.displayName.trim(),
+                email: user.email,
+            })
+        }
+
+        upcomingBirthdays
+            .filter((person) => !person.masked)
+            .forEach((person) => {
+                const name = person.name?.trim()
+                if (!name || map.has(name)) return
+                map.set(name, { name })
+            })
+
+        return Array.from(map.values())
+    }, [upcomingBirthdays, user?.displayName, user?.email])
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString)
@@ -283,7 +363,8 @@ export function UpcomingEventsSidebar() {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-right duration-700">
+        <>
+        <div className={shouldHideSidebarCards ? 'hidden' : 'space-y-6 animate-in fade-in slide-in-from-right duration-700'}>
             {/* Upcoming Events Section */}
             <div className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
                 <div className="p-5 border-b border-gray-100 bg-linear-to-r from-gray-50 to-white">
@@ -412,14 +493,80 @@ export function UpcomingEventsSidebar() {
                 </div>
 
                 <div className="px-4 pb-4">
-                    <button className="w-full py-3 bg-white/15 hover:bg-white text-white hover:text-red-700 text-sm font-bold rounded-xl transition-colors duration-200 border border-white/30 hover:border-white shadow-sm hover:shadow-md group">
+                    <button
+                        type="button"
+                        className="w-full py-3 bg-white/15 hover:bg-white text-white hover:text-red-700 text-sm font-bold rounded-xl transition-colors duration-200 border border-white/30 hover:border-white shadow-sm hover:shadow-md group"
+                        onClick={() => setIsSendWishPopupOpen(true)}
+                    >
                         <span className="flex items-center justify-center gap-2">
                             <span>Gửi lời chúc ngay</span>
                             <span className="group-hover:scale-125 transition-transform">💌</span>
                         </span>
                     </button>
+
+                   
                 </div>
             </div>
         </div>
+
+            <BirthdayWishPopup
+                isOpen={isWishPopupOpen}
+                onClose={handleWishPopupClose}
+                currentWeek={currentWeek}
+                currentMonth={currentMonth}
+                currentYear={currentYear}
+                userArea={userArea}
+                birthdays={upcomingBirthdays}
+            />
+
+            <BirthdaySendWishPopup
+                isOpen={isSendWishPopupOpen}
+                onClose={() => setIsSendWishPopupOpen(false)}
+                currentWeek={currentWeek}
+                currentMonth={currentMonth}
+                currentYear={currentYear}
+                userArea={userArea}
+                birthdays={upcomingBirthdays}
+                senderCandidates={senderCandidates}
+                fallbackSenderEmail={user?.email || null}
+            />
+
+            {isPopupPreferenceDialogOpen && (
+                <div
+                    className="fixed inset-0 z-120 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4"
+                    onClick={() => setIsPopupPreferenceDialogOpen(false)}
+                >
+                    <div
+                        className="w-full max-w-md rounded-2xl border border-white/70 bg-white shadow-2xl overflow-hidden"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="h-1.5 bg-linear-to-r from-[#a1001f] to-[#c41230]" />
+                        <div className="p-5">
+                            <h3 className="text-lg font-bold text-gray-900">Hiển thị lại popup sinh nhật?</h3>
+                            <p className="mt-2 text-sm text-gray-600 leading-relaxed">
+                                Khi bạn đăng nhập lại web lần sau, bạn có muốn tiếp tục tự động hiển thị popup chúc mừng sinh nhật không?
+                            </p>
+
+                            <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <button
+                                    type="button"
+                                    onClick={handleDisablePopupNextLogin}
+                                    className="rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                                >
+                                    Không, ẩn lần sau
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleEnablePopupNextLogin}
+                                    className="rounded-xl bg-linear-to-r from-[#a1001f] to-[#c41230] px-3 py-2.5 text-sm font-semibold text-white hover:from-[#8a001a] hover:to-[#ad102a]"
+                                >
+                                    Có, tiếp tục hiển thị
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     )
 }

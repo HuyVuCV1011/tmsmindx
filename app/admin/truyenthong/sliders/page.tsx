@@ -1,9 +1,11 @@
 'use client'
 
+import { PageContainer } from '@/components/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Clock, Edit2, Eye, EyeOff, GripVertical, Image as ImageIcon, List, Plus, Settings, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Clock, Edit2, Eye, EyeOff, GripVertical, Image as ImageIcon, List, Plus, Settings, Trash2, X } from 'lucide-react'
+import Link from 'next/link'
 import React, { useState } from 'react'
 import toast from 'react-hot-toast'
 
@@ -123,16 +125,18 @@ export default function SlidersManagementPage() {
     }
 
     return (
-        <div className="space-y-5">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Quản lý Slider</h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                        Tổng cộng <span className="font-semibold text-gray-700">{sliders.length}</span> slider
-                    </p>
-                </div>
-                <Button className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-10 shadow-sm" onClick={() => setIsCreateModalOpen(true)}>
+        <PageContainer
+            title="Quản lý Slider"
+            description={`Tổng cộng ${sliders.length} slider`}
+        >
+            <div className="flex items-center justify-between mb-6">
+                <Button asChild variant="outline" size="sm" className="gap-2">
+                    <Link href="/admin/truyenthong">
+                        <ArrowLeft className="w-4 h-4" />
+                        Quay lại
+                    </Link>
+                </Button>
+                <Button variant="mindx" className="gap-2 shadow-sm font-semibold" onClick={() => setIsCreateModalOpen(true)}>
                     <Plus className="w-4 h-4" />
                     Tạo slider mới
                 </Button>
@@ -142,9 +146,9 @@ export default function SlidersManagementPage() {
                 {/* Settings Panel */}
                 <div className="lg:col-span-1">
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-4">
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 px-4 py-3">
-                            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                                <Settings className="w-4 h-4 text-blue-600" />
+                        <div className="px-5 py-4 border-b border-gray-100">
+                            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                                <Settings className="w-5 h-5 text-gray-600" />
                                 Cài đặt chung
                             </h3>
                         </div>
@@ -195,9 +199,9 @@ export default function SlidersManagementPage() {
                 {/* Sliders List */}
                 <div className="lg:col-span-2">
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 px-4 py-3">
-                            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                                <List className="w-4 h-4 text-blue-600" />
+                        <div className="px-5 py-4 border-b border-gray-100">
+                            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                                <List className="w-5 h-5 text-gray-600" />
                                 Danh sách Slider
                             </h3>
                         </div>
@@ -250,7 +254,7 @@ export default function SlidersManagementPage() {
                                                 <div className="flex bg-gray-50 rounded-lg border border-gray-200 p-0.5">
                                                     <button
                                                         onClick={() => handleToggleStatus(slider.id)}
-                                                        className="h-7 w-7 flex items-center justify-center hover:bg-blue-50 hover:text-blue-600 rounded transition-colors"
+                                                        className="h-7 w-7 flex items-center justify-center hover:bg-blue-50 hover:text-blue-600 rounded transition-colors cursor-pointer"
                                                         title={slider.status === 'active' ? 'Tạm dừng' : 'Kích hoạt'}
                                                     >
                                                         {slider.status === 'active' ? (
@@ -261,7 +265,7 @@ export default function SlidersManagementPage() {
                                                     </button>
 
                                                     <button
-                                                        className="h-7 w-7 flex items-center justify-center hover:bg-blue-50 hover:text-blue-600 rounded transition-colors"
+                                                        className="h-7 w-7 flex items-center justify-center hover:bg-blue-50 hover:text-blue-600 rounded transition-colors cursor-pointer"
                                                         title="Chỉnh sửa"
                                                     >
                                                         <Edit2 className="w-4 h-4" />
@@ -269,7 +273,7 @@ export default function SlidersManagementPage() {
 
                                                     <button
                                                         onClick={() => handleDelete(slider.id)}
-                                                        className="h-7 w-7 flex items-center justify-center hover:bg-red-50 hover:text-red-600 rounded transition-colors"
+                                                        className="h-7 w-7 flex items-center justify-center hover:bg-red-50 hover:text-red-600 rounded transition-colors cursor-pointer"
                                                         title="Xóa"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
@@ -300,7 +304,7 @@ export default function SlidersManagementPage() {
                             </h3>
                             <button
                                 onClick={() => setIsCreateModalOpen(false)}
-                                className="text-white/80 hover:text-white transition-colors"
+                                className="text-white/80 hover:text-white transition-colors cursor-pointer"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -380,6 +384,6 @@ export default function SlidersManagementPage() {
                     </div>
                 </div>
             )}
-        </div>
+        </PageContainer>
     )
 }

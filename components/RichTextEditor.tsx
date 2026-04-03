@@ -4,6 +4,10 @@ import { mergeAttributes, type Editor as TiptapEditor } from '@tiptap/core'
 import Color from '@tiptap/extension-color'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
+import { Table } from '@tiptap/extension-table'
+import { TableCell } from '@tiptap/extension-table-cell'
+import { TableHeader } from '@tiptap/extension-table-header'
+import { TableRow } from '@tiptap/extension-table-row'
 import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle } from '@tiptap/extension-text-style'
 import Underline from '@tiptap/extension-underline'
@@ -30,7 +34,8 @@ import {
     Redo,
     Trash2,
     Underline as UnderlineIcon,
-    Undo
+    Undo,
+    Table as TableIcon
 } from 'lucide-react'
 import React, { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
@@ -265,6 +270,23 @@ export default function RichTextEditor({
         HTMLAttributes: {
           class: 'tiptap-image'
         }
+      }),
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: 'border-collapse border border-gray-300 w-full min-w-full my-4 overflow-x-auto block tiptap-table',
+        },
+      }),
+      TableRow,
+      TableHeader.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 bg-gray-100 p-2 font-bold text-left min-w-[100px]',
+        },
+      }),
+      TableCell.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 p-2 min-w-[100px]',
+        },
       }),
       Link.configure({
         openOnClick: false,
@@ -680,6 +702,54 @@ export default function RichTextEditor({
           >
             <Minus className="h-4 w-4" />
           </Button>
+        </div>
+
+        {/* Table Operations */}
+        <div className="flex gap-1 pr-2 border-r">
+          <Button
+            type="button"
+            size="sm"
+            variant={editor.isActive('table') ? 'default' : 'ghost'}
+            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+            className=" h-8 w-8 p-0 cursor-pointer"
+            title="Thêm Bảng"
+          >
+            <TableIcon className="h-4 w-4" />
+          </Button>
+          {editor.isActive('table') && (
+            <div className="flex items-center bg-blue-50/50 rounded-md border border-blue-100 p-0.5 gap-0.5 ml-1">
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => editor.chain().focus().addColumnAfter().run()}
+                    className="h-7 px-2 text-[10px] text-blue-700 hover:bg-blue-100 cursor-pointer"
+                    title="Thêm cột"
+                >
+                    +Cột
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => editor.chain().focus().addRowAfter().run()}
+                    className="h-7 px-2 text-[10px] text-blue-700 hover:bg-blue-100 cursor-pointer"
+                    title="Thêm dòng"
+                >
+                    +Dòng
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => editor.chain().focus().deleteTable().run()}
+                    className="h-7 px-2 text-[10px] text-red-600 hover:bg-red-100 cursor-pointer"
+                    title="Xóa Bảng"
+                >
+                    Xóa
+                </Button>
+            </div>
+          )}
         </div>
 
         {/* Text Color */}

@@ -7,6 +7,7 @@ export const AVAILABLE_ROUTES = [
     { path: "/admin/page1", label: "Thông tin GV", group: "Quản lý" },
     { path: "/admin/page2", label: "Quy trình quy định K12 Teaching", group: "Quản lý" },
     { path: "/admin/page3", label: "Màn hình 3", group: "Quản lý" },
+    { path: "/admin/hr-candidates", label: "HR quản lý GEN ứng viên", group: "Nhân sự" },
     { path: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện", group: "Sự kiện" },
     { path: "/admin/page4/danh-sach-dang-ky", label: "Danh sách đăng ký", group: "Đánh giá năng lực GV" },
     { path: "/admin/page4/thu-vien-de", label: "Library đề chuyên môn", group: "Đánh giá năng lực GV" },
@@ -16,7 +17,6 @@ export const AVAILABLE_ROUTES = [
     { path: "/admin/assignment-questions", label: "Câu hỏi Assignment", group: "Đào tạo" },
     { path: "/admin/video-setup", label: "Cài đặt Video", group: "Đào tạo" },
     { path: "/admin/video-detail", label: "Chi tiết Video", group: "Đào tạo" },
-    { path: "/admin/assignments", label: "Bài tập", group: "Đào tạo" },
     { path: "/admin/training-studio", label: "Training Studio", group: "Đào tạo" },
     { path: "/admin/giaitrinh", label: "QL Giải trình", group: "Nội dung" },
     { path: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", group: "Nội dung" },
@@ -66,7 +66,7 @@ export default function PermSelector({ perms, setPerms }: { perms: string[]; set
                         {exp && (
                             <div className="px-3 py-2 space-y-1">
                                 {gr.map(r => (
-                                    <label key={r.path} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-1 transition-colors">
+                                    <label key={`${r.path}-${r.label}`} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-1 transition-colors">
                                         <input type="checkbox" checked={perms.includes(r.path)} onChange={() => togglePerm(r.path)}
                                             className="rounded border-gray-300 text-[#a1001f] focus:ring-[#a1001f]" />
                                         <span className="text-xs text-gray-700">{r.label}</span>
