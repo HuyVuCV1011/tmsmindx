@@ -3,7 +3,7 @@
 import Modal from '@/components/Modal';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Stepper, StepItem } from '@/components/ui/stepper';
+import { StepItem, Stepper } from '@/components/ui/stepper';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/lib/auth-context';
 import { findMatchingCampus } from '@/lib/campus-data';

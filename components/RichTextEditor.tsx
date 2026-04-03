@@ -32,10 +32,10 @@ import {
     Minus,
     Quote,
     Redo,
+    Table as TableIcon,
     Trash2,
     Underline as UnderlineIcon,
-    Undo,
-    Table as TableIcon
+    Undo
 } from 'lucide-react'
 import React, { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
