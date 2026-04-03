@@ -225,6 +225,31 @@ export default function RichTextEditor({
   const [selectedImageWidth, setSelectedImageWidth] = useState<string>('100%')
   const [selectedImageAlign, setSelectedImageAlign] = useState<string>('top')
   const [showImageControls, setShowImageControls] = useState(false)
+
+  const uploadImageFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      throw new Error('Chi ho tro dinh dang anh')
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('Kich thuoc anh toi da 5MB')
+    }
+
+    const formData = new FormData()
+    formData.append('image', file)
+
+    const res = await fetch('/api/upload-question-image', {
+      method: 'POST',
+      body: formData
+    })
+
+    const data = await res.json()
+    if (!res.ok || !data?.success || !data?.url) {
+      throw new Error(data?.error || 'Upload failed')
+    }
+
+    return String(data.url)
+  }, [])
   
   const editor = useEditor({
     immediatelyRender: false,
@@ -236,7 +261,7 @@ export default function RichTextEditor({
       }),
       ResizableImage.configure({
         inline: true,
-        allowBase64: true,
+        allowBase64: false,
         HTMLAttributes: {
           class: 'tiptap-image'
         }
@@ -260,10 +285,77 @@ export default function RichTextEditor({
         class: `prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none ${minHeight} px-4 py-3 ${
           error ? 'border-red-500' : ''
         }`
+      },
+      handlePaste: (_view, event) => {
+        const items = event.clipboardData?.items
+        if (!items?.length) return false
+
+        for (const item of Array.from(items)) {
+          if (!item.type.startsWith('image/')) continue
+
+          const file = item.getAsFile()
+          if (!file) continue
+
+          event.preventDefault()
+          ;(async () => {
+            try {
+              toast.loading('Dang tai anh len cloud...', { id: 'richtext-image-upload' })
+              const imageUrl = await uploadImageFile(file)
+              editor?.chain().focus().setImage({ src: imageUrl, alt: file.name || 'image' }).run()
+              toast.success('Da chen anh thanh cong', { id: 'richtext-image-upload' })
+            } catch (error) {
+              console.error('Paste image upload error:', error)
+              toast.error(error instanceof Error ? error.message : 'Khong the tai anh len cloud', {
+                id: 'richtext-image-upload'
+              })
+            }
+          })()
+
+          return true
+        }
+
+        return false
+      },
+      handleDrop: (_view, event) => {
+        const files = Array.from(event.dataTransfer?.files || [])
+        const imageFile = files.find((file) => file.type.startsWith('image/'))
+        if (!imageFile) return false
+
+        event.preventDefault()
+        ;(async () => {
+          try {
+            toast.loading('Dang tai anh len cloud...', { id: 'richtext-image-upload' })
+            const imageUrl = await uploadImageFile(imageFile)
+            editor?.chain().focus().setImage({ src: imageUrl, alt: imageFile.name || 'image' }).run()
+            toast.success('Da chen anh thanh cong', { id: 'richtext-image-upload' })
+          } catch (error) {
+            console.error('Drop image upload error:', error)
+            toast.error(error instanceof Error ? error.message : 'Khong the tai anh len cloud', {
+              id: 'richtext-image-upload'
+            })
+          }
+        })()
+
+        return true
       }
     },
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML())
+      const html = editor.getHTML()
+
+      // Blob URLs are temporary browser-local references and become invalid
+      // after refresh. Persisting them causes broken rich text rendering later.
+      const hasUnstableSource = /<img[^>]+src=["'](?:blob:|data:image)/i.test(html)
+      if (hasUnstableSource) {
+        const sanitized = html.replace(/<img[^>]+src=["'](?:blob:[^"']*|data:image[^"']*)["'][^>]*>/gi, '')
+        if (sanitized !== html) {
+          editor.commands.setContent(sanitized, { emitUpdate: false })
+          onChange(sanitized)
+          toast.error('Anh paste tam thoi da duoc loai bo. Vui long doi upload len cloud truoc khi luu.')
+          return
+        }
+      }
+
+      onChange(html)
     },
     onSelectionUpdate: ({ editor }: { editor: TiptapEditor }) => {
       const selection = editor.state.selection
@@ -306,27 +398,20 @@ export default function RichTextEditor({
       if (!file || !editor) return
 
       try {
-        // Upload to server
-        const formData = new FormData()
-        formData.append('image', file)
-
-        const res = await fetch('/api/upload-thumbnail', {
-          method: 'POST',
-          body: formData
-        })
-
-        if (!res.ok) throw new Error('Upload failed')
-
-        const data = await res.json()
-        editor.chain().focus().setImage({ src: data.url }).run()
+        toast.loading('Dang tai anh len cloud...', { id: 'richtext-image-upload' })
+        const imageUrl = await uploadImageFile(file)
+        editor.chain().focus().setImage({ src: imageUrl, alt: file.name || 'image' }).run()
+        toast.success('Da chen anh thanh cong', { id: 'richtext-image-upload' })
       } catch (error) {
         console.error('Image upload error:', error)
-        toast.error('Không thể tải lên hình ảnh. Vui lòng thử lại.')
+        toast.error(error instanceof Error ? error.message : 'Khong the tai len hinh anh', {
+          id: 'richtext-image-upload'
+        })
       }
     }
 
     input.click()
-  }, [editor])
+  }, [editor, uploadImageFile])
 
   const setLink = useCallback(() => {
     if (!editor) return

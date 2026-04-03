@@ -32,11 +32,17 @@ export async function GET(request: NextRequest) {
         es.id       AS set_id,
         es.set_code,
         es.set_name,
+        COALESCE(qc.question_count, 0) AS question_count,
         es.total_points,
         es.passing_score,
         es.status   AS set_status
       FROM monthly_exam_selections mes
       LEFT JOIN exam_sets es ON es.id = mes.selected_set_id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS question_count
+        FROM exam_set_questions esq
+        WHERE esq.set_id = es.id
+      ) qc ON TRUE
       WHERE mes.subject_id = $1
         AND mes.year  = $2
         AND mes.month = $3
@@ -77,7 +83,10 @@ export async function POST(request: NextRequest) {
 
     // Verify set belongs to this subject
     const setCheck = await pool.query(
-      `SELECT es.id FROM exam_sets es
+      `SELECT
+         es.id,
+         (SELECT COUNT(*)::int FROM exam_set_questions esq WHERE esq.set_id = es.id) AS question_count
+       FROM exam_sets es
        JOIN exam_subject_catalog esc ON esc.id = es.subject_id
        WHERE es.id = $1 AND esc.id = $2`,
       [selected_set_id, subject_id]
@@ -86,6 +95,14 @@ export async function POST(request: NextRequest) {
     if (setCheck.rowCount === 0) {
       return NextResponse.json(
         { success: false, error: 'Bộ đề không thuộc môn này' },
+        { status: 400 }
+      );
+    }
+
+    const questionCount = Number(setCheck.rows[0]?.question_count || 0);
+    if (questionCount <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'Bộ đề chưa có câu hỏi, không thể dùng để phân công' },
         { status: 400 }
       );
     }
@@ -134,12 +151,17 @@ export async function PATCH(request: NextRequest) {
     const targetYear = year ?? new Date().getFullYear();
     const targetMonth = month ?? (new Date().getMonth() + 1);
 
-    // Pick a random set from this subject (all existing sets)
+    // Pick a random set from this subject, but only sets that already have questions.
     const randomResult = await pool.query(
       `
       SELECT es.id, es.set_code, es.set_name
       FROM exam_sets es
       WHERE es.subject_id = $1
+        AND EXISTS (
+          SELECT 1
+          FROM exam_set_questions esq
+          WHERE esq.set_id = es.id
+        )
       ORDER BY RANDOM()
       LIMIT 1
       `,
@@ -148,7 +170,7 @@ export async function PATCH(request: NextRequest) {
 
     if (randomResult.rowCount === 0) {
       return NextResponse.json(
-        { success: false, error: 'Không có bộ đề nào để chọn ngẫu nhiên' },
+        { success: false, error: 'Không có bộ đề nào có câu hỏi để chọn ngẫu nhiên' },
         { status: 422 }
       );
     }

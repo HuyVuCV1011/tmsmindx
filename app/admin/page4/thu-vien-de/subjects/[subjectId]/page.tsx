@@ -35,6 +35,7 @@ export default function SubjectDetailPage() {
     set_code: string | null;
     set_name: string | null;
     selection_mode: "manual" | "random";
+    question_count?: number;
   }
   const [monthlySelection, setMonthlySelection] = useState<MonthlySelection | null>(null);
   const [isDefaultModalOpen, setIsDefaultModalOpen] = useState(false);
@@ -53,6 +54,12 @@ export default function SubjectDetailPage() {
     if (!subject) return [];
     return getSetsBySubject(sets, subject);
   }, [sets, subject]);
+
+  const usableSubjectSets = useMemo(() => {
+    return subjectSets.filter((set) => Number(set.question_count || 0) > 0);
+  }, [subjectSets]);
+
+  const hasUsableSets = usableSubjectSets.length > 0;
 
   const fetchSets = async () => {
     if (!subject) return;
@@ -94,6 +101,7 @@ export default function SubjectDetailPage() {
           set_code: data.data.set_code ?? null,
           set_name: data.data.set_name ?? null,
           selection_mode: data.data.selection_mode,
+          question_count: Number(data.data.question_count || 0),
         });
       } else {
         setMonthlySelection(null);
@@ -384,6 +392,14 @@ export default function SubjectDetailPage() {
               <p className="truncate text-sm font-semibold text-gray-900">
                 {monthlySelection.set_code} — {monthlySelection.set_name}
               </p>
+              <p className={cn(
+                "text-xs font-medium",
+                Number(monthlySelection.question_count || 0) > 0 ? "text-green-700" : "text-red-700"
+              )}>
+                {Number(monthlySelection.question_count || 0) > 0
+                  ? `${monthlySelection.question_count} câu hỏi • Có thể sử dụng`
+                  : "0 câu hỏi • Không thể sử dụng"}
+              </p>
             </div>
           </div>
           <button
@@ -413,7 +429,7 @@ export default function SubjectDetailPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              disabled={!subjectDbId || subjectSets.length === 0}
+              disabled={!subjectDbId || !hasUsableSets}
               onClick={() => {
                 setDefaultSelectedSetId(monthlySelection?.set_id ?? "");
                 setIsDefaultModalOpen(true);
@@ -425,7 +441,7 @@ export default function SubjectDetailPage() {
             </button>
             <button
               type="button"
-              disabled={isRandomizing || !subjectDbId || subjectSets.length === 0}
+              disabled={isRandomizing || !subjectDbId || !hasUsableSets}
               onClick={handleRandomize}
               className="inline-flex items-center gap-1.5 rounded-md border border-blue-400 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -457,9 +473,22 @@ export default function SubjectDetailPage() {
                         {level.label}
                       </span>
                       <span className="truncate text-sm font-semibold text-gray-900">{set.set_code}</span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                          Number(set.question_count || 0) > 0
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        )}
+                      >
+                        {set.question_count || 0} câu
+                      </span>
                     </div>
                     <p className="truncate text-sm text-gray-600">{set.set_name}</p>
                     <p className="text-xs text-gray-500">{set.total_points} điểm • Đạt {set.passing_score}</p>
+                    {Number(set.question_count || 0) <= 0 && (
+                      <p className="text-xs font-semibold text-red-600">Chưa có câu hỏi, không được dùng để phân công.</p>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -605,15 +634,18 @@ export default function SubjectDetailPage() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
             >
               <option value="">-- Chọn bộ đề --</option>
-              {subjectSets
+              {usableSubjectSets
                 .map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.set_code} – {s.set_name}
+                    {s.set_code} – {s.set_name} ({s.question_count || 0} câu)
                   </option>
                 ))}
             </select>
             {subjectSets.length === 0 && (
               <p className="mt-1 text-xs text-red-500">Không có bộ đề nào để chọn.</p>
+            )}
+            {subjectSets.length > 0 && usableSubjectSets.length === 0 && (
+              <p className="mt-1 text-xs text-red-500">Tất cả bộ đề đang có 0 câu, chưa thể dùng để phân công.</p>
             )}
           </div>
 

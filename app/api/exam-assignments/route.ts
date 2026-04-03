@@ -42,6 +42,14 @@ async function ensureAssignmentsFromRegistrations(teacherCodes: string[]) {
           WHERE esc.exam_type = m.exam_type
             AND esc.block_code = m.block_code
             AND esc.subject_code = m.subject_code
+            AND es.status = 'active'
+            AND (es.valid_from IS NULL OR m.scheduled_at >= es.valid_from)
+            AND (es.valid_to IS NULL OR m.scheduled_at <= es.valid_to)
+            AND EXISTS (
+              SELECT 1
+              FROM exam_set_questions esq
+              WHERE esq.set_id = es.id
+            )
           LIMIT 1
         ) month_pick ON TRUE
         LEFT JOIN LATERAL (
@@ -54,6 +62,11 @@ async function ensureAssignmentsFromRegistrations(teacherCodes: string[]) {
             AND es.status = 'active'
             AND (es.valid_from IS NULL OR m.scheduled_at >= es.valid_from)
             AND (es.valid_to IS NULL OR m.scheduled_at <= es.valid_to)
+            AND EXISTS (
+              SELECT 1
+              FROM exam_set_questions esq
+              WHERE esq.set_id = es.id
+            )
           ORDER BY RANDOM()
           LIMIT 1
         ) set_pick ON TRUE
@@ -163,6 +176,11 @@ export async function GET(request: NextRequest) {
         es.status AS set_status,
         es.valid_from AS set_valid_from,
         es.valid_to AS set_valid_to,
+        EXISTS (
+          SELECT 1
+          FROM exam_set_questions esq
+          WHERE esq.set_id = tea.selected_set_id
+        ) AS has_questions,
         COALESCE(ex.status::text, old_ex.status::text) AS explanation_status,
         COALESCE(ex.admin_note, old_ex.admin_note) AS admin_note
       FROM teacher_exam_assignments tea
@@ -249,6 +267,7 @@ export async function GET(request: NextRequest) {
       const canTake =
         isOpen &&
         isSetActiveNow &&
+        row.has_questions === true &&
         ['assigned', 'in_progress'].includes(row.assignment_status);
 
       return {

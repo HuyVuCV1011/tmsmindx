@@ -266,6 +266,7 @@ async function exportXLSX(headers: string[], rows: (string | number | null)[][],
 
 interface FilterState {
   selectedCenters: string[];
+  centerQuery: string;
   teacherCodeQuery: string;
   block: string;
 }
@@ -282,31 +283,124 @@ function FilterPanel({
   onChange: (f: FilterState) => void;
 }) {
   const toggleCenter = (c: string) => {
-    const next = filters.selectedCenters.includes(c)
+    const isSelected = filters.selectedCenters.includes(c);
+    const next = isSelected
       ? filters.selectedCenters.filter(x => x !== c)
       : [...filters.selectedCenters, c];
-    onChange({ ...filters, selectedCenters: next });
+
+    // After choosing a center from search results, clear query so user can type the next one quickly.
+    onChange({ ...filters, selectedCenters: next, centerQuery: isSelected ? filters.centerQuery : '' });
   };
+
+  const [centerDropdownOpen, setCenterDropdownOpen] = useState(false);
+  const centerDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (centerDropdownRef.current && !centerDropdownRef.current.contains(event.target as Node)) {
+        setCenterDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const normalizeVietnameseText = (value: string) =>
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .toLowerCase()
+      .trim();
+
+  const centerQueryNormalized = normalizeVietnameseText(filters.centerQuery);
+  const visibleCenters = centerQueryNormalized
+    ? allCenters.filter((center) => normalizeVietnameseText(center).includes(centerQueryNormalized))
+    : allCenters;
 
   return (
     <div className="flex flex-wrap gap-3 items-start mb-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
       {/* Centers multi-select */}
-      <div className="flex-1 min-w-[200px]">
+      <div className="flex-1 min-w-[240px]" ref={centerDropdownRef}>
         <label className="text-xs font-medium text-slate-500 block mb-1.5">Cơ sở</label>
-        <div className="flex flex-wrap gap-1.5">
-          {allCenters.map(center => (
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <input
+            type="text"
+            value={filters.centerQuery}
+            onFocus={() => setCenterDropdownOpen(true)}
+            onChange={(e) => {
+              onChange({ ...filters, centerQuery: e.target.value });
+              if (!centerDropdownOpen) setCenterDropdownOpen(true);
+            }}
+            placeholder={
+              filters.selectedCenters.length > 0
+                ? `Đã chọn ${filters.selectedCenters.length} cơ sở - gõ để tìm thêm...`
+                : 'Gõ để tìm cơ sở...'
+            }
+            className="w-full pl-7 pr-7 py-1.5 text-xs border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#a1001f]"
+          />
+          {filters.centerQuery ? (
             <button
-              key={center}
-              onClick={() => toggleCenter(center)}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                filters.selectedCenters.includes(center)
-                  ? 'bg-[#a1001f] text-white'
-                  : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'
-              }`}
+              type="button"
+              onClick={() => onChange({ ...filters, centerQuery: '' })}
+              className="absolute right-2 top-1/2 -translate-y-1/2"
             >
-              {center}
+              <X className="w-3 h-3 text-slate-400" />
             </button>
-          ))}
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCenterDropdownOpen((prev) => !prev)}
+              className="absolute right-2 top-1/2 -translate-y-1/2"
+            >
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${centerDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+
+          {centerDropdownOpen && (
+            <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-lg p-2">
+              <div className="max-h-52 overflow-y-auto space-y-1">
+                {visibleCenters.map((center) => {
+                  const checked = filters.selectedCenters.includes(center);
+                  return (
+                    <button
+                      type="button"
+                      key={center}
+                      onClick={() => toggleCenter(center)}
+                      className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                        checked
+                          ? 'bg-[#a1001f]/10 text-[#a1001f]'
+                          : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <span className="text-left">{center}</span>
+                      {checked && <span className="text-[11px] font-semibold">Da chon</span>}
+                    </button>
+                  );
+                })}
+                {visibleCenters.length === 0 && (
+                  <div className="px-2 py-1.5 text-xs text-slate-400 italic">Không tìm thấy cơ sở phù hợp</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {filters.selectedCenters.map((center) => (
+              <button
+                key={center}
+                type="button"
+                onClick={() => toggleCenter(center)}
+                className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#a1001f] text-white"
+                title="Bấm để bỏ chọn"
+              >
+                {center}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -349,10 +443,10 @@ function FilterPanel({
       </div>
 
       {/* Clear all */}
-      {(filters.selectedCenters.length > 0 || filters.teacherCodeQuery || filters.block) && (
+      {(filters.selectedCenters.length > 0 || filters.centerQuery || filters.teacherCodeQuery || filters.block) && (
         <div className="flex items-end">
           <button
-            onClick={() => onChange({ selectedCenters: [], teacherCodeQuery: '', block: '' })}
+            onClick={() => onChange({ selectedCenters: [], centerQuery: '', teacherCodeQuery: '', block: '' })}
             className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 underline"
           >
             Xóa filter
@@ -384,6 +478,7 @@ export default function TrainingDashboardPage() {
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
     selectedCenters: [],
+    centerQuery: '',
     teacherCodeQuery: '',
     block: '',
   });

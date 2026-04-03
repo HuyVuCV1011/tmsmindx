@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
+const stripUnstableImageSources = (value: unknown) => {
+  if (typeof value !== 'string') return value;
+  return value.replace(
+    /<img[^>]+src=["'](?:blob:[^"']*|data:image[^"']*)["'][^>]*>/gi,
+    ''
+  );
+};
+
 // GET: Fetch assignment questions by assignment_id
 export async function GET(request: NextRequest) {
   try {
@@ -83,14 +91,23 @@ export async function POST(request: NextRequest) {
       RETURNING *
     `;
 
+    const sanitizedQuestionText = String(stripUnstableImageSources(question_text) || '');
+    const sanitizedCorrectAnswer =
+      correct_answer == null ? null : String(stripUnstableImageSources(correct_answer) || '');
+    const sanitizedExplanation =
+      explanation == null ? null : String(stripUnstableImageSources(explanation) || '');
+    const sanitizedOptions = Array.isArray(options)
+      ? options.map((item: unknown) => String(stripUnstableImageSources(item) || '')).filter(Boolean)
+      : null;
+
     const values = [
       assignment_id,
-      question_text,
+      sanitizedQuestionText,
       question_type,
-      correct_answer,
-      options ? JSON.stringify(options) : null,
+      sanitizedCorrectAnswer,
+      sanitizedOptions ? JSON.stringify(sanitizedOptions) : null,
       image_url,
-      explanation,
+      sanitizedExplanation,
       points,
       order_number,
       difficulty
@@ -147,7 +164,14 @@ export async function PUT(request: NextRequest) {
         setClauses.push(`${key} = $${paramIndex}`);
         // Handle JSON fields
         if (key === 'options' && updates[key]) {
-          values.push(JSON.stringify(updates[key]));
+          const sanitizedOptions = Array.isArray(updates[key])
+            ? updates[key]
+                .map((item: unknown) => String(stripUnstableImageSources(item) || ''))
+                .filter(Boolean)
+            : null;
+          values.push(sanitizedOptions ? JSON.stringify(sanitizedOptions) : null);
+        } else if (['question_text', 'correct_answer', 'explanation'].includes(key)) {
+          values.push(stripUnstableImageSources(updates[key]));
         } else {
           values.push(updates[key]);
         }

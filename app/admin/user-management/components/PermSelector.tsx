@@ -22,6 +22,7 @@ export const AVAILABLE_ROUTES = [
     { path: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", group: "Nội dung" },
     { path: "/admin/truyenthong", label: "QL truyền thông", group: "Nội dung" },
     { path: "/admin/database", label: "Database Manager", group: "Hệ thống" },
+    { path: "/admin/cloudinary", label: "Cloudinary Manager", group: "Hệ thống" },
     { path: "/admin/user-management", label: "QL tài khoản", group: "Hệ thống" },
 ];
 

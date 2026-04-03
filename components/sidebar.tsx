@@ -88,6 +88,7 @@ export function Sidebar() {
       submenu: [
         { href: "/admin/user-management", label: "Quản lý tài khoản"},
         { href: "/admin/database", label: "Database Manager"},
+        { href: "/admin/cloudinary", label: "Cloudinary Manager"},
       ]
     },
     { href: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", icon: FileText },

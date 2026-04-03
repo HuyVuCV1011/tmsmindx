@@ -1,4 +1,5 @@
 import { withApiProtection } from "@/lib/api-protection";
+import pool from "@/lib/db";
 import { Teacher } from "@/types/teacher";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -346,6 +347,63 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
+function buildFallbackTeacher(code: string, email: string, fullName = ""): Teacher {
+  return {
+    stt: "",
+    name: fullName || code,
+    code,
+    emailMindx: email,
+    emailPersonal: "",
+    status: "Active",
+    branchIn: "",
+    programIn: "",
+    branchCurrent: "",
+    programCurrent: "",
+    manager: "",
+    responsible: "",
+    position: "",
+    startDate: "",
+    onboardBy: "",
+  };
+}
+
+async function resolveTeacherFallbackByEmail(email: string): Promise<Teacher | null> {
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    const byEmailResult = await pool.query(
+      `
+      SELECT teacher_code, full_name, work_email, center, teaching_block, position, status
+      FROM training_teacher_stats
+      WHERE LOWER(TRIM(work_email)) = LOWER(TRIM($1))
+      LIMIT 1
+      `,
+      [normalizedEmail]
+    );
+
+    if (byEmailResult.rows.length > 0) {
+      const row = byEmailResult.rows[0];
+      const teacher = buildFallbackTeacher(
+        String(row.teacher_code || "").trim(),
+        String(row.work_email || normalizedEmail).trim(),
+        String(row.full_name || "").trim()
+      );
+      teacher.branchCurrent = String(row.center || "").trim();
+      teacher.programCurrent = String(row.teaching_block || "").trim();
+      teacher.position = String(row.position || "").trim();
+      teacher.status = String(row.status || "Active").trim() || "Active";
+      return teacher;
+    }
+  } catch (error) {
+    console.warn("resolveTeacherFallbackByEmail query failed:", error);
+  }
+
+  const codeFromEmail = (email.split("@")[0] || "").trim();
+  if (!codeFromEmail) {
+    return null;
+  }
+  return buildFallbackTeacher(codeFromEmail, email);
+}
+
 export const GET = withApiProtection(async (request: NextRequest) => {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
@@ -397,10 +455,18 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     );
 
     if (!teacher) {
-      return NextResponse.json(
-        { error: `Không tìm thấy giáo viên với email "${emailParam}"` },
-        { status: 404 }
-      );
+      const fallbackTeacher = await resolveTeacherFallbackByEmail(normalizedEmail);
+      if (fallbackTeacher) {
+        if (isBasicLookup) {
+          return NextResponse.json({ teacher: fallbackTeacher, fallback: true });
+        }
+        teacher = fallbackTeacher;
+      } else {
+        return NextResponse.json(
+          { error: `Không tìm thấy giáo viên với email "${emailParam}"` },
+          { status: 404 }
+        );
+      }
     }
   }
 

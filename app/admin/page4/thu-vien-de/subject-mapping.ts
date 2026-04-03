@@ -7,6 +7,7 @@ export interface ExamSetRecord {
   subject_id: number;
   set_code: string;
   set_name: string;
+  question_count?: number;
   total_points: number;
   passing_score: number;
   status: "active" | "inactive";
@@ -24,20 +25,22 @@ export interface SubjectConfig {
   blockCode: BlockCode;
   label: string;
   matchKeys: string[];
+  durationMinutes?: number;
   levelTags?: LevelTag[];
 }
 
 export const SUBJECT_CONFIGS: SubjectConfig[] = [
-  { id: "cod-scratch", examType: "expertise", blockCode: "CODING", label: "[COD] Scratch (S)", matchKeys: ["[COD] Scratch"] },
-  { id: "cod-gamemaker", examType: "expertise", blockCode: "CODING", label: "[COD] GameMaker (G)", matchKeys: ["[COD] GameMaker"] },
-  { id: "cod-python", examType: "expertise", blockCode: "CODING", label: "[COD] Python (PT)", matchKeys: ["[COD] Python"] },
-  { id: "cod-web", examType: "expertise", blockCode: "CODING", label: "[COD] Web (JS)", matchKeys: ["[COD] Web"] },
+  { id: "cod-scratch", examType: "expertise", blockCode: "CODING", label: "[COD] Scratch (S)", matchKeys: ["[COD] Scratch"], durationMinutes: 120 },
+  { id: "cod-gamemaker", examType: "expertise", blockCode: "CODING", label: "[COD] GameMaker (G)", matchKeys: ["[COD] GameMaker"], durationMinutes: 120 },
+  { id: "cod-python", examType: "expertise", blockCode: "CODING", label: "[COD] Python (PT)", matchKeys: ["[COD] Python"], durationMinutes: 120 },
+  { id: "cod-web", examType: "expertise", blockCode: "CODING", label: "[COD] Web (JS)", matchKeys: ["[COD] Web"], durationMinutes: 120 },
   {
     id: "cod-cs",
     examType: "expertise",
     blockCode: "CODING",
     label: "[COD] Computer Science (CS)",
     matchKeys: ["[COD] ComputerScience", "[COD] Computer Science"],
+    durationMinutes: 120,
   },
 
   {
@@ -46,6 +49,7 @@ export const SUBJECT_CONFIGS: SubjectConfig[] = [
     blockCode: "ROBOTICS",
     label: "[ROB] Lego 4+",
     matchKeys: ["[ROB] Lego Spike", "[ROB] LegoSpike", "[ROB] Lego"],
+    durationMinutes: 120,
     levelTags: ["B", "A", "I"],
   },
   {
@@ -54,6 +58,7 @@ export const SUBJECT_CONFIGS: SubjectConfig[] = [
     blockCode: "ROBOTICS",
     label: "[ROB] Vex Go",
     matchKeys: ["[ROB] Vex Go", "[ROB] VexGo", "[ROB] Vex Go N1", "[ROB] VexGo N1", "[ROB] Vex Go N2", "[ROB] VexGo N2"],
+    durationMinutes: 120,
     levelTags: ["B", "A", "I"],
   },
   {
@@ -62,6 +67,7 @@ export const SUBJECT_CONFIGS: SubjectConfig[] = [
     blockCode: "ROBOTICS",
     label: "[ROB] Vex IQ",
     matchKeys: ["[ROB] Vex IQ", "[ROB] VexIQ", "[ROB] Vex IQ N3", "[ROB] VexIQ N3"],
+    durationMinutes: 120,
     levelTags: ["B", "A", "I"],
   },
 
@@ -71,6 +77,7 @@ export const SUBJECT_CONFIGS: SubjectConfig[] = [
     blockCode: "ART",
     label: "[ART] Arts",
     matchKeys: ["[ART]"],
+    durationMinutes: 120,
     levelTags: ["B", "A", "I"],
   },
 
@@ -80,6 +87,7 @@ export const SUBJECT_CONFIGS: SubjectConfig[] = [
     blockCode: "PROCESS",
     label: "Kiểm tra quy trình & kỹ năng trải nghiệm",
     matchKeys: ["[Trial] Quy Trình Trai nghiệm", "quy trình"],
+    durationMinutes: 60,
   },
 ];
 

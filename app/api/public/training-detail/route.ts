@@ -57,6 +57,63 @@ export async function GET(request: NextRequest) {
       [code]
     );
 
+    // Get all assignment attempts for this teacher, grouped by video.
+    const attemptsResult = await pool.query(
+      `SELECT
+         tva.video_id,
+         tas.id as submission_id,
+         tas.assignment_id,
+         tas.attempt_number,
+         tas.score,
+         tas.total_points,
+         tas.percentage,
+         tas.status,
+         tas.created_at,
+         tas.submitted_at,
+         tas.graded_at,
+         COUNT(taa.question_id)::INT as answers_count
+       FROM training_assignment_submissions tas
+       JOIN training_video_assignments tva ON tva.id = tas.assignment_id
+       LEFT JOIN training_assignment_answers taa ON taa.submission_id = tas.id
+       WHERE tas.teacher_code = $1
+       GROUP BY
+         tva.video_id,
+         tas.id,
+         tas.assignment_id,
+         tas.attempt_number,
+         tas.score,
+         tas.total_points,
+         tas.percentage,
+         tas.status,
+         tas.created_at,
+         tas.submitted_at,
+         tas.graded_at
+       ORDER BY tva.video_id ASC, tas.created_at DESC`,
+      [code]
+    );
+
+    const attemptMap = new Map<number, any[]>();
+    for (const row of attemptsResult.rows) {
+      const key = Number(row.video_id);
+      if (!attemptMap.has(key)) {
+        attemptMap.set(key, []);
+      }
+
+      attemptMap.get(key)!.push({
+        submission_id: row.submission_id,
+        assignment_id: row.assignment_id,
+        attempt_number: row.attempt_number,
+        score: row.score != null ? parseFloat(row.score) : null,
+        total_points: row.total_points != null ? parseFloat(row.total_points) : null,
+        percentage: row.percentage != null ? parseFloat(row.percentage) : null,
+        status: row.status,
+        created_at: row.created_at,
+        submitted_at: row.submitted_at,
+        graded_at: row.graded_at,
+        answers_count: row.answers_count || 0,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       teacher: {
@@ -78,6 +135,7 @@ export async function GET(request: NextRequest) {
         viewed_at: row.first_viewed_at,
         completed_at: row.completed_at,
         submission_id: row.submission_id,
+        attempt_logs: attemptMap.get(Number(row.video_id)) || [],
         answers: [], // Data answers not available in this view
       })),
     });

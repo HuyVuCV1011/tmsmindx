@@ -17,6 +17,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
         er.block_code,
         er.subject_code,
         esc.subject_name,
+        tts.full_name AS teacher_name,
         COALESCE(er.center_code, tts.center) AS center_code,
         er.scheduled_at,
         er.source_form,
@@ -195,5 +196,87 @@ export const POST = withApiProtection(async (request: NextRequest) => {
       { success: false, error: error.message || 'Failed to create registration' },
       { status: 500 }
     );
+  }
+});
+
+export const DELETE = withApiProtection(async (request: NextRequest) => {
+  const client = await pool.connect();
+
+  try {
+    const body = await request.json();
+    const registrationId = Number(body?.registration_id);
+
+    if (!registrationId || Number.isNaN(registrationId)) {
+      return NextResponse.json(
+        { success: false, error: 'registration_id không hợp lệ' },
+        { status: 400 }
+      );
+    }
+
+    await client.query('BEGIN');
+
+    const assignmentResult = await client.query(
+      `
+      SELECT id, assignment_status
+      FROM teacher_exam_assignments
+      WHERE registration_id = $1
+      LIMIT 1
+      `,
+      [registrationId]
+    );
+
+    if (!assignmentResult.rows.length) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { success: false, error: 'Đăng ký này đã ở trạng thái pending' },
+        { status: 400 }
+      );
+    }
+
+    const assignment = assignmentResult.rows[0] as {
+      id: number;
+      assignment_status: string;
+    };
+
+    if (assignment.assignment_status === 'submitted' || assignment.assignment_status === 'graded') {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { success: false, error: 'Không thể đưa về pending vì bài đã nộp/chấm' },
+        { status: 400 }
+      );
+    }
+
+    await client.query(
+      `
+      DELETE FROM teacher_exam_assignments
+      WHERE id = $1
+      `,
+      [assignment.id]
+    );
+
+    await client.query(
+      `
+      UPDATE exam_registrations
+      SET updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      `,
+      [registrationId]
+    );
+
+    await client.query('COMMIT');
+
+    return NextResponse.json({
+      success: true,
+      message: 'Đã đưa đăng ký về trạng thái pending',
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Error removing exam assignment:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to set registration pending' },
+      { status: 500 }
+    );
+  } finally {
+    client.release();
   }
 });
