@@ -32,7 +32,7 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto p-8">
+      <div className="max-w-7xl mx-auto p-8">
         <div className="space-y-6">
           {/* Header Skeleton */}
           <div className="h-10 bg-gray-200 rounded w-64 animate-pulse"></div>
@@ -57,7 +57,7 @@ export default function AnalyticsPage() {
 
   if (error) {
     return (
-      <div className="max-w-6xl mx-auto p-8">
+      <div className="max-w-7xl mx-auto p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
           <p className="text-red-800">{error}</p>
           <button 
@@ -72,7 +72,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-8">
+    <div className="max-w-7xl mx-auto p-4 sm:p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Analytics Dashboard</h1>

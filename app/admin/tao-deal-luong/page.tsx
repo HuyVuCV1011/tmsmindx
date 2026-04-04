@@ -402,11 +402,11 @@ export default function DealLuongPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+    <div className="min-h-screen space-y-6">
       {/* Header */}
       <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-linear-to-r from-blue-50 via-indigo-50 to-white p-6 md:p-8">
         <div className="absolute -right-8 -top-8 h-36 w-36 rounded-full bg-blue-200/30 blur-2xl" />
-        <h1 className="relative text-2xl font-bold text-slate-900 flex items-center gap-3">
+        <h1 className="relative text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
             <DollarSign className="w-5 h-5 text-white" />
           </div>

@@ -284,7 +284,7 @@ export default function TrainingPage() {
 
   return (
     <div className="bg-white">
-      <div className="w-full">
+      <div className="max-w-7xl mx-auto px-4 lg:px-6">
         {/* Header */}
 
         <div className="bg-linear-to-r from-[#a1001f] to-[#c41230] text-white rounded-lg p-6 mb-6">

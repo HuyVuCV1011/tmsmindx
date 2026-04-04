@@ -333,22 +333,35 @@
   /* Interactive controls should clearly indicate clickability */
   a[href],
   button,
-  [role='button'],
+  [role="button"],
   label[for],
   summary,
-  select,
-  textarea,
-  input:not([type='hidden']),
-  input[type='button'],
-  input[type='submit'],
-  input[type='reset'],
-  input[type='checkbox'],
-  input[type='radio'] {
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"],
+  input[type="checkbox"],
+  input[type="radio"] {
     cursor: pointer;
   }
 
+  textarea,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"] {
+    cursor: text;
+  }
+
   button:disabled,
-  [role='button'][aria-disabled='true'],
+  [role="button"][aria-disabled="true"],
   input:disabled,
   select:disabled,
   textarea:disabled {

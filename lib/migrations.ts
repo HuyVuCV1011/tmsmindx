@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 
 // ============================================================
-// Hệ thống Migration tự động cho TMS
+// Hệ thống Migration tự động cho TPS
 // Khi chạy app, tất cả tables sẽ được tạo tự động nếu chưa có
 // Thêm chức năng mới → thêm migration vào danh sách → restart app
 // ============================================================
@@ -1053,6 +1053,137 @@ const migrations: Migration[] = [
       BEFORE UPDATE ON hr_gen_attendance_records
       FOR EACH ROW
       EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V42: K12 docs content management (draft + published)
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V42_k12_docs_management',
+    version: 42,
+    sql: `
+      CREATE TABLE IF NOT EXISTS k12_documents (
+        id SERIAL PRIMARY KEY,
+        slug VARCHAR(400) NOT NULL UNIQUE,
+        title VARCHAR(500) NOT NULL,
+        relative_path VARCHAR(600) NOT NULL UNIQUE,
+        content TEXT NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft'
+          CHECK (status IN ('draft', 'published')),
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_by_email VARCHAR(255),
+        updated_by_email VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_k12_documents_status ON k12_documents(status);
+      CREATE INDEX IF NOT EXISTS idx_k12_documents_sort_order ON k12_documents(sort_order);
+
+      DROP TRIGGER IF EXISTS trg_k12_documents_updated_at ON k12_documents;
+      CREATE TRIGGER trg_k12_documents_updated_at
+      BEFORE UPDATE ON k12_documents
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+
+      INSERT INTO app_permissions (user_id, route_path, can_access)
+      SELECT u.id, '/admin/page2/manage', true
+      FROM app_users u
+      WHERE u.role = 'super_admin'
+      ON CONFLICT (user_id, route_path) DO NOTHING;
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V43: K12 docs article metadata (topic, excerpt, cover)
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V43_k12_docs_article_fields',
+    version: 43,
+    sql: `
+      ALTER TABLE k12_documents
+      ADD COLUMN IF NOT EXISTS topic VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS excerpt TEXT,
+      ADD COLUMN IF NOT EXISTS cover_image_url TEXT;
+
+      CREATE INDEX IF NOT EXISTS idx_k12_documents_topic ON k12_documents(topic);
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V44: K12 CMS hierarchy (section + parent tree)
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V44_k12_docs_cms_hierarchy',
+    version: 44,
+    sql: `
+      ALTER TABLE k12_documents
+      ADD COLUMN IF NOT EXISTS type VARCHAR(20) NOT NULL DEFAULT 'article',
+      ADD COLUMN IF NOT EXISTS section_id INTEGER,
+      ADD COLUMN IF NOT EXISTS parent_id INTEGER,
+      ADD COLUMN IF NOT EXISTS content_format VARCHAR(20) NOT NULL DEFAULT 'html';
+
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.table_constraints
+          WHERE constraint_name = 'k12_documents_type_check'
+        ) THEN
+          ALTER TABLE k12_documents
+          ADD CONSTRAINT k12_documents_type_check CHECK (type IN ('section', 'article'));
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.table_constraints
+          WHERE constraint_name = 'k12_documents_content_format_check'
+        ) THEN
+          ALTER TABLE k12_documents
+          ADD CONSTRAINT k12_documents_content_format_check CHECK (content_format IN ('html', 'json'));
+        END IF;
+      END $$;
+
+      CREATE INDEX IF NOT EXISTS idx_k12_documents_type ON k12_documents(type);
+      CREATE INDEX IF NOT EXISTS idx_k12_documents_section_id ON k12_documents(section_id);
+      CREATE INDEX IF NOT EXISTS idx_k12_documents_parent_id ON k12_documents(parent_id);
+
+      DO $$
+      DECLARE
+        root_section_id INTEGER;
+      BEGIN
+        INSERT INTO k12_documents (
+          slug, title, relative_path, content, topic, excerpt, cover_image_url, type, status, sort_order, created_by_email, updated_by_email
+        )
+        SELECT
+          'quy-trinh-quy-dinh-danh-cho-giao-vien',
+          'Quy Trình, Quy Định K12 Teaching',
+          'quy-trinh-quy-dinh-danh-cho-giao-vien/index.md',
+          '',
+          'Quy Trình, Quy Định K12 Teaching',
+          'Tất cả quy trình, quy định và tài liệu K12 Teaching.',
+          NULL,
+          'section',
+          'published',
+          0,
+          'system',
+          'system'
+        WHERE NOT EXISTS (
+          SELECT 1 FROM k12_documents WHERE slug = 'quy-trinh-quy-dinh-danh-cho-giao-vien' AND type = 'section'
+        );
+
+        SELECT id INTO root_section_id
+        FROM k12_documents
+        WHERE slug = 'quy-trinh-quy-dinh-danh-cho-giao-vien' AND type = 'section'
+        LIMIT 1;
+
+        IF root_section_id IS NOT NULL THEN
+          UPDATE k12_documents
+          SET section_id = root_section_id
+          WHERE type = 'article' AND section_id IS NULL;
+        END IF;
+      END $$;
     `,
   },
 ];

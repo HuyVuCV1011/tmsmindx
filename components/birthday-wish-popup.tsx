@@ -535,23 +535,13 @@ export function BirthdayWishPopup({
                                     <div className="absolute bottom-8 left-8 text-red-300 text-lg opacity-70 z-10" data-export="star">★</div>
                                     <div className="absolute bottom-10 right-6 text-red-300 text-lg opacity-70 z-10" data-export="star">★</div>
 
-                                    <div className="text-center relative z-20" data-export="header">
-                                        <p className="text-[#b11226] text-[34px] sm:text-[42px] font-black leading-[1.04] tracking-tight mt-3" data-export="title">
-                                            Chúc mừng sinh nhật
-                                        </p>
-                                        <div className="mt-2 space-y-1.5">
-                                            {visibleBirthdays.length > 0 ? (
-                                                visibleBirthdays.map((person, index) => (
-                                                    <div key={`${person.name}-${index}`} className="text-red-700">
-                                                        <p className="text-[30px] sm:text-[38px] font-black leading-tight tracking-tight" data-export="name">{person.name}</p>
-                                                        <p className="text-base sm:text-lg text-red-500 font-medium" data-export="date">{person.date}</p>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <p className="text-red-600 text-base" data-export="name">Đội ngũ giáo viên MindX</p>
-                                            )}
-                                        </div>
-                                    </div>
+                                    <p
+                                        className="mt-3 text-center relative z-20 text-[34px] leading-none tracking-wide text-[#b11226] drop-shadow-[0_2px_2px_rgba(0,0,0,0.08)] sm:text-[44px]"
+                                        style={{ fontFamily: 'Kaushan Script, cursive' }}
+                                        data-export="title"
+                                    >
+                                        Happy Birthday
+                                    </p>
                                     <div className="mt-4 flex items-center justify-center relative z-20" data-export="cake">
                                         <Image
                                             src="/images/mindx-birthday-cake.png"
@@ -563,6 +553,21 @@ export function BirthdayWishPopup({
                                             unoptimized
                                             data-export="cake-image"
                                         />
+                                    </div>
+
+                                    <div className="mt-3 text-center relative z-20" data-export="header">
+                                        <div className="space-y-1.5">
+                                            {visibleBirthdays.length > 0 ? (
+                                                visibleBirthdays.map((person, index) => (
+                                                    <div key={`${person.name}-${index}`} className="text-red-700">
+                                                        <p className="text-[30px] sm:text-[38px] font-black leading-tight tracking-tight" data-export="name">{person.name}</p>
+                                                        <p className="text-base sm:text-lg text-red-500 font-medium" data-export="date">{person.date}</p>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <p className="text-red-600 text-base" data-export="name">Đội ngũ giáo viên MindX</p>
+                                            )}
+                                        </div>
                                     </div>
 
                                     <div className="mt-3 rounded-2xl bg-white/90 border border-rose-300 border-dashed p-3 text-center min-h-18 flex items-center justify-center relative z-20 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]" data-export="wish">

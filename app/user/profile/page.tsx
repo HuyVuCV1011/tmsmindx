@@ -265,7 +265,7 @@ export default function TeacherProfilePage() {
 
     return (
         <PageContainer padding="lg">
-            <div className="max-w-6xl mx-auto space-y-8">
+            <div className="max-w-7xl mx-auto space-y-8">
                 
                 {/* Profile Header */}
                 <div className="bg-linear-to-br from-blue-600 via-blue-700 to-indigo-700 rounded-3xl p-8 text-white shadow-2xl">
