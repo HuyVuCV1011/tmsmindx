@@ -286,22 +286,12 @@ export default function GiaiTrinhPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <PageHeader
-        title="Giải Trình Không Tham Gia Kiểm Tra"
-        description="Quản lý và theo dõi các giải trình của bạn"
-        actions={
-          <Button
-            onClick={() => setShowModal(true)}
-            size="lg"
-            className="whitespace-nowrap shadow-sm"
-          >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Tạo Giải Trình Mới
-          </Button>
-        }
-      />
+      <div className="w-full mb-6">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Giải Trình Không Tham Gia Kiểm Tra</h1>
+          <p className="mt-1 text-sm text-gray-600">Quản lý và theo dõi các giải trình của bạn</p>
+        </div>
+      </div>
 
       {/* Modal Form - Responsive for mobile */}
       <Modal
@@ -500,10 +490,20 @@ export default function GiaiTrinhPage() {
         <div className="bg-white rounded-xl shadow-md overflow-hidden">
           <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-linear-to-r from-gray-50 to-white">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Danh Sách Giải Trình</h2>
-              <p className="text-sm text-gray-600">
-                <span className="font-medium text-gray-900">{explanations.length}</span> giải trình
-              </p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Danh Sách Giải Trình</h2>
+                <span className="text-xs text-gray-500 font-normal">({explanations.length} giải trình)</span>
+              </div>
+              <Button
+                onClick={() => setShowModal(true)}
+                size="sm"
+                className="whitespace-nowrap shadow-sm bg-gradient-to-r from-[#a1001f] to-[#c41230] hover:from-[#8a001a] hover:to-[#a8102a] text-white border-0"
+              >
+                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Tạo Giải Trình Mới
+              </Button>
             </div>
           </div>
           

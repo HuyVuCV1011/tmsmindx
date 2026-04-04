@@ -162,7 +162,17 @@ function formatDateOnly(date: Date) {
 }
 
 function combineDateAndTime(date: string, time: string) {
-  return `${date}T${time}`;
+  // Build a Date in local (browser) time so we preserve the admin's intended VN wall-clock.
+  // Appending the local timezone offset makes the API round-trip timezone-independent.
+  const [h, m] = (time || '00:00').split(':').map(Number);
+  const [y, mo, d] = (date || '').split('-').map(Number);
+  const dt = new Date(y, mo - 1, d, h || 0, m || 0, 0, 0);
+  const offsetMinutes = -dt.getTimezoneOffset(); // e.g. 420 for UTC+7
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absOff = Math.abs(offsetMinutes);
+  const oh = Math.floor(absOff / 60).toString().padStart(2, '0');
+  const om = (absOff % 60).toString().padStart(2, '0');
+  return `${date}T${time}:00${sign}${oh}:${om}`; // e.g. "2026-04-05T22:30:00+07:00"
 }
 
 function formatEventTimeRange(startAt: string, endAt: string) {
