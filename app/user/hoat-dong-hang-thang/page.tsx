@@ -1073,8 +1073,18 @@ export default function MonthlyActivitiesPage() {
       return;
     }
 
+    const preselectedOptions = REGISTER_OPTIONS.filter((option) => {
+      const examEvents = upcomingExamEventsByOption[option] || [];
+      const preferredEventId =
+        selectedExamEventByOption[option] || examEvents[0]?.id || "";
+      if (!preferredEventId) {
+        return false;
+      }
+      return (registeredExamEventIdsByOption[option] || []).includes(preferredEventId);
+    });
+
     setShowDayEventsModal(false);
-    setSelectedOptions([]);
+    setSelectedOptions(preselectedOptions);
     setSelectedExamEventByOption({});
     setSelectedRegistrationEvent(registrationEvent);
     setShowRegisterModal(true);
@@ -1212,7 +1222,7 @@ export default function MonthlyActivitiesPage() {
             source_form: sourceForm,
             open_at: scheduledAt.toISOString(),
             close_at: closeAt.toISOString(),
-            scheduled_event_id: registrationEvent.id,
+            scheduled_event_id: targetEventId,
             teacher_info: teacherAutoFillData,
           }),
         });

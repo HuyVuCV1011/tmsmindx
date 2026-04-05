@@ -657,84 +657,74 @@ export async function PATCH(request: Request) {
     if (hasChuyenSauExplanationTable) {
       const mappedStatus = status === 'accepted' ? 'accepted' : 'rejected';
 
-      if (explanationAssignmentId) {
-        await client.query(
-          `INSERT INTO chuyen_sau_giaitrinh (
-             assignment_id,
-             teacher_code,
-             email,
-             reason,
-             status,
-             reviewer_email,
-             reviewer_note,
-             reviewed_at,
-             explanation_id,
-             registration_id,
-             updated_at
-           )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9, NOW())
-           ON CONFLICT (assignment_id)
-           DO UPDATE SET
-             teacher_code = EXCLUDED.teacher_code,
-             email = EXCLUDED.email,
-             reason = EXCLUDED.reason,
-             status = EXCLUDED.status,
-             reviewer_email = EXCLUDED.reviewer_email,
-             reviewer_note = EXCLUDED.reviewer_note,
-             reviewed_at = EXCLUDED.reviewed_at,
-             explanation_id = EXCLUDED.explanation_id,
-             registration_id = COALESCE(EXCLUDED.registration_id, chuyen_sau_giaitrinh.registration_id),
-             updated_at = NOW()`,
-          [
-            explanationAssignmentId,
-            explanation.lms_code,
-            explanation.email,
-            explanation.reason,
-            mappedStatus,
-            admin_email,
-            admin_note,
-            explanation.id,
-            explanationRegistrationId,
-          ]
-        );
-      } else {
-        await client.query(
-          `INSERT INTO chuyen_sau_giaitrinh (
-             assignment_id,
-             teacher_code,
-             email,
-             reason,
-             status,
-             reviewer_email,
-             reviewer_note,
-             reviewed_at,
-             explanation_id,
-             registration_id,
-             updated_at
-           )
-           VALUES (NULL, $1, $2, $3, $4, $5, $6, NOW(), $7, $8, NOW())
-           ON CONFLICT (explanation_id)
-           DO UPDATE SET
-             teacher_code = EXCLUDED.teacher_code,
-             email = EXCLUDED.email,
-             reason = EXCLUDED.reason,
-             status = EXCLUDED.status,
-             reviewer_email = EXCLUDED.reviewer_email,
-             reviewer_note = EXCLUDED.reviewer_note,
-             reviewed_at = EXCLUDED.reviewed_at,
-             registration_id = COALESCE(EXCLUDED.registration_id, chuyen_sau_giaitrinh.registration_id),
-             updated_at = NOW()`,
-          [
-            explanation.lms_code,
-            explanation.email,
-            explanation.reason,
-            mappedStatus,
-            admin_email,
-            admin_note,
-            explanation.id,
-            explanationRegistrationId,
-          ]
-        );
+      const syncValues = [
+        explanationAssignmentId,
+        explanation.lms_code,
+        explanation.email,
+        explanation.reason,
+        mappedStatus,
+        admin_email,
+        admin_note,
+        explanation.id,
+        explanationRegistrationId,
+      ];
+
+      const updateByExplanation = await client.query(
+        `UPDATE chuyen_sau_giaitrinh
+         SET assignment_id = COALESCE($1, assignment_id),
+             teacher_code = $2,
+             email = $3,
+             reason = $4,
+             status = $5,
+             reviewer_email = $6,
+             reviewer_note = $7,
+             reviewed_at = NOW(),
+             registration_id = COALESCE($9, registration_id),
+             updated_at = NOW()
+         WHERE explanation_id = $8`,
+        syncValues
+      );
+
+      if ((updateByExplanation.rowCount ?? 0) === 0) {
+        try {
+          await client.query(
+            `INSERT INTO chuyen_sau_giaitrinh (
+               assignment_id,
+               teacher_code,
+               email,
+               reason,
+               status,
+               reviewer_email,
+               reviewer_note,
+               reviewed_at,
+               explanation_id,
+               registration_id,
+               updated_at
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9, NOW())`,
+            syncValues
+          );
+        } catch (syncError: any) {
+          if (syncError?.code !== '23505') {
+            throw syncError;
+          }
+
+          await client.query(
+            `UPDATE chuyen_sau_giaitrinh
+             SET assignment_id = COALESCE($1, assignment_id),
+                 teacher_code = $2,
+                 email = $3,
+                 reason = $4,
+                 status = $5,
+                 reviewer_email = $6,
+                 reviewer_note = $7,
+                 reviewed_at = NOW(),
+                 registration_id = COALESCE($9, registration_id),
+                 updated_at = NOW()
+             WHERE explanation_id = $8`,
+            syncValues
+          );
+        }
       }
     }
 
