@@ -4,16 +4,24 @@ import { Card } from "@/components/Card";
 import Modal from "@/components/Modal";
 import { PageContainer } from "@/components/PageContainer";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ListChecks, PlusCircle, Shuffle, Star, SquarePen, Trash2 } from "lucide-react";
+import { ArrowLeft, ListChecks, PlusCircle, Shuffle, SquarePen, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { ExamSetRecord, getSetsBySubject, getSubjectById, inferLevel } from "../../subject-mapping";
+import {
+    ExamSetRecord,
+    ExamSubjectRecord,
+    SubjectConfig,
+    getSetsBySubject,
+    inferLevel,
+    mapSubjectRecordToConfig,
+} from "../../subject-mapping";
 
 export default function SubjectDetailPage() {
   const params = useParams<{ subjectId: string }>();
   const subjectId = params?.subjectId;
+  const [subject, setSubject] = useState<SubjectConfig | null>(null);
   const [sets, setSets] = useState<ExamSetRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingSetId, setDeletingSetId] = useState<number | null>(null);
@@ -21,8 +29,6 @@ export default function SubjectDetailPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [setName, setSetName] = useState("");
-  const [totalPoints, setTotalPoints] = useState(10);
-  const [passingScore, setPassingScore] = useState(7);
   const [status, setStatus] = useState<"active" | "inactive">("active");
 
   // ─── Monthly selection state ───────────────────────────────────────
@@ -45,11 +51,6 @@ export default function SubjectDetailPage() {
   const [isRemovingSelection, setIsRemovingSelection] = useState(false);
   const [subjectDbId, setSubjectDbId] = useState<number | null>(null);
 
-  const subject = useMemo(() => {
-    if (!subjectId) return undefined;
-    return getSubjectById(subjectId);
-  }, [subjectId]);
-
   const subjectSets = useMemo(() => {
     if (!subject) return [];
     return getSetsBySubject(sets, subject);
@@ -66,7 +67,7 @@ export default function SubjectDetailPage() {
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/exam-sets?subject_code=${encodeURIComponent(subject.label)}`);
+      const response = await fetch(`/api/exam-sets?subject_key=${encodeURIComponent(subject.subjectKey)}`);
       const data = await response.json();
 
       if (data.success) {
@@ -85,14 +86,44 @@ export default function SubjectDetailPage() {
   };
 
   useEffect(() => {
+    if (!subjectId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch('/api/exam-subjects');
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          if (!cancelled) setSubject(null);
+          return;
+        }
+
+        const found = ((data.data || []) as ExamSubjectRecord[]).find(
+          (item) => String(item.id) === String(subjectId)
+        );
+
+        if (!cancelled) {
+          setSubject(found ? mapSubjectRecordToConfig(found) : null);
+        }
+      } catch {
+        if (!cancelled) setSubject(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [subjectId]);
+
+  useEffect(() => {
     fetchSets();
-  }, [subject?.label]);
+  }, [subject?.subjectKey]);
 
   // Fetch monthly selection cho tháng hiện tại
   const fetchMonthlySelection = async (dbId: number) => {
     try {
       const res = await fetch(
-        `/api/monthly-exam-selections?subject_id=${dbId}&year=${currentYear}&month=${currentMonth}`
+        `/api/chuyensau-chonde-monhoc?subject_id=${dbId}&year=${currentYear}&month=${currentMonth}`
       );
       const data = await res.json();
       if (data.success && data.data) {
@@ -119,8 +150,6 @@ export default function SubjectDetailPage() {
 
   const resetCreateForm = () => {
     setSetName("");
-    setTotalPoints(10);
-    setPassingScore(7);
     setStatus("active");
   };
 
@@ -138,12 +167,7 @@ export default function SubjectDetailPage() {
     }
 
     if (!setName.trim()) {
-      toast.error("Vui lòng nhập tên đề");
-      return;
-    }
-
-    if (passingScore > totalPoints) {
-      toast.error("Điểm đạt không được lớn hơn tổng điểm");
+      toast.error("Vui lòng nhập ghi chú bộ đề");
       return;
     }
 
@@ -155,11 +179,10 @@ export default function SubjectDetailPage() {
         body: JSON.stringify({
           exam_type: subject.examType,
           block_code: subject.blockCode,
+          subject_key: subject.subjectKey,
           subject_code: subject.label,
           subject_name: subject.label,
           set_name: setName.trim(),
-          total_points: totalPoints,
-          passing_score: passingScore,
           status,
         }),
       });
@@ -251,7 +274,7 @@ export default function SubjectDetailPage() {
 
     try {
       setIsSavingDefault(true);
-      const res = await fetch("/api/monthly-exam-selections", {
+      const res = await fetch('/api/chuyensau-chonde-monhoc', {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -283,7 +306,7 @@ export default function SubjectDetailPage() {
     }
     try {
       setIsRandomizing(true);
-      const res = await fetch("/api/monthly-exam-selections", {
+      const res = await fetch('/api/chuyensau-chonde-monhoc', {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subject_id: subjectDbId, year: currentYear, month: currentMonth }),
@@ -294,7 +317,7 @@ export default function SubjectDetailPage() {
         return;
       }
       await fetchMonthlySelection(subjectDbId);
-      toast.success(`Đã chọn ngẫu nhiên: ${data.picked?.set_code} – ${data.picked?.set_name}`);
+      toast.success(`Đã chọn ngẫu nhiên: ${data.picked?.set_code}${data.picked?.set_name ? ` • Ghi chú: ${data.picked?.set_name}` : ""}`);
     } catch {
       toast.error("Có lỗi xảy ra khi chọn ngẫu nhiên");
     } finally {
@@ -311,8 +334,8 @@ export default function SubjectDetailPage() {
     try {
       setIsRemovingSelection(true);
       const response = await fetch(
-        `/api/monthly-exam-selections?subject_id=${subjectDbId}&year=${currentYear}&month=${currentMonth}`,
-        { method: "DELETE" }
+        `/api/chuyensau-chonde-monhoc?subject_id=${subjectDbId}&year=${currentYear}&month=${currentMonth}`,
+        { method: 'DELETE' }
       );
       const data = await response.json();
       if (!response.ok || !data.success) {
@@ -333,7 +356,7 @@ export default function SubjectDetailPage() {
     return (
       <PageContainer title="Chi tiết bộ đề theo môn" description="Không tìm thấy môn học.">
         <Link
-          href="/admin/page4/thu-vien-de"
+          href="/admin/thu-vien-de"
           className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -350,7 +373,7 @@ export default function SubjectDetailPage() {
     >
       <div className="mb-4 flex items-center justify-between gap-2">
         <Link
-          href="/admin/page4/thu-vien-de"
+          href="/admin/thu-vien-de"
           className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -390,8 +413,11 @@ export default function SubjectDetailPage() {
                 {monthlySelection.selection_mode === "random" ? " (Ngẫu nhiên)" : " (Mặc định)"}
               </p>
               <p className="truncate text-sm font-semibold text-gray-900">
-                {monthlySelection.set_code} — {monthlySelection.set_name}
+                {monthlySelection.set_code}
               </p>
+              {monthlySelection.set_name ? (
+                <p className="truncate text-xs text-gray-600">Ghi chú: {monthlySelection.set_name}</p>
+              ) : null}
               <p className={cn(
                 "text-xs font-medium",
                 Number(monthlySelection.question_count || 0) > 0 ? "text-green-700" : "text-red-700"
@@ -484,8 +510,11 @@ export default function SubjectDetailPage() {
                         {set.question_count || 0} câu
                       </span>
                     </div>
-                    <p className="truncate text-sm text-gray-600">{set.set_name}</p>
-                    <p className="text-xs text-gray-500">{set.total_points} điểm • Đạt {set.passing_score}</p>
+                    {set.set_name ? (
+                      <p className="truncate text-sm text-gray-600">Ghi chú: {set.set_name}</p>
+                    ) : (
+                      <p className="truncate text-sm text-gray-400">Chưa có ghi chú</p>
+                    )}
                     {Number(set.question_count || 0) <= 0 && (
                       <p className="text-xs font-semibold text-red-600">Chưa có câu hỏi, không được dùng để phân công.</p>
                     )}
@@ -501,7 +530,7 @@ export default function SubjectDetailPage() {
                       {set.status}
                     </span>
                     <Link
-                      href={`/admin/page4/thu-vien-de/questions?set_id=${set.id}`}
+                      href={`/admin/thu-vien-de/questions?set_id=${set.id}`}
                       className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                     >
                       <SquarePen className="h-3.5 w-3.5" />
@@ -551,36 +580,13 @@ export default function SubjectDetailPage() {
       >
         <form onSubmit={handleCreateSet} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Tên đề</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Ghi chú bộ đề</label>
             <input
               value={setName}
               onChange={(e) => setSetName(e.target.value)}
-              placeholder="Nhập tên bộ đề"
+              placeholder="Ví dụ: Bản dùng cho đánh giá giữa kỳ"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Tổng điểm</label>
-              <input
-                type="number"
-                min={1}
-                value={totalPoints}
-                onChange={(e) => setTotalPoints(Number(e.target.value || 10))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Điểm đạt</label>
-              <input
-                type="number"
-                min={0}
-                value={passingScore}
-                onChange={(e) => setPassingScore(Number(e.target.value || 7))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
           </div>
 
           <div>
@@ -637,7 +643,7 @@ export default function SubjectDetailPage() {
               {usableSubjectSets
                 .map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.set_code} – {s.set_name} ({s.question_count || 0} câu)
+                    {s.set_code}{s.set_name ? ` • Ghi chú: ${s.set_name}` : ""} ({s.question_count || 0} câu)
                   </option>
                 ))}
             </select>

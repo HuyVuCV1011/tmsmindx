@@ -2,7 +2,6 @@
 
 
 import Modal from '@/components/Modal';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Stepper } from '@/components/ui/stepper';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -15,6 +14,7 @@ import toast from 'react-hot-toast';
 
 interface Explanation {
   id: number;
+  assignment_id?: number;
   teacher_name: string;
   lms_code: string;
   email: string;
@@ -57,6 +57,7 @@ export default function GiaiTrinhPage() {
   const [selectedExplanation, setSelectedExplanation] = useState<Explanation | null>(null);
 
   const [formData, setFormData] = useState({
+    assignment_id: '',
     teacher_name: '',
     lms_code: '',
     email: user?.email || '',
@@ -180,6 +181,7 @@ export default function GiaiTrinhPage() {
 
     setFormData((prev) => ({
       ...prev,
+      assignment_id: prefillAssignmentId || prev.assignment_id,
       campus: prefillCampus || prev.campus,
       subject: prefillSubject || prev.subject,
       test_date: normalizedDate || prev.test_date,

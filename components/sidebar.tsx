@@ -108,7 +108,7 @@ export function Sidebar() {
             // { href: "/admin/page4/form-dang-ky", label: "Form đăng ký kiểm tra" }, 
             { href: "/admin/page4/danh-sach-dang-ky", label: "Danh sách Giáo viên đăng ký" },
             { href: "/admin/giaitrinh", label: "Quản lý Giải trình"},
-            { href: "/admin/page4/thu-vien-de", label: "Thư viện đề chuyên môn" },
+            { href: "/admin/thu-vien-de", label: "Thư viện đề chuyên môn" },
           ]
         },
       ]
@@ -162,6 +162,16 @@ export function Sidebar() {
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
+  const getRoutePermissionAliases = (path: string) => {
+    if (path === '/admin/thu-vien-de') {
+      return ['/admin/thu-vien-de', '/admin/page4/thu-vien-de'];
+    }
+    if (path === '/admin/page4/thu-vien-de') {
+      return ['/admin/page4/thu-vien-de', '/admin/thu-vien-de'];
+    }
+    return [path];
+  };
+
   const isMenuItemActive = (item: any): boolean => {
     if (item?.submenu && Array.isArray(item.submenu)) {
       return item.submenu.some((child: any) => isMenuItemActive(child));
@@ -188,7 +198,10 @@ export function Sidebar() {
 
     const hasPermissionForHref = (href: string) => {
       const targetPath = href.split('?')[0];
-      return permissions.some((p) => targetPath === p || targetPath.startsWith(`${p}/`));
+      const candidatePaths = getRoutePermissionAliases(targetPath);
+      return permissions.some((p) =>
+        candidatePaths.some((candidate) => candidate === p || candidate.startsWith(`${p}/`))
+      );
     };
 
     const filterMenuItemsByPermissions = (items: any[]): any[] => {

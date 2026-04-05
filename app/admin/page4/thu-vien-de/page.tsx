@@ -5,17 +5,28 @@ import Modal from "@/components/Modal";
 import { PageContainer } from "@/components/PageContainer";
 import { SkeletonCard } from "@/components/skeletons";
 import { cn } from "@/lib/utils";
-import { BlockCode, ExamSetRecord, SUBJECT_CONFIGS, getSetsBySubject, inferLevel } from "./subject-mapping";
-import { Bot, CalendarDays, CheckCircle2, Code2, GripVertical, Palette, PlusCircle, ChevronLeft, ChevronRight, Settings2, Trash2 } from "lucide-react";
+import { Bot, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Code2, GripVertical, Palette, PlusCircle, Settings2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import {
+  BlockCode,
+  ExamSetRecord,
+  ExamSubjectRecord,
+  SubjectConfig,
+  getSetsBySubject,
+  inferLevel,
+  mapSubjectRecordToConfig,
+} from "./subject-mapping";
 
 interface EvaluationEvent {
   id: string;
+  title: string;
   specialty: string;
   startAt: string;
   endAt: string;
+  registrationTemplate?: "official" | "supplement" | null;
+  metadata?: Record<string, any>;
   eventType?: "registration" | "exam" | "workshop_teaching" | "meeting" | "advanced_training_release" | "holiday";
 }
 
@@ -33,6 +44,7 @@ interface PlannedEvent {
   flowRound: number;
   selectedSetId: number | null;
   isGeneratedSupplement?: boolean;
+  sourceEventId?: string | null;
 }
 
 interface MonthlyDefaultSelection {
@@ -136,8 +148,8 @@ function toIsoUtcFromLocal(dateKey: string, timeStr: string) {
 }
 
 function getSubjectDurationMinutes(subjectId: string) {
-  const subject = SUBJECT_CONFIGS.find((item) => item.id === subjectId);
-  return subject?.durationMinutes ?? 120;
+  if (subjectId.startsWith('registration-')) return 24 * 60 - 1;
+  return 120;
 }
 
 function daysInMonth(year: number, month: number) {
@@ -271,15 +283,19 @@ const BLOCK_CONFIGS: BlockConfig[] = [
 
 
 export default function ProfessionalAssignmentLibraryPage() {
+  const [subjectConfigs, setSubjectConfigs] = useState<SubjectConfig[]>([]);
   const [sets, setSets] = useState<ExamSetRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isCreateSubjectModalOpen, setIsCreateSubjectModalOpen] = useState(false);
+  const [isCreatingSubject, setIsCreatingSubject] = useState(false);
+  const [newSubjectName, setNewSubjectName] = useState("");
+  const [newSubjectBlockCode, setNewSubjectBlockCode] = useState<BlockCode>("CODING");
+  const [newSubjectDurationMinutes, setNewSubjectDurationMinutes] = useState(120);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [selectedBlockCode, setSelectedBlockCode] = useState<BlockCode>("CODING");
-  const [selectedSubjectId, setSelectedSubjectId] = useState("cod-scratch");
+  const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [setName, setSetName] = useState("");
-  const [totalPoints, setTotalPoints] = useState(10);
-  const [passingScore, setPassingScore] = useState(7);
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [scheduleEvents, setScheduleEvents] = useState<EvaluationEvent[]>([]);
 
@@ -300,14 +316,9 @@ export default function ProfessionalAssignmentLibraryPage() {
   });
   const [autoStartTime, setAutoStartTime] = useState("19:00");
   const [isDurationSettingsOpen, setIsDurationSettingsOpen] = useState(false);
+  const [isSavingDurationSettings, setIsSavingDurationSettings] = useState(false);
   const [durationFocusSubjectId, setDurationFocusSubjectId] = useState<string | null>(null);
-  const [subjectDurations, setSubjectDurations] = useState<Record<string, number>>(() => {
-    const next: Record<string, number> = {};
-    SUBJECT_CONFIGS.filter((s) => s.examType === "expertise" || s.examType === "experience").forEach((s) => {
-      next[s.id] = s.durationMinutes ?? 120;
-    });
-    return next;
-  });
+  const [subjectDurations, setSubjectDurations] = useState<Record<string, number>>({});
 
   const [plannedEvents, setPlannedEvents] = useState<PlannedEvent[]>([]);
   const [monthlyDefaultBySubjectId, setMonthlyDefaultBySubjectId] = useState<Record<string, MonthlyDefaultSelection>>({});
@@ -332,8 +343,8 @@ export default function ProfessionalAssignmentLibraryPage() {
   const [focusDate, setFocusDate] = useState(new Date());
 
   const examDurationConfigSubjects = useMemo(() => {
-    return SUBJECT_CONFIGS.filter((s) => s.examType === "expertise" || s.examType === "experience");
-  }, []);
+    return subjectConfigs.filter((s) => s.examType === "expertise" || s.examType === "experience");
+  }, [subjectConfigs]);
 
   const durationSubjectsForModal = useMemo(() => {
     if (!durationFocusSubjectId) return examDurationConfigSubjects;
@@ -341,7 +352,8 @@ export default function ProfessionalAssignmentLibraryPage() {
   }, [examDurationConfigSubjects, durationFocusSubjectId]);
 
   const getEffectiveDurationMinutes = (subjectId: string) => {
-    return subjectDurations[subjectId] ?? getSubjectDurationMinutes(subjectId);
+    const subject = subjectConfigs.find((item) => item.id === subjectId);
+    return subjectDurations[subjectId] ?? subject?.durationMinutes ?? getSubjectDurationMinutes(subjectId);
   };
 
   const openDurationSettings = (subjectId?: string) => {
@@ -472,7 +484,7 @@ export default function ProfessionalAssignmentLibraryPage() {
     const month = parsed?.month ?? (fallbackNow.getMonth() + 1);
 
     const subjectSelections = await Promise.all(
-      SUBJECT_CONFIGS
+      subjectConfigs
         .filter((s) => s.examType === "expertise" || s.examType === "experience")
         .map(async (subjectConfig) => {
           const matchedSets = getSetsBySubject(sets, subjectConfig);
@@ -491,7 +503,7 @@ export default function ProfessionalAssignmentLibraryPage() {
           const candidateSelections = await Promise.all(
             candidateSubjectDbIds.map(async (subjectDbId) => {
               const response = await fetch(
-                `/api/monthly-exam-selections?subject_id=${subjectDbId}&year=${year}&month=${month}`
+                `/api/chuyensau-chonde-monhoc?subject_id=${subjectDbId}&year=${year}&month=${month}`
               );
               const data = await response.json();
 
@@ -573,12 +585,128 @@ export default function ProfessionalAssignmentLibraryPage() {
         await fetchSets();
       }
 
+      const latestScheduleEvents = await fetchScheduleEvents();
+
       if (autoCreatePrepareTokenRef.current !== prepareToken) return;
 
       const monthlyDefaults = await loadMonthlyDefaultsForAutoCreate(startDateForCreate);
       if (autoCreatePrepareTokenRef.current !== prepareToken) return;
 
-      const eligibleExamSubjects = SUBJECT_CONFIGS
+      const existingMonthlyTemplates = (() => {
+        const toDateKey = (value: string) => {
+          const parsed = new Date(value);
+          if (Number.isNaN(parsed.getTime())) return "";
+          return formatDateKey(parsed);
+        };
+
+        const toTimeKey = (value: string) => {
+          const parsed = new Date(value);
+          if (Number.isNaN(parsed.getTime())) return "00:00";
+          return `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
+        };
+
+        const inRange = (dateKey: string) => dateKey >= startDateForCreate && dateKey <= endDateForCreate;
+
+        const registrationMap = new Map<string, PlannedEvent>();
+        const examMap = new Map<string, PlannedEvent>();
+
+        latestScheduleEvents
+          .filter((event) => (event.eventType || "exam") === "registration")
+          .forEach((event) => {
+            const metadata = event.metadata || {};
+            const occurrenceDate = String(metadata.occurrence_date || toDateKey(event.startAt));
+            if (!occurrenceDate || !inRange(occurrenceDate)) return;
+
+            const registrationTemplate =
+              (event.registrationTemplate || metadata.registration_template || "official") as "official" | "supplement";
+            const flowRound = Number(metadata.flow_round || 0);
+            const key = `${registrationTemplate}-${flowRound}`;
+
+            if (registrationMap.has(key)) return;
+
+            const label =
+              registrationTemplate === "supplement"
+                ? `${REGISTRATION_EVENT_LABELS.supplement} #${Math.max(1, flowRound)}`
+                : REGISTRATION_EVENT_LABELS.official;
+
+            registrationMap.set(key, {
+              id: `existing-registration-${key}`,
+              subjectId: `registration-${registrationTemplate}-${flowRound || "official"}`,
+              label,
+              eventKind: "registration",
+              durationMinutes: 24 * 60 - 1,
+              startDate: startDateForCreate,
+              endDate: endDateForCreate,
+              startTime: toTimeKey(event.startAt),
+              endTime: toTimeKey(event.endAt),
+              registrationTemplate,
+              flowRound,
+              selectedSetId: null,
+              isGeneratedSupplement: registrationTemplate === "supplement",
+              sourceEventId: event.id,
+            });
+          });
+
+        latestScheduleEvents
+          .filter((event) => (event.eventType || "exam") === "exam")
+          .forEach((event) => {
+            const metadata = event.metadata || {};
+            const occurrenceDate = String(metadata.occurrence_date || toDateKey(event.startAt));
+            if (!occurrenceDate || !inRange(occurrenceDate)) return;
+
+            const subjectDbId = Number(metadata.subject_id || 0);
+            if (!subjectDbId) return;
+
+            const subjectConfig = subjectConfigs.find((subject) => Number(subject.id) === subjectDbId);
+            if (!subjectConfig) return;
+
+            const registrationTemplate =
+              (event.registrationTemplate || metadata.registration_template || "official") as "official" | "supplement";
+            const flowRound = Number(metadata.flow_round || 0);
+            const key = `${subjectConfig.id}-${registrationTemplate}-${flowRound}`;
+
+            if (examMap.has(key)) return;
+
+            const durationMinutes =
+              Number(metadata.duration_minutes || 0) > 0
+                ? Number(metadata.duration_minutes)
+                : getEffectiveDurationMinutes(subjectConfig.id);
+            const selectedSetId = Number(metadata.selected_set_id || monthlyDefaults[subjectConfig.id]?.setId || 0) || null;
+
+            examMap.set(key, {
+              id: `existing-exam-${key}`,
+              subjectId: subjectConfig.id,
+              label: subjectConfig.label,
+              eventKind: "exam",
+              durationMinutes,
+              startDate: startDateForCreate,
+              endDate: endDateForCreate,
+              startTime: toTimeKey(event.startAt),
+              endTime: toTimeKey(event.endAt),
+              registrationTemplate,
+              flowRound,
+              selectedSetId,
+              isGeneratedSupplement: registrationTemplate === "supplement",
+              sourceEventId: event.id,
+            });
+          });
+
+        if (registrationMap.size === 0 && examMap.size === 0) return [] as PlannedEvent[];
+
+        return [...registrationMap.values(), ...examMap.values()].sort((a, b) => {
+          if (a.eventKind !== b.eventKind) return a.eventKind === "registration" ? -1 : 1;
+          if (a.flowRound !== b.flowRound) return a.flowRound - b.flowRound;
+          return a.label.localeCompare(b.label);
+        });
+      })();
+
+      if (existingMonthlyTemplates.length > 0) {
+        setPlannedEvents(existingMonthlyTemplates);
+        toast.success("Đã nạp lịch tháng cũ từ event_schedules để bạn chỉnh sửa");
+        return;
+      }
+
+      const eligibleExamSubjects = subjectConfigs
         .filter((s) => (s.examType === "expertise" || s.examType === "experience") && monthlyDefaults[s.id]);
 
       if (eligibleExamSubjects.length === 0) {
@@ -610,6 +738,7 @@ export default function ProfessionalAssignmentLibraryPage() {
             flowRound: 0,
             selectedSetId: monthlyDefaults[s.id]?.setId ?? null,
             isGeneratedSupplement: false,
+            sourceEventId: null,
           })),
         ]
       );
@@ -644,25 +773,68 @@ export default function ProfessionalAssignmentLibraryPage() {
     setSubjectDurations(next);
   };
 
-  const applyDurationSettingsToPlannedEvents = () => {
-    const next = plannedEvents.map((evt) => {
-      if (evt.eventKind !== "exam") return evt;
-      const durationMinutes = getEffectiveDurationMinutes(evt.subjectId);
-      return {
-        ...evt,
-        durationMinutes,
-        endTime: addMinutesToTime(evt.startTime, durationMinutes),
-      };
-    });
+  const applyDurationSettingsToPlannedEvents = async () => {
+    try {
+      setIsSavingDurationSettings(true);
 
-    commitPlannedEvents(next);
-    closeDurationSettings();
-    toast.success("Đã áp dụng thời lượng cho từng bộ môn");
+      const subjectsToPersist = durationSubjectsForModal.filter((subject) => {
+        const duration = subjectDurations[subject.id] ?? subject.durationMinutes ?? getSubjectDurationMinutes(subject.id);
+        return Number.isFinite(duration) && duration > 0;
+      });
+
+      if (subjectsToPersist.length > 0) {
+        const persistResults = await Promise.all(
+          subjectsToPersist.map(async (subject) => {
+            const duration = Math.max(
+              1,
+              Math.floor(subjectDurations[subject.id] ?? subject.durationMinutes ?? getSubjectDurationMinutes(subject.id))
+            );
+
+            const response = await fetch('/api/exam-subjects', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: Number(subject.id),
+                duration_minutes: duration,
+              }),
+            });
+
+            const data = await response.json();
+            if (!response.ok || !data?.success) {
+              throw new Error(data?.error || `Không thể cập nhật thời lượng môn ${subject.label}`);
+            }
+          })
+        );
+
+        if (persistResults.length) {
+          await fetchSubjects();
+        }
+      }
+
+      const next = plannedEvents.map((evt) => {
+        if (evt.eventKind !== "exam") return evt;
+        const durationMinutes = getEffectiveDurationMinutes(evt.subjectId);
+        return {
+          ...evt,
+          durationMinutes,
+          endTime: addMinutesToTime(evt.startTime, durationMinutes),
+        };
+      });
+
+      commitPlannedEvents(next);
+      closeDurationSettings();
+      toast.success("Đã lưu thời lượng theo bộ môn và áp dụng lịch");
+    } catch (error: any) {
+      console.error('Error applying subject durations:', error);
+      toast.error(error?.message || 'Không thể lưu thời lượng bộ môn');
+    } finally {
+      setIsSavingDurationSettings(false);
+    }
   };
 
   const groupedByBlock = useMemo(() => {
     return BLOCK_CONFIGS.map((block) => {
-      const subjects = SUBJECT_CONFIGS.filter((subject) => subject.blockCode === block.blockCode).map((subject) => {
+      const subjects = subjectConfigs.filter((subject) => subject.blockCode === block.blockCode).map((subject) => {
         const subjectSets = getSetsBySubject(sets, subject);
 
         return {
@@ -676,7 +848,7 @@ export default function ProfessionalAssignmentLibraryPage() {
         subjects,
       };
     });
-  }, [sets]);
+  }, [sets, subjectConfigs]);
 
   const calendarCells = useMemo(() => buildCalendarCells(focusDate), [focusDate]);
 
@@ -693,7 +865,7 @@ export default function ProfessionalAssignmentLibraryPage() {
 
   const blockOptions = useMemo(() => {
     const blockMap = new Map<BlockCode, string>();
-    SUBJECT_CONFIGS.filter((item) => item.examType === "expertise").forEach((item) => {
+    subjectConfigs.filter((item) => item.examType === "expertise").forEach((item) => {
       if (!blockMap.has(item.blockCode)) {
         blockMap.set(item.blockCode, item.blockCode);
       }
@@ -705,13 +877,13 @@ export default function ProfessionalAssignmentLibraryPage() {
       { value: "ART" as BlockCode, label: "Art" },
       { value: "PROCESS" as BlockCode, label: "Quy trình & trải nghiệm" },
     ].filter((item) => blockMap.has(item.value));
-  }, []);
+  }, [subjectConfigs]);
 
   const subjectOptions = useMemo(() => {
-    return SUBJECT_CONFIGS.filter(
+    return subjectConfigs.filter(
       (subject) => subject.examType === "expertise" && subject.blockCode === selectedBlockCode
     );
-  }, [selectedBlockCode]);
+  }, [subjectConfigs, selectedBlockCode]);
 
   const selectedSubject = useMemo(() => {
     return subjectOptions.find((subject) => subject.id === selectedSubjectId) || subjectOptions[0];
@@ -720,13 +892,39 @@ export default function ProfessionalAssignmentLibraryPage() {
   const activeSetsBySubjectId = useMemo(() => {
     const map = new Map<string, ExamSetRecord[]>();
 
-    SUBJECT_CONFIGS.forEach((subject) => {
+    subjectConfigs.forEach((subject) => {
       const subjectSets = getSetsBySubject(sets, subject).filter((set) => set.status === "active");
       map.set(subject.id, subjectSets);
     });
 
     return map;
-  }, [sets]);
+  }, [sets, subjectConfigs]);
+
+  const fetchSubjects = async () => {
+    try {
+      const response = await fetch('/api/exam-subjects');
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        toast.error(data.error || 'Không thể tải danh sách bộ môn');
+        setSubjectConfigs([]);
+        return;
+      }
+
+      const mapped = ((data.data || []) as ExamSubjectRecord[]).map(mapSubjectRecordToConfig);
+      setSubjectConfigs(mapped);
+      setSubjectDurations((previous) => {
+        const next: Record<string, number> = {};
+        mapped.forEach((subject) => {
+          next[subject.id] = previous[subject.id] ?? subject.durationMinutes ?? 120;
+        });
+        return next;
+      });
+    } catch (error) {
+      console.error('Error fetching exam subjects:', error);
+      toast.error('Có lỗi xảy ra khi tải danh sách bộ môn');
+      setSubjectConfigs([]);
+    }
+  };
 
   useEffect(() => {
     if (sets.length === 0) return;
@@ -799,6 +997,7 @@ export default function ProfessionalAssignmentLibraryPage() {
   };
 
   useEffect(() => {
+    fetchSubjects();
     fetchSets();
   }, []);
 
@@ -812,24 +1011,31 @@ export default function ProfessionalAssignmentLibraryPage() {
 
       const rows = (data.data || []) as Array<{
         id: string;
-        specialty: string | null;
         title: string;
+        specialty: string | null;
         start_at: string;
         end_at: string;
+        registration_template?: "official" | "supplement" | null;
+        metadata?: Record<string, any>;
         event_type: EvaluationEvent['eventType'];
       }>;
 
-      setScheduleEvents(
-        rows.map((item) => ({
-          id: item.id,
-          specialty: item.specialty || item.title,
-          startAt: item.start_at,
-          endAt: item.end_at,
-          eventType: item.event_type,
-        }))
-      );
+      const mapped = rows.map((item) => ({
+        id: item.id,
+        title: item.title,
+        specialty: item.specialty || item.title,
+        startAt: item.start_at,
+        endAt: item.end_at,
+        registrationTemplate: item.registration_template || null,
+        metadata: item.metadata || {},
+        eventType: item.event_type,
+      }));
+
+      setScheduleEvents(mapped);
+      return mapped;
     } catch {
       setScheduleEvents([]);
+      return [] as EvaluationEvent[];
     }
   };
 
@@ -881,18 +1087,77 @@ export default function ProfessionalAssignmentLibraryPage() {
     }
   }, [selectedBlockCode, subjectOptions, selectedSubjectId]);
 
+  useEffect(() => {
+    if (subjectConfigs.length === 0) return;
+    if (!subjectConfigs.some((subject) => subject.blockCode === selectedBlockCode)) {
+      setSelectedBlockCode(subjectConfigs[0].blockCode);
+    }
+  }, [subjectConfigs, selectedBlockCode]);
+
   const resetCreateForm = () => {
-    setSelectedBlockCode("CODING");
-    setSelectedSubjectId("cod-scratch");
+    const firstSubject = subjectConfigs.find((subject) => subject.examType === 'expertise');
+    setSelectedBlockCode(firstSubject?.blockCode || "CODING");
+    setSelectedSubjectId(firstSubject?.id || "");
     setSetName("");
-    setTotalPoints(10);
-    setPassingScore(7);
     setStatus("active");
   };
 
   const handleOpenCreateModal = () => {
     resetCreateForm();
     setIsCreateModalOpen(true);
+  };
+
+  const handleOpenCreateSubjectModal = (blockCode?: BlockCode) => {
+    const nextBlock = blockCode || selectedBlockCode || "CODING";
+    setNewSubjectBlockCode(nextBlock);
+    setNewSubjectName("");
+    setNewSubjectDurationMinutes(nextBlock === "PROCESS" ? 60 : 120);
+    setIsCreateSubjectModalOpen(true);
+  };
+
+  const handleCreateSubject = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!newSubjectName.trim()) {
+      toast.error("Vui lòng nhập tên môn");
+      return;
+    }
+
+    if (!Number.isFinite(newSubjectDurationMinutes) || newSubjectDurationMinutes <= 0) {
+      toast.error("Vui lòng nhập thời lượng hợp lệ");
+      return;
+    }
+
+    try {
+      setIsCreatingSubject(true);
+      const response = await fetch('/api/exam-subjects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          block_code: newSubjectBlockCode,
+          subject_name: newSubjectName.trim(),
+          duration_minutes: Math.max(1, Math.floor(newSubjectDurationMinutes)),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        toast.error(data?.error || 'Không thể tạo môn học');
+        return;
+      }
+
+      toast.success('Đã tạo môn học mới');
+      setIsCreateSubjectModalOpen(false);
+      setNewSubjectName('');
+      setNewSubjectDurationMinutes(newSubjectBlockCode === "PROCESS" ? 60 : 120);
+      setSelectedBlockCode(newSubjectBlockCode);
+      await fetchSubjects();
+    } catch (error) {
+      console.error('Error creating subject:', error);
+      toast.error('Có lỗi xảy ra khi tạo môn học');
+    } finally {
+      setIsCreatingSubject(false);
+    }
   };
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
@@ -1334,7 +1599,12 @@ export default function ProfessionalAssignmentLibraryPage() {
       return;
     }
 
-    const missingSet = scheduledEvents.find((event) => event.eventKind === "exam" && !event.selectedSetId);
+    const missingSet = scheduledEvents.find((event) => {
+      if (event.eventKind !== 'exam') return false;
+      const mode = monthlyDefaultBySubjectId[event.subjectId]?.selectionMode;
+      if (mode === 'random') return false;
+      return !event.selectedSetId;
+    });
     if (missingSet) {
       toast.error(`Vui lòng chọn bộ đề cho môn ${missingSet.label}`);
       return;
@@ -1344,6 +1614,64 @@ export default function ProfessionalAssignmentLibraryPage() {
       setIsAutoCreating(true);
       let successCount = 0;
       const selectionUpdated = new Set<string>();
+      const workingScheduleEvents = [...scheduleEvents];
+
+      const findExistingAutoEvent = (params: {
+        occurrenceDate: string;
+        eventType: "registration" | "exam";
+        registrationTemplate: "official" | "supplement";
+        flowRound: number;
+        subjectId?: number;
+      }) => {
+        return workingScheduleEvents.find((event) => {
+          const metadata = event.metadata || {};
+          if ((event.eventType || "exam") !== params.eventType) return false;
+          if ((event.registrationTemplate || metadata.registration_template || "official") !== params.registrationTemplate) return false;
+          if (String(metadata.occurrence_date || "") !== params.occurrenceDate) return false;
+          if (Number(metadata.flow_round || 0) !== params.flowRound) return false;
+          if (params.eventType === "exam" && params.subjectId) {
+            return Number(metadata.subject_id || 0) === params.subjectId;
+          }
+          return true;
+        });
+      };
+
+      const upsertEventSchedule = async (payload: Record<string, any>, matcher: Parameters<typeof findExistingAutoEvent>[0]) => {
+        const existing = findExistingAutoEvent(matcher);
+        const response = await fetch("/api/event-schedules", {
+          method: existing ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(existing ? { ...payload, id: existing.id } : { ...payload, id: crypto.randomUUID() }),
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || "Không thể lưu sự kiện lịch");
+        }
+
+        const saved = data?.data;
+        if (saved?.id) {
+          const nextEvent: EvaluationEvent = {
+            id: saved.id,
+            title: saved.title,
+            specialty: saved.specialty || saved.title,
+            startAt: saved.start_at,
+            endAt: saved.end_at,
+            registrationTemplate: saved.registration_template || null,
+            metadata: saved.metadata || {},
+            eventType: saved.event_type,
+          };
+
+          const existingIndex = workingScheduleEvents.findIndex((event) => event.id === nextEvent.id);
+          if (existingIndex >= 0) {
+            workingScheduleEvents[existingIndex] = nextEvent;
+          } else {
+            workingScheduleEvents.push(nextEvent);
+          }
+        }
+
+        return data;
+      };
       
       for (const planned of scheduledEvents) {
         if (planned.eventKind === "registration") {
@@ -1356,11 +1684,8 @@ export default function ProfessionalAssignmentLibraryPage() {
               throw new Error(`Thời gian không hợp lệ cho lịch đăng ký ${planned.label}`);
             }
 
-            const response = await fetch("/api/event-schedules", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                id: crypto.randomUUID(),
+            const createData = await upsertEventSchedule(
+              {
                 title: planned.label,
                 event_type: "registration",
                 specialty: "Lịch đăng ký kiểm tra",
@@ -1375,6 +1700,7 @@ export default function ProfessionalAssignmentLibraryPage() {
                   occurrence_date: occurrenceDate,
                   auto_created_from: planned.id,
                   flow_round: planned.flowRound,
+                  registration_template: planned.registrationTemplate,
                   subject_list: plannedEvents
                     .filter(
                       (event) =>
@@ -1384,11 +1710,16 @@ export default function ProfessionalAssignmentLibraryPage() {
                     )
                     .map((event) => event.label),
                 },
-              }),
-            });
+              },
+              {
+                occurrenceDate,
+                eventType: "registration",
+                registrationTemplate: planned.registrationTemplate,
+                flowRound: planned.flowRound,
+              }
+            );
 
-            const createData = await response.json();
-            if (response.ok && createData?.success) {
+            if (createData?.success) {
               successCount++;
             }
           }
@@ -1396,9 +1727,16 @@ export default function ProfessionalAssignmentLibraryPage() {
           continue;
         }
 
-        const selectedSet = sets.find((set) => Number(set.id) === planned.selectedSetId);
-        if (!selectedSet) {
-          continue;
+        const plannedSet = sets.find((set) => Number(set.id) === planned.selectedSetId);
+        const subjectDbIdFromSet = Number(plannedSet?.subject_id || 0);
+        const fallbackSubjectDbId = Number(
+          monthlyDefaultBySubjectId[planned.subjectId]?.setId
+            ? sets.find((set) => Number(set.id) === monthlyDefaultBySubjectId[planned.subjectId]?.setId)?.subject_id
+            : 0
+        );
+        const subjectDbId = subjectDbIdFromSet || fallbackSubjectDbId;
+        if (!subjectDbId) {
+          throw new Error(`Khong tim thay subject_id cho mon ${planned.label}`);
         }
 
         const monthlyDateKeys = generateMonthlyDateKeys(planned.startDate, planned.endDate);
@@ -1411,18 +1749,29 @@ export default function ProfessionalAssignmentLibraryPage() {
           }
 
           const { year, month } = parseYearMonthFromDate(occurrenceDate);
-          const selectionKey = `${selectedSet.subject_id}-${year}-${month}`;
+          const selectionKey = `${subjectDbId}-${year}-${month}`;
+          const isRandomMode = monthlyDefaultBySubjectId[planned.subjectId]?.selectionMode === 'random';
+          let selectedSet = plannedSet;
+
           if (!selectionUpdated.has(selectionKey)) {
-            const selectionResponse = await fetch("/api/monthly-exam-selections", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                subject_id: selectedSet.subject_id,
-                selected_set_id: selectedSet.id,
-                year,
-                month,
-                note: `Auto set from schedule ${planned.startDate} -> ${planned.endDate}`,
-              }),
+            const selectionResponse = await fetch('/api/chuyensau-chonde-monhoc', {
+              method: isRandomMode ? 'PATCH' : 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(
+                isRandomMode
+                  ? {
+                      subject_id: subjectDbId,
+                      year,
+                      month,
+                    }
+                  : {
+                      subject_id: subjectDbId,
+                      selected_set_id: selectedSet?.id,
+                      year,
+                      month,
+                      note: `Auto set from schedule ${planned.startDate} -> ${planned.endDate}`,
+                    }
+              ),
             });
 
             const selectionData = await selectionResponse.json();
@@ -1430,14 +1779,38 @@ export default function ProfessionalAssignmentLibraryPage() {
               throw new Error(selectionData?.error || `Không thể chọn bộ đề cho ${planned.label}`);
             }
 
+            if (isRandomMode) {
+              const pickedId = Number(selectionData?.picked?.id || selectionData?.data?.selected_set_id || 0);
+              const pickedSet = sets.find((set) => Number(set.id) === pickedId);
+              if (!pickedSet) {
+                throw new Error(`Khong tim thay bo de duoc random cho mon ${planned.label}`);
+              }
+              selectedSet = pickedSet;
+            }
+
             selectionUpdated.add(selectionKey);
+          } else if (isRandomMode) {
+            const latestSelectionResponse = await fetch(
+              `/api/chuyensau-chonde-monhoc?subject_id=${subjectDbId}&year=${year}&month=${month}`
+            );
+            const latestSelectionData = await latestSelectionResponse.json();
+            if (!latestSelectionResponse.ok || !latestSelectionData?.success || !latestSelectionData?.data?.set_id) {
+              throw new Error(`Khong the lay bo de random hien tai cho mon ${planned.label}`);
+            }
+            const pickedId = Number(latestSelectionData.data.set_id);
+            const pickedSet = sets.find((set) => Number(set.id) === pickedId);
+            if (!pickedSet) {
+              throw new Error(`Khong tim thay bo de random (${pickedId}) cho mon ${planned.label}`);
+            }
+            selectedSet = pickedSet;
           }
 
-          const response = await fetch("/api/event-schedules", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              id: crypto.randomUUID(),
+          if (!selectedSet) {
+            throw new Error(`Khong tim thay bo de hop le cho mon ${planned.label}`);
+          }
+
+          const createData = await upsertEventSchedule(
+            {
               title: getAutoEventTitle(planned.label),
               event_type: "exam",
               specialty: planned.label,
@@ -1450,17 +1823,26 @@ export default function ProfessionalAssignmentLibraryPage() {
                 range_start_date: planned.startDate,
                 range_end_date: planned.endDate,
                 occurrence_date: occurrenceDate,
-                  flow_round: planned.flowRound,
+                flow_round: planned.flowRound,
+                registration_template: planned.registrationTemplate,
                 subject_id: selectedSet.subject_id,
                 selected_set_id: selectedSet.id,
                 selected_set_code: selectedSet.set_code,
                 selected_set_name: selectedSet.set_name,
+                selection_mode: isRandomMode ? 'random' : 'default',
+                duration_minutes: planned.durationMinutes,
               },
-            }),
-          });
+            },
+            {
+              occurrenceDate,
+              eventType: "exam",
+              registrationTemplate: planned.registrationTemplate,
+              flowRound: planned.flowRound,
+              subjectId: Number(selectedSet.subject_id),
+            }
+          );
 
-          const createData = await response.json();
-          if (response.ok && createData?.success) {
+          if (createData?.success) {
             successCount++;
           }
         }
@@ -1486,12 +1868,7 @@ export default function ProfessionalAssignmentLibraryPage() {
     }
 
     if (!setName.trim()) {
-      toast.error("Vui lòng nhập tên đề");
-      return;
-    }
-
-    if (passingScore > totalPoints) {
-      toast.error("Điểm đạt không được lớn hơn tổng điểm");
+      toast.error("Vui lòng nhập ghi chú bộ đề");
       return;
     }
 
@@ -1503,11 +1880,10 @@ export default function ProfessionalAssignmentLibraryPage() {
         body: JSON.stringify({
           exam_type: selectedSubject.examType,
           block_code: selectedSubject.blockCode,
+          subject_key: selectedSubject.subjectKey,
           subject_code: selectedSubject.label,
           subject_name: selectedSubject.label,
           set_name: setName.trim(),
-          total_points: totalPoints,
-          passing_score: passingScore,
           status,
         }),
       });
@@ -1645,7 +2021,7 @@ export default function ProfessionalAssignmentLibraryPage() {
                     </button>
 
                     <Link
-                      href={`/admin/page4/thu-vien-de/subjects/${subject.id}`}
+                      href={`/admin/thu-vien-de/subjects/${subject.id}`}
                       className={cn(
                         "block rounded-lg border border-gray-200 bg-gray-50 p-3 pr-24 transition-colors",
                         "min-h-30 hover:border-red-200 hover:bg-red-50/40"
@@ -1660,7 +2036,7 @@ export default function ProfessionalAssignmentLibraryPage() {
 
                       {monthlyDefaultBySubjectId[subject.id] ? (
                         <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-800">
-                          Đề tháng đang áp dụng ({monthlyDefaultBySubjectId[subject.id].selectionMode === "random" ? "ngẫu nhiên" : "mặc định"}): {monthlyDefaultBySubjectId[subject.id].setCode} - {monthlyDefaultBySubjectId[subject.id].setName}
+                          Đề tháng đang áp dụng ({monthlyDefaultBySubjectId[subject.id].selectionMode === "random" ? "ngẫu nhiên" : "mặc định"}): Mã đề {monthlyDefaultBySubjectId[subject.id].setCode}{monthlyDefaultBySubjectId[subject.id].setName ? ` • Ghi chú: ${monthlyDefaultBySubjectId[subject.id].setName}` : ""}
                         </div>
                       ) : (
                         <div className="mt-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[11px] text-gray-600">
@@ -1678,11 +2054,16 @@ export default function ProfessionalAssignmentLibraryPage() {
 
                               return (
                                 <div key={set.id} className="flex items-center gap-2 rounded-md bg-white px-2 py-1">
-                                  <div className="flex min-w-0 items-center gap-2">
-                                    <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", level.className)}>
-                                      {level.label}
-                                    </span>
-                                    <span className="truncate text-xs text-gray-700">{set.set_code}</span>
+                                  <div className="min-w-0">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                      <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", level.className)}>
+                                        {level.label}
+                                      </span>
+                                      <span className="truncate text-xs text-gray-700">{set.set_code}</span>
+                                    </div>
+                                    {set.set_name ? (
+                                      <p className="truncate text-[11px] text-gray-500">Ghi chú: {set.set_name}</p>
+                                    ) : null}
                                   </div>
                                 </div>
                               );
@@ -1696,6 +2077,21 @@ export default function ProfessionalAssignmentLibraryPage() {
                     </Link>
                   </div>
                 ))}
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenCreateSubjectModal(group.blockCode)}
+                  className={cn(
+                    "block rounded-lg border border-dashed border-red-200 bg-red-50/40 p-3 text-left transition-colors",
+                    "min-h-30 hover:border-red-300 hover:bg-red-100/50"
+                  )}
+                >
+                  <p className="text-sm font-semibold text-red-700">+ Thêm môn</p>
+                  <div className="mt-2 rounded-md border border-red-200 bg-white px-2 py-1.5 text-[11px] text-gray-600">
+                    Nhập tên môn và tạo nhanh
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">Bấm để tạo môn mới trong khối này.</p>
+                </button>
               </div>
 
               {group.blockCode === "ART" && (
@@ -1709,6 +2105,61 @@ export default function ProfessionalAssignmentLibraryPage() {
       {loading && (
         <div className="mt-4 text-sm text-gray-500">Đang tải danh sách bộ đề...</div>
       )}
+
+      <Modal
+        isOpen={isCreateSubjectModalOpen}
+        onClose={() => setIsCreateSubjectModalOpen(false)}
+        title="Thêm môn mới"
+        subtitle="Nhập tên môn để tạo thẻ môn học mới"
+        maxWidth="md"
+        headerColor="from-[#7f1d1d] to-[#b91c1c]"
+      >
+        <form onSubmit={handleCreateSubject} className="space-y-4">
+          <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            Tạo trong khối: <span className="font-semibold text-gray-800">{BLOCK_CONFIGS.find((block) => block.blockCode === newSubjectBlockCode)?.label || newSubjectBlockCode}</span>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Tên môn</label>
+            <input
+              value={newSubjectName}
+              onChange={(e) => setNewSubjectName(e.target.value)}
+              placeholder="Ví dụ: [COD] JavaScript Nâng cao"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Thời lượng (phút)</label>
+            <input
+              type="number"
+              min={1}
+              max={1440}
+              value={newSubjectDurationMinutes}
+              onChange={(e) => setNewSubjectDurationMinutes(Math.max(1, Number(e.target.value || 1)))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsCreateSubjectModalOpen(false)}
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              disabled={isCreatingSubject}
+              className="inline-flex items-center gap-2 rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+            >
+              <PlusCircle className="h-4 w-4" />
+              {isCreatingSubject ? "Đang tạo..." : "Tạo môn"}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         isOpen={isCreateModalOpen}
@@ -1750,36 +2201,13 @@ export default function ProfessionalAssignmentLibraryPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Tên đề</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Ghi chú bộ đề</label>
             <input
               value={setName}
               onChange={(e) => setSetName(e.target.value)}
-              placeholder="Nhập tên bộ đề"
+              placeholder="Ví dụ: Dùng cho tháng 04/2026"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Tổng điểm</label>
-              <input
-                type="number"
-                min={1}
-                value={totalPoints}
-                onChange={(e) => setTotalPoints(Number(e.target.value || 10))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Điểm đạt</label>
-              <input
-                type="number"
-                min={0}
-                value={passingScore}
-                onChange={(e) => setPassingScore(Number(e.target.value || 7))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
           </div>
 
           <div>
@@ -2405,6 +2833,7 @@ export default function ProfessionalAssignmentLibraryPage() {
             <button
               type="button"
               onClick={handleResetSubjectDurations}
+              disabled={isSavingDurationSettings}
               className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               {durationFocusSubjectId ? "Khôi phục môn này" : "Khôi phục mặc định"}
@@ -2413,6 +2842,7 @@ export default function ProfessionalAssignmentLibraryPage() {
               <button
                 type="button"
                 onClick={closeDurationSettings}
+                disabled={isSavingDurationSettings}
                 className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Hủy
@@ -2420,9 +2850,10 @@ export default function ProfessionalAssignmentLibraryPage() {
               <button
                 type="button"
                 onClick={applyDurationSettingsToPlannedEvents}
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                disabled={isSavingDurationSettings}
+                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Áp dụng
+                {isSavingDurationSettings ? "Đang lưu..." : "Áp dụng"}
               </button>
             </div>
           </div>

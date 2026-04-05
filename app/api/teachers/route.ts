@@ -1,11 +1,14 @@
 import { withApiProtection } from "@/lib/api-protection";
 import pool from "@/lib/db";
-import { NextRequest, NextResponse } from "next/server";
 import { Teacher } from "@/types/teacher";
+import { NextRequest, NextResponse } from "next/server";
 
 const TEACHER_PROFILE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_PROFILE_CSV_URL || "";
 const TEACHER_EXPERTISE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERTISE_CSV_URL || "";
 const TEACHER_EXPERIENCE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERIENCE_CSV_URL || "";
+const SHEET_FETCH_TIMEOUT_MS = 12000;
+const SHEET_FETCH_RETRIES = 2;
+const SHEET_RETRY_DELAY_MS = 350;
 
 // In-memory cache with global persistence for dev mode and pending promise tracking
 interface CacheEntry<T> {
@@ -53,6 +56,64 @@ function isCacheValid<T>(entry: CacheEntry<T> | null): boolean {
   return Date.now() - entry.timestamp < CACHE_TTL;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableFetchError(error: unknown): boolean {
+  const err = error as any;
+  const message = String(err?.message || "").toLowerCase();
+  const causeCode = String(err?.cause?.code || "").toUpperCase();
+
+  return (
+    causeCode === "UND_ERR_SOCKET" ||
+    causeCode === "ECONNRESET" ||
+    causeCode === "ETIMEDOUT" ||
+    message.includes("fetch failed") ||
+    message.includes("socket") ||
+    message.includes("timed out") ||
+    err?.name === "AbortError"
+  );
+}
+
+async function fetchCsvWithRetry(url: string, label: string): Promise<string> {
+  if (!url) {
+    throw new Error(`${label} URL is empty`);
+  }
+
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= SHEET_FETCH_RETRIES; attempt++) {
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(SHEET_FETCH_TIMEOUT_MS),
+      });
+
+      if (!response.ok) {
+        const retryableStatus = response.status >= 500 || response.status === 429;
+        if (retryableStatus && attempt < SHEET_FETCH_RETRIES) {
+          await sleep(SHEET_RETRY_DELAY_MS * (attempt + 1));
+          continue;
+        }
+        throw new Error(`Cannot fetch ${label}. Status: ${response.status}`);
+      }
+
+      return await response.text();
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableFetchError(error);
+      const hasMoreAttempts = attempt < SHEET_FETCH_RETRIES;
+      if (!retryable || !hasMoreAttempts) {
+        break;
+      }
+      await sleep(SHEET_RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(`Cannot fetch ${label}`);
+}
+
 // Fetch data từ Google Sheets với caching  
 async function fetchTeachersFromSheet(): Promise<Teacher[]> {
   // Ensure cache is initialized
@@ -81,15 +142,7 @@ async function fetchTeachersFromSheet(): Promise<Teacher[]> {
   if (!cache.pendingRequests.teachers) {
     console.log("🔄 Starting fresh fetch for teachers data...");
     cache.pendingRequests.teachers = (async () => {
-      const response = await fetch(TEACHER_PROFILE_CSV_URL, { 
-        cache: 'no-store' 
-      });
-      
-      if (!response.ok) {
-        throw new Error("Cannot fetch sheet data");
-      }
-
-      const csvText = await response.text();
+      const csvText = await fetchCsvWithRetry(TEACHER_PROFILE_CSV_URL, "teacher profile data");
       const lines = csvText.split("\n");
       
       // Skip first 2 rows (title row + header row)
@@ -168,11 +221,10 @@ async function fetchExpertiseScores(teacherCode: string): Promise<{ [key: string
       // Deduplicate simultaneous requests
       if (!cache.pendingRequests.expertiseRaw) {
         console.log("🔄 Fetching fresh expertise data from Google Sheets...");
-        cache.pendingRequests.expertiseRaw = fetch(TEACHER_EXPERTISE_CSV_URL, { cache: 'no-store' })
-          .then(async (res) => {
-            if (!res.ok) throw new Error(`Cannot fetch expertise data. Status: ${res.status}`);
-            return res.text();
-          });
+        cache.pendingRequests.expertiseRaw = fetchCsvWithRetry(
+          TEACHER_EXPERTISE_CSV_URL,
+          "expertise data"
+        );
       } else {
         console.log("⏳ Waiting for pending expertise fetch...");
       }
@@ -250,11 +302,10 @@ async function fetchExperienceScores(teacherCode: string): Promise<{ [key: strin
       // Deduplicate pending requests
       if (!cache.pendingRequests.experienceRaw) {
         console.log("🔄 Fetching fresh experience data from Google Sheets...");
-        cache.pendingRequests.experienceRaw = fetch(TEACHER_EXPERIENCE_CSV_URL, { cache: 'no-store' })
-          .then(async (res) => {
-            if (!res.ok) throw new Error(`Cannot fetch experience data. Status: ${res.status}`);
-            return res.text();
-          });
+        cache.pendingRequests.experienceRaw = fetchCsvWithRetry(
+          TEACHER_EXPERIENCE_CSV_URL,
+          "experience data"
+        );
       } else {
         console.log("⏳ Waiting for pending experience fetch...");
       }

@@ -81,7 +81,11 @@ interface ExamAssignment {
   set_name: string;
   total_points: number;
   passing_score: number;
+  correct_answers?: number;
+  total_questions?: number;
+  score_handling_note?: string;
   explanation_status?: 'pending' | 'accepted' | 'rejected';
+  explanation_id?: number | null;
   admin_note?: string;
   is_open?: boolean;
   can_take?: boolean;
@@ -325,12 +329,32 @@ export default function TeacherAssignmentPage() {
     try {
       if (!isBackgroundUpdate) setExamLoading(true);
 
+      let canonicalTeacherCode = '';
+      if (user?.email) {
+        try {
+          const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
+          const data = await res.json();
+          canonicalTeacherCode = (data?.teacher?.code || '').toString().trim();
+          if (canonicalTeacherCode && canonicalTeacherCode !== teacherCode) {
+            setTeacherCode(canonicalTeacherCode);
+          }
+        } catch {
+          // Keep fallback behavior below when teacher lookup is unavailable.
+        }
+      }
+
       const candidates = new Set<string>();
       const normalizedTeacherCode = teacherCode?.trim();
       if (normalizedTeacherCode) {
         candidates.add(normalizedTeacherCode);
         candidates.add(normalizedTeacherCode.toLowerCase());
         candidates.add(normalizedTeacherCode.toUpperCase());
+      }
+
+      if (canonicalTeacherCode) {
+        candidates.add(canonicalTeacherCode);
+        candidates.add(canonicalTeacherCode.toLowerCase());
+        candidates.add(canonicalTeacherCode.toUpperCase());
       }
 
       if (user?.email) {
@@ -343,15 +367,12 @@ export default function TeacherAssignmentPage() {
       }
 
       const teacherCodesParam = encodeURIComponent(Array.from(candidates).join(','));
-      const baseParams = `teacher_code=${encodeURIComponent(teacherCode)}&teacher_codes=${teacherCodesParam}`;
-
-      // ── Phase 1: fetch last 6 months immediately ──────────────────────────
-      const now = new Date();
-      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      const sinceStr = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2, '0')}-01`;
-
+      const effectiveTeacherCode = canonicalTeacherCode || teacherCode;
+      const baseParams = `teacher_code=${encodeURIComponent(effectiveTeacherCode)}&teacher_codes=${teacherCodesParam}`;
+      // Fetch full assignment history so score tab filters (6 months/all/custom month)
+      // operate on complete data instead of only current month.
       const recentRes = await fetch(
-        `/api/exam-assignments?${baseParams}&since=${sinceStr}`,
+        `/api/exam-assignments?${baseParams}`,
         { cache: 'no-store' }
       );
       const recentData = await recentRes.json();
@@ -360,31 +381,6 @@ export default function TeacherAssignmentPage() {
       }
 
       if (!isBackgroundUpdate) setExamLoading(false);
-
-      // ── Phase 2: fetch older data in background and merge ─────────────────
-      // Skip older fetch on background polling (10s interval) — those only
-      // need to refresh recent data for live updates.
-      if (!isBackgroundUpdate) {
-        (async () => {
-          try {
-            const olderRes = await fetch(
-              `/api/exam-assignments?${baseParams}&before=${sinceStr}`,
-              { cache: 'no-store' }
-            );
-            const olderData = await olderRes.json();
-            if (olderData.success && olderData.data?.length > 0) {
-              setExamAssignments(prev => {
-                // Merge: keep recent items, append older ones (no duplicates)
-                const existingIds = new Set(prev.map((item: ExamAssignment) => item.id));
-                const newOlder = olderData.data.filter((item: ExamAssignment) => !existingIds.has(item.id));
-                return [...prev, ...newOlder];
-              });
-            }
-          } catch (err) {
-            console.warn('Background fetch of older exam assignments failed:', err);
-          }
-        })();
-      }
     } catch (err) {
       console.error('Error fetching exam assignments:', err);
       setError('Failed to load exam assignments');
@@ -746,6 +742,51 @@ export default function TeacherAssignmentPage() {
     };
   }
 
+  function shouldShowExplanationCTA(item: ExamAssignment): boolean {
+    const closeAt = new Date(item.close_at);
+    const expired = item.assignment_status === 'expired' || closeAt < new Date();
+    const note = (item.score_handling_note || '').toLowerCase();
+    const requiresExplanation = note.includes('mac dinh 0') || note.includes('mặc định 0');
+    const explanationId = Number(item.explanation_id || 0);
+    const hasLinkedExplanation = Number.isFinite(explanationId) && explanationId > 0;
+    const isPendingWithoutLinkedExplanation = item.explanation_status === 'pending' && !hasLinkedExplanation;
+
+    if (item.explanation_status === 'accepted') {
+      return false;
+    }
+
+    if (isPendingWithoutLinkedExplanation) {
+      return true;
+    }
+
+    return expired && requiresExplanation;
+  }
+
+  function buildExplanationHref(item: ExamAssignment): string {
+    return `/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`;
+  }
+
+  function getPassingScore(item: ExamAssignment): number | null {
+    const parsed = Number(item.passing_score);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+  }
+
+  function isExamPassed(item: ExamAssignment, score: number | null): boolean {
+    const passingScore = getPassingScore(item);
+    return score !== null && passingScore !== null && score >= passingScore;
+  }
+
+  function formatScoreSummary(item: ExamAssignment, score: number | null): string {
+    if (score === null) return 'Chưa có';
+    const correctAnswers = Number(item.correct_answers ?? 0);
+    const totalQuestions = Number(item.total_questions ?? 0);
+    if (Number.isFinite(totalQuestions) && totalQuestions > 0) {
+      return `${correctAnswers}/${totalQuestions} câu • ${score} điểm`;
+    }
+    return `${score} điểm`;
+  }
+
   const formatExplanationStatus = (status?: ExamAssignment['explanation_status']) => {
     if (status === 'pending') return 'Đang chờ duyệt';
     if (status === 'accepted') return 'Đã duyệt';
@@ -799,7 +840,7 @@ export default function TeacherAssignmentPage() {
         const isExcluded = item.explanation_status === 'accepted';
         if (!isExcluded && score !== null) {
           totalAssigned++;
-          if (score >= item.passing_score) totalPassed++;
+          if (isExamPassed(item, score)) totalPassed++;
         }
       }
 
@@ -950,9 +991,9 @@ export default function TeacherAssignmentPage() {
       if (scoreResultFilter !== 'all') {
         const { score, isMissedCurrentMonth } = getEffectiveExamScore(item);
         if (scoreResultFilter === 'passed') {
-          if (score === null || score < item.passing_score) return false;
+          if (!isExamPassed(item, score)) return false;
         } else if (scoreResultFilter === 'failed') {
-          if (score === null || score >= item.passing_score) return false;
+          if (score === null || isExamPassed(item, score)) return false;
         } else if (scoreResultFilter === 'missing') {
           if (!isMissedCurrentMonth) return false;
         } else if (scoreResultFilter === 'needs_explanation') {
@@ -1665,7 +1706,14 @@ export default function TeacherAssignmentPage() {
                             href={`/user/assignments/exam/${item.id}`}
                             className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
                           >
-                            {item.score !== null || item.assignment_status === 'submitted' ? 'Làm lại bài' : 'Bắt đầu làm bài'}
+                            {'Bắt đầu làm bài'}
+                          </Link>
+                        ) : shouldShowExplanationCTA(item) ? (
+                          <Link
+                            href={buildExplanationHref(item)}
+                            className="inline-flex w-full items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition cursor-pointer"
+                          >
+                            Giải trình
                           </Link>
                         ) : (
                           <button
@@ -1977,6 +2025,7 @@ export default function TeacherAssignmentPage() {
                               const now = new Date();
                               const closeAt = new Date(item.close_at);
                               const { score: effectiveScore, isMissedCurrentMonth } = getEffectiveExamScore(item);
+                              const hasPassingScore = getPassingScore(item) !== null;
 
                               return (
                                 <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:shadow-lg transition-all flex flex-col h-full">
@@ -2006,11 +2055,13 @@ export default function TeacherAssignmentPage() {
                                         <span className="text-blue-600 italic text-sm font-medium">Miễn thi (Đã duyệt GT)</span>
                                       ) : effectiveScore === null ? (
                                         <span className="text-gray-400 italic text-sm">Chưa có</span>
+                                      ) : !hasPassingScore ? (
+                                        <span className="font-bold text-sm text-amber-700">{formatScoreSummary(item, effectiveScore)}</span>
                                       ) : (
-                                        <span className={`font-bold text-base flex items-center gap-2 ${effectiveScore >= item.passing_score ? 'text-green-600' : 'text-red-600'}`}>
-                                          {effectiveScore} <span className="text-xs font-normal text-gray-400">/ {item.total_points}</span>
-                                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${effectiveScore >= item.passing_score ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                            {effectiveScore >= item.passing_score ? 'ĐẠT' : 'KHÔNG ĐẠT'}
+                                        <span className={`font-bold text-base flex items-center gap-2 ${isExamPassed(item, effectiveScore) ? 'text-green-600' : 'text-red-600'}`}>
+                                          {formatScoreSummary(item, effectiveScore)}
+                                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isExamPassed(item, effectiveScore) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                            {isExamPassed(item, effectiveScore) ? 'ĐẠT' : 'KHÔNG ĐẠT'}
                                           </span>
                                         </span>
                                       )}
@@ -2025,9 +2076,16 @@ export default function TeacherAssignmentPage() {
                                       >
                                         {item.score !== null || item.assignment_status === 'submitted' ? 'Làm lại bài' : 'Bắt đầu làm bài'}
                                       </Link>
+                                    ) : shouldShowExplanationCTA(item) ? (
+                                      <Link
+                                        href={buildExplanationHref(item)}
+                                        className="inline-flex w-full items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition cursor-pointer"
+                                      >
+                                        Giải trình
+                                      </Link>
                                     ) : isMissedCurrentMonth && !item.explanation_status ? (
                                       <Link
-                                        href={`/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`}
+                                        href={buildExplanationHref(item)}
                                         className="inline-flex w-full items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition cursor-pointer"
                                       >
                                         Giải trình (Lỡ bài)
@@ -2175,7 +2233,7 @@ export default function TeacherAssignmentPage() {
 
           const passed = passRateItems.filter(item => {
             const { score } = getEffectiveExamScore(item);
-            return score !== null && score >= item.passing_score;
+            return isExamPassed(item, score);
           }).length;
 
           return (
@@ -2200,7 +2258,7 @@ export default function TeacherAssignmentPage() {
                 <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
                   {passRateItems.map(item => {
                     const { score: effectiveScore } = getEffectiveExamScore(item);
-                    const isPassed = effectiveScore !== null && effectiveScore >= item.passing_score;
+                    const isPassed = isExamPassed(item, effectiveScore);
                     const date = new Date(item.open_at);
                     const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     return (
@@ -2299,8 +2357,7 @@ export default function TeacherAssignmentPage() {
                 <p className="text-base font-bold text-blue-900">
                   {(() => {
                     const { score } = getEffectiveExamScore(selectedExamInfo);
-                    if (score === null) return 'Chưa có điểm';
-                    return `${score} / ${selectedExamInfo.total_points}`;
+                    return formatScoreSummary(selectedExamInfo, score);
                   })()}
                 </p>
               </div>

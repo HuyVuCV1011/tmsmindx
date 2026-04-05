@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
 
 type QuestionType = 'multiple_choice' | 'true_false' | 'short_answer' | 'essay';
+type QuestionDifficulty = 'easy' | 'medium' | 'hard';
 
 const stripUnstableImageSources = (value: unknown) => {
   if (typeof value !== 'string') return value;
@@ -26,25 +27,29 @@ export async function GET(request: NextRequest) {
 
     const query = `
       SELECT
-        esq.id,
-        esq.set_id as assignment_id,
-        esq.question_text,
-        esq.question_type,
-        COALESCE(esq.correct_answer, '') as correct_answer,
-        esq.options,
+        q.id,
+        sq.set_id as assignment_id,
+        q.question_text,
+        q.question_type,
+        COALESCE(q.correct_answer, '') as correct_answer,
+        CASE
+          WHEN q.option_a IS NULL AND q.option_b IS NULL AND q.option_c IS NULL AND q.option_d IS NULL THEN NULL
+          ELSE jsonb_build_array(q.option_a, q.option_b, q.option_c, q.option_d)
+        END AS options,
         NULL::text as image_url,
-        COALESCE(esq.explanation, '') as explanation,
-        esq.points,
-        esq.order_number,
-        'medium'::text as difficulty,
+        COALESCE(q.explanation, '') as explanation,
+        COALESCE(sq.points_override, q.points) as points,
+        sq.display_order as order_number,
+        COALESCE(q.difficulty, 'medium') as difficulty,
         es.set_code,
         es.set_name,
         esc.subject_name
-      FROM exam_set_questions esq
-      JOIN exam_sets es ON esq.set_id = es.id
-      JOIN exam_subject_catalog esc ON es.subject_id = esc.id
-      WHERE esq.set_id = $1
-      ORDER BY esq.order_number ASC
+      FROM chuyen_sau_bode_cauhoi sq
+      JOIN chuyen_sau_cauhoi q ON q.id = sq.question_id
+      JOIN chuyen_sau_bode es ON sq.set_id = es.id
+      JOIN chuyen_sau_monhoc esc ON es.subject_id = esc.id
+      WHERE sq.set_id = $1
+      ORDER BY sq.display_order ASC
     `;
 
     const result = await pool.query(query, [setId]);
@@ -65,6 +70,7 @@ export async function GET(request: NextRequest) {
 
 // POST: Create new set question
 export async function POST(request: NextRequest) {
+  const client = await pool.connect();
   try {
     const body = await request.json();
     const {
@@ -76,52 +82,117 @@ export async function POST(request: NextRequest) {
       explanation,
       points = 1,
       order_number,
+      difficulty = 'medium',
+      tags,
     } = body;
 
-    if (!set_id || !question_text) {
+    if (!set_id) {
       return NextResponse.json(
-        { error: 'set_id and question_text are required' },
+        { error: 'set_id is required' },
         { status: 400 }
       );
     }
 
     const normalizedQuestionType: QuestionType = question_type;
+    const normalizedDifficulty: QuestionDifficulty = ['easy', 'medium', 'hard'].includes(difficulty)
+      ? difficulty
+      : 'medium';
+    const canonicalQuestionType = normalizedQuestionType === 'essay' ? 'short_answer' : normalizedQuestionType;
     const sanitizedQuestionText = String(stripUnstableImageSources(question_text) || '');
+    const normalizedQuestionText = sanitizedQuestionText.trim() || '[Tam] Chua dan noi dung tu doc';
     const sanitizedCorrectAnswer =
       correct_answer == null ? null : String(stripUnstableImageSources(correct_answer) || '');
+    const normalizedCorrectAnswer = sanitizedCorrectAnswer ?? '';
     const sanitizedExplanation =
       explanation == null ? null : String(stripUnstableImageSources(explanation) || '');
     const sanitizedOptions = Array.isArray(options)
       ? options.map((item) => String(stripUnstableImageSources(item) || '')).filter(Boolean)
       : [];
-    const optionsValue = sanitizedOptions.length > 0 ? JSON.stringify(sanitizedOptions) : null;
+    const optionA = sanitizedOptions[0] || null;
+    const optionB = sanitizedOptions[1] || null;
+    const optionC = sanitizedOptions[2] || null;
+    const optionD = sanitizedOptions[3] || null;
+    const normalizedTags = Array.isArray(tags)
+      ? tags.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [];
 
-    const query = `
-      INSERT INTO exam_set_questions (
-        set_id,
+    await client.query('BEGIN');
+
+    const questionInsert = `
+      INSERT INTO chuyen_sau_cauhoi (
         question_text,
         question_type,
+        option_a,
+        option_b,
+        option_c,
+        option_d,
         correct_answer,
-        options,
         explanation,
         points,
-        order_number
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        difficulty,
+        tags
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `;
 
-    const values = [
-      set_id,
-      sanitizedQuestionText,
-      normalizedQuestionType,
-      sanitizedCorrectAnswer,
-      optionsValue,
+    const questionValues = [
+      normalizedQuestionText,
+      canonicalQuestionType,
+      optionA,
+      optionB,
+      optionC,
+      optionD,
+      normalizedCorrectAnswer,
       sanitizedExplanation,
       Number(points || 1),
+      normalizedDifficulty,
+      normalizedTags,
+    ];
+
+    const questionResult = await client.query(questionInsert, questionValues);
+    const questionId = questionResult.rows[0].id;
+
+    const mappingInsert = `
+      INSERT INTO chuyen_sau_bode_cauhoi (
+        set_id,
+        question_id,
+        display_order
+      ) VALUES ($1, $2, $3)
+      RETURNING *
+    `;
+
+    const mappingValues = [
+      set_id,
+      questionId,
       Number(order_number || 1),
     ];
 
-    const result = await pool.query(query, values);
+    await client.query(mappingInsert, mappingValues);
+    await client.query('COMMIT');
+
+    const result = await pool.query(
+      `
+      SELECT
+        q.id,
+        sq.set_id as assignment_id,
+        q.question_text,
+        q.question_type,
+        q.correct_answer,
+        CASE
+          WHEN q.option_a IS NULL AND q.option_b IS NULL AND q.option_c IS NULL AND q.option_d IS NULL THEN NULL
+          ELSE jsonb_build_array(q.option_a, q.option_b, q.option_c, q.option_d)
+        END AS options,
+        q.explanation,
+        COALESCE(sq.points_override, q.points) AS points,
+        sq.display_order AS order_number,
+        q.difficulty,
+        q.tags
+      FROM chuyen_sau_cauhoi q
+      JOIN chuyen_sau_bode_cauhoi sq ON sq.question_id = q.id
+      WHERE q.id = $1
+      `,
+      [questionId]
+    );
 
     return NextResponse.json(
       {
@@ -132,16 +203,20 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error creating exam set question:', error);
     return NextResponse.json(
       { error: 'Failed to create exam set question' },
       { status: 500 }
     );
+  } finally {
+    client.release();
   }
 }
 
 // PUT: Update set question
 export async function PUT(request: NextRequest) {
+  let client: Awaited<ReturnType<typeof pool.connect>> | null = null;
   try {
     const body = await request.json();
     const { id, ...updates } = body;
@@ -161,49 +236,103 @@ export async function PUT(request: NextRequest) {
       'explanation',
       'points',
       'order_number',
+      'difficulty',
+      'tags',
     ];
 
-    const setClauses: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
+    const questionClauses: string[] = [];
+    const questionValues: any[] = [];
+    const mappingClauses: string[] = [];
+    const mappingValues: any[] = [];
+    let questionIndex = 1;
+    let mappingIndex = 1;
 
     Object.keys(updates).forEach((key) => {
       if (allowedFields.includes(key)) {
-        setClauses.push(`${key} = $${paramIndex}`);
-        if (key === 'options') {
-          const optionValue = Array.isArray(updates[key]) && updates[key].length > 0
-            ? JSON.stringify(
-                updates[key]
-                  .map((item: unknown) => String(stripUnstableImageSources(item) || ''))
-                  .filter(Boolean)
-              )
-            : null;
-          values.push(optionValue);
-        } else if (['question_text', 'correct_answer', 'explanation'].includes(key)) {
-          values.push(stripUnstableImageSources(updates[key]));
-        } else {
-          values.push(updates[key]);
+        if (key === 'order_number') {
+          mappingClauses.push(`display_order = $${mappingIndex}`);
+          mappingValues.push(Number(updates[key] || 1));
+          mappingIndex++;
+          return;
         }
-        paramIndex++;
+
+        if (key === 'points') {
+          mappingClauses.push(`points_override = $${mappingIndex}`);
+          mappingValues.push(Number(updates[key] || 1));
+          mappingIndex++;
+          return;
+        }
+
+        if (key === 'options') {
+          const sanitized = Array.isArray(updates[key])
+            ? updates[key].map((item: unknown) => String(stripUnstableImageSources(item) || '')).filter(Boolean)
+            : [];
+          const fields: Array<'option_a' | 'option_b' | 'option_c' | 'option_d'> = ['option_a', 'option_b', 'option_c', 'option_d'];
+          fields.forEach((field, idx) => {
+            questionClauses.push(`${field} = $${questionIndex}`);
+            questionValues.push(sanitized[idx] || null);
+            questionIndex++;
+          });
+        } else if (['question_text', 'correct_answer', 'explanation'].includes(key)) {
+          questionClauses.push(`${key} = $${questionIndex}`);
+          questionValues.push(stripUnstableImageSources(updates[key]));
+          questionIndex++;
+        } else if (key === 'question_type') {
+          questionClauses.push(`question_type = $${questionIndex}`);
+          questionValues.push(updates[key] === 'essay' ? 'short_answer' : updates[key]);
+          questionIndex++;
+        } else {
+          questionClauses.push(`${key} = $${questionIndex}`);
+          questionValues.push(updates[key]);
+          questionIndex++;
+        }
       }
     });
 
-    if (setClauses.length === 0) {
+    if (questionClauses.length === 0 && mappingClauses.length === 0) {
       return NextResponse.json(
         { error: 'No valid fields to update' },
         { status: 400 }
       );
     }
 
-    values.push(id);
-    const query = `
-      UPDATE exam_set_questions
-      SET ${setClauses.join(', ')}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $${paramIndex}
-      RETURNING *
-    `;
+    client = await pool.connect();
+    await client.query('BEGIN');
 
-    const result = await pool.query(query, values);
+    if (questionClauses.length > 0) {
+      questionValues.push(id);
+      await client.query(
+        `
+        UPDATE chuyen_sau_cauhoi
+        SET ${questionClauses.join(', ')}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $${questionValues.length}
+        `,
+        questionValues
+      );
+    }
+
+    if (mappingClauses.length > 0) {
+      mappingValues.push(id);
+      await client.query(
+        `
+        UPDATE chuyen_sau_bode_cauhoi
+        SET ${mappingClauses.join(', ')}
+        WHERE question_id = $${mappingValues.length}
+        `,
+        mappingValues
+      );
+    }
+
+    const result = await client.query(
+      `
+      SELECT q.id
+      FROM chuyen_sau_cauhoi q
+      WHERE q.id = $1
+      `,
+      [id]
+    );
+
+    await client.query('COMMIT');
 
     if (result.rows.length === 0) {
       return NextResponse.json(
@@ -218,16 +347,22 @@ export async function PUT(request: NextRequest) {
       message: 'Exam set question updated successfully',
     });
   } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK').catch(() => undefined);
+    }
     console.error('Error updating exam set question:', error);
     return NextResponse.json(
       { error: 'Failed to update exam set question' },
       { status: 500 }
     );
+  } finally {
+    client?.release();
   }
 }
 
 // DELETE: Delete set question
 export async function DELETE(request: NextRequest) {
+  let client: Awaited<ReturnType<typeof pool.connect>> | null = null;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -239,8 +374,25 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const query = 'DELETE FROM exam_set_questions WHERE id = $1 RETURNING *';
-    const result = await pool.query(query, [id]);
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    await client.query('DELETE FROM chuyen_sau_bode_cauhoi WHERE question_id = $1', [id]);
+    const result = await client.query(
+      `
+      DELETE FROM chuyen_sau_cauhoi q
+      WHERE q.id = $1
+        AND NOT EXISTS (
+          SELECT 1
+          FROM chuyen_sau_bode_cauhoi map
+          WHERE map.question_id = q.id
+        )
+      RETURNING *
+      `,
+      [id]
+    );
+
+    await client.query('COMMIT');
 
     if (result.rows.length === 0) {
       return NextResponse.json(
@@ -254,10 +406,15 @@ export async function DELETE(request: NextRequest) {
       message: 'Exam set question deleted successfully',
     });
   } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK').catch(() => undefined);
+    }
     console.error('Error deleting exam set question:', error);
     return NextResponse.json(
       { error: 'Failed to delete exam set question' },
       { status: 500 }
     );
+  } finally {
+    client?.release();
   }
 }

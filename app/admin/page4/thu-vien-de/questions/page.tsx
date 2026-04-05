@@ -95,16 +95,12 @@ function ExamSetQuestionsContent() {
       const isEditing = editingQuestion?.id;
       const method = isEditing ? 'PUT' : 'POST';
       const questionText = (questionData.question_text || '').trim();
+      const normalizedQuestionText = questionText || '[Tạm] Chưa dán nội dung từ doc';
       const questionType: Question['question_type'] = questionData.question_type || 'multiple_choice';
       const normalizedOptions = Array.isArray(questionData.options)
         ? questionData.options.map((option) => option.trim()).filter(Boolean)
         : null;
       let correctAnswer = String(questionData.correct_answer || '').trim();
-
-      if (!questionText) {
-        toast.error('Vui lòng nhập câu hỏi');
-        return;
-      }
 
       if (questionType === 'multiple_choice') {
         if (!normalizedOptions || normalizedOptions.length < 2) {
@@ -130,7 +126,7 @@ function ExamSetQuestionsContent() {
 
       const payload: SetQuestionRequestPayload = {
         set_id: Number(setId),
-        question_text: questionText,
+        question_text: normalizedQuestionText,
         question_type: questionType,
         correct_answer: correctAnswer,
         options: questionType === 'multiple_choice' || questionType === 'true_false'
@@ -301,7 +297,7 @@ function ExamSetQuestionsContent() {
         <div className="text-center py-12">
           <p className="text-red-600">Không tìm thấy bộ đề</p>
           <button
-            onClick={() => router.push('/admin/page4/thu-vien-de')}
+            onClick={() => router.push('/admin/thu-vien-de')}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Quay lại thư viện đề
@@ -341,7 +337,7 @@ function ExamSetQuestionsContent() {
 
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <button
-          onClick={() => router.push('/admin/page4/thu-vien-de')}
+          onClick={() => router.push('/admin/thu-vien-de')}
           className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />

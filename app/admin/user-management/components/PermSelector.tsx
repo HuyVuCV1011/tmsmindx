@@ -10,7 +10,7 @@ export const AVAILABLE_ROUTES = [
     { path: "/admin/hr-candidates", label: "HR quản lý GEN ứng viên", group: "Nhân sự" },
     { path: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện", group: "Sự kiện" },
     { path: "/admin/page4/danh-sach-dang-ky", label: "Danh sách đăng ký", group: "Đánh giá năng lực GV" },
-    { path: "/admin/page4/thu-vien-de", label: "Library đề chuyên môn", group: "Đánh giá năng lực GV" },
+    { path: "/admin/thu-vien-de", label: "Library đề chuyên môn", group: "Đánh giá năng lực GV" },
     { path: "/admin/page5", label: "QL đào tạo nâng cao", group: "Đào tạo" },
     { path: "/admin/training-dashboard", label: "Thống kê đào tạo", group: "Đào tạo" },
     { path: "/admin/assignments", label: "QL Assignments", group: "Đào tạo" },

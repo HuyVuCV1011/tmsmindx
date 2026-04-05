@@ -42,10 +42,12 @@ interface RegisteredExamParticipant {
 
 interface CalendarExamAssignment {
   id: number;
+  registration_id?: number;
   exam_type: "expertise" | "experience";
   subject_code: string;
   open_at: string;
   close_at: string;
+  event_schedule_id?: string | null;
   assignment_status: string;
   can_take: boolean;
   is_open: boolean;
@@ -321,6 +323,13 @@ function normalizeSearchString(value: string) {
     .trim();
 }
 
+function normalizeSubjectCode(value: string) {
+  return normalizeSearchString(value || "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function isSameMinute(firstValue: string, secondValue: string) {
   const first = parseLocalDateTime(firstValue).getTime();
   const second = parseLocalDateTime(secondValue).getTime();
@@ -443,8 +452,30 @@ export default function MonthlyActivitiesPage() {
   const [participantsEvent, setParticipantsEvent] = useState<EvaluationEvent | null>(null);
   const [userRegisteredSubjects, setUserRegisteredSubjects] = useState<Set<string>>(new Set());
   const [registeredScheduleTimesByOption, setRegisteredScheduleTimesByOption] = useState<Record<string, string[]>>({});
+  const [registeredExamEventIdsByOption, setRegisteredExamEventIdsByOption] = useState<Record<string, string[]>>({});
   const [selectedExamEventByOption, setSelectedExamEventByOption] = useState<Record<string, string>>({});
   const [examAssignments, setExamAssignments] = useState<CalendarExamAssignment[]>([]);
+
+  const resolveExamEventIdByOptionAndSchedule = useCallback(
+    (option: string, scheduledAt: string) => {
+      const scheduledStamp = toMinuteStamp(scheduledAt);
+      const matched = events.find((event) => {
+        if (event.eventType !== "exam") {
+          return false;
+        }
+
+        if (toMinuteStamp(event.startAt) !== scheduledStamp) {
+          return false;
+        }
+
+        const mappedPayloads = mapEventToRegisterPayloads(event);
+        return mappedPayloads.some((mapped) => mapped.optionLabel === option);
+      });
+
+      return matched?.id || "";
+    },
+    [events]
+  );
 
   useEffect(() => {
     if (!user?.email) return;
@@ -558,8 +589,9 @@ export default function MonthlyActivitiesPage() {
         if (!response.ok || !data?.success) return;
         const registeredSet = new Set<string>();
         const scheduleTimesByOption: Record<string, string[]> = {};
+        const eventIdsByOption: Record<string, string[]> = {};
 
-        (data.data || []).forEach((row: { block_code: string; subject_code: string; scheduled_at: string }) => {
+        (data.data || []).forEach((row: { block_code: string; subject_code: string; scheduled_at: string; scheduled_event_id?: string | null }) => {
           Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
             if (mapped.block_code === row.block_code && mapped.subject_code === row.subject_code) {
               registeredSet.add(option);
@@ -568,16 +600,34 @@ export default function MonthlyActivitiesPage() {
               }
               if (row.scheduled_at) {
                 scheduleTimesByOption[option].push(row.scheduled_at);
+
+                const rawEventId = (row.scheduled_event_id || '').toString().trim();
+                const isExamEventId =
+                  !!rawEventId &&
+                  events.some((event) => event.id === rawEventId && event.eventType === 'exam');
+                const eventId = isExamEventId
+                  ? rawEventId
+                  : resolveExamEventIdByOptionAndSchedule(option, row.scheduled_at);
+                if (eventId) {
+                  if (!eventIdsByOption[option]) {
+                    eventIdsByOption[option] = [];
+                  }
+
+                  if (!eventIdsByOption[option].includes(eventId)) {
+                    eventIdsByOption[option].push(eventId);
+                  }
+                }
               }
             }
           });
         });
         setUserRegisteredSubjects(registeredSet);
         setRegisteredScheduleTimesByOption(scheduleTimesByOption);
+        setRegisteredExamEventIdsByOption(eventIdsByOption);
       } catch {
       }
     })();
-  }, [teacherCode]);
+  }, [teacherCode, resolveExamEventIdByOptionAndSchedule]);
 
   const fetchExamAssignmentsForMonth = useCallback(
     async (targetDate: Date) => {
@@ -764,17 +814,45 @@ export default function MonthlyActivitiesPage() {
       }
 
       const matches = examAssignments.filter((assignment) => {
+        if (assignment.event_schedule_id && assignment.event_schedule_id === event.id) {
+          return true;
+        }
+
         const hasMappedSubject = mappedPayloads.some(
-          (mapped) =>
-            mapped.exam_type === assignment.exam_type &&
-            mapped.subject_code === assignment.subject_code
+          (mapped) => {
+            if (mapped.exam_type !== assignment.exam_type) {
+              return false;
+            }
+
+            const normalizedAssignmentSubject = normalizeSubjectCode(assignment.subject_code || "");
+            if (!normalizedAssignmentSubject) {
+              return false;
+            }
+
+            const candidates = [
+              mapped.subject_code,
+              mapped.optionLabel,
+              ...mapped.subjectCodeCandidates,
+            ]
+              .map((candidate) => normalizeSubjectCode(candidate || ""))
+              .filter(Boolean);
+
+            return candidates.some(
+              (candidate) =>
+                candidate === normalizedAssignmentSubject ||
+                candidate.includes(normalizedAssignmentSubject) ||
+                normalizedAssignmentSubject.includes(candidate)
+            );
+          }
         );
 
         if (!hasMappedSubject) {
           return false;
         }
 
-        return isSameMinute(assignment.open_at, event.startAt);
+        const assignmentOpenAt = parseLocalDateTime(assignment.open_at);
+        const eventStartAt = parseLocalDateTime(event.startAt);
+        return isSameDate(assignmentOpenAt, eventStartAt);
       });
 
       if (matches.length === 0) {
@@ -786,6 +864,14 @@ export default function MonthlyActivitiesPage() {
         if (first.can_take !== second.can_take) {
           return first.can_take ? -1 : 1;
         }
+
+        const eventStartTime = parseLocalDateTime(event.startAt).getTime();
+        const firstDistance = Math.abs(parseLocalDateTime(first.open_at).getTime() - eventStartTime);
+        const secondDistance = Math.abs(parseLocalDateTime(second.open_at).getTime() - eventStartTime);
+        if (firstDistance !== secondDistance) {
+          return firstDistance - secondDistance;
+        }
+
         return parseLocalDateTime(second.open_at).getTime() - parseLocalDateTime(first.open_at).getTime();
       });
 
@@ -1098,9 +1184,10 @@ export default function MonthlyActivitiesPage() {
           continue;
         }
 
-        const alreadyRegisteredSameSlot = (registeredScheduleTimesByOption[option] || []).some((registeredAt) =>
-          toMinuteStamp(registeredAt) === toMinuteStamp(matchedExamEvent.startAt)
-        );
+        const targetEventId = examEventId || matchedExamEvent.id;
+        const alreadyRegisteredSameSlot =
+          !!targetEventId &&
+          (registeredExamEventIdsByOption[option] || []).includes(targetEventId);
 
         if (alreadyRegisteredSameSlot) {
           failedOptions.push(option);
@@ -1125,6 +1212,7 @@ export default function MonthlyActivitiesPage() {
             source_form: sourceForm,
             open_at: scheduledAt.toISOString(),
             close_at: closeAt.toISOString(),
+            scheduled_event_id: registrationEvent.id,
             teacher_info: teacherAutoFillData,
           }),
         });
@@ -1158,6 +1246,22 @@ export default function MonthlyActivitiesPage() {
           const hasSameSlot = existing.some((value) => toMinuteStamp(value) === toMinuteStamp(scheduledAt));
           if (!hasSameSlot) {
             next[option] = [...existing, scheduledAt];
+          }
+        });
+        return next;
+      });
+
+      setRegisteredExamEventIdsByOption((prev) => {
+        const next: Record<string, string[]> = { ...prev };
+        submittedOptions.forEach((option) => {
+          const selectedEventId = selectedExamEventByOption[option] || "";
+          if (!selectedEventId) {
+            return;
+          }
+
+          const existing = next[option] || [];
+          if (!existing.includes(selectedEventId)) {
+            next[option] = [...existing, selectedEventId];
           }
         });
         return next;
@@ -1669,12 +1773,11 @@ export default function MonthlyActivitiesPage() {
                   (selectedEventId ? examEvents.find((event) => event.id === selectedEventId) : null) ||
                   examEvents[0] ||
                   null;
+                const effectiveSelectedEventId = selectedEventId || selectedExamEvent?.id || "";
                 const hasAnyRegistration = userRegisteredSubjects.has(option);
                 const isAlreadyRegisteredForSelectedEvent =
-                  !!selectedExamEvent &&
-                  (registeredScheduleTimesByOption[option] || []).some(
-                    (registeredAt) => toMinuteStamp(registeredAt) === toMinuteStamp(selectedExamEvent.startAt)
-                  );
+                  !!effectiveSelectedEventId &&
+                  (registeredExamEventIdsByOption[option] || []).includes(effectiveSelectedEventId);
                 const isDisabled = !isAvailable || !hasExamEvents || isAlreadyRegisteredForSelectedEvent;
 
                 return (
