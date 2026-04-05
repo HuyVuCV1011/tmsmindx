@@ -20,7 +20,7 @@ export default function Dashboard() {
             </div>
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-2">
-                Chào mừng đến Dashboard
+                Chào mừng đến trang chủ
               </h2>
               <p className="text-sm text-gray-600">
                 Sử dụng menu bên trái để điều hướng

@@ -72,7 +72,7 @@ export default function DatabaseMigrationPage() {
     }
 
     return (
-        <div className="space-y-6 max-w-4xl mx-auto p-6">
+        <div className="space-y-6 max-w-7xl mx-auto p-6">
             <div className="flex items-center gap-4 mb-6">
                 <Database className="w-8 h-8 text-primary" />
                 <div>

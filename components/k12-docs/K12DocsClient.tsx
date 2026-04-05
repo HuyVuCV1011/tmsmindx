@@ -2,7 +2,7 @@
 
 import { PageContainer } from "@/components/PageContainer";
 import { cn } from "@/lib/utils";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, useEffect, useRef } from "react";
 import Markdown from "react-markdown";
@@ -10,10 +10,17 @@ import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 
 export interface K12ClientDocItem {
+  id: number;
   slug: string;
   title: string;
   relativePath: string;
   content: string;
+  type?: "section" | "article";
+  sectionId?: number | null;
+  parentId?: number | null;
+  topic?: string;
+  excerpt?: string;
+  coverImageUrl?: string;
   headings: Array<{ id: string; text: string; level: number }>;
 }
 
@@ -107,11 +114,54 @@ export default function K12DocsClient({
 }: Props) {
   const [query, setQuery] = useState("");
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [expandedLevelOne, setExpandedLevelOne] = useState<Record<string, boolean>>({});
+  const [isMiniToc, setIsMiniToc] = useState(false);
 
   const selectedDoc = useMemo(() => {
     const effective = selectedSlug || defaultSlug;
     return documents.find((doc) => doc.slug === effective) || documents[0];
   }, [documents, selectedSlug, defaultSlug]);
+
+  const selectedRootNodeId = useMemo(() => {
+    const targetSlug = selectedDoc?.slug;
+    if (!targetSlug) return null;
+
+    const findRootBySlug = (nodes: K12ClientDocNode[], rootId: string | null): string | null => {
+      for (const node of nodes) {
+        const nextRootId = rootId ?? (!node.slug && node.children?.length ? node.id : null);
+
+        if (node.slug === targetSlug) {
+          return nextRootId;
+        }
+
+        if (node.children?.length) {
+          const found = findRootBySlug(node.children, nextRootId);
+          if (found) return found;
+        }
+      }
+
+      return null;
+    };
+
+    return findRootBySlug(tree, null);
+  }, [selectedDoc?.slug, tree]);
+
+  useEffect(() => {
+    const initial: Record<string, boolean> = {};
+
+    tree.forEach((node) => {
+      if (!node.slug && node.children && node.children.length > 0) {
+        initial[node.id] = true;
+      }
+    });
+
+    setExpandedLevelOne((prev) => ({ ...initial, ...prev }));
+  }, [tree]);
+
+  useEffect(() => {
+    if (!selectedRootNodeId) return;
+    setExpandedLevelOne((prev) => ({ ...prev, [selectedRootNodeId]: true }));
+  }, [selectedRootNodeId]);
 
   const searchResults = useMemo(() => {
     if (!query.trim()) return [];
@@ -146,6 +196,10 @@ export default function K12DocsClient({
     return normalizeGitbookMarkdown(selectedDoc.content);
   }, [selectedDoc]);
 
+  const heroImage = selectedDoc?.coverImageUrl || "";
+  const heroTopic = selectedDoc?.topic || pageTitle;
+  const heroExcerpt = selectedDoc?.excerpt || "";
+
   const renderTree = (nodes: K12ClientDocNode[], depth = 0) => {
     return nodes
       .map((node) => {
@@ -173,17 +227,45 @@ export default function K12DocsClient({
                     isActive ? "text-white" : "text-gray-400"
                   )}
                 />
-                <span className="line-clamp-2">{node.title}</span>
+                <span
+                  className={cn(
+                    isMiniToc ? "line-clamp-1 text-[11px] font-medium" : "line-clamp-2"
+                  )}
+                  title={node.title}
+                >
+                  {node.title}
+                </span>
               </Link>
+            ) : depth === 0 && hasChildren ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedLevelOne((prev) => ({
+                    ...prev,
+                    [node.id]: !prev[node.id],
+                  }))
+                }
+                className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 hover:bg-gray-100"
+                style={{ paddingLeft: `${8 + depth * 14}px` }}
+              >
+                <ChevronRight
+                  className={cn(
+                    "mr-1 h-3.5 w-3.5 shrink-0 text-gray-500 transition-transform",
+                    expandedLevelOne[node.id] ? "rotate-90" : "rotate-0"
+                  )}
+                />
+                <span className="line-clamp-1" title={node.title}>{node.title}</span>
+              </button>
             ) : (
               <div
                 className="px-2 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-500"
                 style={{ paddingLeft: `${8 + depth * 14}px` }}
+                title={node.title}
               >
-                {node.title}
+                <span className={cn(isMiniToc ? "line-clamp-1 text-[11px]" : "line-clamp-2")}>{node.title}</span>
               </div>
             )}
-            {renderedChildren}
+            {depth === 0 && hasChildren && !expandedLevelOne[node.id] ? null : renderedChildren}
           </div>
         );
         })
@@ -191,7 +273,7 @@ export default function K12DocsClient({
   };
 
   return (
-    <PageContainer description="Tra cứu quy trình, quy định theo cấu trúc GitBook">
+    <PageContainer>
       {/* Custom Header with Title and Search */}
       <div className="mb-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-2">
@@ -200,7 +282,7 @@ export default function K12DocsClient({
               {pageTitle}
             </h1>
           </div>
-          <div className="flex-shrink-0 lg:w-80">
+          <div className="shrink-0 lg:w-80">
             <label className="sr-only" htmlFor="k12-doc-search">
               Tìm tài liệu
             </label>
@@ -252,15 +334,80 @@ export default function K12DocsClient({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)_220px]">
-        <aside className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm lg:sticky lg:top-4 lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
-          <div className="space-y-1">{renderTree(tree)}</div>
+      <div
+        className="grid grid-cols-1 gap-4 lg:[transition:grid-template-columns_320ms_ease]"
+        style={{
+          gridTemplateColumns: isMiniToc
+            ? "120px minmax(0,1fr) 220px"
+            : "300px minmax(0,1fr) 220px",
+        }}
+      >
+        <aside
+          className={cn(
+            "overflow-x-hidden rounded-xl border border-gray-200 bg-white p-3 shadow-sm",
+            "lg:sticky lg:top-4",
+            isMiniToc ? "lg:h-auto lg:overflow-hidden" : "lg:h-[calc(100vh-120px)] lg:overflow-y-auto"
+          )}
+        >
+          <div className="mb-2 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-gray-900">Mục lục</h2>
+              <button
+                type="button"
+                onClick={() => setIsMiniToc((prev) => !prev)}
+                className="inline-flex items-center rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 transition-all duration-300 hover:bg-gray-50"
+                title={isMiniToc ? "Mở rộng mục lục" : "Thu gọn mục lục"}
+              >
+                <span className="inline-flex transition-transform duration-300">
+                  {isMiniToc ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
+                </span>
+              </button>
+            </div>
+
+          </div>
+          <div
+            className={cn(
+              "overflow-hidden transition-all duration-300 ease-out",
+              isMiniToc ? "max-h-0 opacity-0 -translate-y-1" : "max-h-500 opacity-100 translate-y-0"
+            )}
+          >
+            <div className="space-y-1">{renderTree(tree)}</div>
+          </div>
         </aside>
 
         <article className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           {selectedDoc ? (
             <>
-              <h1 className="mb-2 text-2xl font-bold text-gray-900">{selectedDoc.title}</h1>
+              <div className="mb-5 overflow-hidden rounded-2xl border border-gray-200 bg-linear-to-br from-white to-gray-50 shadow-sm">
+                <div className="grid gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
+                  <div className="relative min-h-48 bg-gray-100">
+                    {heroImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={heroImage}
+                        alt={selectedDoc.title}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full min-h-48 items-end bg-linear-to-br from-[#a1001f] via-[#c41230] to-[#f2b705] p-5 text-white">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/80">
+                            {heroTopic}
+                          </p>
+                          <h1 className="mt-2 text-2xl font-black leading-tight">
+                            {selectedDoc.title}
+                          </h1>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col justify-center p-5 lg:p-6">
+                    <h1 className="text-2xl font-black text-gray-900 lg:text-3xl">{selectedDoc.title}</h1>
+                    {heroExcerpt && <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-600">{heroExcerpt}</p>}
+                  </div>
+                </div>
+              </div>
               <div className="k12-markdown text-gray-800">
                 <Markdown
                   remarkPlugins={[remarkGfm]}

@@ -9,6 +9,7 @@
 ## 🎯 BƯỚC 1: Tăng Connection Pool (5 phút)
 
 ### Vấn đề
+
 Hiện tại app server chỉ giữ 20 connection tối đa → khiến người dùng phải chờ nếu > 20 người online
 
 ### Giải Pháp
@@ -35,6 +36,7 @@ if (!global.pool) {
 ```
 
 ### Kiểm Tra
+
 ```bash
 # Restart app
 npm run dev
@@ -44,6 +46,7 @@ npm run dev
 ```
 
 ### Kết Quả
+
 - **Trước:** 28 người
 - **Sau:** 35 người
 - **Tăng:** +7 người (+25%)
@@ -53,6 +56,7 @@ npm run dev
 ## 🎯 BƯỚC 2: Tạo Database Indexes (10 phút)
 
 ### Vấn đề
+
 Các query hay chậm vì không có index trên các cột frequently accessed
 
 ### Giải Pháp
@@ -64,45 +68,46 @@ Các query hay chậm vì không có index trên các cột frequently accessed
 -- Chạy file này trực tiếp vào database
 
 -- 1. Index cho teachers table
-CREATE INDEX IF NOT EXISTS idx_teachers_active 
-  ON teachers(created_at DESC) 
+CREATE INDEX IF NOT EXISTS idx_teachers_active
+  ON teachers(created_at DESC)
   WHERE deleted = false;
 
-CREATE INDEX IF NOT EXISTS idx_teachers_email 
+CREATE INDEX IF NOT EXISTS idx_teachers_email
   ON teachers(email);
 
-CREATE INDEX IF NOT EXISTS idx_teachers_phone 
+CREATE INDEX IF NOT EXISTS idx_teachers_phone
   ON teachers(phone);
 
--- 2. Index cho communications table  
-CREATE INDEX IF NOT EXISTS idx_communications_user 
+-- 2. Index cho communications table
+CREATE INDEX IF NOT EXISTS idx_communications_user
   ON communications(user_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_communications_created 
+CREATE INDEX IF NOT EXISTS idx_communications_created
   ON communications(created_at DESC);
 
 -- 3. Index cho session_tracking
-CREATE INDEX IF NOT EXISTS idx_sessions_user_activity 
+CREATE INDEX IF NOT EXISTS idx_sessions_user_activity
   ON session_tracking(user_id, last_activity DESC);
 
-CREATE INDEX IF NOT EXISTS idx_sessions_route 
+CREATE INDEX IF NOT EXISTS idx_sessions_route
   ON session_tracking(current_route);
 
 -- 4. Index cho exams
-CREATE INDEX IF NOT EXISTS idx_exam_assignments_teacher 
+CREATE INDEX IF NOT EXISTS idx_exam_assignments_teacher
   ON teacher_exam_assignments(teacher_id, created_at DESC);
 
 -- 5. Kiểm tra tất cả indexes
-SELECT schemaname, tablename, indexname 
-FROM pg_indexes 
-WHERE schemaname = 'public' 
+SELECT schemaname, tablename, indexname
+FROM pg_indexes
+WHERE schemaname = 'public'
 ORDER BY tablename;
 ```
 
 ### Thực Hiện
+
 ```bash
 # Option 1: Dùng psql
-psql -d teachingms -f scripts/add-performance-indexes.sql
+psql -d teaching_portal_system -f scripts/add-performance-indexes.sql
 
 # Option 2: Dùng API database admin
 # POST http://localhost:3000/api/database
@@ -110,12 +115,14 @@ psql -d teachingms -f scripts/add-performance-indexes.sql
 ```
 
 ### Kiểm Tra
+
 ```bash
 # Xem query execution time trước/sau
 # Nên giảm 40-60%
 ```
 
 ### Kết Quả
+
 - **Query speed:** ↑ 40-60%
 - **Throughput:** +200 requests/sec
 - **CPU usage:** ↓ 20%
@@ -125,6 +132,7 @@ psql -d teachingms -f scripts/add-performance-indexes.sql
 ## 🎯 BƯỚC 3: Setup Session Cleanup (15 phút)
 
 ### Vấn đề
+
 Table `session_tracking` sẽ phồng tăng nhanh → query chậm đi
 
 ### Giải Pháp
@@ -132,31 +140,31 @@ Table `session_tracking` sẽ phồng tăng nhanh → query chậm đi
 **File: `lib/session-cleanup.ts` (tạo mới)**
 
 ```typescript
-import pool from '@/lib/db';
+import pool from "@/lib/db";
 
 export async function cleanupOldSessions() {
   try {
-    console.log('🧹 Cleaning up old sessions...');
-    
+    console.log("🧹 Cleaning up old sessions...");
+
     // Xóa sessions cũ hơn 7 ngày
     const result = await pool.query(`
       DELETE FROM session_tracking
       WHERE last_activity < NOW() - INTERVAL '7 days'
     `);
-    
+
     console.log(`✅ Deleted ${result.rowCount} old sessions`);
-    
+
     // Vacuum để giải phóng space
-    await pool.query('VACUUM ANALYZE session_tracking');
-    
-    console.log('✅ Vacuumed table');
-    
+    await pool.query("VACUUM ANALYZE session_tracking");
+
+    console.log("✅ Vacuumed table");
+
     return {
       deleted: result.rowCount,
-      status: 'success'
+      status: "success",
     };
   } catch (error) {
-    console.error('❌ Cleanup failed:', error);
+    console.error("❌ Cleanup failed:", error);
     throw error;
   }
 }
@@ -165,12 +173,12 @@ export async function cleanupOldSessions() {
 **File: `app/api/cron/cleanup-sessions/route.ts` (tạo mới)**
 
 ```typescript
-import { cleanupOldSessions } from '@/lib/session-cleanup';
-import { NextRequest } from 'next/server';
+import { cleanupOldSessions } from "@/lib/session-cleanup";
+import { NextRequest } from "next/server";
 
 /**
  * Cron job để cleanup old sessions
- * 
+ *
  * Vercel Cron Integration:
  * - POST http://your-domain.com/api/cron/cleanup-sessions
  * - Set trong vercel.json: {
@@ -183,36 +191,33 @@ import { NextRequest } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     // Kiểm tra authorization header
-    const authHeader = request.headers.get('authorization');
+    const authHeader = request.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
-    
+
     if (!cronSecret) {
       return Response.json(
-        { error: 'CRON_SECRET not configured' },
-        { status: 500 }
+        { error: "CRON_SECRET not configured" },
+        { status: 500 },
       );
     }
-    
+
     if (authHeader !== `Bearer ${cronSecret}`) {
-      return Response.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Run cleanup
     const result = await cleanupOldSessions();
-    
+
     return Response.json({
       success: true,
-      message: 'Cleanup completed',
-      data: result
+      message: "Cleanup completed",
+      data: result,
     });
   } catch (error) {
-    console.error('Cron job failed:', error);
+    console.error("Cron job failed:", error);
     return Response.json(
-      { error: 'Cleanup failed', details: String(error) },
-      { status: 500 }
+      { error: "Cleanup failed", details: String(error) },
+      { status: 500 },
     );
   }
 }
@@ -220,12 +225,12 @@ export async function POST(request: NextRequest) {
 // Support GET cho testing
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
-  const testMode = url.searchParams.get('test') === 'true';
-  
+  const testMode = url.searchParams.get("test") === "true";
+
   if (!testMode) {
     return Response.json(
-      { error: 'Use POST with Authorization header' },
-      { status: 405 }
+      { error: "Use POST with Authorization header" },
+      { status: 405 },
     );
   }
 
@@ -233,10 +238,7 @@ export async function GET(request: NextRequest) {
     const result = await cleanupOldSessions();
     return Response.json({ success: true, data: result });
   } catch (error) {
-    return Response.json(
-      { error: String(error) },
-      { status: 500 }
-    );
+    return Response.json({ error: String(error) }, { status: 500 });
   }
 }
 ```
@@ -245,10 +247,12 @@ export async function GET(request: NextRequest) {
 
 ```json
 {
-  "crons": [{
-    "path": "/api/cron/cleanup-sessions",
-    "schedule": "0 2 * * *"
-  }]
+  "crons": [
+    {
+      "path": "/api/cron/cleanup-sessions",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }
 ```
 
@@ -259,11 +263,12 @@ CRON_SECRET=your_super_secret_key_here_12345
 ```
 
 ### Thực Hiện
+
 ```bash
 # Test cleanup (local)
 curl 'http://localhost:3000/api/cron/cleanup-sessions?test=true'
 
-# Kết quả: 
+# Kết quả:
 # {
 #   "success": true,
 #   "data": {
@@ -274,15 +279,17 @@ curl 'http://localhost:3000/api/cron/cleanup-sessions?test=true'
 ```
 
 ### Kiểm Tra
+
 ```sql
 -- Xem kích thước table trước/sau
-SELECT 
+SELECT
   pg_size_pretty(pg_total_relation_size('session_tracking')) as size,
   COUNT(*) as rows
 FROM session_tracking;
 ```
 
 ### Kết Quả
+
 - **Table size:** ↓ 30-50%
 - **Query speed:** ↑ 15-20%
 - **Storage savings:** Giải phóng ~100-500MB/tháng
@@ -292,11 +299,13 @@ FROM session_tracking;
 ## 🎯 BƯỚC 4: Implement Query Caching (45 phút)
 
 ### Vấn đề
+
 Mỗi request đều query database → N+1 problem → chậm
 
 ### Giải Pháp
 
 **Tìm file:**
+
 - `app/dashboard/page.tsx`
 - `app/dashboard/lịch-giáo-viên/page.tsx`
 - Các page hay query nhiều dữ liệu
@@ -308,7 +317,7 @@ Mỗi request đều query database → N+1 problem → chậm
 export default async function DashboardPage() {
   const teachers = await db.query('SELECT * FROM teachers LIMIT 100');
   const communications = await db.query('SELECT * FROM communications LIMIT 50');
-  
+
   return (
     <div>
       {/* Render data */}
@@ -332,7 +341,7 @@ const getCachedTeachers = unstable_cache(
     return result.rows;
   },
   ['dashboard-teachers'],  // cache key
-  { 
+  {
     revalidate: 300,  // 5 phút
     tags: ['teachers']  // để dùng revalidateTag sau
   }
@@ -351,7 +360,7 @@ const getCachedCommunications = unstable_cache(
     return result.rows;
   },
   ['dashboard-communications'],
-  { 
+  {
     revalidate: 120,  // 2 phút
     tags: ['communications']
   }
@@ -362,14 +371,14 @@ export default async function DashboardPage() {
   // Lần sau (trong 5 phút): từ cache
   const teachers = await getCachedTeachers();
   const communications = await getCachedCommunications();
-  
+
   return (
     <div className="space-y-6">
       <div>
         <h2>Teachers ({teachers.length})</h2>
         {/* Render teachers */}
       </div>
-      
+
       <div>
         <h2>Communications ({communications.length})</h2>
         {/* Render communications */}
@@ -384,21 +393,21 @@ export default async function DashboardPage() {
 ```typescript
 // app/dashboard/actions.ts
 
-'use server';
+"use server";
 
-import { revalidateTag } from 'next/cache';
+import { revalidateTag } from "next/cache";
 
 export async function invalidateTeachersCache() {
-  revalidateTag('teachers');
+  revalidateTag("teachers");
 }
 
 export async function invalidateCommunicationsCache() {
-  revalidateTag('communications');
+  revalidateTag("communications");
 }
 
 export async function invalidateDashboardCache() {
-  revalidateTag('teachers');
-  revalidateTag('communications');
+  revalidateTag("teachers");
+  revalidateTag("communications");
 }
 ```
 
@@ -411,7 +420,7 @@ import { invalidateDashboardCache } from './actions';
 
 export function RefreshButton() {
   return (
-    <button 
+    <button
       onClick={async () => {
         await invalidateDashboardCache();
         // Cache sẽ refresh ngay
@@ -426,6 +435,7 @@ export function RefreshButton() {
 ```
 
 ### Kiểm Tra
+
 ```bash
 # Monitor console logs - sẽ thấy:
 # Lần 1: "📦 Fetching teachers (not cached)"
@@ -434,6 +444,7 @@ export function RefreshButton() {
 ```
 
 ### Kết Quả
+
 - **Database queries:** ↓ 70-80%
 - **Response time:** ↓ 80-90%
 - **Throughput:** +500 requests/sec
@@ -444,6 +455,7 @@ export function RefreshButton() {
 ## 🎯 BƯỚC 5: Optimize N+1 Queries (30 phút)
 
 ### Vấn đề
+
 Query từng item lần lượt thay vì lấy tất cả một lần
 
 ### Tìm N+1 Problems
@@ -453,14 +465,15 @@ Query từng item lần lượt thay vì lấy tất cả một lần
 ```typescript
 // lib/db.ts - Thêm logging
 
-if (process.env.NODE_ENV === 'development') {
-  pool.on('query', (query) => {
-    console.log('⏱️  [Query]', query.text.slice(0, 50), '...');
+if (process.env.NODE_ENV === "development") {
+  pool.on("query", (query) => {
+    console.log("⏱️  [Query]", query.text.slice(0, 50), "...");
   });
 }
 ```
 
 **Tìm trong database admin dashboard:**
+
 ```bash
 curl "http://localhost:3000/api/database?action=query&sql=SELECT query, count FROM pg_stat_statements ORDER BY calls DESC LIMIT 20&secret=YOUR_SECRET"
 ```
@@ -470,21 +483,21 @@ curl "http://localhost:3000/api/database?action=query&sql=SELECT query, count FR
 ```typescript
 // ❌ BAD: N+1 Problem
 async function getBadTeachersWithStats() {
-  const teachers = await db.query('SELECT * FROM teachers LIMIT 10');
-  
+  const teachers = await db.query("SELECT * FROM teachers LIMIT 10");
+
   const result = [];
   for (const teacher of teachers.rows) {
     // Lặp 10 lần query! ❌
     const stats = await db.query(
-      'SELECT * FROM teacher_stats WHERE teacher_id = $1',
-      [teacher.id]
+      "SELECT * FROM teacher_stats WHERE teacher_id = $1",
+      [teacher.id],
     );
     result.push({
       ...teacher,
-      stats: stats.rows[0]
+      stats: stats.rows[0],
     });
   }
-  
+
   return result;
   // Total queries: 1 + N = 11 queries ❌
 }
@@ -501,7 +514,7 @@ async function getGoodTeachersWithStats() {
     LEFT JOIN teacher_stats ts ON t.id = ts.teacher_id
     LIMIT 10
   `);
-  
+
   return result.rows;
   // Total queries: 1 query ✅
 }
@@ -512,11 +525,12 @@ async function getGoodTeachersWithStats() {
 **File: `lib/queries/optimized.ts` (tạo mới)**
 
 ```typescript
-import pool from '@/lib/db';
+import pool from "@/lib/db";
 
 // 1. Get teachers with stats - optimized
 export async function getTeachersWithStats(limit = 10) {
-  const result = await db.query(`
+  const result = await db.query(
+    `
     SELECT 
       t.id, t.name, t.email, t.phone,
       ts.total_students,
@@ -528,14 +542,17 @@ export async function getTeachersWithStats(limit = 10) {
     LEFT JOIN teacher_exam_assignments ta ON t.id = ta.teacher_id
     GROUP BY t.id, ts.id
     LIMIT $1
-  `, [limit]);
-  
+  `,
+    [limit],
+  );
+
   return result.rows;
 }
 
 // 2. Get communications with replies - optimized
 export async function getCommunicationsWithReplies(limit = 20) {
-  const result = await db.query(`
+  const result = await db.query(
+    `
     SELECT 
       c.id, c.title, c.content, c.created_at,
       COUNT(cr.id) as reply_count,
@@ -546,13 +563,16 @@ export async function getCommunicationsWithReplies(limit = 20) {
     GROUP BY c.id
     ORDER BY c.created_at DESC
     LIMIT $1
-  `, [limit]);
-  
+  `,
+    [limit],
+  );
+
   return result.rows;
 }
 ```
 
 ### Kết Quả
+
 - **Database queries:** ↓ 80-90%
 - **Query time:** ↓ 70-80%
 - **Concurrent capacity:** +20 người
@@ -562,6 +582,7 @@ export async function getCommunicationsWithReplies(limit = 20) {
 ## 📊 TÓNG HỢP KẾT QUẢ
 
 ### Trước Tối Ưu
+
 ```
 Concurrent Users: 28
 Query Time (p95): 200ms
@@ -571,6 +592,7 @@ CPU Usage: 70%
 ```
 
 ### Sau Tối Ưu (5 bước)
+
 ```
 Concurrent Users: 60-70  ← +140%! 🚀
 Query Time (p95): 50ms   ← ↓75%
@@ -584,15 +606,18 @@ CPU Usage: 35%           ← ↓50%
 ## ⏱️ TIMELINE THỰC HIỆN
 
 ### Hôm nay (30 phút)
+
 1. Tăng connection pool: `lib/db.ts` (5 phút)
 2. Thêm indexes: `scripts/add-performance-indexes.sql` (10 phút)
 3. Test và restart app (15 phút)
 
 ### Ngày mai (1 giờ)
+
 4. Setup session cleanup cron job (30 phút)
 5. Test cleanup endpoint (30 phút)
 
 ### Tuần này (2 giờ)
+
 6. Implement `unstable_cache` cho 5 page chính (90 phút)
 7. Identify N+1 queries (30 phút)
 8. Refactor N+1 queries (1 giờ)
@@ -602,6 +627,7 @@ CPU Usage: 35%           ← ↓50%
 ## 📋 DEPLOYMENT CHECKLIST
 
 ### Trước deploy
+
 - [ ] Test locally với `npm run dev`
 - [ ] Verify indexes created: `SELECT * FROM pg_indexes`
 - [ ] Test session cleanup: `curl http://localhost:3000/api/cron/cleanup-sessions?test=true`
@@ -609,12 +635,14 @@ CPU Usage: 35%           ← ↓50%
 - [ ] Run load test
 
 ### Deploy
+
 - [ ] Commit changes với message rõ
 - [ ] Push lên main branch
 - [ ] Deploy lên production
 - [ ] Verify cron job running
 
 ### Sau deploy
+
 - [ ] Monitor metrics trong 1 giờ
 - [ ] Check error logs
 - [ ] Verify concurrent users tracking
@@ -625,26 +653,30 @@ CPU Usage: 35%           ← ↓50%
 ## 🆘 TROUBLESHOOTING
 
 ### Index creation slow?
+
 ```sql
 -- Tạo index dengan CONCURRENTLY để không lock table
-CREATE INDEX CONCURRENTLY idx_large_table 
+CREATE INDEX CONCURRENTLY idx_large_table
 ON large_table(column_name);
 ```
 
 ### Connection pool error?
+
 ```
 Error: Client was closed unexpectedly
 → Tăng: connectionTimeoutMillis từ 10000 → 30000
 ```
 
 ### Cache không update?
+
 ```typescript
 // Manual revalidate
-revalidateTag('dashboard-teachers');
-revalidateTag('dashboard-communications');
+revalidateTag("dashboard-teachers");
+revalidateTag("dashboard-communications");
 ```
 
 ### Cron job không chạy?
+
 ```bash
 # Kiểm tra Vercel logs
 # Hoặc test manual:

@@ -1,6 +1,14 @@
 import { Pool } from 'pg';
 import { initDatabase } from './migrations';
 
+const isBuildPhase =
+  process.env.NEXT_PHASE === 'phase-production-build' ||
+  process.env.npm_lifecycle_event === 'build';
+
+// Keep the default pool intentionally small because Next.js may spawn multiple
+// worker processes; a large per-process pool quickly exhausts Postgres slots.
+const poolMax = Math.max(1, parseInt(process.env.DB_POOL_MAX || '2', 10));
+
 // Prevent creating multiple pools during hot reloads in development (Next.js specific fix for serverless/HMR)
 if (!global.pool) {
   global.pool = new Pool({
@@ -9,7 +17,7 @@ if (!global.pool) {
     database: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    max: 20, // Limit maximum connections to avoid exhausting Postgres connection slots
+    max: poolMax, // Keep this low by default; can be overridden via DB_POOL_MAX
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000, // Increased to 10s to avoid timeout on slow networks
     ssl: {
@@ -23,10 +31,12 @@ if (!global.pool) {
     // Don't exit process in serverless, let it log and reconnect
   });
 
-  // Auto-init only once
-  initDatabase(global.pool).catch((err) => {
-    console.error('⚠️ Auto-migration failed (app vẫn chạy bình thường):', err.message);
-  });
+  // Avoid running migrations in each Next.js build worker process.
+  if (!isBuildPhase) {
+    global.migrationInitPromise = initDatabase(global.pool).catch((err) => {
+      console.error('⚠️ Auto-migration failed (app vẫn chạy bình thường):', err.message);
+    });
+  }
 }
 
 const pool = global.pool;

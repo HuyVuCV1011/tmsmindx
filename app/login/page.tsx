@@ -239,8 +239,8 @@ export default function LoginPage() {
         <div className="hidden md:flex flex-col justify-between items-start bg-gradient-to-br from-[#800000] to-[#E31F26] w-1/3 h-full p-8 text-white">
           <div>
             <img src="/logo_white.svg" alt="logo" className="h-20 mb-8 animate-fade-in" />
-            <h2 className="text-2xl font-bold mb-4 leading-tight animate-slide-up">Learning<br />Management System(LMS)</h2>
-            <p className="text-sm opacity-90 mb-8 animate-slide-up animation-delay-200">Hệ thống quản lý thông tin giáo viên, theo dõi tiến độ đào tạo,xử lý yêu cầu,tra cứu thông tin nội bộ.</p>
+            <h2 className="text-2xl font-bold mb-4 leading-tight animate-slide-up"> Teaching<br />Portal System (TPS)</h2>
+            <p className="text-sm opacity-90 mb-8 animate-slide-up animation-delay-200">Hệ thống quản lý thông tin giáo viên, theo dõi tiến độ đào tạo, xử lý yêu cầu tra cứu thông tin nội bộ.</p>
           </div>
           <div className="flex items-center gap-2 text-xs opacity-80">
             <span>Teaching Team</span>
@@ -251,9 +251,8 @@ export default function LoginPage() {
         <div className="flex-1 flex flex-col justify-center px-12 py-6 animate-fade-in animation-delay-200">
           <div className="flex flex-col gap-4 mb-2">
             <h2 className="text-xl font-bold text-center text-[#800000] animate-slide-up">MindX Technology School</h2>
-            <div className="text-lg font-semibold text-gray-900 text-center mt-2 mb-1 animate-slide-up animation-delay-200">Welcome to Portal</div>
-            <div className="text-sm text-gray-500 text-center mb-2 animate-fade-in animation-delay-300">Please select your role and login to continue.</div>
-            <div className="text-sm text-gray-500 text-center mb-3 animate-fade-in animation-delay-400">Đăng nhập bằng tài khoản <a href="https://lms.mindx.edu.vn/" target="_blank" rel="noreferrer" className="text-[#a1001f] font-medium hover:underline transition-colors">https://lms.mindx.edu.vn/</a></div>
+            <div className="text-lg font-semibold text-gray-900 text-center mt-2 mb-1 animate-slide-up animation-delay-200">Chào mừng bạn đến với TPS</div>
+            <div className="text-sm text-gray-500 text-center mb-2 animate-fade-in animation-delay-300">Lựa chọn vai trò của bạn để tiếp tục</div>
           </div>
 
           {error && (
@@ -261,7 +260,7 @@ export default function LoginPage() {
               {error}
             </div>
           )}
-
+  <div>
           <div className="flex justify-center gap-3 mb-4">
             <button
               className={getRoleButtonClass('teacher')}
@@ -279,8 +278,10 @@ export default function LoginPage() {
             >
               Quản lý
             </button>
+            
           </div>
-
+            <div className="text-sm text-gray-500 text-center mb-3 animate-fade-in animation-delay-400">Đăng nhập bằng tài khoản <a href="https://lms.mindx.edu.vn/" target="_blank" rel="noreferrer" className="text-[#a1001f] font-medium hover:underline transition-colors">https://lms.mindx.edu.vn/</a></div>
+</div>
           <form className="flex flex-col gap-3 animate-fade-in animation-delay-300" onSubmit={handleSubmit} noValidate>
             <div className="relative group">
               <label className="block text-xs font-semibold mb-1 text-gray-700 transition-colors group-focus-within:text-[#800000]">Email / Mã đăng nhập</label>
@@ -322,9 +323,9 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
-              <div className="text-right mt-1">
-                <a href="#" className="text-xs text-[#800000] hover:underline transition-all duration-200 hover:text-[#c1122f]">Forgot Password?</a>
-              </div>
+              {/* <div className="text-right mt-1">
+                <a href="#" className="text-xs text-[#800000] hover:underline transition-all duration-200 hover:text-[#c1122f]">Quên mật khẩu?</a>
+              </div> */}
             </div>
             <button
               type="submit"
@@ -343,9 +344,9 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="text-xs text-center text-gray-500 mt-4 animate-fade-in animation-delay-400">
-            Having trouble logging in? <a href="#" className="text-[#800000] hover:underline font-medium transition-all duration-200 hover:text-[#c1122f]">Get Help</a>
-          </div>
+          {/* <div className="text-xs text-center text-gray-500 mt-4 animate-fade-in animation-delay-400">
+           Bạn gặp khó khăn khi đăng nhập <a href="#" className="text-[#800000] hover:underline font-medium transition-all duration-200 hover:text-[#c1122f]">Nhận trợ giúp</a>
+          </div> */}
         </div>
       </div>
     </div>
