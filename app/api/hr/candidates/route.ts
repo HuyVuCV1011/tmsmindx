@@ -132,7 +132,10 @@ async function validateHrAccess(requestEmail: string): Promise<{ ok: boolean; st
 
   const permissions = permissionResult.rows.map((row: { route_path: string }) => row.route_path);
   const hasAccess = permissions.some(
-    (routePath) => routePath === HR_PERMISSION_ROUTE || HR_PERMISSION_ROUTE.startsWith(`${routePath}/`)
+    (routePath) =>
+      routePath === HR_PERMISSION_ROUTE ||
+      HR_PERMISSION_ROUTE.startsWith(`${routePath}/`) ||
+      routePath.startsWith(`${HR_PERMISSION_ROUTE}/`)
   );
 
   if (!hasAccess) {

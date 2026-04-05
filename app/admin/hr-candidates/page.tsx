@@ -185,8 +185,8 @@ export default function HrCandidatesPage() {
 
   return (
     <PageContainer
-      title="Quản trị GEN Nhóm UV"
-      description="Trung tâm điều phối dữ liệu nhân sự tuyển dụng, bộ lọc đa năng, và bulk actions."
+      title="Điều Phối Ứng Viên Đầu Vào"
+      description="Trung tâm tổng hợp dữ liệu, phân loại ứng viên và thiết lập lịch đào tạo linh hoạt."
       maxWidth="full"
       padding="md"
     >

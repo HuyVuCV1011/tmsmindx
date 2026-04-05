@@ -178,7 +178,9 @@ export function Sidebar() {
 
     const hasPermissionForHref = (href: string) => {
       const targetPath = href.split('?')[0];
-      return permissions.some((p) => targetPath === p || targetPath.startsWith(`${p}/`));
+      return permissions.some(
+        (p) => targetPath === p || targetPath.startsWith(`${p}/`) || p.startsWith(`${targetPath}/`)
+      );
     };
 
     const filterMenuItemsByPermissions = (items: any[]): any[] => {
