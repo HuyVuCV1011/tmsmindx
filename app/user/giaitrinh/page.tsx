@@ -284,7 +284,8 @@ export default function GiaiTrinhPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white px-4 lg:px-6">
+      <div className="max-w-7xl mx-auto">
       {/* Header */}
       <PageHeader
         title="Giải Trình Không Tham Gia Kiểm Tra"
@@ -496,7 +497,7 @@ export default function GiaiTrinhPage() {
       </Modal>
 
       {/* Danh sách giải trình - Responsive Cards */}
-      <div className="max-w-7xl mx-auto">
+      <div>
         <div className="bg-white rounded-xl shadow-md overflow-hidden">
           <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-linear-to-r from-gray-50 to-white">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -609,6 +610,7 @@ export default function GiaiTrinhPage() {
             </div>
           )}
         </div>
+      </div>
       </div>
 
       {/* Detail Modal - Mobile Optimized */}

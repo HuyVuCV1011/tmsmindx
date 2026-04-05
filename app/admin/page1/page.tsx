@@ -693,11 +693,11 @@ export default function Page1() {
   }, [availabilityRecords, availabilityPeriod, availabilityFromDate, availabilityToDate]);
 
   return (
-    <div className="max-w-4xl mx-auto px-2 sm:px-4">
+    <div className="max-w-7xl mx-auto px-4 lg:px-6">
       <div className="space-y-3 sm:space-y-4">
         {/* Header */}
         <div className="border-b border-gray-900 pb-2 sm:pb-3">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Tìm kiếm giáo viên</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Tìm kiếm giáo viên</h1>
           <p className="text-xs text-gray-600 mt-1">Nhập mã giáo viên để xem thông tin chi tiết</p>
         </div>
 

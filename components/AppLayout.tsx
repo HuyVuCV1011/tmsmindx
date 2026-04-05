@@ -171,7 +171,7 @@ export default function AppLayout({
           </div>
 
           <p className="mt-8 text-xs text-gray-400">
-            Teaching Management System &bull; MindX Technology School
+            Teaching Portal System (TPS) &bull; MindX Technology School
           </p>
         </div>
       </div>

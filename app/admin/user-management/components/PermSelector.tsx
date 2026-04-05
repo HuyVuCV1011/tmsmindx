@@ -19,7 +19,7 @@ export const AVAILABLE_ROUTES = [
     { path: "/admin/video-detail", label: "Chi tiết Video", group: "Đào tạo" },
     { path: "/admin/training-studio", label: "Training Studio", group: "Đào tạo" },
     { path: "/admin/giaitrinh", label: "QL Giải trình", group: "Nội dung" },
-    { path: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", group: "Nội dung" },
+    { path: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", group: "Quản lý" },
     { path: "/admin/truyenthong", label: "QL truyền thông", group: "Nội dung" },
     { path: "/admin/database", label: "Database Manager", group: "Hệ thống" },
     { path: "/admin/cloudinary", label: "Cloudinary Manager", group: "Hệ thống" },

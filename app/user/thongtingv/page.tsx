@@ -966,11 +966,11 @@ export default function Page1() {
   }, [availabilityRecords, availabilityPeriod, availabilityFromDate, availabilityToDate]);
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-7xl mx-auto px-4 lg:px-6">
       <div className="space-y-3 sm:space-y-4">
         {/* Header */}
         <div className="border-b border-gray-900 pb-2 sm:pb-3">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Thông tin của tôi</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Thông tin của tôi</h1>
           <div className="text-xs text-gray-600 mt-1">
             {(isLoadingTeacher || isResolvingCode) ? (
               <span className="inline-flex items-center gap-2">

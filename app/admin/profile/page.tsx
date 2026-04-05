@@ -16,7 +16,7 @@ export default function AdminProfilePage() {
 
     return (
         <PageContainer padding="lg">
-            <div className="max-w-6xl mx-auto space-y-8">
+            <div className="max-w-7xl mx-auto space-y-8">
                 
                 {/* Profile Header */}
                 <div className="bg-linear-to-br from-[#a1001f] via-[#c41230] to-red-800 rounded-3xl p-8 text-white shadow-2xl">

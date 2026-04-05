@@ -225,13 +225,11 @@ export default function AdminDealLuongPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8">
+    <div className="min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <DollarSign className="w-5 h-5 text-white" />
-          </div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3">
+          
           {`Quản lý ${DEAL_TYPE_LABELS[dealTypeTab]?.label || 'Deal lương'}`}
         </h1>
         <p className="text-slate-500 mt-2 text-sm">Duyệt yêu cầu bonus, hạ lương, deal lương từ Leader/TE/TC</p>
