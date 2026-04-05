@@ -100,6 +100,7 @@ export const POST = withApiProtection(async (request: NextRequest) => {
       open_at,
       close_at,
       random_seed,
+      teacher_info,
     } = body;
 
     if (!teacher_code || !exam_type || !registration_type || !block_code || !subject_code || !scheduled_at) {
@@ -183,6 +184,42 @@ export const POST = withApiProtection(async (request: NextRequest) => {
         { success: false, error: 'Cannot create registration' },
         { status: 500 }
       );
+    }
+
+    const { selected_set_id: registeredSetId } = result.rows[0];
+
+    // Auto-fill chuyen_sau_results for chuyên sâu (expertise) exams
+    if (exam_type === 'expertise') {
+      try {
+        const VN_TZ = 'Asia/Ho_Chi_Minh';
+        const vnFmt = new Intl.DateTimeFormat('vi-VN', {
+          timeZone: VN_TZ,
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', hour12: false,
+        });
+        const thoi_gian_kiem_tra = vnFmt.format(scheduledAt);
+        const vnDate = new Intl.DateTimeFormat('en-CA', { timeZone: VN_TZ }).format(scheduledAt);
+        const [vnYear, vnMonth] = vnDate.split('-').map(Number);
+
+        const hinh_thuc = registration_type === 'additional' ? 'Bổ sung' : 'Chính thức';
+        const ho_va_ten = (teacher_info?.teacher_name || '').toString().trim() || null;
+        const dia_chi_email = (teacher_info?.email || '').toString().trim() || null;
+        const co_so = (teacher_info?.campus || finalCenterCode || '').toString().trim() || null;
+        const ma_lms = teacher_code;
+
+        const deValue = registeredSetId != null ? String(registeredSetId) : null;
+        await pool.query(
+          `INSERT INTO chuyen_sau_results
+            (ho_va_ten, dia_chi_email, bo_mon, co_so, ma_lms, hinh_thuc,
+             thang_dk, nam_dk, thoi_gian_kiem_tra, de, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+          [ho_va_ten, dia_chi_email, subject_code, co_so, ma_lms, hinh_thuc,
+           vnMonth, vnYear, thoi_gian_kiem_tra, deValue]
+        );
+      } catch (csrErr: any) {
+        // Non-fatal: log but don't fail the registration
+        console.error('[exam-registrations] chuyen_sau_results auto-fill failed:', csrErr.message);
+      }
     }
 
     return NextResponse.json({

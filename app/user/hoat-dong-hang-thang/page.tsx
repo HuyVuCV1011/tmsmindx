@@ -1058,6 +1058,15 @@ export default function MonthlyActivitiesPage() {
     const failedOptions: string[] = [];
     const failedDetails: string[] = [];
 
+    // Read teacher info from localStorage for chuyen_sau_results auto-fill
+    let teacherAutoFillData: { teacher_name?: string; email?: string; campus?: string; lms_code?: string } = {};
+    try {
+      const cached = typeof window !== 'undefined' ? localStorage.getItem('teacher_auto_fill_data') : null;
+      if (cached) teacherAutoFillData = JSON.parse(cached);
+    } catch {
+      // ignore localStorage errors
+    }
+
     try {
       setSubmitting(true);
 
@@ -1116,6 +1125,7 @@ export default function MonthlyActivitiesPage() {
             source_form: sourceForm,
             open_at: scheduledAt.toISOString(),
             close_at: closeAt.toISOString(),
+            teacher_info: teacherAutoFillData,
           }),
         });
 
@@ -1289,7 +1299,7 @@ export default function MonthlyActivitiesPage() {
             return (
               <div
                 key={dateKey}
-                className={`min-h-28 border-r border-b border-gray-200 p-2 ${
+                className={`min-h-28 flex flex-col border-r border-b border-gray-200 p-2 ${
                   isPastCalendarDate
                     ? "bg-gray-100"
                     : isToday
@@ -1377,6 +1387,7 @@ export default function MonthlyActivitiesPage() {
                     </button>
                   )}
                 </div>
+                <div className="flex-1" />
               </div>
             );
           })}

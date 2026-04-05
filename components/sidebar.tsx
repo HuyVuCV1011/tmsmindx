@@ -72,12 +72,18 @@ export function Sidebar() {
         { href: "/admin/page1", label: "Hồ sơ Giáo viên" },
         { href: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện" },
         {
-          label: "Quản lý Deal Lương",
+          label: "Quản lý điều phối",
+          submenu: [
+            { href: "/admin/xin-nghi-mot-buoi", label: "Danh sách yêu cầu xin nghỉ 1 buổi"},
+          ]
+        },
+        {
+          label: "Quản lý Nâng/Hạ Lương",
           icon: DollarSign,
           submenu: [
             { href: "/admin/deal-luong?type=salary_deal", label: "Thỏa thuận lương " },
             { href: "/admin/deal-luong?type=salary_reduction", label: "Hạ lương" },
-            { href: "/admin/deal-luong?type=bonus", label: "Bonus" },
+            { href: "/admin/deal-luong?type=bonus", label: "Nâng lương" },
           ]
         },
       ]
@@ -90,13 +96,13 @@ export function Sidebar() {
           label: "Đào Tạo Nâng Cao",
           icon: FileText,
           submenu: [
-            { href: "/admin/page5", label: "Quản lý đào tạo nâng cao" },
-            { href: "/admin/assignments", label: "Cấu hình bài kiểm tra" },
+            { href: "/admin/page5", label: "Thư viện video nâng cao" },
+            { href: "/admin/assignments", label: "Thư viện đề nâng cao" },
             { href: "/admin/training-dashboard", label: "Thống kê" },
           ]
         },
         {
-          label: "Đánh giá năng lực Giáo Viên",
+          label: "Kiểm Tra Chuyên Môn/Trải Nghiệm",
           icon: Settings,
           submenu: [
             // { href: "/admin/page4/form-dang-ky", label: "Form đăng ký kiểm tra" }, 
@@ -116,31 +122,35 @@ export function Sidebar() {
         { href: "/admin/cloudinary", label: "Cloudinary Manager"},
       ]
     },
-    { href: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", icon: FileText },
   ];
 
   const userMenuItems = [
     { href: "/user/truyenthong", label: "Truyền Thông Nội Bộ", icon: Megaphone },
     { href: "/user/thongtingv", label: "Thông Tin Của Tôi", icon: Home },
-    { href: "/user/page2", label: "Quy trình quy định K12 Teaching", icon: BookOpen },
-    { href: "/user/hoat-dong-hang-thang", label: "Hoạt Động Hàng Tháng", icon: CalendarDays },
+    {
+      label: "Lịch & Hoạt động",
+      icon: CalendarDays,
+      submenu: [
+        { href: "/user/hoat-dong-hang-thang", label: "Hoạt Động Hàng Tháng"},
+        { href: "/user/xin-nghi-mot-buoi", label: "Tạo yêu cầu xin nghỉ" },
+        { href: "/user/nhan-lop-1-buoi", label: "Danh sách nhận lớp 1 buổi" },
+      ]
+    },
     {
       label: "Đào tạo & Khảo thí",
       icon: GraduationCap,
       submenu: [
         { href: "/user/training", label: "Đào tạo nâng cao" },
-        { href: "/user/assignments", label: "Kiểm tra Chuyên Môn" },
-        { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
+        {
+          label: "Kiểm tra chuyên môn/Trải nghiệm",
+          submenu: [
+            { href: "/user/assignments", label: "Kiểm tra chuyên môn/trải nghiệm" },
+            { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
+          ]
+        },
       ]
     },
-    {
-      label: "Quy trình xin nghỉ 1 buổi",
-      icon: Settings,
-      submenu: [
-        { href: "/user/xin-nghi-mot-buoi", label: "Gửi yêu cầu xin nghỉ" },
-        { href: "/user/nhan-lop-1-buoi", label: "Danh sách nhận lớp 1 buổi" },
-      ]
-    },
+    { href: "/user/page2", label: "Quy trình & Quy định", icon: BookOpen },
   ];
 
   const isPathMatch = (href?: string) => {
@@ -371,7 +381,7 @@ export function Sidebar() {
                             if (subHasSubmenu) {
                               return (
                                 <div key={subItem.label} className="space-y-1 py-1">
-                                  <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                  <div className="px-2 py-1 text-[11px] font-semibold tracking-wide text-gray-500">
                                     {subItem.label}
                                   </div>
                                   <div className="ml-2 space-y-0.5 border-l border-gray-200 pl-2">
