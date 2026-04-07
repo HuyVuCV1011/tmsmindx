@@ -1,646 +1,492 @@
-import { ensureChuyenSauExamTables } from '@/lib/chuyen-sau-exam-schema';
+/**
+ * exam-submissions/route.ts
+ *
+ * Flow nộp bài MỚI (schema V60):
+ *   1. User nộp answers kèm result_id (đã có trên chuyen_sau_results)
+ *   2. Server tính điểm từ chuyen_sau_cauhoi
+ *   3. Lưu từng câu vào chuyen_sau_baithi_cauhoi
+ *   4. Cập nhật chuyen_sau_results: so_diem, so_cau_dung, tong_cau, trang_thai='da_nop'
+ *
+ * Không còn dùng: chuyen_sau_phancong, chuyen_sau_dangky, chuyen_sau_submissions (legacy)
+ */
+
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
-async function resolveAssignmentId(inputAssignmentId: number): Promise<number> {
-  if (!Number.isFinite(inputAssignmentId) || inputAssignmentId <= 0) {
-    return 0;
-  }
-
-  const directRes = await pool.query(
-    `SELECT id
-     FROM chuyen_sau_phancong
-     WHERE id = $1
-     LIMIT 1`,
-    [inputAssignmentId]
-  );
-
-  if (directRes.rowCount) {
-    return inputAssignmentId;
-  }
-
-  const byRegistrationDirectRes = await pool.query(
-    `SELECT cp.id
-     FROM chuyen_sau_phancong cp
-     WHERE cp.registration_id = $1
-     ORDER BY cp.updated_at DESC, cp.created_at DESC
-     LIMIT 1`,
-    [inputAssignmentId]
-  );
-
-  if (byRegistrationDirectRes.rowCount) {
-    return Number(byRegistrationDirectRes.rows[0]?.id || 0);
-  }
-
-  const legacyRes = await pool.query(
-    `SELECT assignment_id, registration_id
-     FROM chuyen_sau_results
-     WHERE id = $1
-     LIMIT 1`,
-    [inputAssignmentId]
-  );
-
-  const mappedAssignmentId = Number(legacyRes.rows[0]?.assignment_id || 0);
-  if (mappedAssignmentId > 0) {
-    return mappedAssignmentId;
-  }
-
-  const mappedByRegistrationRes = await pool.query(
-    `SELECT cp.id
-     FROM chuyen_sau_phancong cp
-     WHERE cp.registration_id = $1
-     ORDER BY cp.updated_at DESC, cp.created_at DESC
-     LIMIT 1`,
-    [legacyRes.rows[0]?.registration_id || null]
-  );
-
-  return Number(mappedByRegistrationRes.rows[0]?.id || 0);
+interface AnswerPayload {
+  question_id: number | string;
+  answer: string | null;
 }
 
-export async function POST(request: NextRequest) {
+// ─── GET: Xem kết quả bài thi ────────────────────────────────────────────────
+
+export async function GET(request: NextRequest) {
   try {
-    await ensureChuyenSauExamTables();
+    const { searchParams } = new URL(request.url);
+    const resultId = searchParams.get('result_id');
+    const email = searchParams.get('email');
+    const subjectCode = searchParams.get('subject_code');
+    const includeAnswers = searchParams.get('include_answers') === 'true';
+    const examType = searchParams.get('exam_type');
+    const blockCode = searchParams.get('block_code');
 
-    const body = await request.json();
-    const { assignment_id, teacher_code } = body;
-    const resolvedAssignmentId = await resolveAssignmentId(Number(assignment_id));
+    const conditions: string[] = [];
+    const values: unknown[] = [];
 
-    if (!resolvedAssignmentId || !teacher_code) {
-      return NextResponse.json(
-        { success: false, error: 'assignment_id and teacher_code are required' },
-        { status: 400 }
-      );
+    if (resultId) {
+      conditions.push(`r.id = $${values.length + 1}`);
+      values.push(resultId);
     }
-
-    const assignmentQuery = `
-      SELECT tea.id, tea.teacher_code, tea.registration_id, tea.open_at, tea.close_at, tea.assignment_status,
-             es.status AS set_status, es.valid_from, es.valid_to
-      FROM chuyen_sau_phancong tea
-      JOIN chuyen_sau_bode es ON es.id = tea.selected_set_id
-      WHERE tea.id = $1
-      LIMIT 1
-    `;
-    const assignmentResult = await pool.query(assignmentQuery, [resolvedAssignmentId]);
-
-    if (!assignmentResult.rows.length) {
-      return NextResponse.json(
-        { success: false, error: 'Assignment not found' },
-        { status: 404 }
-      );
+    if (email) {
+      conditions.push(`r.email = $${values.length + 1}`);
+      values.push(email);
     }
-
-    const assignment = assignmentResult.rows[0];
-    if (String(assignment.teacher_code).toLowerCase() !== String(teacher_code).toLowerCase()) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized assignment access' },
-        { status: 403 }
-      );
+    if (subjectCode) {
+      conditions.push(`mh.ma_mon = $${values.length + 1}`);
+      values.push(subjectCode);
     }
-
-    const now = new Date();
-    if (now < new Date(assignment.open_at)) {
-      return NextResponse.json(
-        { success: false, error: 'Exam is not open yet' },
-        { status: 400 }
-      );
+    if (examType) {
+      conditions.push(`mh.loai_ky_thi = $${values.length + 1}`);
+      values.push(examType);
     }
-
-    if (now > new Date(assignment.close_at) || assignment.assignment_status === 'expired') {
-      return NextResponse.json(
-        { success: false, error: 'Exam time is over' },
-        { status: 400 }
-      );
+    if (blockCode) {
+      conditions.push(`mh.ma_khoi = $${values.length + 1}`);
+      values.push(blockCode);
     }
+    // Chỉ lấy những bài đã thi
+    conditions.push(`r.trang_thai IN ('da_nop', 'dang_thi')`);
 
-    const validFrom = assignment.valid_from ? new Date(assignment.valid_from) : null;
-    const validTo = assignment.valid_to ? new Date(assignment.valid_to) : null;
-    const isWithinSetWindow = (!validFrom || now >= validFrom) && (!validTo || now <= validTo);
-    const isSetActiveNow = assignment.set_status === 'active' && isWithinSetWindow;
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    if (!isSetActiveNow) {
-      return NextResponse.json(
-        { success: false, error: 'Bộ đề hiện không active trong thời gian lịch cho phép' },
-        { status: 403 }
-      );
-    }
-
-    const daThiResult = await pool.query(
-      `SELECT id
-       FROM chuyen_sau_results
-       WHERE assignment_id = $1
-         AND LOWER(TRIM(COALESCE(xu_ly_diem, ''))) = 'da thi'
-       LIMIT 1`,
-      [resolvedAssignmentId]
-    );
-
-    if (daThiResult.rowCount) {
-      return NextResponse.json(
-        { success: false, error: 'Bài thi này đã ở trạng thái Da thi, không thể làm lại.' },
-        { status: 409 }
-      );
-    }
-
-    const existingSubmissionResult = await pool.query(
-      `SELECT id, status, submitted_at
-       FROM chuyen_sau_bainop
-       WHERE assignment_id = $1
-       LIMIT 1`,
-      [resolvedAssignmentId]
-    );
-
-    const existingSubmission = existingSubmissionResult.rows[0];
-    const existingStatus = String(existingSubmission?.status || '').toLowerCase();
-    const alreadyFinalized =
-      Boolean(existingSubmission?.submitted_at) ||
-      existingStatus === 'submitted' ||
-      existingStatus === 'graded' ||
-      String(assignment.assignment_status || '').toLowerCase() === 'submitted' ||
-      String(assignment.assignment_status || '').toLowerCase() === 'graded';
-
-    if (alreadyFinalized) {
-      return NextResponse.json(
-        { success: false, error: 'Bài thi này đã nộp. Mỗi khung đăng ký chỉ được làm 1 lần.' },
-        { status: 409 }
-      );
-    }
-
-    const upsertSubmissionQuery = `
-      INSERT INTO chuyen_sau_bainop (
-        assignment_id,
-        teacher_code,
-        started_at,
-        status,
-        created_at,
-        updated_at
-      ) VALUES ($1, $2, NOW(), 'in_progress', NOW(), NOW())
-      ON CONFLICT (assignment_id)
-      DO UPDATE SET
-        teacher_code = COALESCE(chuyen_sau_bainop.teacher_code, EXCLUDED.teacher_code),
-        started_at = COALESCE(chuyen_sau_bainop.started_at, EXCLUDED.started_at),
-        status = CASE
-          WHEN chuyen_sau_bainop.status = 'graded' THEN chuyen_sau_bainop.status
-          ELSE 'in_progress'
-        END,
-        updated_at = NOW()
-      RETURNING *
-    `;
-
-    const insertResult = await pool.query(upsertSubmissionQuery, [resolvedAssignmentId, teacher_code]);
-
-    await pool.query(
-      `UPDATE chuyen_sau_phancong
-       SET assignment_status = CASE
-         WHEN assignment_status = 'assigned' THEN 'in_progress'
-         ELSE assignment_status
-       END,
-       updated_at = NOW()
-       WHERE id = $1`,
-      [resolvedAssignmentId]
-    );
-
-    return NextResponse.json({
-      success: true,
-      data: insertResult.rows[0],
-    });
-  } catch (error: any) {
-    console.error('Error creating exam submission:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to create exam submission' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PUT(request: NextRequest) {
-  let client: any = null;
-  try {
-    client = await pool.connect();
-    await ensureChuyenSauExamTables(client);
-
-    const body = await request.json();
-    const {
-      assignment_id,
-      teacher_code,
-      answers, // array of { question_id, answer_text }
-    } = body;
-    const resolvedAssignmentId = await resolveAssignmentId(Number(assignment_id));
-    if (!Array.isArray(answers)) {
-      return NextResponse.json(
-        { success: false, error: 'answers phải là mảng hợp lệ' },
-        { status: 400 }
-      );
-    }
-
-
-    if (!resolvedAssignmentId || !teacher_code) {
-      return NextResponse.json(
-        { success: false, error: 'assignment_id and teacher_code are required' },
-        { status: 400 }
-      );
-    }
-
-    // Verify the assignment belongs to this teacher and is still valid
-    const assignmentResult = await client.query(
-      `SELECT tea.id, tea.selected_set_id, tea.subject_code, tea.open_at, tea.close_at, tea.assignment_status,
-              es.total_points, es.passing_score
-      FROM chuyen_sau_phancong tea
-       JOIN chuyen_sau_bode es ON es.id = tea.selected_set_id
-       WHERE tea.id = $1 AND LOWER(TRIM(tea.teacher_code)) = LOWER(TRIM($2))
-       LIMIT 1`,
-      [resolvedAssignmentId, teacher_code]
-    );
-
-    if (!assignmentResult.rows.length) {
-      return NextResponse.json(
-        { success: false, error: 'Assignment not found or unauthorized' },
-        { status: 404 }
-      );
-    }
-
-    const assignment = assignmentResult.rows[0];
-
-    const normalizedAssignmentStatus = String(assignment.assignment_status || '').toLowerCase();
-    if (normalizedAssignmentStatus === 'submitted' || normalizedAssignmentStatus === 'graded') {
-      return NextResponse.json(
-        { success: false, error: 'Bài thi này đã nộp. Mỗi khung đăng ký chỉ được làm 1 lần.' },
-        { status: 409 }
-      );
-    }
-
-    const daThiResult = await client.query(
-      `SELECT id
-       FROM chuyen_sau_results
-       WHERE assignment_id = $1
-         AND LOWER(TRIM(COALESCE(xu_ly_diem, ''))) = 'da thi'
-       LIMIT 1`,
-      [resolvedAssignmentId]
-    );
-
-    if (daThiResult.rowCount) {
-      return NextResponse.json(
-        { success: false, error: 'Bài thi này đã ở trạng thái Da thi, không thể nộp lại.' },
-        { status: 409 }
-      );
-    }
-
-    let submissionResult = await client.query(
-      `SELECT id, started_at, status, submitted_at FROM chuyen_sau_bainop
-       WHERE assignment_id = $1 LIMIT 1`,
-      [resolvedAssignmentId]
-    );
-
-    const existingSubmission = submissionResult.rows[0];
-    const existingStatus = String(existingSubmission?.status || '').toLowerCase();
-    const alreadyFinalized =
-      Boolean(existingSubmission?.submitted_at) ||
-      existingStatus === 'submitted' ||
-      existingStatus === 'graded';
-
-    if (alreadyFinalized) {
-      return NextResponse.json(
-        { success: false, error: 'Bài thi này đã nộp. Mỗi khung đăng ký chỉ được làm 1 lần.' },
-        { status: 409 }
-      );
-    }
-
-    // Recover gracefully when start API was skipped/failed and user submits directly.
-    if (!submissionResult.rows.length) {
-      const createdSubmission = await client.query(
-        `INSERT INTO chuyen_sau_bainop (
-           assignment_id,
-           teacher_code,
-           started_at,
-           status,
-           created_at,
-           updated_at
-         )
-         VALUES ($1, $2, NOW(), 'in_progress', NOW(), NOW())
-         ON CONFLICT (assignment_id)
-         DO UPDATE SET
-           teacher_code = COALESCE(chuyen_sau_bainop.teacher_code, EXCLUDED.teacher_code),
-           updated_at = NOW()
-         RETURNING id, started_at, status, submitted_at`,
-        [resolvedAssignmentId, teacher_code]
-      );
-
-      submissionResult = createdSubmission;
-
-      await client.query(
-        `UPDATE chuyen_sau_phancong
-         SET assignment_status = CASE
-           WHEN assignment_status = 'assigned' THEN 'in_progress'
-           ELSE assignment_status
-         END,
-         updated_at = NOW()
-         WHERE id = $1`,
-        [resolvedAssignmentId]
-      );
-    }
-
-    const submission = submissionResult.rows[0];
-    const now = new Date();
-    const startedAt = submission.started_at ? new Date(submission.started_at) : now;
-    const timeSpentSeconds = Math.max(0, Math.floor((now.getTime() - startedAt.getTime()) / 1000));
-
-    // Fetch all questions for the set to grade server-side
-    const questionsResult = await client.query(
+    const result = await pool.query(
       `SELECT
-         q.id,
-         q.question_type,
-         q.correct_answer,
-         q.option_a,
-         q.option_b,
-         q.option_c,
-         q.option_d,
-         COALESCE(map.points_override, q.points) AS points
-       FROM chuyen_sau_bode_cauhoi map
-       JOIN chuyen_sau_cauhoi q ON q.id = map.question_id
-       WHERE map.set_id = $1`,
-      [assignment.selected_set_id]
+         r.id                   AS result_id,
+         r.user_id,
+         r.firebase_uid,
+         r.email,
+         r.ho_ten               AS full_name,
+         r.ma_de                AS set_code,
+         r.so_diem              AS score,
+         r.tong_cau             AS total_questions,
+         r.so_cau_dung          AS correct_count,
+         r.trang_thai           AS status,
+         r.thoi_gian_bat_dau    AS started_at,
+         r.thoi_gian_nop        AS submitted_at,
+         r.tao_luc              AS created_at,
+         mh.ma_mon              AS subject_code,
+         mh.ten_mon             AS subject_name,
+         mh.ma_khoi             AS block_code,
+         mh.loai_ky_thi         AS exam_type,
+         bd.diem_dat            AS passing_score,
+         bd.tong_diem           AS max_score
+       FROM chuyen_sau_results r
+       JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
+       LEFT JOIN chuyen_sau_bode bd ON bd.ma_de = r.ma_de
+       ${where}
+       ORDER BY r.thoi_gian_nop DESC NULLS LAST`,
+      values
     );
-    const questionMap = new Map<number, any>();
-    for (const q of questionsResult.rows as any[]) {
-      const questionId = Number(q.id);
-      if (!Number.isFinite(questionId)) continue;
-      questionMap.set(questionId, q);
+
+    if (result.rows.length === 0) {
+      return NextResponse.json({ success: true, data: [], count: 0 });
     }
 
-    let totalRawScore = 0;
-    let maxRawScore = 0;
-    const answersToInsert: Array<{ question_id: number; answer_text: string; is_correct: boolean; points_earned: number }> = [];
-
-    for (const q of questionsResult.rows) {
-      maxRawScore += Number(q.points || 0);
-    }
-
-    // Normalize rich text answer content (text + image src) for stable server-side grading.
-    const normalizeForGrading = (value: string): string => {
-      if (!value) return '';
-      let text = String(value);
-      // Decode HTML entities (handles &lt; &gt; &amp; &quot; &nbsp; etc.)
-      text = text.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
-
-      // Keep image identity for image-only options.
-      const imageTokens = Array.from(text.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi))
-        .map((match) => String(match[1] || '').trim().toLowerCase())
-        .filter(Boolean)
-        .sort()
-        .join('|');
-
-      // Strip any remaining HTML tags
-      text = text.replace(/<[^>]*>/g, ' ');
-      // Collapse whitespace
-      text = text.replace(/\s+/g, ' ').trim().toLowerCase();
-
-      return [text, imageTokens].filter(Boolean).join('||');
-    };
-
-    const normalizeChoiceKey = (value: string): string => {
-      const normalized = normalizeForGrading(value)
-        .replace(/\./g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      return normalized;
-    };
-
-    const resolveChoiceAnswer = (rawAnswer: string, question: any): string => {
-      const normalized = normalizeChoiceKey(rawAnswer);
-      const firstToken = normalized.split(' ')[0];
-
-      const optionMap: Record<string, string> = {
-        a: String(question.option_a || ''),
-        b: String(question.option_b || ''),
-        c: String(question.option_c || ''),
-        d: String(question.option_d || ''),
-      };
-
-      if (Object.prototype.hasOwnProperty.call(optionMap, firstToken)) {
-        return normalizeForGrading(optionMap[firstToken]);
-      }
-
-      return normalizeForGrading(rawAnswer);
-    };
-
-    for (const ans of answers) {
-      const answerQuestionId = Number(ans.question_id);
-      if (!Number.isFinite(answerQuestionId)) continue;
-
-      const q = questionMap.get(answerQuestionId);
-      if (!q) continue;
-
-      const resolvedCorrectAnswer = resolveChoiceAnswer(String(q.correct_answer || ''), q);
-      const resolvedUserAnswer = resolveChoiceAnswer(String(ans.answer_text || ''), q);
-      const isCorrect = resolvedCorrectAnswer !== '' && resolvedUserAnswer === resolvedCorrectAnswer;
-      const pointsEarned = isCorrect ? parseFloat(q.points) : 0;
-
-      totalRawScore += pointsEarned;
-      answersToInsert.push({
-        question_id: answerQuestionId,
-        answer_text: ans.answer_text || '',
-        is_correct: isCorrect,
-        points_earned: pointsEarned,
+    // Kèm chi tiết từng câu nếu yêu cầu
+    if (includeAnswers && resultId) {
+      const answers = await pool.query(
+        `SELECT
+           btc.id,
+           btc.id_cau             AS question_id,
+           cq.noi_dung_cau_hoi    AS question_text,
+           cq.loai_cau_hoi        AS question_type,
+           CASE
+             WHEN cq.lua_chon_a IS NOT NULL OR cq.lua_chon_b IS NOT NULL
+              OR cq.lua_chon_c IS NOT NULL OR cq.lua_chon_d IS NOT NULL
+             THEN jsonb_build_array(cq.lua_chon_a, cq.lua_chon_b, cq.lua_chon_c, cq.lua_chon_d)
+             ELSE NULL
+           END                    AS options,
+           cq.dap_an_dung         AS correct_answer,
+           cq.giai_thich          AS explanation,
+           btc.dap_an_nguoi_dung  AS user_answer,
+           btc.la_dung            AS is_correct,
+           btc.diem_dat_duoc      AS points_earned,
+           cq.diem                AS points_total
+         FROM chuyen_sau_baithi_cauhoi btc
+         JOIN chuyen_sau_cauhoi cq ON cq.id = btc.id_cau
+         WHERE btc.id_ket_qua = $1
+         ORDER BY btc.id ASC`,
+        [resultId]
+      );
+      return NextResponse.json({
+        success: true,
+        data: result.rows[0],
+        answers: answers.rows,
+        count: answers.rows.length,
       });
     }
 
-    const normalizedTotalPoints = 10;
-    const passingScore = Math.min(10, Math.max(0, Number(assignment.passing_score || 7)));
-    const scaledScore = maxRawScore > 0
-      ? Number(((totalRawScore * normalizedTotalPoints) / maxRawScore).toFixed(2))
-      : 0;
-    const percentage = Math.min(100, Number(((scaledScore / normalizedTotalPoints) * 100).toFixed(2)));
-    const isPassed = scaledScore >= passingScore;
+    return NextResponse.json({ success: true, data: result.rows, count: result.rows.length });
+  } catch (error) {
+    console.error('Error fetching submissions:', error);
+    return NextResponse.json({ success: false, error: 'Failed to fetch submissions' }, { status: 500 });
+  }
+}
+
+// ─── POST: Nộp bài ────────────────────────────────────────────────────────────
+
+export async function POST(request: NextRequest) {
+  const client = await pool.connect();
+  try {
+    const body = await request.json();
+    // Chấp nhận assignment_id là alias của result_id (chuyen_sau_results.id)
+    const result_id = body.result_id || body.assignment_id;
+    const teacher_code = body.teacher_code;
+
+    if (!result_id) {
+      return NextResponse.json(
+        { success: false, error: 'Cần result_id hoặc assignment_id' },
+        { status: 400 }
+      );
+    }
 
     await client.query('BEGIN');
 
-    // Upsert answers
-    for (const ans of answersToInsert) {
-      await client.query(
-        `INSERT INTO chuyen_sau_bainop_traloi (submission_id, question_id, answer_text, is_correct, points_earned)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (submission_id, question_id)
-         DO UPDATE SET answer_text = EXCLUDED.answer_text, is_correct = EXCLUDED.is_correct, points_earned = EXCLUDED.points_earned`,
-        [submission.id, ans.question_id, ans.answer_text, ans.is_correct, ans.points_earned]
+    // Tìm result record — xác nhận tồn tại và lấy bộ đề
+    const resultRow = await client.query(
+      `SELECT r.id, r.id_de_thi, r.id_mon, r.nam_dk, r.thang_dk, r.id_su_kien,
+              COALESCE(r.id_de_thi, ct_sub.id_de) AS resolved_set_id
+       FROM chuyen_sau_results r
+       LEFT JOIN LATERAL (
+         SELECT ct.id_de FROM chuyen_sau_chonde_thang ct
+         WHERE ct.id_mon = r.id_mon
+           AND ct.nam   = COALESCE(r.nam_dk,   EXTRACT(YEAR  FROM NOW())::int)
+           AND ct.thang = COALESCE(r.thang_dk, EXTRACT(MONTH FROM NOW())::int)
+         LIMIT 1
+       ) ct_sub ON (r.id_de_thi IS NULL)
+       WHERE r.id = $1
+       LIMIT 1`,
+      [result_id]
+    );
+
+    if (resultRow.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { success: false, error: 'Không tìm thấy kết quả đăng ký.' },
+        { status: 404 }
       );
     }
 
-    const updatedSubmission = await client.query(
-        `UPDATE chuyen_sau_bainop
-       SET submitted_at = NOW(), time_spent_seconds = $1, raw_score = $2,
-           percentage = $3, is_passed = $4, status = 'graded', updated_at = NOW()
-       WHERE id = $5
-       RETURNING *`,
-      [timeSpentSeconds, scaledScore, percentage.toFixed(2), isPassed, submission.id]
-    );
+    const resultRecord = resultRow.rows[0];
+    const resolvedSetId = resultRecord.resolved_set_id;
 
-    await client.query(
-      `UPDATE chuyen_sau_phancong
-       SET assignment_status = 'graded', score = $1, score_status = 'graded', updated_at = NOW()
-       WHERE id = $2`,
-      [scaledScore, resolvedAssignmentId]
-    );
-
-    // Sync score into chuyen_sau_results (expertise scoreboard)
-    const vnDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(assignment.open_at));
-    const [vnYear, vnMonth] = vnDate.split('-').map(Number);
-    const correctCount = answersToInsert.filter((answer) => answer.is_correct).length;
-
-    const scoreHandling = scaledScore <= 0 ? 'Diem 0 - cho giai trinh' : 'Da thi';
-
-    const directScoreSync = await client.query(
-      `WITH target AS (
-         SELECT csr.id
-         FROM chuyen_sau_results csr
-         WHERE csr.assignment_id = $1
-            OR csr.registration_id = (
-              SELECT registration_id
-              FROM chuyen_sau_phancong
-              WHERE id = $1
-              LIMIT 1
-            )
-         ORDER BY
-           CASE WHEN csr.assignment_id = $1 THEN 0 ELSE 1 END,
-           csr.created_at DESC
-         LIMIT 1
-       )
-       UPDATE chuyen_sau_results csr
-       SET assignment_id = $1,
-           registration_id = COALESCE(
-             csr.registration_id,
-             (SELECT registration_id FROM chuyen_sau_phancong WHERE id = $1 LIMIT 1)
-           ),
-           cau_dung = $2,
-           diem = $3,
-           xu_ly_diem = $4,
-           updated_at = NOW()
-       WHERE csr.id IN (SELECT id FROM target)` ,
-        [resolvedAssignmentId, correctCount, scaledScore, scoreHandling]
-    );
-
-    if (!directScoreSync.rowCount) {
-      const fallbackScoreSync = await client.query(
-        `WITH target AS (
-           SELECT csr.id
-           FROM chuyen_sau_results csr
-           WHERE LOWER(TRIM(csr.ma_lms)) = LOWER(TRIM($1))
-             AND LOWER(TRIM(csr.bo_mon)) = LOWER(TRIM($2))
-             AND csr.nam_dk = $3
-             AND csr.thang_dk = $4
-             AND (csr.de IS NULL OR csr.de = $5)
-           ORDER BY csr.created_at DESC
-           LIMIT 1
-         )
-         UPDATE chuyen_sau_results csr
-         SET assignment_id = $6,
-             registration_id = COALESCE(
-               csr.registration_id,
-               (SELECT registration_id FROM chuyen_sau_phancong WHERE id = $6 LIMIT 1)
-             ),
-             cau_dung = $7,
-             diem = $8,
-             xu_ly_diem = $9,
-             updated_at = NOW()
-         WHERE csr.id IN (SELECT id FROM target)`,
-        [
-          teacher_code,
-          assignment.subject_code,
-          vnYear,
-          vnMonth,
-          String(assignment.selected_set_id),
-          resolvedAssignmentId,
-          correctCount,
-          scaledScore,
-          scoreHandling,
-        ]
+    if (!resolvedSetId) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { success: false, error: 'Chưa có bộ đề nào được phân công.' },
+        { status: 400 }
       );
+    }
 
-      // If no row can be matched, create one so score sync is never dropped.
-      if (!fallbackScoreSync.rowCount) {
-        const registrationRes = await client.query(
-          `SELECT tea.registration_id, tea.open_at, tea.registration_type, tea.subject_code,
-                  csd.teacher_name, csd.email, csd.campus
-           FROM chuyen_sau_phancong tea
-           LEFT JOIN chuyen_sau_dangky csd ON csd.id = tea.registration_id
-           WHERE tea.id = $1
-           LIMIT 1`,
-          [resolvedAssignmentId]
-        );
-
-        const reg = registrationRes.rows[0] || {};
-        const openAt = reg.open_at ? new Date(reg.open_at) : new Date();
-        const vnOpenDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(openAt);
-        const [openYear, openMonth] = vnOpenDate.split('-').map(Number);
-
-        await client.query(
-          `INSERT INTO chuyen_sau_results (
-             registration_id,
-             assignment_id,
-             ho_va_ten,
-             dia_chi_email,
-             bo_mon,
-             co_so,
-             ma_lms,
-             hinh_thuc,
-             thang_dk,
-             nam_dk,
-             thoi_gian_kiem_tra,
-             de,
-             cau_dung,
-             diem,
-             xu_ly_diem,
-             created_at,
-             updated_at
+    // Kiểm tra cửa sổ thi hợp lệ: chỉ cho phép bắt đầu khi event_schedules.bat_dau_luc <= NOW() <= ket_thuc_luc
+    const eventWindow = await client.query(
+      `SELECT es.bat_dau_luc AT TIME ZONE 'Asia/Ho_Chi_Minh' AS bat_dau_luc,
+              es.ket_thuc_luc AT TIME ZONE 'Asia/Ho_Chi_Minh' AS ket_thuc_luc
+       FROM event_schedules es
+       JOIN chuyen_sau_monhoc mh ON mh.id = $3
+       WHERE es.loai_su_kien = 'exam'
+         AND (
+           ($4::uuid IS NOT NULL AND es.id = $4::uuid)
+           OR (
+             $4::uuid IS NULL
+             AND es.chuyen_nganh = mh.ma_mon
+             AND EXTRACT(YEAR  FROM es.bat_dau_luc) = COALESCE($1, EXTRACT(YEAR  FROM NOW()))
+             AND EXTRACT(MONTH FROM es.bat_dau_luc) = COALESCE($2, EXTRACT(MONTH FROM NOW()))
            )
-           VALUES (
-             $1, $2, $3, $4, $5, $6, $7, $8,
-             $9, $10, $11, $12, $13, $14, $15, NOW(), NOW()
-           )`,
-          [
-            reg.registration_id || null,
-            resolvedAssignmentId,
-            reg.teacher_name || teacher_code,
-            reg.email || null,
-            reg.subject_code || assignment.subject_code,
-            reg.campus || null,
-            teacher_code,
-            reg.registration_type === 'additional' ? 'Bo sung' : 'Chinh thuc',
-            Number.isFinite(openMonth) ? openMonth : vnMonth,
-            Number.isFinite(openYear) ? openYear : vnYear,
-            openAt,
-            String(assignment.selected_set_id),
-            correctCount,
-            scaledScore,
-            scoreHandling,
-          ]
+         )
+       ORDER BY ($4::uuid IS NOT NULL AND es.id = $4::uuid) DESC, es.bat_dau_luc DESC
+       LIMIT 1`,
+      [resultRecord.nam_dk, resultRecord.thang_dk, resultRecord.id_mon, resultRecord.id_su_kien || null]
+    );
+
+    if (eventWindow.rows.length > 0) {
+      const { bat_dau_luc, ket_thuc_luc } = eventWindow.rows[0];
+      const now = new Date();
+      if (bat_dau_luc && now < new Date(bat_dau_luc)) {
+        await client.query('ROLLBACK');
+        return NextResponse.json(
+          { success: false, error: 'Bài thi chưa đến thời gian mở. Vui lòng chờ đến giờ admin đã đặt.' },
+          { status: 403 }
+        );
+      }
+      if (ket_thuc_luc && now > new Date(ket_thuc_luc)) {
+        await client.query('ROLLBACK');
+        return NextResponse.json(
+          { success: false, error: 'Cửa sổ thi đã đóng.' },
+          { status: 403 }
         );
       }
     }
+
+    // Tạo hoặc lấy lại bản ghi bài nộp trong chuyen_sau_bainop
+    const existingBainop = await client.query(
+      `SELECT id, bat_dau_luc FROM chuyen_sau_bainop WHERE id_ket_qua = $1 AND trang_thai_nop = 'dang_nop' LIMIT 1`,
+      [result_id]
+    );
+
+    let bainopId: number;
+    let bainopStartedAt: Date;
+    if (existingBainop.rows.length > 0) {
+      bainopId = existingBainop.rows[0].id;
+      bainopStartedAt = existingBainop.rows[0].bat_dau_luc || new Date();
+    } else {
+      const newBainop = await client.query(
+        `INSERT INTO chuyen_sau_bainop (id_ket_qua, id_de_thi, trang_thai_nop, bat_dau_luc, teacher_code, tao_luc)
+         VALUES ($1, $2, 'dang_nop', NOW(), $3, NOW())
+         RETURNING id, bat_dau_luc`,
+        [result_id, resolvedSetId, teacher_code || null]
+      );
+      bainopId = newBainop.rows[0].id;
+      bainopStartedAt = newBainop.rows[0].bat_dau_luc || new Date();
+    }
+
+    // Fill thoi_gian_kiem_tra + id_su_kien vào chuyen_sau_results khi bắt đầu thi
+    // Tìm event_schedule khớp: loai_su_kien='exam', chuyen_nganh=ma_mon, cùng tháng/năm
+    const eventLookup = await client.query(
+      `SELECT es.id::text AS event_id
+       FROM event_schedules es
+       JOIN chuyen_sau_monhoc mh ON mh.id = $3
+       WHERE es.loai_su_kien = 'exam'
+         AND es.chuyen_nganh = mh.ma_mon
+         AND EXTRACT(YEAR  FROM es.bat_dau_luc) = COALESCE($1, EXTRACT(YEAR  FROM NOW()))
+         AND EXTRACT(MONTH FROM es.bat_dau_luc) = COALESCE($2, EXTRACT(MONTH FROM NOW()))
+       ORDER BY es.bat_dau_luc DESC
+       LIMIT 1`,
+      [resultRecord.nam_dk, resultRecord.thang_dk, resultRecord.id_mon]
+    );
+
+    const eventId = eventLookup.rows[0]?.event_id || null;
+
+    await client.query(
+      `UPDATE chuyen_sau_results SET
+         thoi_gian_kiem_tra = TO_CHAR(NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh', 'HH24:MI DD/MM/YYYY'),
+         id_su_kien         = COALESCE(id_su_kien, $1::uuid)
+       WHERE id = $2`,
+      [eventId, result_id]
+    );
 
     await client.query('COMMIT');
 
     return NextResponse.json({
       success: true,
+      message: 'Bắt đầu bài thi thành công',
       data: {
-        ...updatedSubmission.rows[0],
-        calculated_score: scaledScore,
-        raw_score: Number(totalRawScore.toFixed(2)),
-        max_raw_score: Number(maxRawScore.toFixed(2)),
-        total_points: normalizedTotalPoints,
-        percentage: parseFloat(percentage.toFixed(2)),
-        is_passed: isPassed,
+        bainop_id: bainopId,
+        result_id: Number(result_id),
+        event_id: eventId,
+        started_at: new Date().toISOString(), // Always use server's current time so timer counts from NOW
       },
     });
-  } catch (error: any) {
-    if (client) {
-      await client.query('ROLLBACK').catch(() => {});
-    }
-    console.error('Error submitting exam:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to submit exam' },
-      { status: 500 }
-    );
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error starting exam:', error);
+    return NextResponse.json({ success: false, error: 'Failed to start exam' }, { status: 500 });
   } finally {
-    if (client) {
-      client.release();
+    client.release();
+  }
+}
+
+// ─── PUT: Nộp bài + chấm điểm ────────────────────────────────────────────────
+
+export async function PUT(request: NextRequest) {
+  const client = await pool.connect();
+  try {
+    const body = await request.json();
+    // Chấp nhận assignment_id là alias của result_id
+    const result_id = body.result_id || body.assignment_id;
+    const { answers = [], teacher_code } = body;
+
+    if (!result_id) {
+      return NextResponse.json({ success: false, error: 'Cần result_id hoặc assignment_id' }, { status: 400 });
     }
+
+    await client.query('BEGIN');
+
+    // Tìm result kèm bộ đề
+    const resultRow = await client.query(
+      `SELECT r.id, r.id_de_thi, r.id_mon,
+              COALESCE(r.id_de_thi, ct_sub.id_de) AS resolved_set_id
+       FROM chuyen_sau_results r
+       LEFT JOIN LATERAL (
+         SELECT ct.id_de FROM chuyen_sau_chonde_thang ct
+         WHERE ct.id_mon = r.id_mon
+           AND ct.nam   = COALESCE(r.nam_dk,   EXTRACT(YEAR  FROM NOW())::int)
+           AND ct.thang = COALESCE(r.thang_dk, EXTRACT(MONTH FROM NOW())::int)
+         LIMIT 1
+       ) ct_sub ON (r.id_de_thi IS NULL)
+       WHERE r.id = $1
+       LIMIT 1`,
+      [result_id]
+    );
+
+    if (resultRow.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ success: false, error: 'Không tìm thấy kết quả đăng ký.' }, { status: 404 });
+    }
+
+    const resultRecord = resultRow.rows[0];
+    const resolvedSetId = resultRecord.resolved_set_id;
+
+    if (!resolvedSetId) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ success: false, error: 'Chưa có bộ đề nào được phân công.' }, { status: 400 });
+    }
+
+    // Lấy câu hỏi từ bộ đề
+    const questionsResult = await client.query(
+      `SELECT cq.id, cq.dap_an_dung, cq.loai_cau_hoi, cq.diem
+       FROM chuyen_sau_bode bd
+       JOIN chuyen_sau_bode_cauhoi bc ON bc.id_de = bd.id
+       JOIN chuyen_sau_cauhoi cq      ON cq.id = bc.id_cau
+       WHERE bd.id = $1`,
+      [resolvedSetId]
+    );
+
+    const questionMap = new Map(questionsResult.rows.map((q) => [String(q.id), q]));
+
+    // Tính điểm
+    let correctCount = 0;
+    let totalPoints = 0;
+    let earnedPoints = 0;
+    const totalQuestions = questionsResult.rows.length;
+
+    // Cộng điểm tối đa theo bộ đề
+    for (const q of questionsResult.rows) {
+      totalPoints += Number(q.diem || 1);
+    }
+
+    const submittedAnswers: Array<{ question_id: number | string; answer_text?: string; answer?: string }> =
+      Array.isArray(answers) ? answers : [];
+
+    const processedAnswers: Array<{
+      id_bai_nop: number;
+      id_cau: number;
+      dap_an_chon: string | null;
+      dung: boolean;
+      diem_dat_duoc: number;
+    }> = [];
+
+    // Lấy / tạo bainop
+    let bainopRow = await client.query(
+      `SELECT id FROM chuyen_sau_bainop WHERE id_ket_qua = $1 ORDER BY tao_luc DESC LIMIT 1`,
+      [result_id]
+    );
+    let bainopId: number;
+    if (bainopRow.rows.length > 0) {
+      bainopId = bainopRow.rows[0].id;
+    } else {
+      const newBainop = await client.query(
+        `INSERT INTO chuyen_sau_bainop (id_ket_qua, id_de_thi, trang_thai_nop, bat_dau_luc, teacher_code, tao_luc)
+         VALUES ($1, $2, 'dang_nop', NOW(), $3, NOW()) RETURNING id`,
+        [result_id, resolvedSetId, teacher_code || null]
+      );
+      bainopId = newBainop.rows[0].id;
+    }
+
+    for (const ans of submittedAnswers) {
+      const q = questionMap.get(String(ans.question_id));
+      if (!q) continue;
+
+      const userAnswer = (ans.answer_text ?? ans.answer ?? null);
+      const points = Number(q.diem || 1);
+
+      let isCorrect = false;
+      if (q.loai_cau_hoi !== 'tu_luan' && userAnswer !== null && q.dap_an_dung) {
+        isCorrect = String(userAnswer).trim().toUpperCase() === q.dap_an_dung.trim().toUpperCase();
+      }
+
+      if (isCorrect) {
+        correctCount++;
+        earnedPoints += points;
+      }
+
+      processedAnswers.push({
+        id_bai_nop: bainopId,
+        id_cau: Number(ans.question_id),
+        dap_an_chon: userAnswer ? String(userAnswer) : null,
+        dung: isCorrect,
+        diem_dat_duoc: isCorrect ? points : 0,
+      });
+    }
+
+    // Điểm thô & quy đổi thang 10
+    const rawScore = earnedPoints;
+    const score10 = totalPoints > 0
+      ? Number(((earnedPoints / totalPoints) * 10).toFixed(2))
+      : 0;
+    const percentage = totalPoints > 0
+      ? Number(((earnedPoints / totalPoints) * 100).toFixed(1))
+      : 0;
+
+    // Xóa câu trả lời cũ của bainop này rồi insert lại (idempotent)
+    await client.query('DELETE FROM chuyen_sau_bainop_traloi WHERE id_bai_nop = $1', [bainopId]);
+
+    if (processedAnswers.length > 0) {
+      const insertQ = `
+        INSERT INTO chuyen_sau_bainop_traloi (id_bai_nop, id_cau, dap_an_chon, dung, diem_dat_duoc, tao_luc)
+        VALUES ${processedAnswers.map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5}, NOW())`).join(', ')}
+      `;
+      const insertVals = processedAnswers.flatMap((a) => [
+        a.id_bai_nop, a.id_cau, a.dap_an_chon, a.dung, a.diem_dat_duoc,
+      ]);
+      await client.query(insertQ, insertVals);
+    }
+
+    // Cập nhật chuyen_sau_bainop
+    await client.query(
+      `UPDATE chuyen_sau_bainop SET
+         trang_thai_nop       = 'da_nop',
+         nop_luc              = NOW(),
+         diem_tho             = $1,
+         diem_tho_toi_da      = $2,
+         phan_tram            = $3,
+         diem_chuan_hoa       = $4,
+         raw_score            = $1,
+         percentage           = $3,
+         submitted_at         = NOW()
+       WHERE id = $5`,
+      [rawScore, totalPoints, percentage, score10, bainopId]
+    );
+
+    // Cập nhật chuyen_sau_results với điểm và trạng thái hoàn thành
+    await client.query(
+      `UPDATE chuyen_sau_results SET
+         diem         = $1,
+         cau_dung     = $2,
+         xu_ly_diem   = 'đã hoàn thành'
+       WHERE id = $3`,
+      [score10, correctCount, result_id]
+    );
+
+    await client.query('COMMIT');
+
+    return NextResponse.json({
+      success: true,
+      message: 'Nộp bài thành công',
+      data: {
+        bainop_id: bainopId,
+        result_id: Number(result_id),
+        calculated_score: score10,
+        raw_score: rawScore,
+        percentage,
+        total_questions: totalQuestions,
+        correct_count: correctCount,
+      },
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error submitting exam:', error);
+    return NextResponse.json({ success: false, error: 'Failed to submit exam' }, { status: 500 });
+  } finally {
+    client.release();
   }
 }

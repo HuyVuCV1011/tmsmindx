@@ -30,45 +30,21 @@ async function ensureSubjectConfigColumns() {
 
   await pool.query(`
     ALTER TABLE IF EXISTS chuyen_sau_monhoc
-      ADD COLUMN IF NOT EXISTS exam_duration_minutes INTEGER,
-      ADD COLUMN IF NOT EXISTS set_selection_mode VARCHAR(20) NOT NULL DEFAULT 'default',
-      ADD COLUMN IF NOT EXISTS default_set_id BIGINT;
+      ADD COLUMN IF NOT EXISTS metadata JSONB,
+      ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0;
   `);
 
   await pool.query(`
     UPDATE chuyen_sau_monhoc
-    SET exam_duration_minutes = COALESCE(
-      exam_duration_minutes,
+    SET thoi_gian_thi_phut = COALESCE(
+      thoi_gian_thi_phut,
       CASE
         WHEN COALESCE(metadata->>'duration_minutes', '') ~ '^[0-9]+$' THEN (metadata->>'duration_minutes')::int
         ELSE NULL
       END,
-      CASE WHEN exam_type = 'experience' THEN 60 ELSE 120 END
+      CASE WHEN loai_ky_thi = 'experience' THEN 60 ELSE 120 END
     )
-    WHERE exam_duration_minutes IS NULL;
-  `);
-
-  await pool.query(`
-    ALTER TABLE IF EXISTS chuyen_sau_monhoc
-      ALTER COLUMN exam_duration_minutes SET NOT NULL;
-  `);
-
-  // Backfill default_set_id từ bộ đề active đầu tiên của môn học.
-  await pool.query(`
-    UPDATE chuyen_sau_monhoc csm
-    SET default_set_id = (
-      SELECT csb.id
-      FROM chuyen_sau_bode csb
-      WHERE csb.id_mon = csm.id
-        AND csb.trang_thai = 'active'
-      ORDER BY csb.tao_luc ASC
-      LIMIT 1
-    )
-    WHERE csm.default_set_id IS NULL
-      AND EXISTS (
-        SELECT 1 FROM chuyen_sau_bode csb
-        WHERE csb.id_mon = csm.id AND csb.trang_thai = 'active'
-      );
+    WHERE thoi_gian_thi_phut IS NULL;
   `);
 
   subjectConfigColumnsEnsured = true;
@@ -81,21 +57,29 @@ export async function GET() {
     const result = await pool.query(
       `SELECT
          csm.id,
-         COALESCE(csm.exam_type, csm.loai_ky_thi) AS exam_type,
+         csm.loai_ky_thi AS exam_type,
          csm.ma_khoi AS block_code,
          csm.ma_mon AS subject_code,
          csm.ten_mon AS subject_name,
          csm.khoa_mon AS subject_key,
-         csm.exam_duration_minutes AS duration_minutes,
-         csm.set_selection_mode,
-         csm.default_set_id,
+         csm.thoi_gian_thi_phut AS duration_minutes,
+         CASE WHEN csm.che_do_chon_de = 'ngau_nhien' THEN 'random' ELSE 'default' END AS set_selection_mode,
+         chonde.id_de AS default_set_id,
          ds.ma_de AS default_set_code,
          ds.ten_de AS default_set_name,
          csm.metadata,
          csm.dang_hoat_dong AS is_active,
-         csm.tao_luc AS created_at
+         csm.tao_luc AS created_at,
+         csm.tao_luc AS updated_at
        FROM chuyen_sau_monhoc csm
-       LEFT JOIN chuyen_sau_bode ds ON ds.id = csm.default_set_id
+       LEFT JOIN LATERAL (
+         SELECT ct.id_de
+         FROM chuyen_sau_chonde_thang ct
+         WHERE ct.id_mon = csm.id
+         ORDER BY ct.nam DESC, ct.thang DESC
+         LIMIT 1
+       ) chonde ON TRUE
+       LEFT JOIN chuyen_sau_bode ds ON ds.id = chonde.id_de
        WHERE csm.dang_hoat_dong = TRUE
        ORDER BY csm.ma_khoi ASC, csm.ten_mon ASC`
     );
@@ -181,26 +165,28 @@ export async function POST(request: Request) {
          ma_mon,
          ten_mon,
          khoa_mon,
+         thoi_gian_thi_phut,
          exam_duration_minutes,
-         set_selection_mode,
+         che_do_chon_de,
          display_order,
          dang_hoat_dong,
          metadata
        )
-       VALUES ($1, $2, $3, $4, $5, $6, 'default', $7, TRUE, $8::jsonb)
+       VALUES ($1, $2, $3, $4, $5, $6, $6, 'mac_dinh', $7, TRUE, $8::jsonb)
        RETURNING
          id,
-         COALESCE(exam_type, loai_ky_thi) AS exam_type,
+         loai_ky_thi AS exam_type,
          ma_khoi AS block_code,
          ma_mon AS subject_code,
          ten_mon AS subject_name,
          khoa_mon AS subject_key,
-         exam_duration_minutes AS duration_minutes,
-         set_selection_mode,
-         default_set_id,
+         thoi_gian_thi_phut AS duration_minutes,
+         CASE WHEN che_do_chon_de = 'ngau_nhien' THEN 'random' ELSE 'default' END AS set_selection_mode,
+         NULL::bigint AS default_set_id,
          metadata,
          dang_hoat_dong AS is_active,
-         tao_luc AS created_at`,
+         tao_luc AS created_at,
+         tao_luc AS updated_at`,
       // NOTE: tham số giữ nguyên thứ tự ($1=loai_ky_thi, $2=ma_khoi, ...)
       [
         examType,
@@ -244,12 +230,8 @@ export async function PUT(request: Request) {
     const subjectId = Number(body?.id);
     const hasDuration = body?.duration_minutes !== undefined;
     const hasSelectionMode = body?.set_selection_mode !== undefined;
-    const hasDefaultSet = body?.default_set_id !== undefined;
     const inputDurationMinutes = Number(body?.duration_minutes);
     const inputSelectionMode = String(body?.set_selection_mode || '').trim().toLowerCase();
-    const defaultSetId = body?.default_set_id === null || body?.default_set_id === ''
-      ? null
-      : Number(body?.default_set_id);
 
     if (!Number.isFinite(subjectId) || subjectId <= 0) {
       return NextResponse.json(
@@ -258,7 +240,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    if (!hasDuration && !hasSelectionMode && !hasDefaultSet) {
+    if (!hasDuration && !hasSelectionMode) {
       return NextResponse.json(
         { success: false, error: 'Không có dữ liệu cần cập nhật' },
         { status: 400 }
@@ -279,48 +261,20 @@ export async function PUT(request: Request) {
       );
     }
 
-    if (hasDefaultSet && defaultSetId !== null && (!Number.isFinite(defaultSetId) || defaultSetId <= 0)) {
-      return NextResponse.json(
-        { success: false, error: 'default_set_id không hợp lệ' },
-        { status: 400 }
-      );
-    }
-
     const updates: string[] = [];
     const values: Array<number | string | null> = [];
 
     if (hasDuration) {
       const durationMinutes = Math.min(1440, Math.floor(inputDurationMinutes));
+      updates.push(`thoi_gian_thi_phut = $${values.length + 1}`);
       updates.push(`exam_duration_minutes = $${values.length + 1}`);
       values.push(durationMinutes);
     }
 
     if (hasSelectionMode) {
-      updates.push(`set_selection_mode = $${values.length + 1}`);
-      values.push(inputSelectionMode);
-    }
-
-    if (hasDefaultSet) {
-      if (defaultSetId !== null) {
-        const setBelongsResult = await pool.query(
-          `SELECT 1
-           FROM chuyen_sau_bode
-           WHERE id = $1
-             AND id_mon = $2
-           LIMIT 1`,
-          [defaultSetId, subjectId]
-        );
-
-        if (setBelongsResult.rowCount === 0) {
-          return NextResponse.json(
-            { success: false, error: 'Bộ đề mặc định không thuộc bộ môn này' },
-            { status: 400 }
-          );
-        }
-      }
-
-      updates.push(`default_set_id = $${values.length + 1}`);
-      values.push(defaultSetId);
+      const dbSelectionMode = inputSelectionMode === 'random' ? 'ngau_nhien' : 'mac_dinh';
+      updates.push(`che_do_chon_de = $${values.length + 1}`);
+      values.push(dbSelectionMode);
     }
 
     updates.push(`metadata = COALESCE(metadata, '{}'::jsonb)`);
@@ -331,17 +285,17 @@ export async function PUT(request: Request) {
        WHERE id = $${values.length + 1}
        RETURNING
          id,
-         COALESCE(exam_type, loai_ky_thi) AS exam_type,
+         loai_ky_thi AS exam_type,
          ma_khoi AS block_code,
          ma_mon AS subject_code,
          ten_mon AS subject_name,
          khoa_mon AS subject_key,
-         exam_duration_minutes AS duration_minutes,
-         set_selection_mode,
-         default_set_id,
+         thoi_gian_thi_phut AS duration_minutes,
+         CASE WHEN che_do_chon_de = 'ngau_nhien' THEN 'random' ELSE 'default' END AS set_selection_mode,
          metadata,
          dang_hoat_dong AS is_active,
-         tao_luc AS created_at`,
+         tao_luc AS created_at,
+         tao_luc AS updated_at`,
       [...values, subjectId]
     );
 

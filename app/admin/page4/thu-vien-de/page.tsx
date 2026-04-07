@@ -503,7 +503,7 @@ export default function ProfessionalAssignmentLibraryPage() {
           const candidateSelections = await Promise.all(
             candidateSubjectDbIds.map(async (subjectDbId) => {
               const response = await fetch(
-                `/api/chuyensau-chonde-monhoc?subject_id=${subjectDbId}&year=${year}&month=${month}`
+                `/api/chuyensau-chonde-thang?subject_id=${subjectDbId}&year=${year}&month=${month}`
               );
               const data = await response.json();
 
@@ -654,10 +654,10 @@ export default function ProfessionalAssignmentLibraryPage() {
             const occurrenceDate = String(metadata.occurrence_date || toDateKey(event.startAt));
             if (!occurrenceDate || !inRange(occurrenceDate)) return;
 
-            const subjectDbId = Number(metadata.subject_id || 0);
-            if (!subjectDbId) return;
-
-            const subjectConfig = subjectConfigs.find((subject) => Number(subject.id) === subjectDbId);
+            // Khớp môn học qua specialty (chuyen_nganh) vì DB không lưu metadata.subject_id
+            const subjectConfig = subjectConfigs.find(
+              (subject) => event.specialty && subject.label === event.specialty
+            );
             if (!subjectConfig) return;
 
             const registrationTemplate =
@@ -667,11 +667,11 @@ export default function ProfessionalAssignmentLibraryPage() {
 
             if (examMap.has(key)) return;
 
-            const durationMinutes =
-              Number(metadata.duration_minutes || 0) > 0
-                ? Number(metadata.duration_minutes)
-                : getEffectiveDurationMinutes(subjectConfig.id);
-            const selectedSetId = Number(metadata.selected_set_id || monthlyDefaults[subjectConfig.id]?.setId || 0) || null;
+            const durationMinutes = getEffectiveDurationMinutes(subjectConfig.id);
+            // Ưu tiên: set được chọn thủ công → set mặc định tháng → set đầu tiên có câu hỏi
+            const firstValidSetId = (activeSetsBySubjectId.get(subjectConfig.id) || [])
+              .find(set => Number(set.question_count) > 0)?.id ?? null;
+            const selectedSetId = Number(metadata.selected_set_id || monthlyDefaults[subjectConfig.id]?.setId || firstValidSetId || 0) || null;
 
             examMap.set(key, {
               id: `existing-exam-${key}`,
@@ -706,11 +706,15 @@ export default function ProfessionalAssignmentLibraryPage() {
         return;
       }
 
-      const eligibleExamSubjects = subjectConfigs
-        .filter((s) => (s.examType === "expertise" || s.examType === "experience") && monthlyDefaults[s.id]);
+      // Điều kiện: môn expertise/experience VÀ (có bộ đề tháng ĐÃ chọn HOẶC có ít nhất 1 bộ đề active có câu hỏi)
+      const eligibleExamSubjects = subjectConfigs.filter((s) => {
+        if (s.examType !== "expertise" && s.examType !== "experience") return false;
+        if (monthlyDefaults[s.id]) return true;
+        return (activeSetsBySubjectId.get(s.id) || []).some(set => Number(set.question_count) > 0);
+      });
 
       if (eligibleExamSubjects.length === 0) {
-        toast.error("Không có môn đủ điều kiện: cần có bộ đề tháng và bộ đề phải có câu hỏi.");
+        toast.error("Không có môn đủ điều kiện: cần có ít nhất 1 bộ đề active có câu hỏi.");
         setPlannedEvents([]);
         return;
       }
@@ -736,7 +740,9 @@ export default function ProfessionalAssignmentLibraryPage() {
             endTime: addMinutesToTime("19:00", getEffectiveDurationMinutes(s.id)),
             registrationTemplate: "official" as const,
             flowRound: 0,
-            selectedSetId: monthlyDefaults[s.id]?.setId ?? null,
+            selectedSetId: monthlyDefaults[s.id]?.setId
+              ?? (activeSetsBySubjectId.get(s.id) || []).find(set => Number(set.question_count) > 0)?.id
+              ?? null,
             isGeneratedSupplement: false,
             sourceEventId: null,
           })),
@@ -1734,7 +1740,10 @@ export default function ProfessionalAssignmentLibraryPage() {
             ? sets.find((set) => Number(set.id) === monthlyDefaultBySubjectId[planned.subjectId]?.setId)?.subject_id
             : 0
         );
-        const subjectDbId = subjectDbIdFromSet || fallbackSubjectDbId;
+        // Fallback cuối: lấy subject_id từ bất kỳ set active có câu hỏi nào của môn này
+        const autoFallbackSet = (activeSetsBySubjectId.get(planned.subjectId) || [])
+          .find(set => Number(set.question_count) > 0);
+        const subjectDbId = subjectDbIdFromSet || fallbackSubjectDbId || Number(autoFallbackSet?.subject_id || 0);
         if (!subjectDbId) {
           throw new Error(`Khong tim thay subject_id cho mon ${planned.label}`);
         }
@@ -1743,18 +1752,22 @@ export default function ProfessionalAssignmentLibraryPage() {
 
         for (const occurrenceDate of monthlyDateKeys) {
           const startAtIso = toIsoUtcFromLocal(occurrenceDate, planned.startTime);
-          const endAtIso = toIsoUtcFromLocal(occurrenceDate, planned.endTime);
-          if (!startAtIso || !endAtIso) {
+          if (!startAtIso) {
             throw new Error(`Thời gian không hợp lệ cho môn ${planned.label}`);
           }
+          // Tính endAt từ startAt + durationMinutes (tránh lỗi midnight-crossing khi % 24)
+          const durationMins = planned.durationMinutes || getEffectiveDurationMinutes(planned.subjectId) || 120;
+          const endAtIso = new Date(new Date(startAtIso).getTime() + durationMins * 60_000).toISOString();
 
           const { year, month } = parseYearMonthFromDate(occurrenceDate);
           const selectionKey = `${subjectDbId}-${year}-${month}`;
           const isRandomMode = monthlyDefaultBySubjectId[planned.subjectId]?.selectionMode === 'random';
-          let selectedSet = plannedSet;
+          // Nếu không có selectedSetId được chọn, tự động dùng set đầu tiên có câu hỏi của môn
+          let selectedSet: typeof plannedSet = plannedSet
+            ?? (activeSetsBySubjectId.get(planned.subjectId) || []).find(set => Number(set.question_count) > 0);
 
           if (!selectionUpdated.has(selectionKey)) {
-            const selectionResponse = await fetch('/api/chuyensau-chonde-monhoc', {
+            const selectionResponse = await fetch('/api/chuyensau-chonde-thang', {
               method: isRandomMode ? 'PATCH' : 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(
@@ -1791,7 +1804,7 @@ export default function ProfessionalAssignmentLibraryPage() {
             selectionUpdated.add(selectionKey);
           } else if (isRandomMode) {
             const latestSelectionResponse = await fetch(
-              `/api/chuyensau-chonde-monhoc?subject_id=${subjectDbId}&year=${year}&month=${month}`
+              `/api/chuyensau-chonde-thang?subject_id=${subjectDbId}&year=${year}&month=${month}`
             );
             const latestSelectionData = await latestSelectionResponse.json();
             if (!latestSelectionResponse.ok || !latestSelectionData?.success || !latestSelectionData?.data?.set_id) {
@@ -2518,6 +2531,19 @@ export default function ProfessionalAssignmentLibraryPage() {
                             <div className="w-full rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-800">
                               Bộ đề tháng ({monthlyDefaultBySubjectId[evt.subjectId].selectionMode === "random" ? "ngẫu nhiên" : "mặc định"}): {monthlyDefaultBySubjectId[evt.subjectId].setCode} - {monthlyDefaultBySubjectId[evt.subjectId].setName}
                             </div>
+                          ) : evt.selectedSetId ? (
+                            (() => {
+                              const autoSet = sets.find((s) => Number(s.id) === evt.selectedSetId);
+                              return autoSet ? (
+                                <div className="w-full rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                                  Bộ đề tự động: {autoSet.set_code}{autoSet.set_name ? ` · ${autoSet.set_name}` : ""} ({autoSet.question_count ?? 0} câu)
+                                </div>
+                              ) : (
+                                <div className="w-full rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-700">
+                                  Môn này chưa có bộ đề hợp lệ (có câu hỏi).
+                                </div>
+                              );
+                            })()
                           ) : (
                             <div className="w-full rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-700">
                               Môn này chưa có bộ đề tháng hợp lệ (có câu hỏi).

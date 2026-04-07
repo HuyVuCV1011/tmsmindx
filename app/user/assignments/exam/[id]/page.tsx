@@ -31,6 +31,7 @@ interface ExamAssignment {
   passing_score: number;
   assignment_status: string;
   score: number | null;
+  time_limit_minutes: number;
 }
 
 export default function ExamAssignmentTakingPage() {
@@ -48,6 +49,7 @@ export default function ExamAssignmentTakingPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [examStartedAt, setExamStartedAt] = useState<number | null>(null); // ms timestamp
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [percentage, setPercentage] = useState<number>(0);
@@ -254,6 +256,11 @@ export default function ExamAssignmentTakingPage() {
         } catch {
         }
 
+        // Ghi nhớ thời điểm bắt đầu để đếm ngược chính xác
+        const rawStartedAt = startData.data?.started_at;
+        const startedAtMs = rawStartedAt ? new Date(rawStartedAt).getTime() : Date.now();
+        setExamStartedAt(startedAtMs);
+
         setAssignment(assignmentData);
         setQuestions(questionData);
       } catch (error) {
@@ -267,10 +274,16 @@ export default function ExamAssignmentTakingPage() {
   }, [teacherCode, assignmentIdParam, assignmentId, router, user?.email]);
 
   useEffect(() => {
-    if (!assignment || submitted) return;
+    if (!assignment || submitted || examStartedAt === null) return;
+
+    const durationMs = (assignment.time_limit_minutes || 90) * 60_000;
+    // Deadline = started_at + duration; also cap at close_at to respect exam window
+    const durationDeadline = examStartedAt + durationMs;
+    const closeDeadline = new Date(assignment.close_at).getTime();
+    const deadline = Math.min(durationDeadline, closeDeadline);
 
     const tick = () => {
-      const remain = Math.max(0, Math.floor((new Date(assignment.close_at).getTime() - Date.now()) / 1000));
+      const remain = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
       setTimeRemaining(remain);
       if (remain === 0 && !submitted) {
         handleSubmit(true);
@@ -280,7 +293,7 @@ export default function ExamAssignmentTakingPage() {
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [assignment, submitted]);
+  }, [assignment, submitted, examStartedAt]);
 
   const unansweredCount = useMemo(
     () => questions.length - Object.keys(answers).length,
@@ -324,9 +337,14 @@ export default function ExamAssignmentTakingPage() {
   }, [assignment?.id, assignment?.teacher_code, teacherCode, user?.email, answers, submitted]);
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    const safe = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(safe / 3600);
+    const mins = Math.floor((safe % 3600) / 60);
+    const secs = safe % 60;
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleAnswerChange = (questionId: number, value: string) => {

@@ -81,6 +81,7 @@ interface ExamAssignment {
   set_name: string;
   total_points: number;
   passing_score: number;
+  duration_minutes: number;
   correct_answers?: number;
   total_questions?: number;
   score_handling_note?: string;
@@ -161,6 +162,8 @@ export default function TeacherAssignmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
   const isSubmittingRef = useRef(false);
+  // Track previous nowTs to detect crossing of open_at boundaries
+  const lastNowTsRef = useRef(Date.now());
   const [selectedExamInfo, setSelectedExamInfo] = useState<ExamAssignment | null>(null);
 
   const searchParams = useSearchParams();
@@ -265,6 +268,23 @@ export default function TeacherAssignmentPage() {
       window.clearInterval(timer);
     };
   }, []);
+
+  // Auto-refetch exam assignments when any exam's open_at boundary is crossed
+  useEffect(() => {
+    const prev = lastNowTsRef.current;
+    lastNowTsRef.current = nowTs;
+
+    const anyJustOpened = examAssignments.some((item) => {
+      if (item.can_take) return false;
+      if (!['assigned', 'in_progress'].includes(item.assignment_status)) return false;
+      const openMs = new Date(item.open_at).getTime();
+      return prev < openMs && nowTs >= openMs;
+    });
+
+    if (anyJustOpened) {
+      fetchExamAssignments(true);
+    }
+  }, [nowTs, examAssignments]);
 
   const fetchAvailableAssignments = async (isBackgroundUpdate = false) => {
     try {
@@ -1589,6 +1609,7 @@ export default function TeacherAssignmentPage() {
   const getExamCountdownInfo = (item: ExamAssignment) => {
     const openMs = new Date(item.open_at).getTime();
     const closeMs = new Date(item.close_at).getTime();
+    const durationMins = item.duration_minutes || 90;
 
     if (nowTs < openMs) {
       return {
@@ -1606,8 +1627,9 @@ export default function TeacherAssignmentPage() {
       };
     }
 
+    // Cửa sổ đang mở → đếm ngược đến close_at theo giây
     return {
-      label: 'Còn lại',
+      label: 'Đóng sau',
       value: formatCountdown((closeMs - nowTs) / 1000),
       className: 'text-blue-700 bg-blue-50 border-blue-200',
     };
@@ -1701,7 +1723,7 @@ export default function TeacherAssignmentPage() {
                       </div>
 
                       <div className="pt-3 border-t border-gray-100">
-                        {item.can_take ? (
+                        {item.can_take && nowTs >= new Date(item.open_at).getTime() ? (
                           <Link
                             href={`/user/assignments/exam/${item.id}`}
                             className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
@@ -1721,7 +1743,7 @@ export default function TeacherAssignmentPage() {
                             onClick={() => setSelectedExamInfo(item)}
                             className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 border border-blue-100 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
                           >
-                            {new Date(item.open_at) > now ? 'Chưa tới giờ mở' : 'Chi tiết bài thi'}
+                            {nowTs < new Date(item.open_at).getTime() ? 'Chưa tới giờ mở' : 'Chi tiết bài thi'}
                           </button>
                         )}
                       </div>
@@ -2049,6 +2071,12 @@ export default function TeacherAssignmentPage() {
                                       <span className="text-gray-500">Đóng:</span>
                                       <span>{new Date(item.close_at).toLocaleDateString('vi-VN')} {new Date(item.close_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
                                     </div>
+                                    {nowTs < new Date(item.open_at).getTime() && (
+                                      <div className="mt-3 flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700">
+                                        <span className="text-xs font-semibold">Mở sau</span>
+                                        <span className="font-mono text-sm font-bold">{formatCountdown((new Date(item.open_at).getTime() - nowTs) / 1000)}</span>
+                                      </div>
+                                    )}
                                     <div className="flex justify-between items-center bg-gray-50 border border-gray-100 p-2.5 rounded-lg mt-3">
                                       <span className="font-semibold text-gray-700">Điểm số:</span>
                                       {item.explanation_status === 'accepted' ? (
@@ -2069,7 +2097,7 @@ export default function TeacherAssignmentPage() {
                                   </div>
 
                                   <div className="mt-auto pt-4 border-t border-gray-100">
-                                    {item.can_take ? (
+                                    {item.can_take && nowTs >= new Date(item.open_at).getTime() ? (
                                       <Link
                                         href={`/user/assignments/exam/${item.id}`}
                                         className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
@@ -2112,7 +2140,7 @@ export default function TeacherAssignmentPage() {
                                         onClick={() => setSelectedExamInfo(item)}
                                         className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 border border-blue-100 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
                                       >
-                                        {new Date(item.open_at) > now ? 'Chưa tới giờ mở' : 'Chi tiết bài thi'}
+                                        {nowTs < new Date(item.open_at).getTime() ? 'Chưa tới giờ mở' : 'Chi tiết bài thi'}
                                       </button>
                                     )}
                                   </div>

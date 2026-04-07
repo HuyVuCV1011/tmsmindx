@@ -2,10 +2,17 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from "@/lib/auth-context";
-import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck } from "lucide-react";
+import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck, LayoutDashboard, Database } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from 'react-hot-toast';
 import useSWR, { mutate } from "swr";
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Premium Components
+import ProfileHero from './components/ProfileHero';
+import StatsBento from './components/StatsBento';
+import AvailabilityGrid from './components/AvailabilityGrid';
+import EducationSection from './components/EducationSection';
 
 // Cache for processed data
 const dataCache = new Map();
@@ -365,22 +372,44 @@ export default function Page1() {
     }
   );
 
-  // Load training data in parallel
-  const { data: trainingData, isLoading: isLoadingTraining } = useSWR(
-    teacher && user ? `/api/training?code=${submitCode}` : null,
-    secureFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 300000,
-      shouldRetryOnError: false,
-      revalidateIfStale: false
-    }
+  // Load certificates data
+  const { data: certificatesRes } = useSWR(
+    teacher && user ? `/api/teacher-certificates?email=${encodeURIComponent(teacher.emailMindx)}` : null,
+    secureFetcher
   );
+
+  // Load detailed training stats
+  const { data: trainingStatsRes, isLoading: isLoadingTraining } = useSWR(
+    teacher && user ? `/api/training-teacher-stats?teacher_code=${submitCode}` : null,
+    secureFetcher
+  );
+
+  const certificates = certificatesRes?.data || [];
+  const trainingStat = trainingStatsRes?.data?.[0] || null;
+  const trainingData = trainingStat as TrainingData | null;
 
   const expertiseData = expertiseDataRes?.monthlyData || [];
   const experienceData = experienceDataRes?.monthlyData || [];
   const scoresLoaded = !isLoadingExpertise && !isLoadingExperience;
+
+  // Process scores for StatsBento
+  const expertiseMap = useMemo(() => {
+    const res: Record<string, string> = {};
+    (expertiseData as MonthlyAverage[]).forEach(m => {
+      res[m.month] = m.average.toString();
+    });
+    return res;
+  }, [expertiseData]);
+
+  const experienceMap = useMemo(() => {
+    const res: Record<string, string> = {};
+    (experienceData as MonthlyAverage[]).forEach(m => {
+      res[m.month] = m.average.toString();
+    });
+    return res;
+  }, [experienceData]);
+
+  const [viewMode, setViewMode] = useState<"premium" | "classic">("premium");
 
   // Show feedback modal 30 seconds after successful teacher search
   useEffect(() => {
