@@ -110,6 +110,7 @@ export function BirthdayWishPopup({
         () => birthdays.filter((b) => !b.masked).map((b) => ({ name: b.name, date: formatBirthdayDate(b.date) })),
         [birthdays]
     )
+    const shouldScrollReceivedWishes = wishes.length > 5
 
     useEffect(() => {
         if (!isOpen) return
@@ -453,8 +454,8 @@ export function BirthdayWishPopup({
     }
 
     const popupContent = (
-        <div className="fixed inset-0 z-120">
-            <div className="relative h-screen w-screen overflow-hidden bg-linear-to-br from-[#5b0b12] via-[#8a1220] to-[#4b070d]">
+        <div className="fixed inset-0 z-9999 overflow-y-auto">
+            <div className="relative min-h-dvh w-screen overflow-hidden bg-linear-to-br from-[#5b0b12] via-[#8a1220] to-[#4b070d]">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
                     {balloons.map((balloon) => (
                         <div
@@ -482,8 +483,8 @@ export function BirthdayWishPopup({
                     <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-red-300/10 blur-3xl" />
                 </div>
 
-                <div className="relative z-10 mx-auto flex h-full w-full max-w-6xl items-center px-4 py-3 sm:px-6 sm:py-4">
-                    <div className="w-full max-h-full rounded-2xl border border-white/20 bg-[#980f24]/70 shadow-2xl backdrop-blur-md overflow-hidden animate-popup-entry origin-top flex flex-col">
+                <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-6xl items-center px-4 py-3 sm:px-6 sm:py-4">
+                    <div className="w-full h-[calc(100dvh-1.5rem)] sm:h-[calc(100dvh-2rem)] max-h-205 rounded-2xl border border-white/20 bg-[#980f24]/70 shadow-2xl backdrop-blur-md overflow-hidden animate-popup-entry origin-top flex flex-col">
                         <div className="flex items-center justify-end gap-1 border-b border-white/15 px-4 py-3">
                             <button
                                 type="button"
@@ -504,7 +505,7 @@ export function BirthdayWishPopup({
                             </button>
                         </div>
 
-                        <div className="p-4 flex-1 min-h-0 overflow-hidden">
+                        <div className="p-4 flex-1 min-h-0 overflow-y-auto">
                             <div className={wishes.length > 0 ? 'grid grid-cols-1 lg:grid-cols-2 gap-3 h-full min-h-0' : ''}>
                                 <div
                                     ref={posterRef}
@@ -536,51 +537,59 @@ export function BirthdayWishPopup({
                                     <div className="absolute bottom-10 right-6 text-red-300 text-lg opacity-70 z-10" data-export="star">★</div>
 
                                     <p
-                                        className="mt-3 text-center relative z-20 text-[34px] leading-none tracking-wide text-[#b11226] drop-shadow-[0_2px_2px_rgba(0,0,0,0.08)] sm:text-[44px]"
+                                        className="mt-2 mb-2 text-center relative z-20 text-[34px] leading-[1.14] tracking-wide bg-linear-to-b from-[#1d3f78] via-[#10274f] to-[#0a0f1e] bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.16)] sm:text-[44px]"
                                         style={{ fontFamily: 'Kaushan Script, cursive' }}
                                         data-export="title"
                                     >
                                         Happy Birthday
                                     </p>
-                                    <div className="mt-4 flex items-center justify-center relative z-20" data-export="cake">
+                                    <div className="mt-3 flex items-center justify-center relative z-20" data-export="cake">
                                         <Image
                                             src="/images/mindx-birthday-cake.png"
                                             alt="Bánh sinh nhật MindX"
                                             width={280}
                                             height={280}
-                                            className="w-44 h-44 sm:w-56 sm:h-56 object-contain drop-shadow-[0_14px_30px_rgba(127,29,29,0.26)]"
+                                            className="w-36 h-36 sm:w-48 sm:h-48 object-contain drop-shadow-[0_14px_30px_rgba(127,29,29,0.26)]"
                                             priority
                                             unoptimized
                                             data-export="cake-image"
                                         />
                                     </div>
 
-                                    <div className="mt-3 text-center relative z-20" data-export="header">
+                                    <div className="mt-2 text-center relative z-20" data-export="header">
                                         <div className="space-y-1.5">
                                             {visibleBirthdays.length > 0 ? (
                                                 visibleBirthdays.map((person, index) => (
-                                                    <div key={`${person.name}-${index}`} className="text-red-700">
+                                                    <div key={`${person.name}-${index}`} className="text-black">
                                                         <p className="text-[30px] sm:text-[38px] font-black leading-tight tracking-tight" data-export="name">{person.name}</p>
-                                                        <p className="text-base sm:text-lg text-red-500 font-medium" data-export="date">{person.date}</p>
+                                                        <p className="text-base sm:text-lg text-black font-medium" data-export="date">{person.date}</p>
                                                     </div>
                                                 ))
                                             ) : (
-                                                <p className="text-red-600 text-base" data-export="name">Đội ngũ giáo viên MindX</p>
+                                                <p className="text-black text-base" data-export="name">Đội ngũ giáo viên MindX</p>
                                             )}
                                         </div>
                                     </div>
 
-                                    <div className="mt-3 rounded-2xl bg-white/90 border border-rose-300 border-dashed p-3 text-center min-h-18 flex items-center justify-center relative z-20 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]" data-export="wish">
-                                        <p className="text-rose-900 text-sm sm:text-base font-semibold transition-all duration-500 leading-relaxed" data-export="wish-text">
+                                    <div className="mt-2 rounded-2xl bg-white/90 border border-rose-300 border-dashed p-3 text-center min-h-16 max-h-24 sm:max-h-28 overflow-y-auto custom-scrollbar flex items-start justify-center relative z-20 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]" data-export="wish">
+                                        <p className="text-black text-sm sm:text-base font-semibold transition-all duration-500 leading-relaxed wrap-break-word whitespace-pre-line" data-export="wish-text">
                                             {randomWish}
                                         </p>
                                     </div>
                                 </div>
 
                                 {wishes.length > 0 && (
-                                    <div className="rounded-2xl border border-white/20 bg-black/10 p-3 min-h-0 overflow-y-auto custom-scrollbar">
+                                    <div
+                                        className={`rounded-2xl border border-white/20 bg-black/10 p-3 min-h-0 h-full overflow-hidden flex flex-col ${
+                                            shouldScrollReceivedWishes ? 'max-h-[44vh] lg:max-h-full' : ''
+                                        }`}
+                                    >
                                         <p className="text-white text-sm font-bold uppercase tracking-wide mb-2">Lời chúc đã nhận</p>
-                                        <div className="space-y-2.5">
+                                        <div
+                                            className={`space-y-2.5 min-h-0 flex-1 ${
+                                                shouldScrollReceivedWishes ? 'overflow-y-auto custom-scrollbar pr-1' : 'overflow-y-visible'
+                                            }`}
+                                        >
                                             {wishes.map((wish) => (
                                                 <div key={wish.id} className="rounded-xl border border-white/15 bg-white/10 p-3 text-white">
                                                     <p className="text-sm font-semibold">{wish.senderName}</p>

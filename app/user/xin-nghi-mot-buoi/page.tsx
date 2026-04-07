@@ -327,7 +327,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
                 resetFormForNew();
                 setShowModal(true);
               }}
-              className="whitespace-nowrap border-2 border-[#f3c7d1] bg-[#fff5f7] text-[#a1001f] hover:border-[#a1001f] hover:bg-linear-to-r hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:shadow-md"
+              className="whitespace-nowrap border-2 border-[#a1001f] bg-[#a1001f] text-white shadow-md hover:bg-[#8a001a]"
             >
               Tạo mail xin nghỉ
             </Button>

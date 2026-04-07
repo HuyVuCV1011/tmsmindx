@@ -1186,6 +1186,25 @@ const migrations: Migration[] = [
       END $$;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V45: K12 publish snapshots (lịch sử phát hành gần nhất)
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V45_k12_publish_snapshots',
+    version: 45,
+    sql: `
+      CREATE TABLE IF NOT EXISTS k12_publish_snapshots (
+        id SERIAL PRIMARY KEY,
+        snapshot_data JSONB NOT NULL,
+        document_count INTEGER NOT NULL DEFAULT 0,
+        created_by_email VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_k12_publish_snapshots_created_at ON k12_publish_snapshots(created_at DESC);
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

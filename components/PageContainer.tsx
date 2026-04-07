@@ -6,6 +6,7 @@ interface PageContainerProps {
   children: React.ReactNode;
   title?: string;
   description?: string;
+  headerActions?: React.ReactNode;
   maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl" | "full";
   className?: string;
   padding?: "none" | "sm" | "md" | "lg";
@@ -15,6 +16,7 @@ export function PageContainer({
   children,
   title,
   description,
+  headerActions,
   maxWidth = "full",
   className = "",
   padding = "md",
@@ -39,7 +41,7 @@ export function PageContainer({
     <div className={`${paddingClasses[padding]} ${className}`}>
       {/* Page Header */}
       {(title || description) && (
-        <PageHeader title={title || ""} description={description} />
+        <PageHeader title={title || ""} description={description} actions={headerActions} />
       )}
 
       {/* Page Content */}

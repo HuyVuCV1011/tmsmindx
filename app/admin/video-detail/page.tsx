@@ -391,7 +391,7 @@ function VideoDetailContent() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-8">
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="w-full space-y-6">
           <div className="h-8 bg-white/50 backdrop-blur rounded-lg w-64 animate-pulse"></div>
           
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -479,7 +479,7 @@ function VideoDetailContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-1 md:p-4">
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-3">
           <button 
@@ -1372,7 +1372,7 @@ export default function VideoDetailPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-8">
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="w-full space-y-6">
           <div className="h-8 bg-gray-200 rounded w-64 animate-pulse"></div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">

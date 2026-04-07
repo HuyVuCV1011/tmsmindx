@@ -268,7 +268,7 @@ export default function TeacherProfilePage() {
             <div className="max-w-7xl mx-auto space-y-8">
                 
                 {/* Profile Header */}
-                <div className="bg-linear-to-br from-blue-600 via-blue-700 to-indigo-700 rounded-3xl p-8 text-white shadow-2xl">
+                <div className="bg-[#a1001f] rounded-3xl p-8 text-white shadow-2xl">
                     <div className="flex flex-col md:flex-row items-center gap-6">
                         {/* Avatar */}
                         <div className="relative group">
@@ -305,9 +305,9 @@ export default function TeacherProfilePage() {
 
                 {/* Teacher Information Section */}
                 {teacherInfo && (
-                    <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden">
-                        <div className="p-6 border-b border-gray-200 bg-linear-to-r from-blue-50 to-white flex items-center gap-3">
-                            <div className="w-12 h-12 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <div className="bg-white rounded-3xl shadow-xl border border-[#f1d1d8] overflow-hidden">
+                        <div className="p-6 border-b border-[#f1d1d8] bg-[#fff5f7] flex items-center gap-3">
+                            <div className="w-12 h-12 bg-[#a1001f] rounded-xl flex items-center justify-center shadow-lg">
                                 <User className="w-6 h-6 text-white" />
                             </div>
                             <div>
@@ -319,31 +319,31 @@ export default function TeacherProfilePage() {
                         </div>
 
                         <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                            <div className="bg-[#fff5f7] rounded-xl p-4 border border-[#f6e3e7] hover:border-[#d47a8b] transition-colors">
                                 <p className="text-sm text-gray-500 font-medium mb-1">Mã GV</p>
                                 <p className="font-bold text-gray-900 truncate" title={teacherInfo.code}>{teacherInfo.code || '---'}</p>
                             </div>
-                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                            <div className="bg-[#fff5f7] rounded-xl p-4 border border-[#f6e3e7] hover:border-[#d47a8b] transition-colors">
                                 <p className="text-sm text-gray-500 font-medium mb-1">Chức vụ</p>
                                 <p className="font-bold text-gray-900 truncate" title={teacherInfo.position}>{teacherInfo.position || '---'}</p>
                             </div>
-                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                            <div className="bg-[#fff5f7] rounded-xl p-4 border border-[#f6e3e7] hover:border-[#d47a8b] transition-colors">
                                 <p className="text-sm text-gray-500 font-medium mb-1">Ngày bắt đầu</p>
                                 <p className="font-bold text-gray-900 truncate" title={teacherInfo.startDate}>{teacherInfo.startDate || '---'}</p>
                             </div>
-                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                            <div className="bg-[#fff5f7] rounded-xl p-4 border border-[#f6e3e7] hover:border-[#d47a8b] transition-colors">
                                 <p className="text-sm text-gray-500 font-medium mb-1">Khối</p>
                                 <p className="font-bold text-gray-900 truncate" title={teacherInfo.status}>{teacherInfo.status || '---'}</p>
                             </div>
-                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                            <div className="bg-[#fff5f7] rounded-xl p-4 border border-[#f6e3e7] hover:border-[#d47a8b] transition-colors">
                                 <p className="text-sm text-gray-500 font-medium mb-1">Cơ sở (In)</p>
                                 <p className="font-bold text-gray-900 truncate" title={teacherInfo.branchIn}>{teacherInfo.branchIn || '---'}</p>
                             </div>
-                             <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors">
+                             <div className="bg-[#fff5f7] rounded-xl p-4 border border-[#f6e3e7] hover:border-[#d47a8b] transition-colors">
                                 <p className="text-sm text-gray-500 font-medium mb-1">Onboard bởi</p>
                                 <p className="font-bold text-gray-900 truncate" title={teacherInfo.onboardBy}>{teacherInfo.onboardBy || '---'}</p>
                             </div>
-                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-blue-200 transition-colors md:col-span-2">
+                            <div className="bg-[#fff5f7] rounded-xl p-4 border border-[#f6e3e7] hover:border-[#d47a8b] transition-colors md:col-span-2">
                                 <p className="text-sm text-gray-500 font-medium mb-1">Email cá nhân</p>
                                 <p className="font-bold text-gray-900 truncate" title={teacherInfo.emailPersonal}>{teacherInfo.emailPersonal || '---'}</p>
                             </div>
@@ -352,9 +352,9 @@ export default function TeacherProfilePage() {
                 )}
 
                 {/* Privacy Settings Section */}
-                <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden">
-                    <div className="p-6 border-b border-gray-200 bg-linear-to-r from-purple-50 to-white flex items-center gap-3">
-                        <div className="w-12 h-12 bg-linear-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                <div className="bg-white rounded-3xl shadow-xl border border-[#f1d1d8] overflow-hidden">
+                    <div className="p-6 border-b border-[#f1d1d8] bg-[#fff5f7] flex items-center gap-3">
+                        <div className="w-12 h-12 bg-[#a1001f] rounded-xl flex items-center justify-center shadow-lg">
                             <Shield className="w-6 h-6 text-white" />
                         </div>
                         <div>
@@ -367,10 +367,10 @@ export default function TeacherProfilePage() {
 
                     <div className="p-6 space-y-4">
                         {/* Show Birthday Toggle */}
-                        <div className="flex items-center justify-between p-4 bg-linear-to-r from-gray-50 to-white rounded-xl border border-gray-200 hover:border-purple-300 transition-all">
+                        <div className="flex items-center justify-between p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all">
                             <div className="flex items-start gap-4">
-                                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center shrink-0">
-                                    <Calendar className="w-5 h-5 text-purple-600" />
+                                <div className="w-10 h-10 bg-[#f9e2e8] rounded-lg flex items-center justify-center shrink-0">
+                                    <Calendar className="w-5 h-5 text-[#a1001f]" />
                                 </div>
                                 <div className="flex-1">
                                     <h3 className="font-bold text-gray-900 mb-1">Hiển thị sinh nhật</h3>
@@ -382,8 +382,8 @@ export default function TeacherProfilePage() {
                             <button
                                 onClick={() => handlePrivacyToggle('show_birthday')}
                                 disabled={!privacySettings}
-                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 ${
-                                    privacySettings?.show_birthday ? 'bg-purple-600' : 'bg-gray-300'
+                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 ${
+                                    privacySettings?.show_birthday ? 'bg-[#a1001f]' : 'bg-gray-300'
                                 }`}
                             >
                                 <span
@@ -395,10 +395,10 @@ export default function TeacherProfilePage() {
                         </div>
 
                         {/* Show on Public List Toggle */}
-                        <div className="flex items-center justify-between p-4 bg-linear-to-r from-gray-50 to-white rounded-xl border border-gray-200 hover:border-purple-300 transition-all">
+                        <div className="flex items-center justify-between p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all">
                             <div className="flex items-start gap-4">
-                                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
-                                    {privacySettings?.show_on_public_list ? <Eye className="w-5 h-5 text-blue-600" /> : <EyeOff className="w-5 h-5 text-blue-600" />}
+                                <div className="w-10 h-10 bg-[#f9e2e8] rounded-lg flex items-center justify-center shrink-0">
+                                    {privacySettings?.show_on_public_list ? <Eye className="w-5 h-5 text-[#a1001f]" /> : <EyeOff className="w-5 h-5 text-[#a1001f]" />}
                                 </div>
                                 <div className="flex-1">
                                     <h3 className="font-bold text-gray-900 mb-1">Hiển thị trong danh sách công khai</h3>
@@ -410,8 +410,8 @@ export default function TeacherProfilePage() {
                             <button
                                 onClick={() => handlePrivacyToggle('show_on_public_list')}
                                 disabled={!privacySettings}
-                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 ${
-                                    privacySettings?.show_on_public_list ? 'bg-blue-600' : 'bg-gray-300'
+                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 ${
+                                    privacySettings?.show_on_public_list ? 'bg-[#a1001f]' : 'bg-gray-300'
                                 }`}
                             >
                                 <span
@@ -423,10 +423,10 @@ export default function TeacherProfilePage() {
                         </div>
 
                         {/* Show Phone Toggle */}
-                        <div className="flex items-center justify-between p-4 bg-linear-to-r from-gray-50 to-white rounded-xl border border-gray-200 hover:border-purple-300 transition-all">
+                        <div className="flex items-center justify-between p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all">
                             <div className="flex items-start gap-4">
-                                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
-                                    <Mail className="w-5 h-5 text-green-600" />
+                                <div className="w-10 h-10 bg-[#f9e2e8] rounded-lg flex items-center justify-center shrink-0">
+                                    <Mail className="w-5 h-5 text-[#a1001f]" />
                                 </div>
                                 <div className="flex-1">
                                     <h3 className="font-bold text-gray-900 mb-1">Hiển thị số điện thoại</h3>
@@ -438,8 +438,8 @@ export default function TeacherProfilePage() {
                             <button
                                 onClick={() => handlePrivacyToggle('show_phone')}
                                 disabled={!privacySettings}
-                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 ${
-                                    privacySettings?.show_phone ? 'bg-green-600' : 'bg-gray-300'
+                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 ${
+                                    privacySettings?.show_phone ? 'bg-[#a1001f]' : 'bg-gray-300'
                                 }`}
                             >
                                 <span
@@ -451,10 +451,10 @@ export default function TeacherProfilePage() {
                         </div>
 
                         {/* Show Personal Email Toggle */}
-                        <div className="flex items-center justify-between p-4 bg-linear-to-r from-gray-50 to-white rounded-xl border border-gray-200 hover:border-purple-300 transition-all">
+                        <div className="flex items-center justify-between p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all">
                             <div className="flex items-start gap-4">
-                                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
-                                    <Mail className="w-5 h-5 text-orange-600" />
+                                <div className="w-10 h-10 bg-[#f9e2e8] rounded-lg flex items-center justify-center shrink-0">
+                                    <Mail className="w-5 h-5 text-[#a1001f]" />
                                 </div>
                                 <div className="flex-1">
                                     <h3 className="font-bold text-gray-900 mb-1">Hiển thị email cá nhân</h3>
@@ -466,8 +466,8 @@ export default function TeacherProfilePage() {
                             <button
                                 onClick={() => handlePrivacyToggle('show_personal_email')}
                                 disabled={!privacySettings}
-                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 ${
-                                    privacySettings?.show_personal_email ? 'bg-orange-600' : 'bg-gray-300'
+                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 ${
+                                    privacySettings?.show_personal_email ? 'bg-[#a1001f]' : 'bg-gray-300'
                                 }`}
                             >
                                 <span
@@ -478,10 +478,10 @@ export default function TeacherProfilePage() {
                             </button>
                         </div>
 
-                        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                        <div className="mt-6 p-4 bg-[#fff5f7] border border-[#f1d1d8] rounded-xl">
                             <div className="flex gap-3">
-                                <Shield className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                                <div className="text-sm text-blue-800">
+                                <Shield className="w-5 h-5 text-[#a1001f] shrink-0 mt-0.5" />
+                                <div className="text-sm text-[#6b1223]">
                                     <p className="font-semibold mb-1">Lưu ý về quyền riêng tư</p>
                                     <p>
                                         Các cài đặt này chỉ ảnh hưởng đến thông tin hiển thị trên trang truyền thông công khai. 
@@ -494,11 +494,11 @@ export default function TeacherProfilePage() {
                 </div>
 
                 {/* Certificates Section */}
-                <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden">
+                <div className="bg-white rounded-3xl shadow-xl border border-[#f1d1d8] overflow-hidden">
                     {/* Header */}
-                    <div className="p-6 border-b border-gray-200 bg-linear-to-r from-gray-50 to-white flex items-center justify-between">
+                    <div className="p-6 border-b border-[#f1d1d8] bg-[#fff5f7] flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-linear-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
+                            <div className="w-12 h-12 bg-[#a1001f] rounded-xl flex items-center justify-center shadow-lg">
                                 <Award className="w-6 h-6 text-white" />
                             </div>
                             <div>
@@ -511,7 +511,7 @@ export default function TeacherProfilePage() {
                         <Button
                             size="lg"
                             onClick={() => setShowCertModal(true)}
-                            className="flex items-center gap-2 bg-linear-to-r from-blue-600 to-indigo-600 hover:shadow-xl hover:scale-105 transition-all duration-200 rounded-xl"
+                            className="flex items-center gap-2 bg-[#a1001f] hover:bg-[#870019] text-white hover:shadow-xl hover:scale-105 transition-all duration-200 rounded-xl"
                         >
                             <Plus className="w-5 h-5" />
                             <span>Thêm chứng chỉ</span>
@@ -541,7 +541,7 @@ export default function TeacherProfilePage() {
                                 {certificates.map((cert: Certificate) => (
                                     <div
                                         key={cert.id}
-                                        className="group bg-white border-2 border-gray-200 rounded-2xl overflow-hidden hover:shadow-2xl hover:border-blue-300 transition-all duration-300 hover:-translate-y-1"
+                                        className="group bg-white border-2 border-gray-200 rounded-2xl overflow-hidden hover:shadow-2xl hover:border-[#d47a8b] transition-all duration-300 hover:-translate-y-1"
                                     >
                                         {/* Certificate Image */}
                                         <div
@@ -610,7 +610,7 @@ export default function TeacherProfilePage() {
                             <h2 className="text-2xl font-black text-gray-900">Thêm chứng chỉ mới</h2>
                             <button
                                 onClick={() => setShowCertModal(false)}
-                                className="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center justify-center transition-colors"
+                                className="w-10 h-10 bg-[#fff5f7] hover:bg-[#f9e2e8] text-[#a1001f] rounded-xl flex items-center justify-center transition-colors"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -628,7 +628,7 @@ export default function TeacherProfilePage() {
                                     value={certForm.name}
                                     onChange={(e) => setCertForm({ ...certForm, name: e.target.value })}
                                     placeholder="VD: IELTS 7.5, AWS Certified, etc."
-                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#a1001f] focus:ring-4 focus:ring-[#f9e2e8] outline-none transition-all"
                                 />
                             </div>
 
@@ -640,7 +640,7 @@ export default function TeacherProfilePage() {
                                 <select
                                     value={certForm.type}
                                     onChange={(e) => setCertForm({ ...certForm, type: e.target.value })}
-                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#a1001f] focus:ring-4 focus:ring-[#f9e2e8] outline-none transition-all"
                                 >
                                     <option value="">Chọn loại</option>
                                     <option value="Language">Ngoại ngữ</option>
@@ -660,7 +660,7 @@ export default function TeacherProfilePage() {
                                         type="date"
                                         value={certForm.issueDate}
                                         onChange={(e) => setCertForm({ ...certForm, issueDate: e.target.value })}
-                                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#a1001f] focus:ring-4 focus:ring-[#f9e2e8] outline-none transition-all"
                                     />
                                 </div>
                                 <div>
@@ -671,7 +671,7 @@ export default function TeacherProfilePage() {
                                         type="date"
                                         value={certForm.expiryDate}
                                         onChange={(e) => setCertForm({ ...certForm, expiryDate: e.target.value })}
-                                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#a1001f] focus:ring-4 focus:ring-[#f9e2e8] outline-none transition-all"
                                     />
                                 </div>
                             </div>
@@ -686,7 +686,7 @@ export default function TeacherProfilePage() {
                                     onChange={(e) => setCertForm({ ...certForm, description: e.target.value })}
                                     placeholder="Thông tin bổ sung về chứng chỉ..."
                                     rows={3}
-                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all resize-none"
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#a1001f] focus:ring-4 focus:ring-[#f9e2e8] outline-none transition-all resize-none"
                                 />
                             </div>
 
@@ -706,7 +706,7 @@ export default function TeacherProfilePage() {
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={isUploadingCert || !certForm.name}
-                                    className="w-full px-6 py-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all flex flex-col items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full px-6 py-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-[#a1001f] hover:bg-[#fff5f7] transition-all flex flex-col items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <Upload className="w-8 h-8 text-gray-400" />
                                     <span className="text-sm font-semibold text-gray-600">

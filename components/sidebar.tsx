@@ -95,7 +95,7 @@ export function Sidebar() {
           submenu: [
             { href: "/admin/deal-luong?type=salary_deal", label: "Thỏa thuận lương " },
             { href: "/admin/deal-luong?type=salary_reduction", label: "Hạ lương" },
-            { href: "/admin/deal-luong?type=bonus", label: "Bonus" },
+            { href: "/admin/deal-luong?type=bonus", label: "Nâng Lương" },
           ]
         },
       ]
@@ -145,27 +145,27 @@ export function Sidebar() {
   ];
 
   const userMenuItems = [
-    { href: "/user/truyenthong", label: "Truyền Thông Nội Bộ", icon: Megaphone },
-    { href: "/user/thongtingv", label: "Thông Tin Của Tôi", icon: Home },
-    { href: "/user/page2", label: "Quy Trình, Quy Định K12 Teaching", icon: BookOpen },
-    { href: "/user/hoat-dong-hang-thang", label: "Hoạt Động Hàng Tháng", icon: CalendarDays },
+    { href: "/user/truyenthong", label: "Truyền thông nội bộ", icon: Megaphone },
+    { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
+    {
+      label: "Lịch & Hoạt động",
+      icon: CalendarDays,
+      submenu: [
+        { href: "/user/hoat-dong-hang-thang", label: "Hoạt động hàng tháng" },
+        { href: "/user/xin-nghi-mot-buoi", label: "Tạo yêu cầu xin nghỉ" },
+        { href: "/user/nhan-lop-1-buoi", label: "Danh sách nhận lớp 1 buổi" },
+      ]
+    },
     {
       label: "Đào tạo & Khảo thí",
       icon: GraduationCap,
       submenu: [
         { href: "/user/training", label: "Đào tạo nâng cao" },
-        { href: "/user/assignments", label: "Kiểm tra Chuyên Môn" },
+        { href: "/user/assignments", label: "Kiểm tra chuyên môn" },
         { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
       ]
     },
-    {
-      label: "Quy trình xin nghỉ 1 buổi",
-      icon: Settings,
-      submenu: [
-        { href: "/user/xin-nghi-mot-buoi", label: "Gửi yêu cầu xin nghỉ" },
-        { href: "/user/nhan-lop-1-buoi", label: "Danh sách nhận lớp 1 buổi" },
-      ]
-    },
+    { href: "/user/page2", label: "Quy trình & Quy định", icon: BookOpen },
   ];
 
   const isPathMatch = (href?: string) => {
@@ -174,7 +174,9 @@ export function Sidebar() {
       const [hrefPath, hrefSearch] = href.split('?');
       return pathname === hrefPath && searchParams.toString() === hrefSearch;
     }
-    return pathname === href || pathname.startsWith(`${href}/`);
+    // Sibling routes in submenu: only exact match, not startsWith
+    // So /admin/page2 only matches /admin/page2, NOT /admin/page2/manage
+    return pathname === href;
   };
 
   const isMenuItemActive = (item: any): boolean => {
