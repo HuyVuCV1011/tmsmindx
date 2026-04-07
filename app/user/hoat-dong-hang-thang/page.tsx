@@ -28,6 +28,7 @@ interface ExamSetAvailability {
   status: "active" | "inactive";
   block_code: string;
   subject_code: string;
+  default_set_id?: number | null;
 }
 
 interface RegisteredExamParticipant {
@@ -514,19 +515,20 @@ export default function MonthlyActivitiesPage() {
             .toUpperCase()
             .trim();
 
-        const activeSet = new Set<string>();
+        // Chỉ coi subject hợp lệ nếu có default_set_id được cấu hình
+        const subjectWithDefaultSet = new Set<string>();
         rows
-          .filter((item) => item.status === 'active')
+          .filter((item) => item.default_set_id != null)
           .forEach((item) => {
-            activeSet.add(`${item.block_code}::${normalize(item.subject_code)}`);
+            subjectWithDefaultSet.add(`${item.block_code}::${normalize(item.subject_code)}`);
           });
 
         const available = new Set<string>();
         Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
-          const hasActive = mapped.subjectCodeCandidates.some((candidate) =>
-            activeSet.has(`${mapped.block_code}::${normalize(candidate)}`)
+          const hasDefaultSet = mapped.subjectCodeCandidates.some((candidate) =>
+            subjectWithDefaultSet.has(`${mapped.block_code}::${normalize(candidate)}`)
           );
-          if (hasActive) {
+          if (hasDefaultSet) {
             available.add(option);
           }
         });
@@ -1773,7 +1775,9 @@ export default function MonthlyActivitiesPage() {
                 <p>2. Tick môn muốn đăng ký rồi bấm Gửi đăng ký.</p>
               </div>
 
-              {REGISTER_OPTIONS.filter((option) => (upcomingExamEventsByOption[option] || []).length > 0).map((option) => {
+              {REGISTER_OPTIONS.filter((option) =>
+                (upcomingExamEventsByOption[option] || []).length > 0 && availableOptions.has(option)
+              ).map((option) => {
                 const isAvailable = availableOptions.has(option);
                 const isSelected = selectedOptions.includes(option);
                 const examEvents = upcomingExamEventsByOption[option] || [];

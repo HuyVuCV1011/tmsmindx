@@ -53,6 +53,24 @@ async function ensureSubjectConfigColumns() {
       ALTER COLUMN exam_duration_minutes SET NOT NULL;
   `);
 
+  // Backfill default_set_id từ bộ đề active đầu tiên của môn học.
+  await pool.query(`
+    UPDATE chuyen_sau_monhoc csm
+    SET default_set_id = (
+      SELECT csb.id
+      FROM chuyen_sau_bode csb
+      WHERE csb.id_mon = csm.id
+        AND csb.trang_thai = 'active'
+      ORDER BY csb.tao_luc ASC
+      LIMIT 1
+    )
+    WHERE csm.default_set_id IS NULL
+      AND EXISTS (
+        SELECT 1 FROM chuyen_sau_bode csb
+        WHERE csb.id_mon = csm.id AND csb.trang_thai = 'active'
+      );
+  `);
+
   subjectConfigColumnsEnsured = true;
 }
 
@@ -63,24 +81,23 @@ export async function GET() {
     const result = await pool.query(
       `SELECT
          csm.id,
-         csm.exam_type,
-         csm.block_code,
-         csm.subject_code,
-         csm.subject_name,
-         csm.subject_key,
+         COALESCE(csm.exam_type, csm.loai_ky_thi) AS exam_type,
+         csm.ma_khoi AS block_code,
+         csm.ma_mon AS subject_code,
+         csm.ten_mon AS subject_name,
+         csm.khoa_mon AS subject_key,
          csm.exam_duration_minutes AS duration_minutes,
          csm.set_selection_mode,
          csm.default_set_id,
-         ds.set_code AS default_set_code,
-         COALESCE(ds.set_note, ds.set_name) AS default_set_name,
+         ds.ma_de AS default_set_code,
+         ds.ten_de AS default_set_name,
          csm.metadata,
-         csm.is_active,
-         csm.created_at,
-         csm.updated_at
+         csm.dang_hoat_dong AS is_active,
+         csm.tao_luc AS created_at
        FROM chuyen_sau_monhoc csm
        LEFT JOIN chuyen_sau_bode ds ON ds.id = csm.default_set_id
-       WHERE csm.is_active = TRUE
-       ORDER BY csm.block_code ASC, csm.subject_name ASC`
+       WHERE csm.dang_hoat_dong = TRUE
+       ORDER BY csm.ma_khoi ASC, csm.ten_mon ASC`
     );
 
     return NextResponse.json({
@@ -135,8 +152,8 @@ export async function POST(request: Request) {
     const existing = await client.query(
       `SELECT id
        FROM chuyen_sau_monhoc
-       WHERE (subject_key = $1)
-          OR (block_code = $2 AND lower(subject_name) = lower($3))
+       WHERE (khoa_mon = $1)
+          OR (ma_khoi = $2 AND lower(ten_mon) = lower($3))
        LIMIT 1`,
       [subjectKey, inputBlockCode, subjectName]
     );
@@ -152,39 +169,39 @@ export async function POST(request: Request) {
     const displayOrderResult = await client.query(
       `SELECT COALESCE(MAX(display_order), 0) + 1 AS next_order
        FROM chuyen_sau_monhoc
-       WHERE block_code = $1`,
+       WHERE ma_khoi = $1`,
       [inputBlockCode]
     );
     const displayOrder = Number(displayOrderResult.rows[0]?.next_order || 1);
 
     const insertResult = await client.query(
       `INSERT INTO chuyen_sau_monhoc (
-         exam_type,
-         block_code,
-         subject_code,
-         subject_name,
-         subject_key,
+         loai_ky_thi,
+         ma_khoi,
+         ma_mon,
+         ten_mon,
+         khoa_mon,
          exam_duration_minutes,
          set_selection_mode,
          display_order,
-         is_active,
+         dang_hoat_dong,
          metadata
        )
        VALUES ($1, $2, $3, $4, $5, $6, 'default', $7, TRUE, $8::jsonb)
        RETURNING
          id,
-         exam_type,
-         block_code,
-         subject_code,
-         subject_name,
-         subject_key,
+         COALESCE(exam_type, loai_ky_thi) AS exam_type,
+         ma_khoi AS block_code,
+         ma_mon AS subject_code,
+         ten_mon AS subject_name,
+         khoa_mon AS subject_key,
          exam_duration_minutes AS duration_minutes,
          set_selection_mode,
          default_set_id,
          metadata,
-         is_active,
-         created_at,
-         updated_at`,
+         dang_hoat_dong AS is_active,
+         tao_luc AS created_at`,
+      // NOTE: tham số giữ nguyên thứ tự ($1=loai_ky_thi, $2=ma_khoi, ...)
       [
         examType,
         inputBlockCode,
@@ -289,7 +306,7 @@ export async function PUT(request: Request) {
           `SELECT 1
            FROM chuyen_sau_bode
            WHERE id = $1
-             AND subject_id = $2
+             AND id_mon = $2
            LIMIT 1`,
           [defaultSetId, subjectId]
         );
@@ -310,23 +327,21 @@ export async function PUT(request: Request) {
 
     const result = await pool.query(
       `UPDATE chuyen_sau_monhoc
-       SET ${updates.join(', ')},
-           updated_at = CURRENT_TIMESTAMP
+       SET ${updates.join(', ')}
        WHERE id = $${values.length + 1}
        RETURNING
          id,
-         exam_type,
-         block_code,
-         subject_code,
-         subject_name,
-         subject_key,
+         COALESCE(exam_type, loai_ky_thi) AS exam_type,
+         ma_khoi AS block_code,
+         ma_mon AS subject_code,
+         ten_mon AS subject_name,
+         khoa_mon AS subject_key,
          exam_duration_minutes AS duration_minutes,
          set_selection_mode,
          default_set_id,
          metadata,
-         is_active,
-         created_at,
-         updated_at`,
+         dang_hoat_dong AS is_active,
+         tao_luc AS created_at`,
       [...values, subjectId]
     );
 

@@ -120,22 +120,22 @@ export async function GET(request: NextRequest) {
         csd.block_code,
         csd.subject_code,
         COALESCE(
+          csp.open_at,
           CASE
             WHEN COALESCE(csr.thoi_gian_kiem_tra, '') ~ '^[0-9]{1,2}:[0-9]{2} [0-9]{2}/[0-9]{2}/[0-9]{4}$'
               THEN (to_timestamp(csr.thoi_gian_kiem_tra, 'HH24:MI DD/MM/YYYY')::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
             ELSE NULL
           END,
-          csp.open_at,
           csd.scheduled_at,
           make_timestamp(csd.year, csd.month, 1, 0, 0, 0)
         ) AS open_at,
         COALESCE(
+          csp.close_at,
           CASE
             WHEN COALESCE(csr.thoi_gian_kiem_tra, '') ~ '^[0-9]{1,2}:[0-9]{2} [0-9]{2}/[0-9]{2}/[0-9]{4}$'
               THEN (to_timestamp(csr.thoi_gian_kiem_tra, 'HH24:MI DD/MM/YYYY')::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh') + make_interval(mins => 90)
             ELSE NULL
           END,
-          csp.close_at,
           csd.scheduled_at + make_interval(mins => 90),
           make_timestamp(csd.year, csd.month, 1, 0, 0, 0) + make_interval(mins => 90)
         ) AS close_at,
@@ -442,20 +442,25 @@ export async function GET(request: NextRequest) {
 
     const resultsOnlyResult = await pool.query(resultsOnlyQuery, resultValues);
 
-    // Final source of truth for this endpoint: chuyen_sau_results.
-    // Keep only result-backed rows (result_id > 0), dedupe by result_id.
-    const mergedRows = [
-      ...assignmentResult.rows,
-      ...resultsOnlyResult.rows,
-    ]
-      .filter((row) => {
-        const resultId = Number(row.result_id || 0);
-        return Number.isFinite(resultId) && resultId > 0;
-      })
-      .filter((row, index, arr) => {
-        const resultId = Number(row.result_id || 0);
-        return arr.findIndex((item) => Number(item.result_id || 0) === resultId) === index;
-      });
+    // Keep all assignment-backed rows (real chuyen_sau_phancong records), deduplicated by assignment_id.
+    // Also keep result-only rows that aren't already covered by an assignment row.
+    // This ensures newly registered exams (no result yet) are always visible.
+    const seenAssignmentIds = new Set<number>();
+    const assignmentRows = assignmentResult.rows.filter((row) => {
+      const id = Number(row.assignment_id || 0);
+      if (id <= 0) return false;
+      if (seenAssignmentIds.has(id)) return false;
+      seenAssignmentIds.add(id);
+      return true;
+    });
+    const coveredResultIds = new Set(
+      assignmentRows.map((r) => Number(r.result_id || 0)).filter((id) => id > 0)
+    );
+    const additionalResultRows = resultsOnlyResult.rows.filter((row) => {
+      const resultId = Number(row.result_id || 0);
+      return resultId > 0 && !coveredResultIds.has(resultId);
+    });
+    const mergedRows = [...assignmentRows, ...additionalResultRows];
 
     const now = new Date();
     const mapped = mergedRows.map((row) => {

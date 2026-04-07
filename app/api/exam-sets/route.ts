@@ -22,9 +22,27 @@ async function ensureSubjectConfigColumns() {
         WHEN COALESCE(metadata->>'duration_minutes', '') ~ '^[0-9]+$' THEN (metadata->>'duration_minutes')::int
         ELSE NULL
       END,
-      CASE WHEN exam_type = 'experience' THEN 60 ELSE 120 END
+      CASE WHEN COALESCE(exam_type, loai_ky_thi) = 'experience' THEN 60 ELSE 120 END
     )
     WHERE exam_duration_minutes IS NULL;
+  `);
+
+  // Backfill default_set_id từ bộ đề active đầu tiên của môn học.
+  await pool.query(`
+    UPDATE chuyen_sau_monhoc csm
+    SET default_set_id = (
+      SELECT csb.id
+      FROM chuyen_sau_bode csb
+      WHERE csb.id_mon = csm.id
+        AND csb.trang_thai = 'active'
+      ORDER BY csb.tao_luc ASC
+      LIMIT 1
+    )
+    WHERE csm.default_set_id IS NULL
+      AND EXISTS (
+        SELECT 1 FROM chuyen_sau_bode csb
+        WHERE csb.id_mon = csm.id AND csb.trang_thai = 'active'
+      );
   `);
 
   subjectConfigColumnsEnsured = true;
@@ -61,7 +79,6 @@ function buildSetPrefix(blockCode: string, subjectCode: string) {
 export async function GET(request: NextRequest) {
   try {
     await ensureSubjectConfigColumns();
-    await ensureChuyenSauExamTables();
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -79,56 +96,51 @@ export async function GET(request: NextRequest) {
     }
 
     if (examType) {
-      conditions.push(`esc.exam_type = $${values.length + 1}`);
+      conditions.push(`COALESCE(esc.exam_type, esc.loai_ky_thi) = $${values.length + 1}`);
       values.push(examType);
     }
 
     if (blockCode) {
-      conditions.push(`esc.block_code = $${values.length + 1}`);
+      conditions.push(`esc.ma_khoi = $${values.length + 1}`);
       values.push(blockCode);
     }
 
     if (subjectCode) {
-      conditions.push(`esc.subject_code = $${values.length + 1}`);
+      conditions.push(`esc.ma_mon = $${values.length + 1}`);
       values.push(subjectCode);
     }
 
     if (subjectKey) {
-      conditions.push(`COALESCE(esc.subject_key, esc.metadata->>'subject_key', '') = $${values.length + 1}`);
+      conditions.push(`COALESCE(esc.khoa_mon, esc.metadata->>'subject_key', '') = $${values.length + 1}`);
       values.push(subjectKey);
     }
 
     let query = `
       SELECT
         es.id,
-        es.subject_id,
-        COALESCE(esc.subject_key, esc.metadata->>'subject_key') AS subject_key,
-        es.set_code,
-        COALESCE(es.set_note, es.set_name) AS set_name,
-        es.set_note,
+        es.id_mon AS subject_id,
+        COALESCE(esc.khoa_mon, esc.metadata->>'subject_key') AS subject_key,
+        es.ma_de AS set_code,
+        es.ten_de AS set_name,
+        es.ten_de AS set_note,
         COALESCE(qc.question_count, 0) AS question_count,
-        COALESCE(es.total_points, es.target_scale) AS total_points,
-        es.passing_score,
-        es.min_questions_required,
-        COALESCE(es.scoring_mode, es.metadata->>'scoring_mode', 'raw_10') AS scoring_mode,
-        COALESCE(es.random_weight, (es.metadata->>'random_weight')::int, 1) AS random_weight,
-        COALESCE(es.setup_note, es.metadata->>'setup_note') AS setup_note,
-        es.status,
-        COALESCE(es.valid_from, (es.metadata->>'valid_from')::timestamp) AS valid_from,
-        COALESCE(es.valid_to, (es.metadata->>'valid_to')::timestamp) AS valid_to,
-        COALESCE(es.archived_at, (es.metadata->>'archived_at')::timestamp) AS archived_at,
-        es.created_at,
-        es.updated_at,
-        esc.exam_type,
-        esc.block_code,
-        esc.subject_code,
-        esc.subject_name
+        es.tong_diem AS total_points,
+        es.diem_dat AS passing_score,
+        COALESCE(es.che_do_tinh_diem, 'raw_10') AS scoring_mode,
+        COALESCE(es.trong_so_ngau_nhien, 1) AS random_weight,
+        es.trang_thai AS status,
+        es.tao_luc AS created_at,
+        COALESCE(esc.exam_type, esc.loai_ky_thi) AS exam_type,
+        esc.ma_khoi AS block_code,
+        esc.ma_mon AS subject_code,
+        esc.ten_mon AS subject_name,
+        esc.default_set_id
       FROM chuyen_sau_bode es
-      JOIN chuyen_sau_monhoc esc ON esc.id = es.subject_id
+      JOIN chuyen_sau_monhoc esc ON esc.id = es.id_mon
       LEFT JOIN LATERAL (
         SELECT COUNT(*)::int AS question_count
         FROM chuyen_sau_bode_cauhoi csbc
-        WHERE csbc.set_id = es.id
+        WHERE csbc.id_de = es.id
       ) qc ON TRUE
     `;
 
@@ -136,7 +148,7 @@ export async function GET(request: NextRequest) {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    query += ` ORDER BY esc.block_code ASC, esc.subject_code ASC, es.created_at DESC`;
+    query += ` ORDER BY esc.ma_khoi ASC, esc.ma_mon ASC, es.tao_luc DESC`;
 
     const result = await pool.query(query, values);
 
@@ -193,39 +205,33 @@ export async function POST(request: NextRequest) {
         ? subject_key.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_')
         : null;
 
+    // Tính duration trong JS để tránh dùng $1 trong CASE WHEN (gây lỗi type inference)
+    const defaultDuration = exam_type === 'experience' ? 60 : 120;
+    const metadataValue = normalizedSubjectKey
+      ? JSON.stringify({ subject_key: normalizedSubjectKey })
+      : '{}';
+
     const subjectQuery = `
-      INSERT INTO chuyen_sau_monhoc (exam_type, block_code, subject_code, subject_name, is_active, subject_key, exam_duration_minutes, set_selection_mode, metadata)
-      VALUES (
-        $1,
-        $2,
-        $3,
-        $4,
-        TRUE,
-        $5::varchar,
-        CASE WHEN $1 = 'experience' THEN 60 ELSE 120 END,
-        'default',
-        CASE WHEN $5::varchar IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('subject_key', $5::varchar) END
-      )
-      ON CONFLICT (exam_type, block_code, subject_code)
+      INSERT INTO chuyen_sau_monhoc (loai_ky_thi, ma_khoi, ma_mon, ten_mon, dang_hoat_dong, khoa_mon, exam_duration_minutes, set_selection_mode, metadata)
+      VALUES ($1, $2, $3, $4, TRUE, $5, $6, 'default', $7::jsonb)
+      ON CONFLICT (ma_mon)
       DO UPDATE SET
-        subject_name = EXCLUDED.subject_name,
-        is_active = TRUE,
-        subject_key = COALESCE(EXCLUDED.subject_key, chuyen_sau_monhoc.subject_key),
+        ten_mon = EXCLUDED.ten_mon,
+        dang_hoat_dong = TRUE,
+        khoa_mon = COALESCE(EXCLUDED.khoa_mon, chuyen_sau_monhoc.khoa_mon),
         exam_duration_minutes = COALESCE(chuyen_sau_monhoc.exam_duration_minutes, EXCLUDED.exam_duration_minutes),
-        metadata = CASE
-          WHEN $5::varchar IS NULL THEN chuyen_sau_monhoc.metadata
-          ELSE COALESCE(chuyen_sau_monhoc.metadata, '{}'::jsonb) || jsonb_build_object('subject_key', $5::varchar)
-        END,
-        updated_at = CURRENT_TIMESTAMP
+        metadata = COALESCE(chuyen_sau_monhoc.metadata, '{}'::jsonb) || EXCLUDED.metadata
       RETURNING id
     `;
 
     const subjectResult = await client.query(subjectQuery, [
-      exam_type,
-      block_code,
-      subject_code,
-      subject_name,
-      normalizedSubjectKey,
+      exam_type,        // $1 loai_ky_thi
+      block_code,       // $2 ma_khoi
+      subject_code,     // $3 ma_mon (unique constraint)
+      subject_name,     // $4 ten_mon
+      normalizedSubjectKey, // $5 khoa_mon
+      defaultDuration,  // $6 exam_duration_minutes
+      metadataValue,    // $7 metadata
     ]);
 
     const subjectId = subjectResult.rows[0].id;
@@ -235,10 +241,10 @@ export async function POST(request: NextRequest) {
     if (!finalSetCode) {
       const prefix = buildSetPrefix(block_code, subject_code);
       const nextSeqQuery = `
-        SELECT COALESCE(MAX((regexp_match(set_code, '-(\\d+)$'))[1]::int), 0) + 1 AS next_seq
+        SELECT COALESCE(MAX((regexp_match(ma_de, '-(\\d+)$'))[1]::int), 0) + 1 AS next_seq
         FROM chuyen_sau_bode
-        WHERE subject_id = $1
-          AND set_code ~ $2
+        WHERE id_mon = $1
+          AND ma_de ~ $2
       `;
       const pattern = `^${prefix}-\\d+$`;
       const nextSeqResult = await client.query(nextSeqQuery, [subjectId, pattern]);
@@ -248,40 +254,28 @@ export async function POST(request: NextRequest) {
 
     const setQuery = `
       INSERT INTO chuyen_sau_bode (
-        subject_id,
-        set_code,
-        set_name,
-        set_note,
-        total_points,
-        target_scale,
-        passing_score,
-        min_questions_required,
-        status,
-        scoring_mode,
-        random_weight,
-        setup_note,
-        valid_from,
-        valid_to,
-        metadata
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      ON CONFLICT (set_code)
+        id_mon,
+        ma_de,
+        ten_de,
+        tong_diem,
+        diem_dat,
+        trang_thai,
+        che_do_tinh_diem,
+        trong_so_ngau_nhien
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (ma_de)
       DO UPDATE SET
-        subject_id = EXCLUDED.subject_id,
-        set_name = EXCLUDED.set_name,
-        set_note = EXCLUDED.set_note,
-        total_points = EXCLUDED.total_points,
-        target_scale = EXCLUDED.target_scale,
-        passing_score = EXCLUDED.passing_score,
-        min_questions_required = EXCLUDED.min_questions_required,
-        status = EXCLUDED.status,
-        scoring_mode = EXCLUDED.scoring_mode,
-        random_weight = EXCLUDED.random_weight,
-        setup_note = EXCLUDED.setup_note,
-        valid_from = EXCLUDED.valid_from,
-        valid_to = EXCLUDED.valid_to,
-        metadata = EXCLUDED.metadata,
-        updated_at = CURRENT_TIMESTAMP
-      RETURNING *
+        id_mon = EXCLUDED.id_mon,
+        ten_de = EXCLUDED.ten_de,
+        tong_diem = EXCLUDED.tong_diem,
+        diem_dat = EXCLUDED.diem_dat,
+        trang_thai = EXCLUDED.trang_thai,
+        che_do_tinh_diem = EXCLUDED.che_do_tinh_diem,
+        trong_so_ngau_nhien = EXCLUDED.trong_so_ngau_nhien
+      RETURNING id, ma_de AS set_code, ten_de AS set_name, tong_diem AS total_points,
+                diem_dat AS passing_score, trang_thai AS status,
+                che_do_tinh_diem AS scoring_mode, trong_so_ngau_nhien AS random_weight,
+                tao_luc AS created_at
     `;
 
     const normalizedTotalPoints = 10;
@@ -299,33 +293,18 @@ export async function POST(request: NextRequest) {
       subjectId,
       finalSetCode,
       set_name,
-      set_name,
-      normalizedTotalPoints,
       normalizedTotalPoints,
       normalizedPassingScore,
-      Math.max(1, Number(min_questions_required || 1)),
       status || 'active',
       normalizedScoringMode,
       normalizedRandomWeight,
-      setup_note || null,
-      valid_from || null,
-      valid_to || null,
-      JSON.stringify({
-        set_note: set_name,
-        scoring_mode: normalizedScoringMode,
-        random_weight: normalizedRandomWeight,
-        setup_note: setup_note || null,
-        valid_from: valid_from || null,
-        valid_to: valid_to || null,
-      }),
     ]);
 
     // Subject-level policy owns the active default set. If not set yet, use the first created set.
     await client.query(
       `UPDATE chuyen_sau_monhoc
        SET default_set_id = COALESCE(default_set_id, $1),
-           set_selection_mode = COALESCE(set_selection_mode, 'default'),
-           updated_at = CURRENT_TIMESTAMP
+           set_selection_mode = COALESCE(set_selection_mode, 'default')
        WHERE id = $2`,
       [setResult.rows[0].id, subjectId]
     );
@@ -380,21 +359,17 @@ export async function PUT(request: NextRequest) {
     const values: any[] = [];
 
     if (typeof set_name === 'string') {
-      updates.push(`set_name = $${values.length + 1}`);
-      values.push(set_name.trim());
-      updates.push(`set_note = $${values.length + 1}`);
+      updates.push(`ten_de = $${values.length + 1}`);
       values.push(set_name.trim());
     }
 
     if (total_points !== undefined) {
-      updates.push(`total_points = $${values.length + 1}`);
-      values.push(10);
-      updates.push(`target_scale = $${values.length + 1}`);
+      updates.push(`tong_diem = $${values.length + 1}`);
       values.push(10);
     }
 
     if (passing_score !== undefined) {
-      updates.push(`passing_score = $${values.length + 1}`);
+      updates.push(`diem_dat = $${values.length + 1}`);
       values.push(
         passing_score === null || passing_score === ''
           ? null
@@ -402,52 +377,14 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    if (min_questions_required !== undefined) {
-      updates.push(`min_questions_required = $${values.length + 1}`);
-      values.push(Math.max(1, Number(min_questions_required)));
-    }
-
     if (scoring_mode !== undefined) {
-      updates.push(`scoring_mode = $${values.length + 1}`);
+      updates.push(`che_do_tinh_diem = $${values.length + 1}`);
       values.push(scoring_mode);
     }
 
     if (random_weight !== undefined) {
-      updates.push(`random_weight = $${values.length + 1}`);
+      updates.push(`trong_so_ngau_nhien = $${values.length + 1}`);
       values.push(Math.max(1, Number(random_weight)));
-    }
-
-    if (setup_note !== undefined) {
-      updates.push(`setup_note = $${values.length + 1}`);
-      values.push(setup_note || null);
-    }
-
-    if (valid_from !== undefined) {
-      updates.push(`valid_from = $${values.length + 1}`);
-      values.push(valid_from || null);
-    }
-
-    if (valid_to !== undefined) {
-      updates.push(`valid_to = $${values.length + 1}`);
-      values.push(valid_to || null);
-    }
-
-    if (archived_at !== undefined) {
-      updates.push(`archived_at = $${values.length + 1}`);
-      values.push(archived_at || null);
-    }
-
-    const metadataPatch: Record<string, unknown> = {};
-    if (scoring_mode !== undefined) metadataPatch.scoring_mode = scoring_mode;
-    if (random_weight !== undefined) metadataPatch.random_weight = Math.max(1, Number(random_weight));
-    if (setup_note !== undefined) metadataPatch.setup_note = setup_note || null;
-    if (valid_from !== undefined) metadataPatch.valid_from = valid_from || null;
-    if (valid_to !== undefined) metadataPatch.valid_to = valid_to || null;
-    if (archived_at !== undefined) metadataPatch.archived_at = archived_at || null;
-
-    if (Object.keys(metadataPatch).length > 0) {
-      updates.push(`metadata = COALESCE(metadata, '{}'::jsonb) || $${values.length + 1}::jsonb`);
-      values.push(JSON.stringify(metadataPatch));
     }
 
     if (status !== undefined) {
@@ -457,7 +394,7 @@ export async function PUT(request: NextRequest) {
           { status: 400 }
         );
       }
-      updates.push(`status = $${values.length + 1}`);
+      updates.push(`trang_thai = $${values.length + 1}`);
       values.push(status);
     }
 
@@ -473,9 +410,12 @@ export async function PUT(request: NextRequest) {
     const result = await pool.query(
       `
       UPDATE chuyen_sau_bode
-      SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
+      SET ${updates.join(', ')}
       WHERE id = $${values.length}
-      RETURNING *
+      RETURNING id, ma_de AS set_code, ten_de AS set_name, tong_diem AS total_points,
+                diem_dat AS passing_score, trang_thai AS status,
+                che_do_tinh_diem AS scoring_mode, trong_so_ngau_nhien AS random_weight,
+                tao_luc AS created_at
       `,
       values
     );
@@ -538,7 +478,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const deleteResult = await client.query(
-      'DELETE FROM chuyen_sau_bode WHERE id = $1 RETURNING id, set_code, COALESCE(set_note, set_name) AS set_name, set_note',
+      'DELETE FROM chuyen_sau_bode WHERE id = $1 RETURNING id, ma_de AS set_code, ten_de AS set_name, ten_de AS set_note',
       [id]
     );
 
