@@ -74,9 +74,9 @@ function ExamSetQuestionsContent() {
     }
   };
 
-  const fetchQuestions = async () => {
+  const fetchQuestions = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await fetch(`/api/exam-set-questions?set_id=${setId}`);
       const data = await response.json();
       if (data.success) {
@@ -143,6 +143,24 @@ function ExamSetQuestionsContent() {
         ? { ...payload, id: editingQuestion.id }
         : payload;
 
+      // --- OPTIMISTIC UI ---
+      // Close modal and update state immediately
+      setShowBuilder(false);
+      setEditingQuestion(null);
+
+      if (!isEditing) {
+        const optimisticQuestion: Question = {
+          id: -Date.now(), // Temporary ID
+          ...payload,
+          assignment_id: 0, // Satisfy Question type
+          difficulty: payload.difficulty as any
+        };
+        setQuestions(prev => [...prev, optimisticQuestion]);
+      } else {
+        setQuestions(prev => prev.map(q => q.id === editingQuestion.id ? { ...q, ...payload, assignment_id: 0 } as Question : q));
+      }
+      // ---------------------
+
       const response = await fetch('/api/exam-set-questions', {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -152,20 +170,25 @@ function ExamSetQuestionsContent() {
       const data = await response.json();
       if (data.success) {
         toast.success(isEditing ? 'Cập nhật câu hỏi thành công!' : 'Tạo câu hỏi thành công!');
-        setShowBuilder(false);
-        setEditingQuestion(null);
-        fetchQuestions();
+        fetchQuestions(true); // Sync with DB silently
       } else {
         toast.error('Lỗi: ' + data.error);
+        fetchQuestions(true); // Rollback
       }
     } catch (error) {
       console.error('Error saving set question:', error);
       toast.error('Lỗi khi lưu câu hỏi');
+      fetchQuestions(true); // Rollback
     }
   };
 
   const handleDeleteQuestion = async (id: number) => {
     try {
+      // --- OPTIMISTIC UI ---
+      const originalQuestions = [...questions];
+      setQuestions(prev => prev.filter(q => q.id !== id));
+      // ---------------------
+
       const response = await fetch(`/api/exam-set-questions?id=${id}`, {
         method: 'DELETE',
       });
@@ -173,13 +196,15 @@ function ExamSetQuestionsContent() {
       const data = await response.json();
       if (data.success) {
         toast.success('Xóa câu hỏi thành công!');
-        fetchQuestions();
+        fetchQuestions(true); // Sync silently
       } else {
         toast.error('Lỗi: ' + data.error);
+        setQuestions(originalQuestions); // Rollback
       }
     } catch (error) {
       console.error('Error deleting set question:', error);
       toast.error('Lỗi khi xóa câu hỏi');
+      fetchQuestions(true); // Rollback
     }
   };
 

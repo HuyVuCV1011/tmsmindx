@@ -3,6 +3,8 @@ import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 const EVENT_TYPES = [
+  'dang_ky',
+  'thi',
   'registration',
   'exam',
   'workshop_teaching',
@@ -20,7 +22,6 @@ function isValidEventType(value: string): value is EventType {
 }
 
 // Convert any datetime string to VN wall-clock string (YYYY-MM-DD HH:MM:SS).
-// Returns a string (not Date) so pg driver skips prepareDate, avoiding server-TZ-dependent shifts.
 function parseDateValue(value: string | null | undefined): string | null {
   if (!value) return null;
   const parsed = new Date(value);
@@ -29,11 +30,10 @@ function parseDateValue(value: string | null | undefined): string | null {
     timeZone: VN_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   });
-  return fmt.format(parsed); // "YYYY-MM-DD HH:MM:SS" VN wall-clock
+  return fmt.format(parsed);
 }
 
 // Read TIMESTAMP WITHOUT TIME ZONE from pg and return VN wall-clock string.
-// Uses Intl so result is correct on any server timezone (Vercel UTC or local VN).
 function toTimestampString(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value as string);
@@ -45,13 +45,28 @@ function toTimestampString(value: Date | string | null | undefined): string | nu
   return fmt.format(date);
 }
 
+// Serialize row — map DB column names to API response fields (both VN and EN aliases)
 function serializeEventScheduleRow(row: Record<string, any>) {
   return {
-    ...row,
-    start_at: toTimestampString(row.start_at),
-    end_at: toTimestampString(row.end_at),
-    created_at: toTimestampString(row.created_at),
-    updated_at: toTimestampString(row.updated_at),
+    id: row.id,
+    // Vietnamese column names (primary)
+    ten: row.ten,
+    chuyen_nganh: row.chuyen_nganh,
+    loai_su_kien: row.loai_su_kien,
+    mau_dang_ky: row.mau_dang_ky,
+    ghi_chu: row.ghi_chu,
+    bat_dau_luc: toTimestampString(row.bat_dau_luc),
+    ket_thuc_luc: toTimestampString(row.ket_thuc_luc),
+    tao_luc: toTimestampString(row.tao_luc),
+    // English aliases for backward-compatibility with frontend
+    title: row.ten,
+    specialty: row.chuyen_nganh,
+    event_type: row.loai_su_kien,
+    registration_template: row.mau_dang_ky,
+    note: row.ghi_chu,
+    start_at: toTimestampString(row.bat_dau_luc),
+    end_at: toTimestampString(row.ket_thuc_luc),
+    created_at: toTimestampString(row.tao_luc),
   };
 }
 
@@ -60,23 +75,19 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     const { searchParams } = new URL(request.url);
     const month = searchParams.get('month');
     const year = searchParams.get('year');
-    const eventType = searchParams.get('event_type');
+    const eventType = searchParams.get('event_type') || searchParams.get('loai_su_kien');
 
     let query = `
       SELECT
         id,
-        title,
-        specialty,
-        event_type,
-        registration_template,
-        start_at,
-        end_at,
-        note,
-        metadata,
-        created_by,
-        updated_by,
-        created_at,
-        updated_at
+        ten,
+        chuyen_nganh,
+        loai_su_kien,
+        mau_dang_ky,
+        bat_dau_luc,
+        ket_thuc_luc,
+        ghi_chu,
+        tao_luc
       FROM event_schedules
       WHERE TRUE
     `;
@@ -85,26 +96,20 @@ export const GET = withApiProtection(async (request: NextRequest) => {
 
     if (month) {
       values.push(month);
-      query += ` AND TO_CHAR(start_at, 'YYYY-MM') = $${values.length}`;
+      query += ` AND TO_CHAR(bat_dau_luc, 'YYYY-MM') = $${values.length}`;
     }
 
     if (year) {
       values.push(year);
-      query += ` AND TO_CHAR(start_at, 'YYYY') = $${values.length}`;
+      query += ` AND TO_CHAR(bat_dau_luc, 'YYYY') = $${values.length}`;
     }
 
     if (eventType) {
-      if (!isValidEventType(eventType)) {
-        return NextResponse.json(
-          { success: false, error: 'Invalid event_type' },
-          { status: 400 }
-        );
-      }
       values.push(eventType);
-      query += ` AND event_type = $${values.length}`;
+      query += ` AND loai_su_kien = $${values.length}`;
     }
 
-    query += ' ORDER BY start_at ASC, created_at DESC';
+    query += ' ORDER BY bat_dau_luc ASC, tao_luc DESC';
 
     const result = await pool.query(query, values);
 
@@ -125,53 +130,35 @@ export const GET = withApiProtection(async (request: NextRequest) => {
 export const POST = withApiProtection(async (request: NextRequest) => {
   try {
     const body = await request.json();
-    const {
-      id,
-      title,
-      specialty,
-      event_type,
-      registration_template,
-      start_at,
-      end_at,
-      note,
-      metadata,
-      created_by,
-      updated_by,
-    } = body;
 
-    if (!id || !title || !event_type || !start_at || !end_at) {
+    // Accept both Vietnamese and English field names
+    const id = body.id;
+    const ten = body.ten || body.title;
+    const chuyen_nganh = body.chuyen_nganh || body.specialty;
+    const loai_su_kien = body.loai_su_kien || body.event_type;
+    const mau_dang_ky = body.mau_dang_ky || body.registration_template;
+    const bat_dau_luc = body.bat_dau_luc || body.start_at;
+    const ket_thuc_luc = body.ket_thuc_luc || body.end_at;
+    const ghi_chu = body.ghi_chu || body.note;
+
+    if (!id || !ten || !loai_su_kien || !bat_dau_luc || !ket_thuc_luc) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields: id, title, event_type, start_at, end_at' },
+        { success: false, error: 'Thiếu trường bắt buộc: id, ten, loai_su_kien, bat_dau_luc, ket_thuc_luc' },
         { status: 400 }
       );
     }
 
-    if (!isValidEventType(String(event_type))) {
+    const startAt = parseDateValue(bat_dau_luc);
+    const endAt = parseDateValue(ket_thuc_luc);
+    if (!startAt || !endAt) {
       return NextResponse.json(
-        { success: false, error: 'Invalid event_type' },
+        { success: false, error: 'bat_dau_luc hoặc ket_thuc_luc không hợp lệ' },
         { status: 400 }
       );
     }
-
-    const startAt = parseDateValue(start_at);
-    const endAt = parseDateValue(end_at);
-    if (!startAt || !endAt || endAt <= startAt) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid start_at/end_at' },
-        { status: 400 }
-      );
-    }
-    // Validate chronological order using Date objects
     if (new Date(endAt) <= new Date(startAt)) {
       return NextResponse.json(
-        { success: false, error: 'end_at must be after start_at' },
-        { status: 400 }
-      );
-    }
-
-    if (registration_template && !['official', 'supplement'].includes(String(registration_template))) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid registration_template' },
+        { success: false, error: 'ket_thuc_luc phải sau bat_dau_luc' },
         { status: 400 }
       );
     }
@@ -179,33 +166,27 @@ export const POST = withApiProtection(async (request: NextRequest) => {
     const query = `
       INSERT INTO event_schedules (
         id,
-        title,
-        specialty,
-        event_type,
-        registration_template,
-        start_at,
-        end_at,
-        note,
-        metadata,
-        created_by,
-        updated_by
+        ten,
+        chuyen_nganh,
+        loai_su_kien,
+        mau_dang_ky,
+        bat_dau_luc,
+        ket_thuc_luc,
+        ghi_chu
       )
-      VALUES ($1, $2, $3, $4, $5, $6::timestamp, $7::timestamp, $8, $9::jsonb, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6::timestamp, $7::timestamp, $8)
       RETURNING *
     `;
 
     const values = [
       String(id),
-      String(title),
-      specialty ? String(specialty) : null,
-      String(event_type),
-      registration_template ? String(registration_template) : null,
+      String(ten),
+      chuyen_nganh ? String(chuyen_nganh) : null,
+      String(loai_su_kien),
+      mau_dang_ky ? String(mau_dang_ky) : null,
       startAt,
       endAt,
-      note ? String(note) : null,
-      JSON.stringify(metadata || {}),
-      created_by ? String(created_by) : null,
-      updated_by ? String(updated_by) : null,
+      ghi_chu ? String(ghi_chu) : null,
     ];
 
     const result = await pool.query(query, values);
@@ -214,7 +195,7 @@ export const POST = withApiProtection(async (request: NextRequest) => {
       {
         success: true,
         data: serializeEventScheduleRow(result.rows[0]),
-        message: 'Event created successfully',
+        message: 'Tạo sự kiện thành công',
       },
       { status: 201 }
     );
@@ -230,36 +211,11 @@ export const POST = withApiProtection(async (request: NextRequest) => {
 export const PUT = withApiProtection(async (request: NextRequest) => {
   try {
     const body = await request.json();
-    const {
-      id,
-      title,
-      specialty,
-      event_type,
-      registration_template,
-      start_at,
-      end_at,
-      note,
-      metadata,
-      updated_by,
-    } = body;
+    const { id } = body;
 
     if (!id) {
       return NextResponse.json(
-        { success: false, error: 'Event id is required' },
-        { status: 400 }
-      );
-    }
-
-    if (event_type && !isValidEventType(String(event_type))) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid event_type' },
-        { status: 400 }
-      );
-    }
-
-    if (registration_template && !['official', 'supplement'].includes(String(registration_template))) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid registration_template' },
+        { success: false, error: 'id sự kiện là bắt buộc' },
         { status: 400 }
       );
     }
@@ -272,47 +228,49 @@ export const PUT = withApiProtection(async (request: NextRequest) => {
       fields.push(`${sql} = $${values.length}`);
     };
 
-    if (title !== undefined) pushField('title', title ? String(title) : null);
-    if (specialty !== undefined) pushField('specialty', specialty ? String(specialty) : null);
-    if (event_type !== undefined) pushField('event_type', String(event_type));
-    if (registration_template !== undefined) {
-      pushField('registration_template', registration_template ? String(registration_template) : null);
-    }
+    // Accept both VN and EN field names
+    const ten = body.ten ?? body.title;
+    const chuyen_nganh = body.chuyen_nganh ?? body.specialty;
+    const loai_su_kien = body.loai_su_kien ?? body.event_type;
+    const mau_dang_ky = body.mau_dang_ky ?? body.registration_template;
+    const bat_dau_luc = body.bat_dau_luc ?? body.start_at;
+    const ket_thuc_luc = body.ket_thuc_luc ?? body.end_at;
+    const ghi_chu = body.ghi_chu ?? body.note;
 
-    if (start_at !== undefined) {
-      const parsed = parseDateValue(start_at);
+    if (ten !== undefined) pushField('ten', ten ? String(ten) : null);
+    if (chuyen_nganh !== undefined) pushField('chuyen_nganh', chuyen_nganh ? String(chuyen_nganh) : null);
+    if (loai_su_kien !== undefined) pushField('loai_su_kien', String(loai_su_kien));
+    if (mau_dang_ky !== undefined) pushField('mau_dang_ky', mau_dang_ky ? String(mau_dang_ky) : null);
+
+    if (bat_dau_luc !== undefined) {
+      const parsed = parseDateValue(bat_dau_luc);
       if (!parsed) {
         return NextResponse.json(
-          { success: false, error: 'Invalid start_at' },
+          { success: false, error: 'bat_dau_luc không hợp lệ' },
           { status: 400 }
         );
       }
       values.push(parsed);
-      fields.push(`start_at = $${values.length}::timestamp`);
+      fields.push(`bat_dau_luc = $${values.length}::timestamp`);
     }
 
-    if (end_at !== undefined) {
-      const parsed = parseDateValue(end_at);
+    if (ket_thuc_luc !== undefined) {
+      const parsed = parseDateValue(ket_thuc_luc);
       if (!parsed) {
         return NextResponse.json(
-          { success: false, error: 'Invalid end_at' },
+          { success: false, error: 'ket_thuc_luc không hợp lệ' },
           { status: 400 }
         );
       }
       values.push(parsed);
-      fields.push(`end_at = $${values.length}::timestamp`);
+      fields.push(`ket_thuc_luc = $${values.length}::timestamp`);
     }
 
-    if (note !== undefined) pushField('note', note ? String(note) : null);
-    if (metadata !== undefined) {
-      values.push(JSON.stringify(metadata || {}));
-      fields.push(`metadata = $${values.length}::jsonb`);
-    }
-    if (updated_by !== undefined) pushField('updated_by', updated_by ? String(updated_by) : null);
+    if (ghi_chu !== undefined) pushField('ghi_chu', ghi_chu ? String(ghi_chu) : null);
 
     if (fields.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'No fields to update' },
+        { success: false, error: 'Không có trường nào để cập nhật' },
         { status: 400 }
       );
     }
@@ -328,17 +286,15 @@ export const PUT = withApiProtection(async (request: NextRequest) => {
 
     if (!result.rows.length) {
       return NextResponse.json(
-        { success: false, error: 'Event not found' },
+        { success: false, error: 'Không tìm thấy sự kiện' },
         { status: 404 }
       );
     }
 
-    const updated = result.rows[0];
-
     return NextResponse.json({
       success: true,
-      data: serializeEventScheduleRow(updated),
-      message: 'Event updated successfully',
+      data: serializeEventScheduleRow(result.rows[0]),
+      message: 'Cập nhật sự kiện thành công',
     });
   } catch (error: any) {
     console.error('Error updating event schedule:', error);
@@ -356,7 +312,7 @@ export const DELETE = withApiProtection(async (request: NextRequest) => {
 
     if (!id) {
       return NextResponse.json(
-        { success: false, error: 'Event id is required' },
+        { success: false, error: 'id sự kiện là bắt buộc' },
         { status: 400 }
       );
     }
@@ -368,7 +324,7 @@ export const DELETE = withApiProtection(async (request: NextRequest) => {
 
     if (!result.rows.length) {
       return NextResponse.json(
-        { success: false, error: 'Event not found' },
+        { success: false, error: 'Không tìm thấy sự kiện' },
         { status: 404 }
       );
     }
@@ -376,7 +332,7 @@ export const DELETE = withApiProtection(async (request: NextRequest) => {
     return NextResponse.json({
       success: true,
       data: serializeEventScheduleRow(result.rows[0]),
-      message: 'Event deleted successfully',
+      message: 'Xoá sự kiện thành công',
     });
   } catch (error: any) {
     console.error('Error deleting event schedule:', error);

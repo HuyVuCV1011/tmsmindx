@@ -123,7 +123,7 @@ export default function SubjectDetailPage() {
   const fetchMonthlySelection = async (dbId: number) => {
     try {
       const res = await fetch(
-        `/api/chuyensau-chonde-monhoc?subject_id=${dbId}&year=${currentYear}&month=${currentMonth}`
+        `/api/chuyensau-chonde-thang?subject_id=${dbId}&year=${currentYear}&month=${currentMonth}`
       );
       const data = await res.json();
       if (data.success && data.data) {
@@ -274,7 +274,7 @@ export default function SubjectDetailPage() {
 
     try {
       setIsSavingDefault(true);
-      const res = await fetch('/api/chuyensau-chonde-monhoc', {
+      const res = await fetch('/api/chuyensau-chonde-thang', {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -306,7 +306,7 @@ export default function SubjectDetailPage() {
     }
     try {
       setIsRandomizing(true);
-      const res = await fetch('/api/chuyensau-chonde-monhoc', {
+      const res = await fetch('/api/chuyensau-chonde-thang', {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subject_id: subjectDbId, year: currentYear, month: currentMonth }),
@@ -334,7 +334,7 @@ export default function SubjectDetailPage() {
     try {
       setIsRemovingSelection(true);
       const response = await fetch(
-        `/api/chuyensau-chonde-monhoc?subject_id=${subjectDbId}&year=${currentYear}&month=${currentMonth}`,
+        `/api/chuyensau-chonde-thang?subject_id=${subjectDbId}&year=${currentYear}&month=${currentMonth}`,
         { method: 'DELETE' }
       );
       const data = await response.json();

@@ -6,9 +6,9 @@ import { NextRequest, NextResponse } from "next/server";
 const TEACHER_PROFILE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_PROFILE_CSV_URL || "";
 const TEACHER_EXPERTISE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERTISE_CSV_URL || "";
 const TEACHER_EXPERIENCE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERIENCE_CSV_URL || "";
-const SHEET_FETCH_TIMEOUT_MS = 12000;
-const SHEET_FETCH_RETRIES = 2;
-const SHEET_RETRY_DELAY_MS = 350;
+const SHEET_FETCH_TIMEOUT_MS = 30000;
+const SHEET_FETCH_RETRIES = 3;
+const SHEET_RETRY_DELAY_MS = 500;
 
 // In-memory cache with global persistence for dev mode and pending promise tracking
 interface CacheEntry<T> {
@@ -72,7 +72,9 @@ function isRetryableFetchError(error: unknown): boolean {
     message.includes("fetch failed") ||
     message.includes("socket") ||
     message.includes("timed out") ||
-    err?.name === "AbortError"
+    message.includes("timeout") ||
+    err?.name === "AbortError" ||
+    err?.name === "TimeoutError"
   );
 }
 
@@ -107,7 +109,10 @@ async function fetchCsvWithRetry(url: string, label: string): Promise<string> {
       if (!retryable || !hasMoreAttempts) {
         break;
       }
-      await sleep(SHEET_RETRY_DELAY_MS * (attempt + 1));
+      // Exponential backoff
+      const delay = SHEET_RETRY_DELAY_MS * Math.pow(2, attempt);
+      console.warn(`⚠️ Retrying fetch for ${label} (attempt ${attempt + 1}/${SHEET_FETCH_RETRIES}) after ${delay}ms delay... Cause: ${error instanceof Error ? error.message : "Unknown"}`);
+      await sleep(delay);
     }
   }
 

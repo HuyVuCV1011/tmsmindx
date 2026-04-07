@@ -2974,6 +2974,25 @@ const migrations: Migration[] = [
         AND (csg.explanation_id IS NULL OR csg.registration_id IS NULL);
     `,
   },
+  {
+    name: 'V61_create_chuyen_sau_chonde_thang',
+    version: 61,
+    sql: `
+      CREATE TABLE IF NOT EXISTS chuyen_sau_chonde_thang (
+        id serial PRIMARY KEY,
+        id_mon integer NOT NULL REFERENCES chuyen_sau_monhoc(id) ON DELETE CASCADE,
+        nam integer NOT NULL,
+        thang integer NOT NULL,
+        id_de integer NOT NULL REFERENCES chuyen_sau_bode(id) ON DELETE CASCADE,
+        che_do_chon varchar(20) DEFAULT 'manual',
+        tao_luc timestamp DEFAULT CURRENT_TIMESTAMP,
+        cap_nhat_luc timestamp DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(id_mon, nam, thang)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_chuyen_sau_chonde_thang_id_de ON chuyen_sau_chonde_thang(id_de);
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

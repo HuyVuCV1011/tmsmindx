@@ -30,27 +30,22 @@ async function ensureSubjectConfigColumns() {
 
   await pool.query(`
     ALTER TABLE IF EXISTS chuyen_sau_monhoc
-      ADD COLUMN IF NOT EXISTS exam_duration_minutes INTEGER,
-      ADD COLUMN IF NOT EXISTS set_selection_mode VARCHAR(20) NOT NULL DEFAULT 'default',
-      ADD COLUMN IF NOT EXISTS default_set_id BIGINT;
+      ADD COLUMN IF NOT EXISTS metadata JSONB,
+      ADD COLUMN IF NOT EXISTS default_set_id BIGINT,
+      ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0;
   `);
 
   await pool.query(`
     UPDATE chuyen_sau_monhoc
-    SET exam_duration_minutes = COALESCE(
-      exam_duration_minutes,
+    SET thoi_gian_thi_phut = COALESCE(
+      thoi_gian_thi_phut,
       CASE
         WHEN COALESCE(metadata->>'duration_minutes', '') ~ '^[0-9]+$' THEN (metadata->>'duration_minutes')::int
         ELSE NULL
       END,
-      CASE WHEN exam_type = 'experience' THEN 60 ELSE 120 END
+      CASE WHEN loai_ky_thi = 'experience' THEN 60 ELSE 120 END
     )
-    WHERE exam_duration_minutes IS NULL;
-  `);
-
-  await pool.query(`
-    ALTER TABLE IF EXISTS chuyen_sau_monhoc
-      ALTER COLUMN exam_duration_minutes SET NOT NULL;
+    WHERE thoi_gian_thi_phut IS NULL;
   `);
 
   subjectConfigColumnsEnsured = true;
@@ -63,24 +58,24 @@ export async function GET() {
     const result = await pool.query(
       `SELECT
          csm.id,
-         csm.exam_type,
-         csm.block_code,
-         csm.subject_code,
-         csm.subject_name,
-         csm.subject_key,
-         csm.exam_duration_minutes AS duration_minutes,
-         csm.set_selection_mode,
+         csm.loai_ky_thi AS exam_type,
+         csm.ma_khoi AS block_code,
+         csm.ma_mon AS subject_code,
+         csm.ten_mon AS subject_name,
+         csm.khoa_mon AS subject_key,
+         csm.thoi_gian_thi_phut AS duration_minutes,
+         CASE WHEN csm.che_do_chon_de = 'ngau_nhien' THEN 'random' ELSE 'default' END AS set_selection_mode,
          csm.default_set_id,
-         ds.set_code AS default_set_code,
-         COALESCE(ds.set_note, ds.set_name) AS default_set_name,
+         ds.ma_de AS default_set_code,
+         ds.ten_de AS default_set_name,
          csm.metadata,
-         csm.is_active,
-         csm.created_at,
-         csm.updated_at
+         csm.dang_hoat_dong AS is_active,
+         csm.tao_luc AS created_at,
+         csm.tao_luc AS updated_at
        FROM chuyen_sau_monhoc csm
        LEFT JOIN chuyen_sau_bode ds ON ds.id = csm.default_set_id
-       WHERE csm.is_active = TRUE
-       ORDER BY csm.block_code ASC, csm.subject_name ASC`
+       WHERE csm.dang_hoat_dong = TRUE
+       ORDER BY csm.ma_khoi ASC, csm.ten_mon ASC`
     );
 
     return NextResponse.json({
@@ -135,8 +130,8 @@ export async function POST(request: Request) {
     const existing = await client.query(
       `SELECT id
        FROM chuyen_sau_monhoc
-       WHERE (subject_key = $1)
-          OR (block_code = $2 AND lower(subject_name) = lower($3))
+       WHERE (khoa_mon = $1)
+          OR (ma_khoi = $2 AND lower(ten_mon) = lower($3))
        LIMIT 1`,
       [subjectKey, inputBlockCode, subjectName]
     );
@@ -152,39 +147,39 @@ export async function POST(request: Request) {
     const displayOrderResult = await client.query(
       `SELECT COALESCE(MAX(display_order), 0) + 1 AS next_order
        FROM chuyen_sau_monhoc
-       WHERE block_code = $1`,
+       WHERE ma_khoi = $1`,
       [inputBlockCode]
     );
     const displayOrder = Number(displayOrderResult.rows[0]?.next_order || 1);
 
     const insertResult = await client.query(
       `INSERT INTO chuyen_sau_monhoc (
-         exam_type,
-         block_code,
-         subject_code,
-         subject_name,
-         subject_key,
-         exam_duration_minutes,
-         set_selection_mode,
+         loai_ky_thi,
+         ma_khoi,
+         ma_mon,
+         ten_mon,
+         khoa_mon,
+         thoi_gian_thi_phut,
+         che_do_chon_de,
          display_order,
-         is_active,
+         dang_hoat_dong,
          metadata
        )
-       VALUES ($1, $2, $3, $4, $5, $6, 'default', $7, TRUE, $8::jsonb)
+       VALUES ($1, $2, $3, $4, $5, $6, 'mac_dinh', $7, TRUE, $8::jsonb)
        RETURNING
          id,
-         exam_type,
-         block_code,
-         subject_code,
-         subject_name,
-         subject_key,
-         exam_duration_minutes AS duration_minutes,
-         set_selection_mode,
+         loai_ky_thi AS exam_type,
+         ma_khoi AS block_code,
+         ma_mon AS subject_code,
+         ten_mon AS subject_name,
+         khoa_mon AS subject_key,
+         thoi_gian_thi_phut AS duration_minutes,
+         CASE WHEN che_do_chon_de = 'ngau_nhien' THEN 'random' ELSE 'default' END AS set_selection_mode,
          default_set_id,
          metadata,
-         is_active,
-         created_at,
-         updated_at`,
+         dang_hoat_dong AS is_active,
+         tao_luc AS created_at,
+         tao_luc AS updated_at`,
       [
         examType,
         inputBlockCode,
@@ -274,13 +269,15 @@ export async function PUT(request: Request) {
 
     if (hasDuration) {
       const durationMinutes = Math.min(1440, Math.floor(inputDurationMinutes));
-      updates.push(`exam_duration_minutes = $${values.length + 1}`);
+      updates.push(`thoi_gian_thi_phut = $${values.length + 1}`);
       values.push(durationMinutes);
     }
 
     if (hasSelectionMode) {
-      updates.push(`set_selection_mode = $${values.length + 1}`);
-      values.push(inputSelectionMode);
+      // Map 'default'/'random' logic if needed, or simply store it
+      const dbSelectionMode = inputSelectionMode === 'random' ? 'ngau_nhien' : 'mac_dinh';
+      updates.push(`che_do_chon_de = $${values.length + 1}`);
+      values.push(dbSelectionMode);
     }
 
     if (hasDefaultSet) {
@@ -289,7 +286,7 @@ export async function PUT(request: Request) {
           `SELECT 1
            FROM chuyen_sau_bode
            WHERE id = $1
-             AND subject_id = $2
+             AND id_mon = $2
            LIMIT 1`,
           [defaultSetId, subjectId]
         );
@@ -310,23 +307,22 @@ export async function PUT(request: Request) {
 
     const result = await pool.query(
       `UPDATE chuyen_sau_monhoc
-       SET ${updates.join(', ')},
-           updated_at = CURRENT_TIMESTAMP
+       SET ${updates.join(', ')}
        WHERE id = $${values.length + 1}
        RETURNING
          id,
-         exam_type,
-         block_code,
-         subject_code,
-         subject_name,
-         subject_key,
-         exam_duration_minutes AS duration_minutes,
-         set_selection_mode,
+         loai_ky_thi AS exam_type,
+         ma_khoi AS block_code,
+         ma_mon AS subject_code,
+         ten_mon AS subject_name,
+         khoa_mon AS subject_key,
+         thoi_gian_thi_phut AS duration_minutes,
+         CASE WHEN che_do_chon_de = 'ngau_nhien' THEN 'random' ELSE 'default' END AS set_selection_mode,
          default_set_id,
          metadata,
-         is_active,
-         created_at,
-         updated_at`,
+         dang_hoat_dong AS is_active,
+         tao_luc AS created_at,
+         tao_luc AS updated_at`,
       [...values, subjectId]
     );
 

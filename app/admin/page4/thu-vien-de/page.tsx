@@ -503,7 +503,7 @@ export default function ProfessionalAssignmentLibraryPage() {
           const candidateSelections = await Promise.all(
             candidateSubjectDbIds.map(async (subjectDbId) => {
               const response = await fetch(
-                `/api/chuyensau-chonde-monhoc?subject_id=${subjectDbId}&year=${year}&month=${month}`
+                `/api/chuyensau-chonde-thang?subject_id=${subjectDbId}&year=${year}&month=${month}`
               );
               const data = await response.json();
 
@@ -1754,7 +1754,7 @@ export default function ProfessionalAssignmentLibraryPage() {
           let selectedSet = plannedSet;
 
           if (!selectionUpdated.has(selectionKey)) {
-            const selectionResponse = await fetch('/api/chuyensau-chonde-monhoc', {
+            const selectionResponse = await fetch('/api/chuyensau-chonde-thang', {
               method: isRandomMode ? 'PATCH' : 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(
@@ -1791,7 +1791,7 @@ export default function ProfessionalAssignmentLibraryPage() {
             selectionUpdated.add(selectionKey);
           } else if (isRandomMode) {
             const latestSelectionResponse = await fetch(
-              `/api/chuyensau-chonde-monhoc?subject_id=${subjectDbId}&year=${year}&month=${month}`
+              `/api/chuyensau-chonde-thang?subject_id=${subjectDbId}&year=${year}&month=${month}`
             );
             const latestSelectionData = await latestSelectionResponse.json();
             if (!latestSelectionResponse.ok || !latestSelectionData?.success || !latestSelectionData?.data?.set_id) {

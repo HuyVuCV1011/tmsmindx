@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
 type CalendarView = "day" | "week" | "month";
-type EventCategory = "registration" | "exam" | "workshop_teaching" | "meeting" | "advanced_training_release" | "holiday";
+type EventCategory = "registration" | "exam" | "thi" | "workshop_teaching" | "meeting" | "advanced_training_release" | "holiday";
 
 type RegistrationTemplate = "official" | "supplement";
 
@@ -58,6 +58,7 @@ const WEEKDAY_LABELS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 const EVENT_TYPE_LABELS: Record<EventCategory, string> = {
   registration: "A: Lịch đăng ký kiểm tra",
   exam: "B: Lịch kiểm tra chuyên môn",
+  thi: "B: Lịch kiểm tra chuyên môn",
   workshop_teaching: "C: Lịch Workshop Teaching",
   meeting: "D: Lịch họp",
   advanced_training_release: "E: Lịch phát hành đào tạo nâng cao",
@@ -113,6 +114,7 @@ function getEventClass(eventType: EventCategory | undefined) {
       return "bg-indigo-200 text-indigo-900";
     case "holiday":
       return "bg-amber-200 text-amber-900";
+    case "thi":
     case "exam":
     default:
       return "bg-green-200 text-green-900";
@@ -146,6 +148,7 @@ function getCalendarEventStyle(eventType: EventCategory | undefined) {
         timeClassName: "text-amber-700",
         titleClassName: "bg-amber-200 text-amber-900",
       };
+    case "thi":
     case "exam":
     default:
       return {
@@ -731,7 +734,7 @@ export default function MonthlyActivitiesPage() {
     const map = new Map<string, EvaluationEvent[]>();
     eventsByDateKey.forEach((dayEvents, key) => {
       const visible = dayEvents.filter((event) => {
-        if (event.eventType !== "exam") return true;
+        if (event.eventType !== "exam" && event.eventType !== "thi") return true;
         return Object.entries(REGISTER_OPTION_MAP).some(([option, mapped]) => {
           if (!userRegisteredSubjects.has(option)) return false;
           const specialty = normalizeStr(event.specialty || "");
@@ -754,7 +757,7 @@ export default function MonthlyActivitiesPage() {
     const map: Record<string, EvaluationEvent[]> = {};
     Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
       map[option] = events
-        .filter((e) => e.eventType === "exam")
+        .filter((e) => e.eventType === "exam" || e.eventType === "thi")
         .filter((e) => {
           const specialty = normalizeStr(e.specialty || "");
           const title = normalizeStr(e.title || "");
@@ -802,7 +805,7 @@ export default function MonthlyActivitiesPage() {
     const next: Record<string, CalendarExamAssignment | null> = {};
 
     selectedDayEvents.forEach((event) => {
-      if (event.eventType !== "exam") {
+      if (event.eventType !== "exam" && event.eventType !== "thi") {
         next[event.id] = null;
         return;
       }
@@ -893,7 +896,7 @@ export default function MonthlyActivitiesPage() {
     }
 
     const relevantEvents = selectedDayEvents.filter(
-      (event) => event.eventType === "exam" || !event.eventType
+      (event) => event.eventType === "exam" || event.eventType === "thi" || !event.eventType
     );
 
     if (relevantEvents.length === 0) {

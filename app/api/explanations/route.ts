@@ -56,19 +56,22 @@ async function resolveFkSafeId(
   // Some environments still keep explanations.assignment_id FK -> teacher_exam_assignments.
   // If candidateId is from chuyen_sau_phancong, map by registration_id to a legacy assignment id.
   if (constraintName === 'fk_explanations_assignment' && tableName === 'teacher_exam_assignments') {
-    const mappedLegacyAssignment = await client.query(
-      `SELECT tea.id
-       FROM chuyen_sau_phancong csp
-       JOIN teacher_exam_assignments tea ON tea.registration_id = csp.registration_id
-       WHERE csp.id = $1
-       ORDER BY tea.updated_at DESC, tea.created_at DESC, tea.id DESC
-       LIMIT 1`,
-      [candidateId]
-    );
+    const cspCheck = await client.query(`SELECT to_regclass('public.chuyen_sau_phancong') IS NOT NULL AS exists`);
+    if (cspCheck.rows[0]?.exists) {
+      const mappedLegacyAssignment = await client.query(
+        `SELECT tea.id
+         FROM chuyen_sau_phancong csp
+         JOIN teacher_exam_assignments tea ON tea.registration_id = csp.registration_id
+         WHERE csp.id = $1
+         ORDER BY tea.updated_at DESC, tea.created_at DESC, tea.id DESC
+         LIMIT 1`,
+        [candidateId]
+      );
 
-    const mappedId = Number(mappedLegacyAssignment.rows[0]?.id || 0) || null;
-    if (mappedId) {
-      return mappedId;
+      const mappedId = Number(mappedLegacyAssignment.rows[0]?.id || 0) || null;
+      if (mappedId) {
+        return mappedId;
+      }
     }
   }
 
@@ -183,6 +186,22 @@ export async function GET(request: Request) {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+      const oldTableCheck = await client.query(`
+        SELECT 
+          (SELECT to_regclass('public.chuyen_sau_phancong') IS NOT NULL) as has_csp,
+          (SELECT to_regclass('public.chuyen_sau_dangky') IS NOT NULL) as has_csd
+      `);
+      const hasCsp = Boolean(oldTableCheck.rows[0]?.has_csp);
+      const hasCsd = Boolean(oldTableCheck.rows[0]?.has_csd);
+
+      const cspJoin = hasCsp 
+        ? 'LEFT JOIN chuyen_sau_phancong csp ON csp.id = csg.assignment_id'
+        : 'LEFT JOIN (SELECT NULL::bigint as id, NULL::bigint as registration_id) csp ON false';
+      
+      const csdJoin = hasCsd
+        ? 'LEFT JOIN chuyen_sau_dangky reg ON reg.id = COALESCE(csg.registration_id, csp.registration_id, ex.registration_id)'
+        : 'LEFT JOIN (SELECT NULL::bigint as id, NULL as teacher_name, NULL as teacher_code, NULL as campus, NULL as subject_code, NULL as scheduled_at) reg ON false';
+
       result = await client.query(
         `SELECT
            COALESCE(ex.id::bigint, csg.id) AS id,
@@ -211,9 +230,8 @@ export async function GET(request: Request) {
            GREATEST(COALESCE(ex.updated_at, csg.updated_at), csg.updated_at) AS updated_at
          FROM chuyen_sau_giaitrinh csg
          LEFT JOIN explanations ex ON ex.id = csg.explanation_id
-         LEFT JOIN chuyen_sau_phancong csp ON csp.id = csg.assignment_id
-         LEFT JOIN chuyen_sau_dangky reg
-           ON reg.id = COALESCE(csg.registration_id, csp.registration_id, ex.registration_id)
+         ${cspJoin}
+         ${csdJoin}
          LEFT JOIN LATERAL (
            SELECT r.bo_mon, r.co_so, r.thang_dk, r.nam_dk
            FROM chuyen_sau_results r
@@ -313,14 +331,17 @@ export async function POST(request: Request) {
     let linkedRegistrationId: number | null = null;
 
     if (linkedAssignmentId) {
-      const assignmentRes = await client.query(
-        `SELECT registration_id
-         FROM chuyen_sau_phancong
-         WHERE id = $1
-         LIMIT 1`,
-        [linkedAssignmentId]
-      );
-      linkedRegistrationId = Number(assignmentRes.rows[0]?.registration_id || 0) || linkedRegistrationId;
+      const cspCheck = await client.query(`SELECT to_regclass('public.chuyen_sau_phancong') IS NOT NULL AS exists`);
+      if (cspCheck.rows[0]?.exists) {
+        const assignmentRes = await client.query(
+          `SELECT registration_id
+           FROM chuyen_sau_phancong
+           WHERE id = $1
+           LIMIT 1`,
+          [linkedAssignmentId]
+        );
+        linkedRegistrationId = Number(assignmentRes.rows[0]?.registration_id || 0) || linkedRegistrationId;
+      }
     }
 
     let linkedResultId: number | null = null;

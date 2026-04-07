@@ -2,7 +2,7 @@
 
 import { Question } from '@/types/assignment';
 import { CheckCircle, Download, FileText, Filter, Plus, Search, Smile, SortAsc, Target, Upload } from 'lucide-react';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { QuestionCard } from './QuestionCard';
 
 interface QuestionListProps {
@@ -28,8 +28,29 @@ export function QuestionList({
   const [filterType, setFilterType] = useState<string>('all');
   const [filterDifficulty, setFilterDifficulty] = useState<string>('all');
   const [draggedItem, setDraggedItem] = useState<number | null>(null);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkAction, setBulkAction] = useState<string>('');
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const prevQuestionsLength = useRef(questions.length);
+
+  // Auto scroll to bottom when a new question is added
+  useEffect(() => {
+    if (questions.length > prevQuestionsLength.current) {
+      const timer = setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+    prevQuestionsLength.current = questions.length;
+  }, [questions.length]);
+
+  const handleAddClick = () => {
+    onAddQuestion();
+    // Also scroll to bottom to show where the new question will appear/the placeholder
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+    }, 50);
+  };
 
   const totalPoints = questions.reduce((sum, q) => {
     const points = Number(q.points) || 0;
@@ -66,7 +87,7 @@ export function QuestionList({
       // Ctrl/Cmd + N: Add new question
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault();
-        onAddQuestion();
+        handleAddClick();
       }
       // Ctrl/Cmd + A: Select all (when not in input)
       if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !(e.target as HTMLElement).matches('input, textarea')) {
@@ -233,9 +254,8 @@ export function QuestionList({
               </button>
             )}
             <button
-              onClick={onAddQuestion}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
-              title="Thêm câu hỏi (Ctrl/Cmd + N)"
+              onClick={handleAddClick}
+              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-lg hover:shadow-blue-200/50 hover:-translate-y-0.5 active:translate-y-0"
             >
               <Plus className="w-5 h-5" />
               <span className="text-sm font-medium">Thêm câu hỏi</span>
@@ -324,7 +344,7 @@ export function QuestionList({
           </p>
           {!searchTerm && filterType === 'all' && filterDifficulty === 'all' && (
             <button
-              onClick={onAddQuestion}
+              onClick={handleAddClick}
               className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg font-semibold"
             >
               <Plus className="w-5 h-5" />
@@ -367,6 +387,56 @@ export function QuestionList({
               />
             </div>
           ))}
+
+          {/* Add Question Placeholder Card */}
+          {!searchTerm && filterType === 'all' && filterDifficulty === 'all' && (
+            <div 
+              onClick={handleAddClick}
+              className="group bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all cursor-pointer border-dashed hover:border-blue-400 hover:bg-blue-50/30"
+            >
+              <div className="flex items-start gap-3">
+                {/* Drag Handle Placeholder */}
+                {onReorder !== undefined && (
+                  <div className="pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-5 h-5 bg-gray-100 rounded" />
+                  </div>
+                )}
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 bg-gray-100 group-hover:bg-blue-100 rounded-lg flex items-center justify-center transition-colors">
+                      <Plus className="w-5 h-5 text-gray-400 group-hover:text-blue-600" />
+                    </div>
+                    <span className="px-2 py-0.5 bg-gray-100 group-hover:bg-blue-100 text-gray-500 group-hover:text-blue-700 rounded text-xs font-semibold transition-colors">
+                      Câu {questions.length + 1}
+                    </span>
+                    <span className="text-sm font-medium text-gray-400 group-hover:text-blue-500 italic transition-colors">
+                      (Chưa lưu - Bấm để thêm mới)
+                    </span>
+                    <span className="ml-auto text-sm font-bold text-gray-300">
+                      ? điểm
+                    </span>
+                  </div>
+                  
+                  <div className="text-gray-400 font-medium mb-2 italic">
+                    Bấm vào đây để thêm câu hỏi mới...
+                  </div>
+
+                  <div className="flex gap-2">
+                    <div className="h-8 px-4 bg-gray-50 rounded-md border border-gray-100 flex items-center gap-2">
+                       <div className="w-3 h-3 rounded-full border border-gray-300" />
+                       <div className="h-2 w-12 bg-gray-200 rounded" />
+                    </div>
+                    <div className="h-8 px-4 bg-gray-50 rounded-md border border-gray-100 flex items-center gap-2">
+                       <div className="w-3 h-3 rounded-full border border-gray-300" />
+                       <div className="h-2 w-12 bg-gray-200 rounded" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} className="h-10 w-full" />
         </div>
       )}
     </div>
