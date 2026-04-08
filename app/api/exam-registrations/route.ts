@@ -66,43 +66,84 @@ export async function GET(request: NextRequest) {
 
     const result = await pool.query(
       `SELECT
-         r.id                                AS result_id,
-         r.id_su_kien                        AS schedule_id,
-         r.id_mon                            AS subject_id,
-         r.ma_giao_vien                      AS teacher_code,
+         r.id                                                          AS id,
+         r.id                                                          AS result_id,
+         r.id_su_kien                                                  AS schedule_id,
+         r.id_mon                                                      AS subject_id,
+         r.ma_giao_vien                                                AS teacher_code,
          r.ho_ten,
-         r.dia_chi_email                     AS email,
-         r.co_so_lam_viec,
+         r.dia_chi_email                                               AS email,
+         r.co_so_lam_viec                                              AS center_code,
          r.khu_vuc,
          r.hinh_thuc,
-         r.khoi_giang_day,
+         r.khoi_giang_day                                              AS block_code,
          r.thang_dk,
          r.nam_dk,
          r.dot,
          r.thoi_gian_kiem_tra,
-         r.diem                              AS score,
-         r.cau_dung                          AS correct_answers,
+         r.diem                                                        AS score,
+         r.cau_dung                                                    AS correct_answers,
          r.xu_ly_diem,
+         r.tong_diem_bi_tru,
          r.email_giai_trinh,
          r.da_giai_thich,
          r.so_lan_giai_thich,
-         r.id_de_thi                         AS set_id,
-         r.tao_luc                           AS created_at,
+         r.id_de_thi                                                   AS set_id,
+         r.id_de_thi                                                   AS selected_set_id,
+         r.tao_luc                                                     AS created_at,
          r.dang_ky_luc,
-         mh.ma_mon                           AS subject_code,
-         mh.ten_mon                          AS subject_name,
-         mh.ma_khoi                          AS block_code,
-         mh.loai_ky_thi                      AS exam_type,
-         mh.thoi_gian_thi_phut               AS duration_minutes,
-         es.ten                              AS schedule_name,
-         es.bat_dau_luc                      AS schedule_start,
-         es.ket_thuc_luc                     AS schedule_end,
+         mh.ma_mon                                                     AS subject_code,
+         mh.ten_mon                                                    AS subject_name,
+         mh.ma_khoi                                                    AS subject_block,
+         COALESCE(mh.loai_ky_thi, 'expertise')                        AS exam_type,
+         mh.thoi_gian_thi_phut                                         AS duration_minutes,
+         es.ten                                                        AS schedule_name,
+         es.bat_dau_luc                                                AS open_at,
+         es.ket_thuc_luc                                               AS close_at,
+         COALESCE(es.bat_dau_luc, r.tao_luc)                          AS scheduled_at,
          es.loai_su_kien,
-         bode.ma_de                          AS set_code,
-         bode.ten_de                         AS set_name
+         -- registration_type: map hinh_thuc → official/additional
+         CASE
+           WHEN LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) LIKE '%b%sung%'
+             OR LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) LIKE '%bo%'
+             OR LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) = 'additional'
+           THEN 'additional'
+           ELSE 'official'
+         END                                                           AS registration_type,
+         -- source_form
+         COALESCE(r.hinh_thuc, 'system')                              AS source_form,
+         -- assignment_id: non-null if any processing has been done
+         CASE WHEN r.xu_ly_diem IS NOT NULL OR r.diem IS NOT NULL OR r.da_giai_thich = TRUE
+              THEN r.id ELSE NULL END                                  AS assignment_id,
+         -- assignment_status
+         CASE
+           WHEN LOWER(TRIM(COALESCE(r.xu_ly_diem, ''))) IN ('đã hoàn thành', 'da thi', 'đã duyệt', 'từ chối')
+             THEN 'graded'
+           WHEN r.diem IS NOT NULL AND r.diem > 0
+             THEN 'graded'
+           WHEN LOWER(TRIM(COALESCE(r.xu_ly_diem, ''))) = 'chờ giải trình'
+             THEN 'expired'
+           WHEN r.id_de_thi IS NOT NULL
+             THEN 'assigned'
+           ELSE 'assigned'
+         END                                                           AS assignment_status,
+         -- score_status
+         CASE
+           WHEN LOWER(TRIM(COALESCE(r.xu_ly_diem, ''))) IN ('đã hoàn thành', 'đã duyệt', 'từ chối')
+             THEN 'graded'
+           WHEN r.diem IS NULL
+             THEN 'null'
+           ELSE 'graded'
+         END                                                           AS score_status,
+         -- random_assigned_at
+         NULL::timestamp                                               AS random_assigned_at,
+         bode.ma_de                                                    AS set_code,
+         bode.ten_de                                                   AS set_name,
+         bode.tong_diem                                                AS total_points,
+         bode.diem_dat                                                 AS passing_score
        FROM chuyen_sau_results r
        LEFT JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
-       LEFT JOIN event_schedules es ON es.id = r.id_su_kien
+       LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
        LEFT JOIN chuyen_sau_bode bode ON bode.id = r.id_de_thi
        ${where}
        ORDER BY r.tao_luc DESC`,
