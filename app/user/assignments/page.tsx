@@ -766,7 +766,8 @@ export default function TeacherAssignmentPage() {
     const closeAt = new Date(item.close_at);
     const expired = item.assignment_status === 'expired' || closeAt < new Date();
     const note = (item.score_handling_note || '').toLowerCase();
-    const requiresExplanation = note.includes('mac dinh 0') || note.includes('mặc định 0');
+    const requiresExplanation = note.includes('mac dinh 0') || note.includes('mặc định 0') ||
+      note.includes('chờ giải trình') || note.includes('cho giai trinh');
     const explanationId = Number(item.explanation_id || 0);
     const hasLinkedExplanation = Number.isFinite(explanationId) && explanationId > 0;
     const isPendingWithoutLinkedExplanation = item.explanation_status === 'pending' && !hasLinkedExplanation;

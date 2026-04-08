@@ -459,6 +459,7 @@ export default function MonthlyActivitiesPage() {
   const [registeredExamEventIdsByOption, setRegisteredExamEventIdsByOption] = useState<Record<string, string[]>>({});
   const [selectedExamEventByOption, setSelectedExamEventByOption] = useState<Record<string, string>>({});
   const [examAssignments, setExamAssignments] = useState<CalendarExamAssignment[]>([]);
+  const [registeredScheduleIds, setRegisteredScheduleIds] = useState<Set<string>>(new Set());
 
   const resolveExamEventIdByOptionAndSchedule = useCallback(
     (option: string, scheduledAt: string) => {
@@ -596,7 +597,9 @@ export default function MonthlyActivitiesPage() {
         const scheduleTimesByOption: Record<string, string[]> = {};
         const eventIdsByOption: Record<string, string[]> = {};
 
-        (data.data || []).forEach((row: { block_code: string; subject_code: string; scheduled_at: string; scheduled_event_id?: string | null }) => {
+        const scheduleIds = new Set<string>();
+        (data.data || []).forEach((row: { block_code: string; subject_code: string; scheduled_at: string; schedule_id?: string | null; scheduled_event_id?: string | null }) => {
+          if (row.schedule_id) scheduleIds.add(row.schedule_id);
           Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
             if (mapped.block_code === row.block_code && mapped.subject_code === row.subject_code) {
               registeredSet.add(option);
@@ -629,6 +632,7 @@ export default function MonthlyActivitiesPage() {
         setUserRegisteredSubjects(registeredSet);
         setRegisteredScheduleTimesByOption(scheduleTimesByOption);
         setRegisteredExamEventIdsByOption(eventIdsByOption);
+        setRegisteredScheduleIds(scheduleIds);
       } catch {
       }
     })();
@@ -737,6 +741,8 @@ export default function MonthlyActivitiesPage() {
     eventsByDateKey.forEach((dayEvents, key) => {
       const visible = dayEvents.filter((event) => {
         if (event.eventType !== "exam" && event.eventType !== "thi") return true;
+        // Nếu user đã đăng ký lịch thi này (id_su_kien khớp) và chưa hết giờ → luôn hiển thị
+        if (registeredScheduleIds.has(event.id) && !isPastEvent(event)) return true;
         return Object.entries(REGISTER_OPTION_MAP).some(([option, mapped]) => {
           if (!userRegisteredSubjects.has(option)) return false;
           const specialty = normalizeStr(event.specialty || "");
@@ -750,7 +756,7 @@ export default function MonthlyActivitiesPage() {
       map.set(key, visible);
     });
     return map;
-  }, [eventsByDateKey, userRegisteredSubjects]);
+  }, [eventsByDateKey, userRegisteredSubjects, registeredScheduleIds]);
 
   const upcomingExamEventsByOption = useMemo(() => {
     const now = new Date();

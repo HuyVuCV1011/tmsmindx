@@ -201,11 +201,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Kiểm tra trùng theo id_su_kien: mỗi giáo viên chỉ được đăng ký 1 lần cho mỗi lịch thi
+    if (id_su_kien) {
+      const dupEvent = await client.query(
+        `SELECT id FROM chuyen_sau_results
+         WHERE id_su_kien = $1::uuid
+           AND LOWER(TRIM(ma_giao_vien)) = LOWER(TRIM($2))
+         LIMIT 1`,
+        [id_su_kien, ma_giao_vien]
+      );
+      if (dupEvent.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json(
+          { success: false, error: 'Bạn đã đăng ký lịch thi này rồi.', result_id: dupEvent.rows[0].id },
+          { status: 409 }
+        );
+      }
+    }
+
     // Kiểm tra trùng đăng ký (cùng giáo viên + môn + tháng, chỉ block nếu chưa có điểm thực)
+    // Nếu có id_su_kien thì chỉ block khi cùng sự kiện — mỗi sự kiện khác nhau được đăng ký độc lập
     const dupCond: string[] = ['id_mon = $1', `LOWER(TRIM(ma_giao_vien)) = LOWER(TRIM($2))`, `xu_ly_diem = 'chờ giải trình'`];
     const dupVals: unknown[] = [resolvedSubjectId, ma_giao_vien];
 
-    if (thang_dk && nam_dk) {
+    if (id_su_kien) {
+      dupCond.push(`id_su_kien = $${dupVals.length + 1}::uuid`);
+      dupVals.push(id_su_kien);
+    } else if (thang_dk && nam_dk) {
       dupCond.push(`thang_dk = $${dupVals.length + 1}`);
       dupVals.push(thang_dk);
       dupCond.push(`nam_dk = $${dupVals.length + 1}`);

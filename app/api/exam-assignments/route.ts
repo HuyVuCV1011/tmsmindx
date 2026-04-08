@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     const giaitrinh_join = hasGiaitrinh
       ? `
       LEFT JOIN LATERAL (
-        SELECT csg.tru_diem
+        SELECT csg.tru_diem, csg.xu_ly_giai_trinh
         FROM chuyen_sau_giaitrinh csg
         WHERE csg.id_ket_qua = csr.id
         ORDER BY csg.tao_luc DESC
@@ -54,6 +54,15 @@ export async function GET(request: NextRequest) {
     const giaitrinh_select = hasGiaitrinh
       ? `COALESCE(csg.tru_diem, 0)::numeric AS penalty_deduction,`
       : `0::numeric AS penalty_deduction,`;
+
+    const giaitrinh_explanation_status = hasGiaitrinh
+      ? `CASE COALESCE(csg.xu_ly_giai_trinh, '')
+          WHEN 'đã duyệt'       THEN 'accepted'
+          WHEN 'từ chối'         THEN 'rejected'
+          WHEN 'chờ giải trình' THEN 'pending'
+          ELSE NULL
+        END::text AS explanation_status,`
+      : `NULL::text AS explanation_status,`;
 
     let query = `
       SELECT
@@ -140,17 +149,8 @@ export async function GET(request: NextRequest) {
           FROM chuyen_sau_bode_cauhoi bq
           WHERE bq.id_de = COALESCE(csr.id_de_thi, fallback_chonde.id_de)
         ) AS has_questions,
-        -- Explanation status từ xu_ly_diem
-        CASE
-          WHEN LOWER(COALESCE(csr.xu_ly_diem, '')) LIKE '%khong tinh diem%'  THEN 'accepted'
-          WHEN LOWER(COALESCE(csr.xu_ly_diem, '')) LIKE '%tu choi%'          THEN 'rejected'
-          WHEN LOWER(COALESCE(csr.xu_ly_diem, '')) LIKE '%giu diem 0%'       THEN 'rejected'
-          WHEN LOWER(COALESCE(csr.xu_ly_diem, '')) LIKE '%mac dinh 0%'       THEN 'pending'
-          WHEN LOWER(COALESCE(csr.xu_ly_diem, '')) LIKE '%cho duyet%'        THEN 'pending'
-          WHEN NULLIF(TRIM(COALESCE(csr.email_giai_trinh, '')), '') IS NOT NULL THEN 'pending'
-          -- 'chờ giải trình' và 'đã hoàn thành' KHÔNG phải trạng thái giải trình
-          ELSE NULL
-        END::text AS explanation_status,
+        -- Explanation status from chuyen_sau_giaitrinh.xu_ly_diem
+        ${giaitrinh_explanation_status}
         NULL::text AS admin_note,
         csr.tao_luc  AS created_at,
         csr.tao_luc  AS updated_at
@@ -251,7 +251,8 @@ export async function GET(request: NextRequest) {
       const rawStatus = String(row.assignment_status || '').toLowerCase();
       const handlingNote = String(row.score_handling_note || '').toLowerCase();
       const isDefaultZeroNeedExplanation =
-        handlingNote.includes('mac dinh 0') || handlingNote.includes('mặc định 0');
+        handlingNote.includes('mac dinh 0') || handlingNote.includes('mặc định 0') ||
+        handlingNote.includes('chờ giải trình') || handlingNote.includes('cho giai trinh');
       const isSubmittedOrGraded = rawStatus === 'submitted' || rawStatus === 'graded';
       const isExpiredByTime = closeAt ? now > closeAt : false;
 

@@ -1,506 +1,227 @@
+﻿/**
+ * /api/explanations
+ *
+ * HoĂ n toĂ n dĂ¹ng báº£ng má»›i, khĂ´ng cĂ²n báº£ng explanations cÅ©:
+ *   - chuyen_sau_giaitrinh  â†’ Ä‘Æ¡n giáº£i trĂ¬nh
+ *       noi_dung_giai_thich : lĂ½ do giáº£i trĂ¬nh (reason)
+ *       html_giai_thich     : pháº£n há»“i admin (admin_note)
+ *       status              : pending / accepted / rejected
+ *       id_ket_qua          : FK â†’ chuyen_sau_results.id
+ *       admin_name          : tĂªn ngÆ°á»i xá»­ lĂ½
+ *       reviewer_email      : email ngÆ°á»i xá»­ lĂ½
+ *
+ *   - chuyen_sau_results    â†’ káº¿t quáº£ Ä‘Äƒng kĂ½ thi
+ *       ho_ten              : teacher_name
+ *       ma_giao_vien        : lms_code
+ *       dia_chi_email       : email
+ *       co_so_lam_viec      : campus
+ *       id_mon              : FK â†’ chuyen_sau_monhoc.id
+ *       thoi_gian_kiem_tra  : test_date
+ *       xu_ly_diem          : 'chá» giáº£i trĂ¬nh' | 'Ä‘Ă£ hoĂ n thĂ nh'
+ *       email_giai_trinh    : email của giáo viên gửi giải trình (set khi POST, không thay đổi khi admin duyệt)
+ *       da_giai_thich       : Ä‘Ă£ tá»«ng giáº£i trĂ¬nh
+ *       so_lan_giai_thich   : sá»‘ láº§n giáº£i trĂ¬nh
+ *
+ * xu_ly_diem chá»‰ cĂ³ 2 tráº¡ng thĂ¡i:
+ *   - 'chá» giáº£i trĂ¬nh'  : Ä‘Äƒng kĂ½ / Ä‘ang thi / háº¿t giá» chÆ°a ná»™p
+ *   - 'Ä‘Ă£ hoĂ n thĂ nh'   : Ä‘Ă£ ná»™p bĂ i
+ * Tráº¡ng thĂ¡i giáº£i trĂ¬nh Ä‘Æ°á»£c theo dĂµi qua chuyen_sau_giaitrinh.status.
+ */
+
 import pool from '@/lib/db';
 import { NextResponse } from 'next/server';
 
-type DbClient = {
-  query: (text: string, values?: any[]) => Promise<any>;
-};
 
-function isSafeIdentifier(value: string): boolean {
-  return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value);
-}
+// â”€â”€â”€ GET â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Query params: email, status, result_id
 
-async function resolveFkSafeId(
-  client: DbClient,
-  constraintName: string,
-  candidateId: number | null
-): Promise<number | null> {
-  if (!candidateId || candidateId <= 0) return null;
-
-  const fkTargetRes = await client.query(
-    `SELECT
-       n.nspname AS schema_name,
-       c.relname AS table_name
-     FROM pg_constraint pc
-     JOIN pg_class c ON c.oid = pc.confrelid
-     JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE pc.conname = $1
-     LIMIT 1`,
-    [constraintName]
-  );
-
-  // No FK configured => keep compatibility with current behavior.
-  if (!fkTargetRes.rows.length) {
-    return candidateId;
-  }
-
-  const schemaName = String(fkTargetRes.rows[0]?.schema_name || 'public');
-  const tableName = String(fkTargetRes.rows[0]?.table_name || '');
-
-  if (!isSafeIdentifier(schemaName) || !isSafeIdentifier(tableName)) {
-    return null;
-  }
-
-  const existsRes = await client.query(
-    `SELECT 1
-     FROM "${schemaName}"."${tableName}"
-     WHERE id = $1
-     LIMIT 1`,
-    [candidateId]
-  );
-
-  if (existsRes.rows.length > 0) {
-    return candidateId;
-  }
-
-  // Compatibility path:
-  // Some environments still keep explanations.assignment_id FK -> teacher_exam_assignments.
-  // If candidateId is from chuyen_sau_phancong, map by registration_id to a legacy assignment id.
-  if (constraintName === 'fk_explanations_assignment' && tableName === 'teacher_exam_assignments') {
-    const cspCheck = await client.query(`SELECT to_regclass('public.chuyen_sau_phancong') IS NOT NULL AS exists`);
-    if (cspCheck.rows[0]?.exists) {
-      const mappedLegacyAssignment = await client.query(
-        `SELECT tea.id
-         FROM chuyen_sau_phancong csp
-         JOIN teacher_exam_assignments tea ON tea.registration_id = csp.registration_id
-         WHERE csp.id = $1
-         ORDER BY tea.updated_at DESC, tea.created_at DESC, tea.id DESC
-         LIMIT 1`,
-        [candidateId]
-      );
-
-      const mappedId = Number(mappedLegacyAssignment.rows[0]?.id || 0) || null;
-      if (mappedId) {
-        return mappedId;
-      }
-    }
-  }
-
-  return null;
-}
-
-async function ensureExplanationBridgeSchema(client: DbClient): Promise<boolean> {
-  await client.query(`
-    ALTER TABLE explanations
-      ADD COLUMN IF NOT EXISTS registration_id BIGINT,
-      ADD COLUMN IF NOT EXISTS assignment_id BIGINT;
-  `);
-
-  await client.query(`
-    ALTER TABLE chuyen_sau_results
-      ADD COLUMN IF NOT EXISTS explanation_id BIGINT;
-  `);
-
-  await client.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'fk_chuyen_sau_results_explanation_id'
-      ) THEN
-        ALTER TABLE chuyen_sau_results
-          ADD CONSTRAINT fk_chuyen_sau_results_explanation_id
-          FOREIGN KEY (explanation_id) REFERENCES explanations(id) ON DELETE SET NULL;
-      END IF;
-    END $$;
-  `);
-
-  await client.query(`
-    CREATE INDEX IF NOT EXISTS idx_chuyen_sau_results_explanation_id
-    ON chuyen_sau_results(explanation_id)
-    WHERE explanation_id IS NOT NULL;
-  `);
-
-  const tableCheck = await client.query(
-    `SELECT to_regclass('public.chuyen_sau_giaitrinh') IS NOT NULL AS exists`
-  );
-  const hasChuyenSauExplanationTable = Boolean(tableCheck.rows[0]?.exists);
-
-  if (!hasChuyenSauExplanationTable) {
-    return false;
-  }
-
-  await client.query(`
-    ALTER TABLE chuyen_sau_giaitrinh
-      ADD COLUMN IF NOT EXISTS explanation_id BIGINT,
-      ADD COLUMN IF NOT EXISTS registration_id BIGINT;
-  `);
-
-  await client.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'fk_chuyen_sau_giaitrinh_explanation_id'
-      ) THEN
-        ALTER TABLE chuyen_sau_giaitrinh
-          ADD CONSTRAINT fk_chuyen_sau_giaitrinh_explanation_id
-          FOREIGN KEY (explanation_id) REFERENCES explanations(id) ON DELETE SET NULL;
-      END IF;
-    END $$;
-  `);
-
-  await client.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_chuyen_sau_giaitrinh_explanation_id
-    ON chuyen_sau_giaitrinh(explanation_id)
-    WHERE explanation_id IS NOT NULL;
-  `);
-
-  return true;
-}
-
-// GET: Lay danh sach giai trinh
-// Query params: email, status
 export async function GET(request: Request) {
   let client;
 
   try {
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get('email');
-    const status = searchParams.get('status');
+    const email    = searchParams.get('email');
+    const status   = searchParams.get('status');
+    const resultId = searchParams.get('result_id');
+
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+
+    if (email) {
+      values.push(email);
+      conditions.push(
+        `LOWER(TRIM(COALESCE(r.dia_chi_email, ''))) = LOWER(TRIM($${values.length}))`
+      );
+    }
+    if (status) {
+      if (status === 'accepted') {
+        conditions.push(`g.xu_ly_giai_trinh = 'đã duyệt'`);
+      } else if (status === 'rejected') {
+        conditions.push(`g.xu_ly_giai_trinh = 'từ chối'`);
+      } else {
+        conditions.push(`COALESCE(g.xu_ly_giai_trinh, 'chờ giải trình') NOT IN ('đã duyệt', 'từ chối')`);
+      }
+    }
+    if (resultId) {
+      values.push(resultId);
+      conditions.push(`g.id_ket_qua = $${values.length}`);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     client = await pool.connect();
-    const hasChuyenSauExplanationTable = await ensureExplanationBridgeSchema(client);
 
-    let result;
-
-    if (hasChuyenSauExplanationTable) {
-      const values: any[] = [];
-      const conditions: string[] = [];
-
-      if (email) {
-        values.push(email);
-        conditions.push(`LOWER(TRIM(COALESCE(ex.email, csg.email, ''))) = LOWER(TRIM($${values.length}))`);
-      }
-
-      if (status) {
-        values.push(status);
-        conditions.push(`
-          CASE
-            WHEN LOWER(COALESCE(csg.status, ex.status, 'pending')) IN ('approved', 'accepted') THEN 'accepted'
-            WHEN LOWER(COALESCE(csg.status, ex.status, 'pending')) = 'rejected' THEN 'rejected'
-            ELSE 'pending'
-          END = $${values.length}`);
-      }
-
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-      const oldTableCheck = await client.query(`
-        SELECT 
-          (SELECT to_regclass('public.chuyen_sau_phancong') IS NOT NULL) as has_csp,
-          (SELECT to_regclass('public.chuyen_sau_dangky') IS NOT NULL) as has_csd
-      `);
-      const hasCsp = Boolean(oldTableCheck.rows[0]?.has_csp);
-      const hasCsd = Boolean(oldTableCheck.rows[0]?.has_csd);
-
-      const cspJoin = hasCsp 
-        ? 'LEFT JOIN chuyen_sau_phancong csp ON csp.id = csg.assignment_id'
-        : 'LEFT JOIN (SELECT NULL::bigint as id, NULL::bigint as registration_id) csp ON false';
-      
-      const csdJoin = hasCsd
-        ? 'LEFT JOIN chuyen_sau_dangky reg ON reg.id = COALESCE(csg.registration_id, csp.registration_id, ex.registration_id)'
-        : 'LEFT JOIN (SELECT NULL::bigint as id, NULL as teacher_name, NULL as teacher_code, NULL as campus, NULL as subject_code, NULL as scheduled_at) reg ON false';
-
-      result = await client.query(
-        `SELECT
-           COALESCE(ex.id::bigint, csg.id) AS id,
-           csg.assignment_id,
-           COALESCE(ex.teacher_name, reg.teacher_name, '') AS teacher_name,
-           COALESCE(ex.lms_code, csg.teacher_code, reg.teacher_code, '') AS lms_code,
-           COALESCE(ex.email, csg.email, '') AS email,
-           COALESCE(ex.campus, reg.campus, csr.co_so, '') AS campus,
-           COALESCE(ex.subject, reg.subject_code, csr.bo_mon, '') AS subject,
-           COALESCE(
-             ex.test_date::date,
-             CASE
-               WHEN reg.scheduled_at IS NOT NULL THEN reg.scheduled_at::date
-               WHEN csr.nam_dk IS NOT NULL AND csr.thang_dk IS NOT NULL THEN make_date(csr.nam_dk, csr.thang_dk, 1)
-               ELSE NULL
-             END
-           ) AS test_date,
-           COALESCE(ex.reason, csg.reason, '') AS reason,
+    const result = await client.query(
+      `SELECT
+         g.id,
+         g.id_ket_qua                                              AS result_id,
+         COALESCE(r.ho_ten, '')                                    AS teacher_name,
+         COALESCE(r.ma_giao_vien, '')                              AS lms_code,
+         COALESCE(r.dia_chi_email, '')                             AS email,
+         COALESCE(r.co_so_lam_viec, '')                           AS campus,
+         COALESCE(mh.ten_mon, mh.ma_mon, r.id_mon::text, '')       AS subject,
+         COALESCE(
+           es.bat_dau_luc AT TIME ZONE 'Asia/Ho_Chi_Minh',
            CASE
-             WHEN LOWER(COALESCE(csg.status, ex.status, 'pending')) IN ('approved', 'accepted') THEN 'accepted'
-             WHEN LOWER(COALESCE(csg.status, ex.status, 'pending')) = 'rejected' THEN 'rejected'
-             ELSE 'pending'
-           END AS status,
-           COALESCE(ex.admin_note, csg.reviewer_note) AS admin_note,
-           COALESCE(ex.created_at, csg.created_at) AS created_at,
-           GREATEST(COALESCE(ex.updated_at, csg.updated_at), csg.updated_at) AS updated_at
-         FROM chuyen_sau_giaitrinh csg
-         LEFT JOIN explanations ex ON ex.id = csg.explanation_id
-         ${cspJoin}
-         ${csdJoin}
-         LEFT JOIN LATERAL (
-           SELECT r.bo_mon, r.co_so, r.thang_dk, r.nam_dk
-           FROM chuyen_sau_results r
-           WHERE (csg.assignment_id IS NOT NULL AND r.assignment_id = csg.assignment_id)
-              OR (reg.id IS NOT NULL AND r.registration_id = reg.id)
-           ORDER BY
-             CASE WHEN csg.assignment_id IS NOT NULL AND r.assignment_id = csg.assignment_id THEN 0 ELSE 1 END,
-             r.updated_at DESC,
-             r.created_at DESC
-           LIMIT 1
-         ) csr ON true
-         ${whereClause}
-         ORDER BY COALESCE(ex.created_at, csg.created_at) DESC`,
-        values
-      );
-    } else {
-      let query = 'SELECT * FROM explanations';
-      const conditions: string[] = [];
-      const values: any[] = [];
-      let paramCount = 1;
-
-      if (email) {
-        conditions.push(`email = $${paramCount}`);
-        values.push(email);
-        paramCount++;
-      }
-
-      if (status) {
-        conditions.push(`status = $${paramCount}`);
-        values.push(status);
-        paramCount++;
-      }
-
-      if (conditions.length > 0) {
-        query += ' WHERE ' + conditions.join(' AND ');
-      }
-
-      query += ' ORDER BY created_at DESC';
-      result = await client.query(query, values);
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: result.rows,
-      count: result.rowCount,
-    });
-  } catch (error: any) {
-    console.error('Database error:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message,
-      },
-      { status: 500 }
+             WHEN COALESCE(r.thoi_gian_kiem_tra, '') ~ '^[0-9]{1,2}:[0-9]{2} [0-9]{2}/[0-9]{2}/[0-9]{4}$'
+               THEN to_timestamp(r.thoi_gian_kiem_tra, 'HH24:MI DD/MM/YYYY')
+             ELSE NULL
+           END,
+           make_timestamp(COALESCE(r.nam_dk, EXTRACT(YEAR FROM NOW())::int),
+                         COALESCE(r.thang_dk, EXTRACT(MONTH FROM NOW())::int), 1, 0, 0, 0)
+         )                                                           AS test_date,
+         COALESCE(g.noi_dung_giai_thich, '')                       AS reason,
+         CASE g.xu_ly_giai_trinh
+           WHEN 'đã duyệt'   THEN 'accepted'
+           WHEN 'từ chối'    THEN 'rejected'
+           ELSE 'pending'
+         END                                                        AS status,
+         g.html_giai_thich                                          AS admin_note,
+         g.tao_luc                                                  AS created_at
+       FROM chuyen_sau_giaitrinh g
+       JOIN chuyen_sau_results r ON r.id = g.id_ket_qua
+       LEFT JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
+       LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
+       ${where}
+       ORDER BY g.tao_luc DESC`,
+      values
     );
+
+    return NextResponse.json({ success: true, data: result.rows, count: result.rowCount });
+  } catch (error: any) {
+    console.error('GET /api/explanations error:', error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   } finally {
-    if (client) {
-      client.release();
-    }
+    client?.release();
   }
 }
 
-// POST: Tao giai trinh moi
+// â”€â”€â”€ POST: User ná»™p giáº£i trĂ¬nh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Body: result_id (hoáº·c assignment_id), lms_code, email, reason
+//       CĂ¡c trÆ°á»ng teacher_name, campus, subject, test_date khĂ´ng cáº§n gá»­i â€”
+//       Ä‘Ă£ cĂ³ sáºµn trong chuyen_sau_results.
+
 export async function POST(request: Request) {
   let client;
 
   try {
     const body = await request.json();
     const {
-      assignment_id,
-      teacher_name,
+      result_id,
+      assignment_id,  // backward compat â€” frontend váº«n gá»­i field nĂ y
       lms_code,
       email,
-      campus,
-      subject,
-      test_date,
       reason,
     } = body;
 
-    if (!teacher_name || !lms_code || !email || !campus || !subject || !test_date || !reason) {
+    const resolvedResultId = Number(result_id || assignment_id || 0) || null;
+
+    if (!reason?.trim()) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Vui lòng điền đầy đủ thông tin',
-        },
+        { success: false, error: 'Vui lĂ²ng nháº­p ná»™i dung giáº£i trĂ¬nh' },
+        { status: 400 }
+      );
+    }
+    if (!resolvedResultId) {
+      return NextResponse.json(
+        { success: false, error: 'KhĂ´ng xĂ¡c Ä‘á»‹nh Ä‘Æ°á»£c káº¿t quáº£ thi cáº§n giáº£i trĂ¬nh' },
         { status: 400 }
       );
     }
 
     client = await pool.connect();
-    const hasChuyenSauExplanationTable = await ensureExplanationBridgeSchema(client);
+    await client.query('BEGIN');
 
-    const testDate = new Date(test_date);
-    const month = Number.isNaN(testDate.getTime()) ? null : testDate.getMonth() + 1;
-    const year = Number.isNaN(testDate.getTime()) ? null : testDate.getFullYear();
-    let linkedAssignmentId: number | null = Number(assignment_id || 0) || null;
-    let linkedRegistrationId: number | null = null;
-
-    if (linkedAssignmentId) {
-      const cspCheck = await client.query(`SELECT to_regclass('public.chuyen_sau_phancong') IS NOT NULL AS exists`);
-      if (cspCheck.rows[0]?.exists) {
-        const assignmentRes = await client.query(
-          `SELECT registration_id
-           FROM chuyen_sau_phancong
-           WHERE id = $1
-           LIMIT 1`,
-          [linkedAssignmentId]
-        );
-        linkedRegistrationId = Number(assignmentRes.rows[0]?.registration_id || 0) || linkedRegistrationId;
-      }
-    }
-
-    let linkedResultId: number | null = null;
-
-    if (month && year) {
-      const scoreCheck = await client.query(
-        `SELECT id, diem, assignment_id, registration_id
-         FROM chuyen_sau_results
-         WHERE LOWER(TRIM(ma_lms)) = LOWER(TRIM($1))
-           AND LOWER(TRIM(bo_mon)) = LOWER(TRIM($2))
-           AND thang_dk = $3
-           AND nam_dk = $4
-         ORDER BY
-           CASE WHEN assignment_id IS NOT NULL THEN 0 ELSE 1 END,
-           updated_at DESC,
-           created_at DESC
-         LIMIT 1`,
-        [lms_code, subject, month, year]
-      );
-
-      if (!linkedAssignmentId) {
-        linkedAssignmentId = Number(scoreCheck.rows[0]?.assignment_id || 0) || null;
-      }
-      linkedRegistrationId = Number(scoreCheck.rows[0]?.registration_id || 0) || linkedRegistrationId;
-      linkedResultId = Number(scoreCheck.rows[0]?.id || 0) || null;
-      const latestScore = Number(scoreCheck.rows[0]?.diem ?? NaN);
-
-      if (!scoreCheck.rows.length || !Number.isFinite(latestScore) || latestScore > 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Chỉ được gửi giải trình khi điểm hiện tại bằng 0',
-          },
-          { status: 400 }
-        );
-      }
-
-      await client.query(
-        `UPDATE chuyen_sau_results
-         SET email_giai_trinh = $2,
-             xu_ly_diem = 'Cho duyet giai trinh',
-             updated_at = NOW()
-         WHERE id = $1`,
-        [scoreCheck.rows[0].id, email]
-      );
-    }
-
-    if (hasChuyenSauExplanationTable && !linkedAssignmentId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Không xác định được assignment để ghi nhận giải trình',
-        },
-        { status: 400 }
-      );
-    }
-
-    const fkSafeRegistrationId = await resolveFkSafeId(
-      client,
-      'fk_explanations_registration',
-      linkedRegistrationId
-    );
-    const fkSafeAssignmentId = await resolveFkSafeId(
-      client,
-      'fk_explanations_assignment',
-      linkedAssignmentId
+    // 1. Kiá»ƒm tra result tá»“n táº¡i vĂ  Ä‘iá»ƒm = 0
+    const resultRow = await client.query(
+      `SELECT id, diem, xu_ly_diem, ma_giao_vien, dia_chi_email
+       FROM chuyen_sau_results
+       WHERE id = $1
+       LIMIT 1`,
+      [resolvedResultId]
     );
 
-    const insertExplanationQuery = `
-      INSERT INTO explanations (
-        teacher_name, lms_code, email, campus, subject, test_date, reason, status, registration_id, assignment_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9)
-      RETURNING *
-    `;
-
-    const explanationValues = [
-      teacher_name,
-      lms_code,
-      email,
-      campus,
-      subject,
-      test_date,
-      reason,
-      fkSafeRegistrationId,
-      fkSafeAssignmentId,
-    ];
-    let explanationResult;
-    try {
-      explanationResult = await client.query(insertExplanationQuery, explanationValues);
-    } catch (insertError: any) {
-      const isAssignmentFkError =
-        insertError?.code === '23503' && insertError?.constraint === 'fk_explanations_assignment';
-      const isRegistrationFkError =
-        insertError?.code === '23503' && insertError?.constraint === 'fk_explanations_registration';
-
-      if (!isAssignmentFkError && !isRegistrationFkError) {
-        throw insertError;
-      }
-
-      // Final guard in mixed-schema environments: retry without foreign keys.
-      const retryValues = [...explanationValues];
-      if (isRegistrationFkError) {
-        retryValues[7] = null;
-      }
-      if (isAssignmentFkError) {
-        retryValues[8] = null;
-      }
-      explanationResult = await client.query(insertExplanationQuery, retryValues);
+    if (!resultRow.rows.length) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ success: false, error: 'KhĂ´ng tĂ¬m tháº¥y káº¿t quáº£ thi' }, { status: 404 });
     }
-    const createdExplanation = explanationResult.rows[0];
 
-    if (linkedResultId) {
-      await client.query(
-        `UPDATE chuyen_sau_results
-         SET explanation_id = $2,
-             email_giai_trinh = COALESCE($3, email_giai_trinh),
-             xu_ly_diem = 'Cho duyet giai trinh',
-             updated_at = NOW()
-         WHERE id = $1`,
-        [linkedResultId, createdExplanation.id, email]
+    const record = resultRow.rows[0];
+    if (Number(record.diem ?? 0) > 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ success: false, error: 'Chá»‰ Ä‘Æ°á»£c gá»­i giáº£i trĂ¬nh khi Ä‘iá»ƒm báº±ng 0' }, { status: 400 });
+    }
+
+    // 2. Kiá»ƒm tra khĂ´ng cho giáº£i trĂ¬nh láº¡i khi Ä‘Ă£ Ä‘Æ°á»£c cháº¥p nháº­n
+    const existingGT = await client.query(
+      `SELECT id, xu_ly_giai_trinh FROM chuyen_sau_giaitrinh WHERE id_ket_qua = $1 LIMIT 1`,
+      [resolvedResultId]
+    );
+
+    if (existingGT.rows.length > 0 && existingGT.rows[0].xu_ly_giai_trinh === 'đã duyệt') {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ success: false, error: 'Giáº£i trĂ¬nh nĂ y Ä‘Ă£ Ä‘Æ°á»£c cháº¥p nháº­n' }, { status: 409 });
+    }
+
+    const resolvedTeacherCode = (lms_code || record.ma_giao_vien || '').toString().trim();
+    const resolvedEmail       = (email || record.dia_chi_email || '').toString().trim();
+    const trimmedReason       = reason.trim();
+
+    // 3. INSERT má»›i hoáº·c reset láº¡i náº¿u Ä‘Ă£ cĂ³ giáº£i trĂ¬nh cÅ© (rejected / pending)
+    let gtResult;
+    if (existingGT.rows.length > 0) {
+      gtResult = await client.query(
+        `UPDATE chuyen_sau_giaitrinh
+         SET noi_dung_giai_thich = $2,
+             xu_ly_giai_trinh    = 'chờ giải trình',
+             html_giai_thich     = NULL
+         WHERE id_ket_qua = $1
+         RETURNING *`,
+        [resolvedResultId, trimmedReason]
+      );
+    } else {
+      gtResult = await client.query(
+        `INSERT INTO chuyen_sau_giaitrinh
+           (id_ket_qua, noi_dung_giai_thich, xu_ly_giai_trinh, tao_luc)
+         VALUES ($1, $2, 'chờ giải trình', NOW())
+         RETURNING *`,
+        [resolvedResultId, trimmedReason]
       );
     }
 
-    if (hasChuyenSauExplanationTable) {
-      await client.query(
-        `INSERT INTO chuyen_sau_giaitrinh (
-           assignment_id,
-           teacher_code,
-           email,
-           reason,
-           status,
-           explanation_id,
-           registration_id,
-           updated_at
-         )
-         VALUES ($1, $2, $3, $4, 'pending', $5, $6, NOW())
-         ON CONFLICT (assignment_id)
-         DO UPDATE SET
-           teacher_code = EXCLUDED.teacher_code,
-           email = EXCLUDED.email,
-           reason = EXCLUDED.reason,
-           status = EXCLUDED.status,
-           explanation_id = EXCLUDED.explanation_id,
-           registration_id = COALESCE(EXCLUDED.registration_id, chuyen_sau_giaitrinh.registration_id),
-           reviewer_email = NULL,
-           reviewer_note = NULL,
-           reviewed_at = NULL,
-           updated_at = NOW()`,
-        [
-          linkedAssignmentId,
-          lms_code,
-          email,
-          reason,
-          createdExplanation.id,
-          linkedRegistrationId,
-        ]
-      );
-    }
+    // 4. ÄĂ¡nh dáº¥u Ä‘Ă£ giáº£i trĂ¬nh trong chuyen_sau_results
+    await client.query(
+      `UPDATE chuyen_sau_results
+       SET da_giai_thich     = TRUE,
+           so_lan_giai_thich = COALESCE(so_lan_giai_thich, 0) + 1,
+           email_giai_trinh  = COALESCE($2, email_giai_trinh)
+       WHERE id = $1`,
+      [resolvedResultId, resolvedEmail || null]
+    );
 
+    await client.query('COMMIT');
+
+    // 5. Gá»­i email thĂ´ng bĂ¡o (best-effort)
     let emailNotSent = false;
     try {
       const emailResponse = await fetch(
@@ -508,247 +229,132 @@ export async function POST(request: Request) {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'new',
-            explanation: createdExplanation,
-          }),
+          body: JSON.stringify({ type: 'new', explanation: gtResult.rows[0] }),
         }
       );
-
       const emailData = await emailResponse.json();
-      if (emailData.emailNotSent) {
-        emailNotSent = true;
-        console.warn('Email not sent for new explanation:', createdExplanation.id);
-      }
-    } catch (emailError) {
-      console.error('Error sending email:', emailError);
+      if (emailData.emailNotSent) emailNotSent = true;
+    } catch {
       emailNotSent = true;
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Tạo giải thích thành công',
-      data: createdExplanation,
-      emailNotSent,
-    });
-  } catch (error: any) {
-    console.error('Database error:', error);
     return NextResponse.json(
-      {
-        success: false,
-        error: error.message,
-      },
-      { status: 500 }
+      { success: true, message: 'Gá»­i giáº£i trĂ¬nh thĂ nh cĂ´ng', data: gtResult.rows[0], emailNotSent },
+      { status: 201 }
     );
+  } catch (error: any) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    console.error('POST /api/explanations error:', error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   } finally {
-    if (client) {
-      client.release();
-    }
+    client?.release();
   }
 }
 
-// PATCH: Cap nhat trang thai giai trinh (admin)
+// â”€â”€â”€ PATCH: Admin phĂª duyá»‡t / tá»« chá»‘i â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Body: id (chuyen_sau_giaitrinh.id), status, admin_note, admin_email, admin_name
+
 export async function PATCH(request: Request) {
   let client;
 
   try {
     const body = await request.json();
-    const { id, status, admin_note, admin_email, admin_name } = body;
+    const { id, status, admin_note, admin_email, admin_name, tong_diem_bi_tru } = body;
 
     if (!id || !status) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Thiếu thông tin bắt buộc',
-        },
+        { success: false, error: 'Thiáº¿u thĂ´ng tin báº¯t buá»™c (id, status)' },
         { status: 400 }
       );
     }
-
     if (!['accepted', 'rejected'].includes(status)) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Trạng thái không hợp lệ',
-        },
+        { success: false, error: 'Tráº¡ng thĂ¡i khĂ´ng há»£p lá»‡ â€” chá»‰ cháº¥p nháº­n: accepted, rejected' },
         { status: 400 }
       );
     }
 
+    const statusDbValue = status === 'accepted' ? 'đã duyệt' : 'từ chối';
+
     client = await pool.connect();
-    const hasChuyenSauExplanationTable = await ensureExplanationBridgeSchema(client);
+    await client.query('BEGIN');
 
-    const updateExplanationQuery = `
-      UPDATE explanations
-      SET status = $1, admin_note = $2, admin_email = $3, admin_name = $4
-      WHERE id = $5
-      RETURNING *
-    `;
+    // 1. Cập nhật chuyen_sau_giaitrinh
+    const gtResult = await client.query(
+      `UPDATE chuyen_sau_giaitrinh
+       SET xu_ly_giai_trinh = $2,
+           html_giai_thich  = $3
+       WHERE id = $1
+       RETURNING *, id_ket_qua`,
+      [id, statusDbValue, admin_note || null]
+    );
 
-    const updateValues = [status, admin_note, admin_email, admin_name, id];
-    const updateResult = await client.query(updateExplanationQuery, updateValues);
+    if (!gtResult.rows.length) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ success: false, error: 'KhĂ´ng tĂ¬m tháº¥y giáº£i trĂ¬nh' }, { status: 404 });
+    }
 
-    if (updateResult.rowCount === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Không tìm thấy giải thích',
-        },
-        { status: 404 }
+    const ketQuaId = gtResult.rows[0].id_ket_qua;
+
+    // 2. Update chuyen_sau_results based on admin decision
+    if (ketQuaId) {
+      await client.query(
+        `UPDATE chuyen_sau_results
+         SET cau_dung        = NULL,
+             diem            = NULL,
+             xu_ly_diem      = $2,
+             tong_diem_bi_tru = $3
+         WHERE id = $1`,
+        [
+          ketQuaId,
+          statusDbValue,
+          status === 'accepted' ? null : (tong_diem_bi_tru ?? null),
+        ]
       );
     }
 
-    const explanation = updateResult.rows[0];
-    const explanationAssignmentId = Number(explanation.assignment_id || 0) || null;
-    const explanationRegistrationId = Number(explanation.registration_id || 0) || null;
+    await client.query('COMMIT');
 
-    const testDate = new Date(explanation.test_date);
-    const month = Number.isNaN(testDate.getTime()) ? null : testDate.getMonth() + 1;
-    const year = Number.isNaN(testDate.getTime()) ? null : testDate.getFullYear();
+    // 3. Fetch full explanation data for email (JOIN results + monhoc)
+    const fullDataResult = await client.query(
+      `SELECT
+         g.id,
+         g.id_ket_qua                                        AS result_id,
+         g.noi_dung_giai_thich                               AS reason,
+         g.html_giai_thich                                   AS admin_note,
+         g.tao_luc                                           AS created_at,
+         COALESCE(r.ho_ten, '')                              AS teacher_name,
+         COALESCE(r.ma_giao_vien, '')                        AS lms_code,
+         COALESCE(r.dia_chi_email, '')                       AS email,
+         COALESCE(r.co_so_lam_viec, '')                      AS campus,
+         COALESCE(mh.ten_mon, mh.ma_mon, r.id_mon::text, '') AS subject,
+         COALESCE(
+           es.bat_dau_luc AT TIME ZONE 'Asia/Ho_Chi_Minh',
+           CASE
+             WHEN COALESCE(r.thoi_gian_kiem_tra, '') ~ '^[0-9]{1,2}:[0-9]{2} [0-9]{2}/[0-9]{2}/[0-9]{4}$'
+               THEN to_timestamp(r.thoi_gian_kiem_tra, 'HH24:MI DD/MM/YYYY')
+             ELSE NULL
+           END,
+           make_timestamp(COALESCE(r.nam_dk, EXTRACT(YEAR FROM NOW())::int),
+                         COALESCE(r.thang_dk, EXTRACT(MONTH FROM NOW())::int), 1, 0, 0, 0)
+         )                                                   AS test_date
+       FROM chuyen_sau_giaitrinh g
+       JOIN chuyen_sau_results r   ON r.id = g.id_ket_qua
+       LEFT JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
+       LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
+       WHERE g.id = $1`,
+      [id]
+    );
 
-    if (month && year) {
-      const scoreHandling =
-        status === 'accepted'
-          ? 'Khong tinh diem (da giai trinh)'
-          : 'Giu diem 0 (tu choi giai trinh)';
+    const emailPayload = {
+      ...(fullDataResult.rows[0] || {}),
+      admin_name:  admin_name  || null,
+      admin_email: admin_email || null,
+      admin_note:  admin_note  || null,
+      updated_at:  new Date().toISOString(),
+    };
 
-      let scoreUpdated = false;
-
-      if (explanationAssignmentId) {
-        const directByAssignment = await client.query(
-          `UPDATE chuyen_sau_results
-           SET email_giai_trinh = COALESCE($2, email_giai_trinh),
-               explanation_id = $4,
-               xu_ly_diem = $3,
-               diem = CASE WHEN $5 = 'accepted' THEN NULL ELSE COALESCE(diem, 0) END,
-               updated_at = NOW()
-           WHERE assignment_id = $1`,
-          [explanationAssignmentId, explanation.email, scoreHandling, explanation.id, status]
-        );
-        scoreUpdated = (directByAssignment.rowCount ?? 0) > 0;
-      }
-
-      if (!scoreUpdated && explanationRegistrationId) {
-        const directByRegistration = await client.query(
-          `UPDATE chuyen_sau_results
-           SET email_giai_trinh = COALESCE($2, email_giai_trinh),
-               explanation_id = $4,
-               xu_ly_diem = $3,
-               diem = CASE WHEN $5 = 'accepted' THEN NULL ELSE COALESCE(diem, 0) END,
-               updated_at = NOW()
-           WHERE registration_id = $1`,
-          [explanationRegistrationId, explanation.email, scoreHandling, explanation.id, status]
-        );
-        scoreUpdated = (directByRegistration.rowCount ?? 0) > 0;
-      }
-
-      if (!scoreUpdated) {
-        await client.query(
-          `WITH target AS (
-             SELECT id
-             FROM chuyen_sau_results
-             WHERE LOWER(TRIM(ma_lms)) = LOWER(TRIM($1))
-               AND LOWER(TRIM(bo_mon)) = LOWER(TRIM($2))
-               AND thang_dk = $3
-               AND nam_dk = $4
-             ORDER BY created_at DESC
-             LIMIT 1
-           )
-           UPDATE chuyen_sau_results
-           SET email_giai_trinh = COALESCE($5, email_giai_trinh),
-               explanation_id = $7,
-               xu_ly_diem = $6,
-               diem = CASE WHEN $8 = 'accepted' THEN NULL ELSE COALESCE(diem, 0) END,
-               updated_at = NOW()
-           WHERE id IN (SELECT id FROM target)`,
-          [
-            explanation.lms_code,
-            explanation.subject,
-            month,
-            year,
-            explanation.email,
-            scoreHandling,
-            explanation.id,
-            status,
-          ]
-        );
-      }
-    }
-
-    if (hasChuyenSauExplanationTable) {
-      const mappedStatus = status === 'accepted' ? 'accepted' : 'rejected';
-
-      const syncValues = [
-        explanationAssignmentId,
-        explanation.lms_code,
-        explanation.email,
-        explanation.reason,
-        mappedStatus,
-        admin_email,
-        admin_note,
-        explanation.id,
-        explanationRegistrationId,
-      ];
-
-      const updateByExplanation = await client.query(
-        `UPDATE chuyen_sau_giaitrinh
-         SET assignment_id = COALESCE($1, assignment_id),
-             teacher_code = $2,
-             email = $3,
-             reason = $4,
-             status = $5,
-             reviewer_email = $6,
-             reviewer_note = $7,
-             reviewed_at = NOW(),
-             registration_id = COALESCE($9, registration_id),
-             updated_at = NOW()
-         WHERE explanation_id = $8`,
-        syncValues
-      );
-
-      if ((updateByExplanation.rowCount ?? 0) === 0) {
-        try {
-          await client.query(
-            `INSERT INTO chuyen_sau_giaitrinh (
-               assignment_id,
-               teacher_code,
-               email,
-               reason,
-               status,
-               reviewer_email,
-               reviewer_note,
-               reviewed_at,
-               explanation_id,
-               registration_id,
-               updated_at
-             )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9, NOW())`,
-            syncValues
-          );
-        } catch (syncError: any) {
-          if (syncError?.code !== '23505') {
-            throw syncError;
-          }
-
-          await client.query(
-            `UPDATE chuyen_sau_giaitrinh
-             SET assignment_id = COALESCE($1, assignment_id),
-                 teacher_code = $2,
-                 email = $3,
-                 reason = $4,
-                 status = $5,
-                 reviewer_email = $6,
-                 reviewer_note = $7,
-                 reviewed_at = NOW(),
-                 registration_id = COALESCE($9, registration_id),
-                 updated_at = NOW()
-             WHERE explanation_id = $8`,
-            syncValues
-          );
-        }
-      }
-    }
-
+    // 4. Send email notification (best-effort)
     let emailNotSent = false;
     try {
       const emailResponse = await fetch(
@@ -758,39 +364,28 @@ export async function PATCH(request: Request) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: status === 'accepted' ? 'accepted' : 'rejected',
-            explanation: updateResult.rows[0],
+            explanation: emailPayload,
           }),
         }
       );
-
       const emailData = await emailResponse.json();
-      if (emailData.emailNotSent) {
-        emailNotSent = true;
-        console.warn('Email not sent for explanation status update:', updateResult.rows[0].id);
-      }
-    } catch (emailError) {
-      console.error('Error sending email:', emailError);
+      if (emailData.emailNotSent) emailNotSent = true;
+    } catch {
       emailNotSent = true;
     }
 
     return NextResponse.json({
       success: true,
-      message: `Đã ${status === 'accepted' ? 'chấp nhận' : 'từ chối'} giải thích`,
-      data: updateResult.rows[0],
+      message: status === 'accepted' ? 'Da chap nhan giai trinh' : 'Da tu choi giai trinh',
+      data: gtResult.rows[0],
       emailNotSent,
     });
   } catch (error: any) {
-    console.error('Database error:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message,
-      },
-      { status: 500 }
-    );
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    console.error('PATCH /api/explanations error:', error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   } finally {
-    if (client) {
-      client.release();
-    }
+    client?.release();
   }
 }
+

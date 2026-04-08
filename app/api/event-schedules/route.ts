@@ -326,7 +326,7 @@ export const DELETE = withApiProtection(async (request: NextRequest) => {
       );
     }
 
-    // Don du lieu lien quan truoc khi xoa su kien: ket qua, phan cong, bai nop.
+    // Dọn dữ liệu liên quan trước khi xóa sự kiện: kết quả, giải trình, bài nộp.
     try {
       const resultIds = await pool.query(
         `SELECT id FROM chuyen_sau_results WHERE id_su_kien = $1::uuid`,
@@ -334,21 +334,30 @@ export const DELETE = withApiProtection(async (request: NextRequest) => {
       );
       if (resultIds.rows.length > 0) {
         const rIds = resultIds.rows.map((r: { id: number }) => r.id);
-        const phancongIds = await pool.query(
-          `SELECT id FROM chuyen_sau_phancong WHERE registration_id = ANY($1::bigint[])`,
+
+        // Xóa bainop_traloi trước (FK CASCADE từ bainop)
+        const bainopIds = await pool.query(
+          `SELECT id FROM chuyen_sau_bainop WHERE id_ket_qua = ANY($1::bigint[])`,
           [rIds]
         );
-        if (phancongIds.rows.length > 0) {
-          const pIds = phancongIds.rows.map((r: { id: number }) => r.id);
+        if (bainopIds.rows.length > 0) {
+          const bIds = bainopIds.rows.map((r: { id: number }) => r.id);
           await pool.query(
-            `DELETE FROM chuyen_sau_bainop WHERE assignment_id = ANY($1::bigint[])`,
-            [pIds]
+            `DELETE FROM chuyen_sau_bainop_traloi WHERE id_bai_nop = ANY($1::bigint[])`,
+            [bIds]
           );
           await pool.query(
-            `DELETE FROM chuyen_sau_phancong WHERE id = ANY($1::bigint[])`,
-            [pIds]
+            `DELETE FROM chuyen_sau_bainop WHERE id = ANY($1::bigint[])`,
+            [bIds]
           );
         }
+
+        // Xóa giải trình liên quan (qua id_ket_qua)
+        await pool.query(
+          `DELETE FROM chuyen_sau_giaitrinh WHERE id_ket_qua = ANY($1::bigint[])`,
+          [rIds]
+        );
+
         await pool.query(
           `DELETE FROM chuyen_sau_results WHERE id_su_kien = $1::uuid`,
           [String(id)]

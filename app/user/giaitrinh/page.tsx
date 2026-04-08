@@ -42,6 +42,12 @@ const SUBJECT_LIST = [
 
 const STORAGE_KEY = 'teacher_auto_fill_data';
 
+interface RegisteredExam {
+  result_id: number;
+  subject_name: string;
+  open_at: string | null;
+}
+
 export default function GiaiTrinhPage() {
   const { user } = useAuth();
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
@@ -55,6 +61,9 @@ export default function GiaiTrinhPage() {
   const [showCampusList, setShowCampusList] = useState(false);
   const [showSubjectList, setShowSubjectList] = useState(false);
   const [selectedExplanation, setSelectedExplanation] = useState<Explanation | null>(null);
+  const [registeredExams, setRegisteredExams] = useState<RegisteredExam[]>([]);
+  const [loadingExams, setLoadingExams] = useState(false);
+  const [selectedExamId, setSelectedExamId] = useState('');
 
   const [formData, setFormData] = useState({
     assignment_id: '',
@@ -151,6 +160,43 @@ export default function GiaiTrinhPage() {
     return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
+  // Fetch danh sách bài kiểm tra đã đăng ký
+  const fetchRegisteredExams = async (lmsCode: string) => {
+    if (!lmsCode) return;
+    setLoadingExams(true);
+    try {
+      const res = await fetch(`/api/exam-assignments?teacher_code=${encodeURIComponent(lmsCode)}`);
+      const data = await res.json();
+      if (data.success) {
+        setRegisteredExams(data.data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching registered exams:', err);
+    } finally {
+      setLoadingExams(false);
+    }
+  };
+
+  const handleExamSelect = (examId: string) => {
+    setSelectedExamId(examId);
+    if (!examId) {
+      setFormData(prev => ({ ...prev, subject: '', test_date: '', assignment_id: '' }));
+      setSubjectSearch('');
+      return;
+    }
+    const exam = registeredExams.find(e => String(e.result_id) === examId);
+    if (exam) {
+      const dateStr = exam.open_at ? new Date(exam.open_at).toISOString().slice(0, 10) : '';
+      setFormData(prev => ({
+        ...prev,
+        subject: exam.subject_name || '',
+        test_date: dateStr,
+        assignment_id: examId
+      }));
+      setSubjectSearch(exam.subject_name || '');
+    }
+  };
+
   // Fetch danh sách giải trình của user
   const fetchExplanations = async () => {
     try {
@@ -191,6 +237,18 @@ export default function GiaiTrinhPage() {
     setSubjectSearch(prefillSubject || '');
     setShowModal(true);
   }, [user, prefillAssignmentId, prefillSubject, prefillCampus, prefillTestDate]);
+
+  // Fetch registered exams when modal opens
+  useEffect(() => {
+    const lmsCode = formData.lms_code || teacherProfile?.code || '';
+    if (showModal && lmsCode) {
+      fetchRegisteredExams(lmsCode);
+    }
+    if (!showModal) {
+      setSelectedExamId('');
+      setRegisteredExams([]);
+    }
+  }, [showModal]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -301,138 +359,51 @@ export default function GiaiTrinhPage() {
         onClose={() => setShowModal(false)}
         title="Tạo Giải Trình Mới"
         maxWidth="3xl"
-        headerColor="from-blue-600 to-blue-700"
+        headerColor="from-[#a1001f] to-[#c41230]"
       >
         <form onSubmit={handleSubmit}>
-              <div className="space-y-5">
-                {/* Row 1: Teacher Info */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Họ và tên <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.teacher_name}
-                      onChange={(e) => setFormData({ ...formData, teacher_name: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition-all"
-                      placeholder={isTeacherLoading ? 'Đang tải...' : 'Tên giáo viên'}
-                      readOnly={isTeacherLoading}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Mã LMS <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.lms_code}
-                      onChange={(e) => setFormData({ ...formData, lms_code: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition-all"
-                      placeholder={isTeacherLoading ? 'Đang tải...' : 'Mã LMS'}
-                      readOnly={isTeacherLoading}
-                    />
-                  </div>
-                </div>
+              {/* Hidden fields - auto-filled from profile */}
+              <input type="hidden" value={formData.teacher_name} />
+              <input type="hidden" value={formData.lms_code} />
+              <input type="hidden" value={formData.email} />
+              <input type="hidden" value={formData.campus} />
+              <input type="hidden" value={formData.subject} />
 
-                {/* Row 2: Email */}
+              <div className="space-y-5">
+                {/* Chọn bài kiểm tra đã đăng ký */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Email <span className="text-red-500">*</span>
+                    Bài kiểm tra đã đăng ký <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="email"
+                  <select
                     required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    placeholder="email@mindx.edu.vn"
-                  />
+                    value={selectedExamId}
+                    onChange={(e) => handleExamSelect(e.target.value)}
+                    disabled={loadingExams}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white text-sm"
+                  >
+                    <option value="">
+                      {loadingExams ? 'Đang tải danh sách...' : '-- Chọn bài kiểm tra --'}
+                    </option>
+                    {registeredExams.map((exam) => {
+                      const dateLabel = exam.open_at
+                        ? new Date(exam.open_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                        : 'Chưa có ngày';
+                      return (
+                        <option key={exam.result_id} value={String(exam.result_id)}>
+                          {exam.subject_name} — {dateLabel}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {!loadingExams && registeredExams.length === 0 && (
+                    <p className="mt-1.5 text-xs text-amber-600">
+                      Không tìm thấy bài kiểm tra đã đăng ký. Vui lòng kiểm tra lại thông tin tài khoản.
+                    </p>
+                  )}
                 </div>
 
-                {/* Row 3: Campus & Subject */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Cơ sở <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={campusSearch || formData.campus}
-                      onChange={(e) => {
-                        setCampusSearch(e.target.value);
-                        setFormData({ ...formData, campus: e.target.value });
-                        setShowCampusList(true);
-                      }}
-                      onFocus={() => setShowCampusList(true)}
-                      onBlur={() => setTimeout(() => setShowCampusList(false), 200)}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Nhập hoặc chọn cơ sở"
-                      autoComplete="off"
-                    />
-                    {showCampusList && filteredCampusList.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredCampusList.map((campus, index) => (
-                          <div
-                            key={index}
-                            onClick={() => {
-                              setFormData({ ...formData, campus });
-                              setCampusSearch(campus);
-                              setShowCampusList(false);
-                            }}
-                            className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm transition-colors"
-                          >
-                            {campus}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Bộ môn <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={subjectSearch || formData.subject}
-                      onChange={(e) => {
-                        setSubjectSearch(e.target.value);
-                        setFormData({ ...formData, subject: e.target.value });
-                        setShowSubjectList(true);
-                      }}
-                      onFocus={() => setShowSubjectList(true)}
-                      onBlur={() => setTimeout(() => setShowSubjectList(false), 200)}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Nhập hoặc chọn bộ môn"
-                      autoComplete="off"
-                    />
-                    {showSubjectList && filteredSubjectList.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredSubjectList.map((subject, index) => (
-                          <div
-                            key={index}
-                            onClick={() => {
-                              setFormData({ ...formData, subject });
-                              setSubjectSearch(subject);
-                              setShowSubjectList(false);
-                            }}
-                            className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm transition-colors"
-                          >
-                            {subject}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Row 4: Test Date */}
+                {/* Ngày kiểm tra - auto-filled from selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Ngày kiểm tra <span className="text-red-500">*</span>
@@ -441,12 +412,12 @@ export default function GiaiTrinhPage() {
                     type="date"
                     required
                     value={formData.test_date}
-                    onChange={(e) => setFormData({ ...formData, test_date: e.target.value })}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    readOnly
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 transition-all"
                   />
                 </div>
                 
-                {/* Row 5: Reason */}
+                {/* Lý do */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Lý do không tham gia <span className="text-red-500">*</span>
@@ -533,7 +504,7 @@ export default function GiaiTrinhPage() {
                 <Table>
                   <TableHeader className="bg-gray-50">
                     <TableRow>
-                      <TableHead className="uppercase tracking-wider">Created Date</TableHead>
+                      <TableHead className="uppercase tracking-wider pl-6">Created Date</TableHead>
                       <TableHead className="uppercase tracking-wider">Test Date</TableHead>
                       <TableHead className="uppercase tracking-wider">Campus</TableHead>
                       <TableHead className="uppercase tracking-wider">Subject</TableHead>
@@ -547,7 +518,7 @@ export default function GiaiTrinhPage() {
                         className="group cursor-pointer transition-all duration-200 hover:bg-blue-50/80 hover:shadow-md relative z-0 hover:z-10"
                         onClick={() => setSelectedExplanation(explanation)}
                       >
-                        <TableCell className="whitespace-nowrap text-gray-900">
+                        <TableCell className="whitespace-nowrap text-gray-900 pl-6">
                           {new Date(explanation.created_at).toLocaleDateString('vi-VN')}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-gray-900">

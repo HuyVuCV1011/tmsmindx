@@ -2993,6 +2993,57 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_chuyen_sau_chonde_thang_id_de ON chuyen_sau_chonde_thang(id_de);
     `,
   },
+  {
+    name: 'V62_refactor_giaitrinh_to_new_tables',
+    version: 62,
+    sql: `
+      -- 1. Add xu_ly_giai_trinh: tracks explanation status (pending/accepted/rejected) in giaitrinh table
+      ALTER TABLE IF EXISTS chuyen_sau_giaitrinh
+        ADD COLUMN IF NOT EXISTS xu_ly_giai_trinh VARCHAR(50) DEFAULT 'chờ giải trình';
+
+      -- 2. Unique index: one explanation per result
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_chuyen_sau_giaitrinh_id_ket_qua
+        ON chuyen_sau_giaitrinh(id_ket_qua)
+        WHERE id_ket_qua IS NOT NULL;
+
+      -- 3. Drop old explanations table (cascades FK on giaitrinh.explanation_id)
+      DROP TABLE IF EXISTS explanations CASCADE;
+
+      -- 4. Drop legacy columns no longer used in chuyen_sau_giaitrinh
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'chuyen_sau_giaitrinh' AND column_name = 'explanation_id'
+        ) THEN
+          ALTER TABLE chuyen_sau_giaitrinh DROP COLUMN IF EXISTS explanation_id;
+        END IF;
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'chuyen_sau_giaitrinh' AND column_name = 'registration_id'
+        ) THEN
+          ALTER TABLE chuyen_sau_giaitrinh DROP COLUMN IF EXISTS registration_id;
+        END IF;
+      END $$;
+
+      -- 5. Drop legacy explanation_id from results tables
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'chuyen_sau_results' AND column_name = 'explanation_id'
+        ) THEN
+          ALTER TABLE chuyen_sau_results DROP COLUMN IF EXISTS explanation_id;
+        END IF;
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'chuyen_sau_ketqua' AND column_name = 'explanation_id'
+        ) THEN
+          ALTER TABLE chuyen_sau_ketqua DROP COLUMN IF EXISTS explanation_id;
+        END IF;
+      END $$;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========
