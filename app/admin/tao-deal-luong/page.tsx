@@ -61,16 +61,16 @@ const STATUS_TABS: { key: StatusFilter; label: string; color: string }[] = [
 ];
 
 const DEAL_TYPE_LABELS: Record<DealTab, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
-  bonus: { label: 'Bonus', icon: <Award className="w-4 h-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+  bonus: { label: 'Nâng lương', icon: <Award className="w-4 h-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
   salary_reduction: { label: 'Hạ lương', icon: <TrendingDown className="w-4 h-4" />, color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' },
-  salary_deal: { label: 'Deal lương', icon: <DollarSign className="w-4 h-4" />, color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+  salary_deal: { label: 'Thỏa thuận lương', icon: <DollarSign className="w-4 h-4" />, color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
 };
 
 const DEAL_TYPE_FILTER_OPTIONS: { key: DealTypeFilter; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
-  { key: 'bonus', label: 'Bonus' },
+  { key: 'bonus', label: 'Nâng lương' },
   { key: 'salary_reduction', label: 'Hạ lương' },
-  { key: 'salary_deal', label: 'Deal lương' },
+  { key: 'salary_deal', label: 'Thỏa thuận lương' },
 ];
 
 const formatCurrency = (value: number) => `${value.toLocaleString('vi-VN')}đ`;
@@ -248,7 +248,7 @@ export default function DealLuongPage() {
 
     if (activeTab === 'bonus') {
       if (!form.class_code.trim() || !form.bonus_amount || !form.bonus_reason.trim()) {
-        toast.error('Vui lòng điền đầy đủ thông tin Bonus');
+        toast.error('Vui lòng điền đầy đủ thông tin nâng lương');
         return;
       }
     }
@@ -410,10 +410,10 @@ export default function DealLuongPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
             <DollarSign className="w-5 h-5 text-white" />
           </div>
-          Deal Lương
+          Quản lý lương
         </h1>
         <p className="relative text-slate-600 mt-2 text-sm md:text-base max-w-2xl">
-          Tạo và theo dõi yêu cầu bonus, hạ lương hoặc deal lương với luồng duyệt minh bạch theo từng trạng thái.
+          Tạo và theo dõi yêu cầu nâng lương, hạ lương hoặc thỏa thuận lương với luồng duyệt minh bạch theo từng trạng thái.
         </p>
       </div>
 

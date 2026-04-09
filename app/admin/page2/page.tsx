@@ -7,7 +7,7 @@ interface PageProps {
 
 export default async function Page2({ searchParams }: PageProps) {
   const params = await searchParams;
-  const docs = await loadK12Docs();
+  const docs = await loadK12Docs({ includeDraft: true });
   const rawDoc = params.doc;
   const selectedSlug = Array.isArray(rawDoc) ? rawDoc[0] : rawDoc || docs.defaultSlug;
 

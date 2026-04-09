@@ -80,7 +80,7 @@ export default function CommunicationsPage() {
     ]
 
     return (
-        <PageContainer padding="none">
+        <PageContainer>
             <div className="bg-white pb-20">
                 {/* Hero Slider - Now at the top */}
                 {!isLoading && posts.length > 0 && (
@@ -101,7 +101,7 @@ export default function CommunicationsPage() {
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                     <Input
                                         placeholder="Tìm kiếm bài viết..."
-                                        className="pl-10 w-full bg-white border-gray-200 focus:bg-white transition-all"
+                                        className="pl-10 w-full bg-white border-gray-200 focus:bg-white focus:border-[#a1001f] focus:ring-1 focus:ring-[#a1001f]/25 transition-all"
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                     />

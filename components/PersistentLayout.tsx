@@ -46,7 +46,11 @@ function Layout({ children }: { children: React.ReactNode }) {
       >
         <div className="w-full h-screen">
           <div className="h-full overflow-y-auto custom-scrollbar">
-            <div className="w-full px-[1%] py-2 sm:px-[1.5%] sm:py-2 lg:px-[2%] lg:py-3 xl:px-[2.5%] xl:py-3">
+            <div
+              className={`w-full px-1.25 py-1.25 sm:px-[1.5%] sm:py-2 lg:px-[2%] lg:py-3 xl:px-[2.5%] xl:py-3 ${
+                shouldShowSidebar && !isOpen ? 'pt-14 sm:pt-16 lg:pt-3' : ''
+              }`}
+            >
               {children}
             </div>
           </div>

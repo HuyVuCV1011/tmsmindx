@@ -94,11 +94,11 @@ interface TrainingData {
 // Memoized InfoItem component
 const InfoItem = memo(({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => {
   return (
-    <div className="flex items-start gap-2 p-2 rounded border border-gray-200">
-      <div className="text-gray-600 mt-0.5">{icon}</div>
+    <div className="flex items-start gap-2 p-2.5 rounded-lg border border-gray-300 bg-[#f3f3f3]">
+      <div className="text-gray-500 mt-0.5">{icon}</div>
       <div className="flex-1 min-w-0">
-        <div className="text-xs text-gray-600">{label}</div>
-        <div className="text-sm font-medium text-gray-900 truncate">{value}</div>
+        <div className="text-xs text-gray-500">{label}</div>
+        <div className="text-sm font-semibold text-gray-900 truncate">{value}</div>
       </div>
     </div>
   );
@@ -693,12 +693,12 @@ export default function Page1() {
   }, [availabilityRecords, availabilityPeriod, availabilityFromDate, availabilityToDate]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 lg:px-6">
+    <div className="w-full px-4 lg:px-6">
       <div className="space-y-3 sm:space-y-4">
         {/* Header */}
-        <div className="border-b border-gray-900 pb-2 sm:pb-3">
+        <div className="border-b border-gray-200 pb-2 sm:pb-3">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Tìm kiếm giáo viên</h1>
-          <p className="text-xs text-gray-600 mt-1">Nhập mã giáo viên để xem thông tin chi tiết</p>
+          <p className="text-xs text-gray-600 mt-1">Nhập mã giáo viên để xem thông tin chi tiết (ví dụ: phunt, ngocdt01,...)</p>
         </div>
 
         {/* Search Box */}
@@ -710,14 +710,14 @@ export default function Page1() {
               onChange={(e) => setSearchCode(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && handleSearch()}
               placeholder="Nhập mã giáo viên (ví dụ: datpt1, tramhlb)"
-              className="w-full px-3 py-2 text-sm border border-gray-900 rounded focus:outline-none focus:ring-2 focus:ring-gray-900"
+              className="w-full px-4 py-2.5 text-sm border border-gray-300 bg-[#f3f3f3] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#a1001f]/30 focus:border-[#a1001f]"
               autoFocus
             />
           </div>
           <button
             onClick={handleSearch}
             disabled={isLoadingTeacher}
-            className="px-4 py-2 bg-gray-900 text-white rounded text-sm font-medium hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 min-w-[100px]"
+            className="px-6 py-2.5 bg-[#a1001f] text-white rounded-full text-sm font-semibold hover:bg-[#870019] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 min-w-[100px]"
           >
             <Search className="h-4 w-4" />
             {isLoadingTeacher ? "Đang tìm..." : "Tìm"}
@@ -751,9 +751,9 @@ export default function Page1() {
 
         {/* Teacher Info Skeleton */}
         {isLoadingTeacher && submitCode && (
-          <div className="border border-gray-900 rounded-lg overflow-hidden">
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
             {/* Header Skeleton */}
-            <div className="bg-gray-900 text-white p-3 sm:p-4">
+            <div className="bg-[#a1001f] text-white p-3 sm:p-4">
               <div className="flex items-center gap-2 sm:gap-3">
                 <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gray-700 animate-pulse"></div>
                 <div className="min-w-0 flex-1 space-y-2">
@@ -783,11 +783,11 @@ export default function Page1() {
 
         {/* Teacher Info */}
         {teacher && !isLoadingTeacher && (
-          <div className="border border-gray-900 rounded-lg overflow-hidden animate-fadeIn" style={{ animationDelay: '0.1s' }}>
+          <div className="border border-gray-200 rounded-xl overflow-hidden animate-fadeIn" style={{ animationDelay: '0.1s' }}>
             {/* Header Card */}
-            <div className="bg-gray-900 text-white p-3 sm:p-4">
+            <div className="bg-[#a1001f] text-white p-3 sm:p-4">
               <div className="flex items-center gap-2 sm:gap-3">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white text-gray-900 flex items-center justify-center font-bold text-base sm:text-lg shrink-0">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white text-[#a1001f] flex items-center justify-center font-bold text-base sm:text-lg shrink-0">
                   {teacher.name.split(" ").pop()?.charAt(0)}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -796,8 +796,8 @@ export default function Page1() {
                 </div>
                 <div className="shrink-0">
                   <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${teacher.status === "Active"
-                      ? "bg-green-500 text-white"
-                      : "bg-gray-500 text-white"
+                      ? "bg-white text-[#a1001f]"
+                      : "bg-gray-300 text-gray-700"
                     }`}>
                     {teacher.status}
                   </span>
@@ -825,12 +825,6 @@ export default function Page1() {
                 )}
                 {teacher.startDate && teacher.startDate !== "N/A" && (
                   <InfoItem icon={<Calendar className="h-4 w-4" />} label="Ngày vào" value={teacher.startDate} />
-                )}
-                {teacher.manager && teacher.manager !== "N/A" && (
-                  <InfoItem icon={<UserCheck className="h-4 w-4" />} label="Người quản lý" value={teacher.manager} />
-                )}
-                {teacher.responsible && teacher.responsible !== "N/A" && (
-                  <InfoItem icon={<UserCheck className="h-4 w-4" />} label="Người phụ trách" value={teacher.responsible} />
                 )}
               </div>
 
@@ -863,7 +857,7 @@ export default function Page1() {
 
         {/* Score Summary Skeleton */}
         {teacher && !scoresLoaded && (
-          <div className="border border-gray-900 rounded-lg p-3 sm:p-4">
+          <div className="border border-gray-200 rounded-xl p-3 sm:p-4 bg-white">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 items-end">
               {[1, 2, 3, 4].map((i) => (
                 <div key={i}>
@@ -877,14 +871,14 @@ export default function Page1() {
 
         {/* Score Summary */}
         {teacher && scoresLoaded && (expertiseData.length > 0 || experienceData.length > 0) && (
-          <div className="border border-gray-900 rounded-lg p-3 sm:p-4 animate-fadeIn" style={{ animationDelay: '0.2s' }}>
+          <div className="border border-gray-200 rounded-xl p-3 sm:p-4 animate-fadeIn bg-white" style={{ animationDelay: '0.2s' }}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 items-end">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Tháng</label>
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-900 rounded focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-[#f3f3f3] focus:outline-none focus:ring-2 focus:ring-[#a1001f]/30 focus:border-[#a1001f]"
                 >
                   {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
                     <option key={month} value={month}>{month}</option>
@@ -897,7 +891,7 @@ export default function Page1() {
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-900 rounded focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-[#f3f3f3] focus:outline-none focus:ring-2 focus:ring-[#a1001f]/30 focus:border-[#a1001f]"
                 >
                   <option value="2024">2024</option>
                   <option value="2025">2025</option>
@@ -907,14 +901,14 @@ export default function Page1() {
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Chuyên môn</label>
-                <div className="px-4 py-2 bg-gray-900 text-white rounded text-center">
+                <div className="px-4 py-2 bg-[#a1001f] text-white rounded-lg text-center">
                   <span className="text-lg font-bold">{expertiseScore}</span>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Quy trình & Kỹ năng trải nghiệm</label>
-                <div className="px-4 py-2 bg-gray-900 text-white rounded text-center">
+                <div className="px-4 py-2 bg-[#a1001f] text-white rounded-lg text-center">
                   <span className="text-lg font-bold">{experienceScore}</span>
                 </div>
               </div>
@@ -924,15 +918,15 @@ export default function Page1() {
 
         {/* Monthly Metrics */}
         {teacher && (
-          <div className="border border-gray-900 rounded-lg overflow-hidden mt-3 sm:mt-4 animate-fadeIn" style={{ animationDelay: '0.3s' }}>
-            <div className="bg-gray-900 text-white p-2 sm:p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <div className="border border-gray-200 rounded-xl overflow-hidden mt-3 sm:mt-4 animate-fadeIn bg-white" style={{ animationDelay: '0.3s' }}>
+            <div className="bg-[#a1001f] text-white p-2 sm:p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <h3 className="text-sm font-bold">Các chỉ số theo tháng</h3>
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <label className="text-xs">Năm:</label>
                 <select
                   value={selectedTableYear}
                   onChange={(e) => setSelectedTableYear(e.target.value)}
-                  className="px-2 py-1 text-xs bg-white text-gray-900 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-white flex-1 sm:flex-initial"
+                  className="px-2 py-1 text-xs bg-white text-gray-900 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-white flex-1 sm:flex-initial"
                 >
                   <option value="2024">2024</option>
                   <option value="2025">2025</option>
@@ -1082,9 +1076,9 @@ export default function Page1() {
 
         {/* Advanced Training Section */}
         {teacher && (
-          <div className="border border-gray-900 rounded-lg overflow-hidden mt-3 sm:mt-4 animate-fadeIn" style={{ animationDelay: '0.3s' }}>
+          <div className="border border-gray-200 rounded-xl overflow-hidden mt-3 sm:mt-4 animate-fadeIn bg-white" style={{ animationDelay: '0.3s' }}>
             {/* Header */}
-            <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-3 sm:p-4">
+            <div className="bg-[#a1001f] text-white p-3 sm:p-4">
               <div className="flex items-center gap-2 sm:gap-3">
                 <UserCheck className="w-5 h-5 sm:w-6 sm:h-6" />
                 <div>
@@ -1118,11 +1112,11 @@ export default function Page1() {
               ) : (
                 /* Actual Data */
                 <>
-                  <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className="mb-4 p-3 bg-[#f3f3f3] rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm font-medium text-gray-700">Điểm trung bình</div>
-                        <div className="text-2xl font-bold text-purple-600 mt-1">
+                        <div className="text-2xl font-bold text-[#a1001f] mt-1">
                           {trainingData.averageScore?.toFixed(2) || '0.00'}
                         </div>
                       </div>
@@ -1131,7 +1125,7 @@ export default function Page1() {
                         <div className="mt-1">
                           <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-purple-600 rounded-full transition-all"
+                              className="h-full bg-[#a1001f] rounded-full transition-all"
                               style={{ width: `${((trainingData.lessons?.filter((l: any) => l.score > 0).length || 0) / 10) * 100}%` }}
                             />
                           </div>
@@ -1149,8 +1143,8 @@ export default function Page1() {
                       const needsImprovement = hasScore && !isPerfect;
                       const notStarted = !hasScore;
 
-                      const scoreColor = hasScore ? 'text-purple-600' : 'text-gray-400';
-                      const bgColor = hasScore ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200';
+                      const scoreColor = hasScore ? 'text-[#a1001f]' : 'text-gray-400';
+                      const bgColor = hasScore ? 'bg-[#f3f3f3] border-gray-300' : 'bg-gray-50 border-gray-200';
 
                       return (
                         <div
@@ -1159,7 +1153,7 @@ export default function Page1() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
-                              <div className="text-xs font-bold text-purple-700 mb-1">
+                              <div className="text-xs font-bold text-[#a1001f] mb-1">
                                 Lesson {idx + 1}
                               </div>
                               <div className="text-xs text-gray-700 line-clamp-2 mb-2">
@@ -1174,7 +1168,7 @@ export default function Page1() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded transition-colors ${notStarted
-                                        ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
+                                        ? 'bg-[#a1001f] hover:bg-[#870019] text-white cursor-pointer'
                                         : 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
                                       }`}
                                   >
@@ -1209,7 +1203,7 @@ export default function Page1() {
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <div className="flex flex-wrap gap-4 text-xs text-gray-600">
                       <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 bg-purple-50 border border-purple-200 rounded"></div>
+                        <div className="w-4 h-4 bg-[#f3f3f3] border border-gray-300 rounded"></div>
                         <span>Đã hoàn thành</span>
                       </div>
                       <div className="flex items-center gap-1">
@@ -1226,9 +1220,9 @@ export default function Page1() {
 
         {/* Availability Performance Analysis - Show skeleton while loading */}
         {teacher && (
-          <div className="border border-gray-900 rounded-lg overflow-hidden mt-3 sm:mt-4 animate-fadeIn" style={{ animationDelay: '0.5s' }}>
+          <div className="border border-gray-200 rounded-xl overflow-hidden mt-3 sm:mt-4 animate-fadeIn bg-white" style={{ animationDelay: '0.5s' }}>
             {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-3 sm:p-4">
+            <div className="bg-[#a1001f] text-white p-3 sm:p-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -1251,7 +1245,7 @@ export default function Page1() {
                       key={value}
                       onClick={() => setAvailabilityPeriod(value as any)}
                       className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded text-xs sm:text-sm font-medium transition-all ${availabilityPeriod === value
-                          ? 'bg-white text-blue-600 shadow-md'
+                          ? 'bg-white text-[#a1001f] shadow-md'
                           : 'bg-white/20 hover:bg-white/30 text-white'
                         }`}
                     >
@@ -1305,22 +1299,22 @@ export default function Page1() {
                 <>
                   {/* Summary Stats */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-                    <div className="bg-gradient-to-br from-blue-50 to-white border border-blue-200 rounded-lg p-2 sm:p-3 text-center">
-                      <div className="text-lg sm:text-2xl font-bold text-blue-600">{availabilityStats.totalSlots}</div>
+                    <div className="bg-[#f3f3f3] border border-gray-200 rounded-lg p-2 sm:p-3 text-center">
+                      <div className="text-lg sm:text-2xl font-bold text-[#a1001f]">{availabilityStats.totalSlots}</div>
                       <div className="text-[10px] sm:text-xs text-gray-600 mt-0.5">Tổng slots rảnh</div>
                     </div>
-                    <div className="bg-gradient-to-br from-green-50 to-white border border-green-200 rounded-lg p-2 sm:p-3 text-center">
-                      <div className="text-lg sm:text-2xl font-bold text-green-600">
+                    <div className="bg-[#f3f3f3] border border-gray-200 rounded-lg p-2 sm:p-3 text-center">
+                      <div className="text-lg sm:text-2xl font-bold text-[#a1001f]">
                         {availabilityStats.DAYS.find(d => d.key === availabilityStats.mostAvailableDay)?.short || 'N/A'}
                       </div>
                       <div className="text-[10px] sm:text-xs text-gray-600 mt-0.5">Ngày ưa thích</div>
                     </div>
-                    <div className="bg-gradient-to-br from-purple-50 to-white border border-purple-200 rounded-lg p-2 sm:p-3 text-center">
-                      <div className="text-lg sm:text-2xl font-bold text-purple-600">{availabilityStats.mostAvailableTime}</div>
+                    <div className="bg-[#f3f3f3] border border-gray-200 rounded-lg p-2 sm:p-3 text-center">
+                      <div className="text-lg sm:text-2xl font-bold text-[#a1001f]">{availabilityStats.mostAvailableTime}</div>
                       <div className="text-[10px] sm:text-xs text-gray-600 mt-0.5">Khung giờ ưa thích</div>
                     </div>
-                    <div className="bg-gradient-to-br from-orange-50 to-white border border-orange-200 rounded-lg p-2 sm:p-3 text-center">
-                      <div className="text-lg sm:text-2xl font-bold text-orange-600">
+                    <div className="bg-[#f3f3f3] border border-gray-200 rounded-lg p-2 sm:p-3 text-center">
+                      <div className="text-lg sm:text-2xl font-bold text-[#a1001f]">
                         {availabilityStats.totalRegistrations}
                       </div>
                       <div className="text-[10px] sm:text-xs text-gray-600 mt-0.5">Lần đăng ký</div>
@@ -1556,18 +1550,18 @@ export default function Page1() {
                   </div>
 
                   {/* Insights */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
-                    <h4 className="text-sm font-bold text-blue-900 mb-2 flex items-center gap-2">
+                  <div className="bg-[#f3f3f3] border border-gray-200 rounded-lg p-3 sm:p-4">
+                    <h4 className="text-sm font-bold text-[#a1001f] mb-2 flex items-center gap-2">
                       <TrendingUp className="w-4 h-4" />
                       Nhận xét xu hướng
                     </h4>
                     <div className="space-y-1 text-xs sm:text-sm text-gray-700">
-                      <p>• Giáo viên thường rảnh nhất vào <strong className="text-blue-700">
+                      <p>• Giáo viên thường rảnh nhất vào <strong className="text-[#a1001f]">
                         {availabilityStats.DAYS.find(d => d.key === availabilityStats.mostAvailableDay)?.label}
                       </strong></p>
-                      <p>• Khung giờ ưa thích: <strong className="text-blue-700">{availabilityStats.mostAvailableTime}</strong></p>
-                      <p>• Tổng cộng đã đăng ký <strong className="text-blue-700">{availabilityStats.totalSlots} slots</strong> trong {availabilityStats.totalRegistrations} lần đăng ký</p>
-                      <p>• Trung bình: <strong className="text-blue-700">{availabilityStats.totalRegistrations > 0 ? (availabilityStats.totalSlots / availabilityStats.totalRegistrations).toFixed(1) : '0'} slots/lần</strong></p>
+                      <p>• Khung giờ ưa thích: <strong className="text-[#a1001f]">{availabilityStats.mostAvailableTime}</strong></p>
+                      <p>• Tổng cộng đã đăng ký <strong className="text-[#a1001f]">{availabilityStats.totalSlots} slots</strong> trong {availabilityStats.totalRegistrations} lần đăng ký</p>
+                      <p>• Trung bình: <strong className="text-[#a1001f]">{availabilityStats.totalRegistrations > 0 ? (availabilityStats.totalSlots / availabilityStats.totalRegistrations).toFixed(1) : '0'} slots/lần</strong></p>
                     </div>
                   </div>
                 </>

@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:migrate": "node scripts/run-all-migrations.js"
+    "db:migrate": "node scripts/run-all-migrations.js",
+    "ngrok:auth": "ngrok config add-authtoken",
+    "ngrok": "ngrok http 3000 --pooling-enabled"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",
@@ -46,6 +48,7 @@
     "html2canvas": "^1.4.1",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.561.0",
+    "marked": "^17.0.6",
     "next": "16.0.10",
     "nodemailer": "^7.0.12",
     "pg": "^8.16.3",
@@ -78,6 +81,7 @@
     "baseline-browser-mapping": "^2.10.10",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
+    "ngrok": "^5.0.0-beta.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

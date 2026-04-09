@@ -50,9 +50,9 @@ const RATE_TABLE = [
 ];
 
 const DEAL_TYPE_LABELS: Record<DealTab, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
-  bonus: { label: 'Bonus', icon: <Award className="w-4 h-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+  bonus: { label: 'Nâng lương', icon: <Award className="w-4 h-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
   salary_reduction: { label: 'Hạ lương', icon: <TrendingDown className="w-4 h-4" />, color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' },
-  salary_deal: { label: 'Deal lương', icon: <DollarSign className="w-4 h-4" />, color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+  salary_deal: { label: 'Thỏa thuận lương', icon: <DollarSign className="w-4 h-4" />, color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
 };
 
 // ─── Status helpers ─────────────────────────────────
@@ -235,9 +235,9 @@ export default function DealLuongPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
             <DollarSign className="w-5 h-5 text-white" />
           </div>
-          Deal Lương
+          Quản lý lương
         </h1>
-        <p className="text-slate-500 mt-2 text-sm">Gửi yêu cầu bonus, hạ lương, hoặc deal lương cho giảng viên</p>
+        <p className="text-slate-500 mt-2 text-sm">Gửi yêu cầu nâng lương, hạ lương, hoặc thỏa thuận lương cho giảng viên</p>
       </div>
 
       {/* Tabs */}

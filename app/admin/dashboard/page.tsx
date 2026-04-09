@@ -8,7 +8,6 @@ export default function Dashboard() {
     <PageContainer
       title="Dashboard"
       description="Chọn một màn hình từ sidebar bên trái để bắt đầu"
-      padding="none"
     >
       <div className="flex items-center justify-center min-h-[60vh]">
         <Card className="text-center max-w-md" padding="lg" hover>

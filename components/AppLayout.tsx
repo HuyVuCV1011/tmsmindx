@@ -117,7 +117,7 @@ export default function AppLayout({
   // Show skeleton while checking authentication
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white p-6">
+      <div className="min-h-screen bg-white p-4">
         <div className="animate-pulse space-y-6">
           <div className="flex items-center space-x-4">
             <div className="h-10 w-10 bg-gray-300 rounded-full"></div>

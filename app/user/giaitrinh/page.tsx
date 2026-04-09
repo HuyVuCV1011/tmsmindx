@@ -294,7 +294,7 @@ export default function GiaiTrinhPage() {
           <Button
             onClick={() => setShowModal(true)}
             size="lg"
-            className="whitespace-nowrap shadow-sm"
+            className="whitespace-nowrap border-2 border-[#a1001f] bg-[#a1001f] text-white shadow-md hover:bg-[#8a001a]"
           >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -310,138 +310,50 @@ export default function GiaiTrinhPage() {
         onClose={() => setShowModal(false)}
         title="Tạo Giải Trình Mới"
         maxWidth="3xl"
-        headerColor="from-blue-600 to-blue-700"
+        headerColor="bg-[#a1001f]"
       >
         <form onSubmit={handleSubmit}>
-              <div className="space-y-5">
-                {/* Row 1: Teacher Info */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Họ và tên <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.teacher_name}
-                      onChange={(e) => setFormData({ ...formData, teacher_name: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition-all"
-                      placeholder={isTeacherLoading ? 'Đang tải...' : 'Tên giáo viên'}
-                      readOnly={isTeacherLoading}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Mã LMS <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.lms_code}
-                      onChange={(e) => setFormData({ ...formData, lms_code: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition-all"
-                      placeholder={isTeacherLoading ? 'Đang tải...' : 'Mã LMS'}
-                      readOnly={isTeacherLoading}
-                    />
-                  </div>
-                </div>
-
-                {/* Row 2: Email */}
-                <div>
+          <div className="space-y-5">
+                {/* Row 1: Subject */}
+                <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Email <span className="text-red-500">*</span>
+                    Bộ môn <span className="text-red-500">*</span>
                   </label>
                   <input
-                    type="email"
+                    type="text"
                     required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    placeholder="email@mindx.edu.vn"
+                    value={subjectSearch || formData.subject}
+                    onChange={(e) => {
+                      setSubjectSearch(e.target.value);
+                      setFormData({ ...formData, subject: e.target.value });
+                      setShowSubjectList(true);
+                    }}
+                    onFocus={() => setShowSubjectList(true)}
+                    onBlur={() => setTimeout(() => setShowSubjectList(false), 200)}
+                    className="w-full px-3 py-2.5 border border-[#e7c6cb] rounded-lg focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f] transition-all"
+                    placeholder="Nhập hoặc chọn bộ môn"
+                    autoComplete="off"
                   />
+                  {showSubjectList && filteredSubjectList.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-[#e7c6cb] rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredSubjectList.map((subject, index) => (
+                        <div
+                          key={index}
+                          onClick={() => {
+                            setFormData({ ...formData, subject });
+                            setSubjectSearch(subject);
+                            setShowSubjectList(false);
+                          }}
+                          className="px-3 py-2 hover:bg-[#fff1f3] cursor-pointer text-sm transition-colors"
+                        >
+                          {subject}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Row 3: Campus & Subject */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Cơ sở <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={campusSearch || formData.campus}
-                      onChange={(e) => {
-                        setCampusSearch(e.target.value);
-                        setFormData({ ...formData, campus: e.target.value });
-                        setShowCampusList(true);
-                      }}
-                      onFocus={() => setShowCampusList(true)}
-                      onBlur={() => setTimeout(() => setShowCampusList(false), 200)}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Nhập hoặc chọn cơ sở"
-                      autoComplete="off"
-                    />
-                    {showCampusList && filteredCampusList.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredCampusList.map((campus, index) => (
-                          <div
-                            key={index}
-                            onClick={() => {
-                              setFormData({ ...formData, campus });
-                              setCampusSearch(campus);
-                              setShowCampusList(false);
-                            }}
-                            className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm transition-colors"
-                          >
-                            {campus}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Bộ môn <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={subjectSearch || formData.subject}
-                      onChange={(e) => {
-                        setSubjectSearch(e.target.value);
-                        setFormData({ ...formData, subject: e.target.value });
-                        setShowSubjectList(true);
-                      }}
-                      onFocus={() => setShowSubjectList(true)}
-                      onBlur={() => setTimeout(() => setShowSubjectList(false), 200)}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Nhập hoặc chọn bộ môn"
-                      autoComplete="off"
-                    />
-                    {showSubjectList && filteredSubjectList.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredSubjectList.map((subject, index) => (
-                          <div
-                            key={index}
-                            onClick={() => {
-                              setFormData({ ...formData, subject });
-                              setSubjectSearch(subject);
-                              setShowSubjectList(false);
-                            }}
-                            className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm transition-colors"
-                          >
-                            {subject}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Row 4: Test Date */}
+                {/* Row 2: Test Date */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Ngày kiểm tra <span className="text-red-500">*</span>
@@ -451,7 +363,7 @@ export default function GiaiTrinhPage() {
                     required
                     value={formData.test_date}
                     onChange={(e) => setFormData({ ...formData, test_date: e.target.value })}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className="w-full px-3 py-2.5 border border-[#e7c6cb] rounded-lg focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f] transition-all"
                   />
                 </div>
                 
@@ -465,41 +377,32 @@ export default function GiaiTrinhPage() {
                     rows={4}
                     value={formData.reason}
                     onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                    className="w-full px-3 py-2.5 border border-[#e7c6cb] rounded-lg focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f] transition-all resize-none"
                     placeholder="Nhập lý do chi tiết về việc không thể tham gia kiểm tra..."
                   />
                 </div>
               </div>
-              
-              <div className="flex flex-col-reverse sm:flex-row gap-3 mt-6 pt-6 border-t border-gray-200">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowModal(false)}
-                  className="w-full sm:w-auto font-medium"
-                >
-                  Hủy
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full sm:w-auto font-medium shadow-sm"
-                >
-                  {submitting ? (
-                    <span className="flex items-center justify-center">
-                      <div className="w-4 h-4 bg-white/30 rounded mr-2"></div>
-                      Đang gửi...
-                    </span>
-                  ) : 'Gửi Giải Trình'}
-                </Button>
-              </div>
+            <div className="mt-6 pt-6 border-t border-[#f1d1d8] flex justify-end">
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="w-full sm:w-auto font-medium shadow-sm bg-[#a1001f] text-white hover:bg-[#8a0019]"
+              >
+                {submitting ? (
+                  <span className="flex items-center justify-center">
+                    <div className="w-4 h-4 bg-white/30 rounded mr-2"></div>
+                    Đang gửi...
+                  </span>
+                ) : 'Gửi Giải Trình'}
+              </Button>
+            </div>
         </form>
       </Modal>
 
       {/* Danh sách giải trình - Responsive Cards */}
       <div>
         <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-linear-to-r from-gray-50 to-white">
+          <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-gray-50">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Danh Sách Giải Trình</h2>
               <p className="text-sm text-gray-600">
@@ -704,7 +607,7 @@ export default function GiaiTrinhPage() {
                 {/* Reason Section */}
                 <div className="pt-2">
                   <p className="text-sm font-medium text-gray-700 mb-2">Lý do không tham gia:</p>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="bg-[#fff5f7] border border-[#f1d1d8] rounded-lg p-4">
                     <p className="text-sm text-gray-800 whitespace-pre-wrap">{selectedExplanation.reason}</p>
                   </div>
                 </div>
