@@ -1708,129 +1708,121 @@ const migrations: Migration[] = [
     name: 'V47_restructure_thu_vien_de_columns',
     version: 47,
     sql: `
-      -- Subject catalog: add stable key + metadata for UI mapping consistency
-      ALTER TABLE exam_subject_catalog
-        ADD COLUMN IF NOT EXISTS subject_key VARCHAR(120),
-        ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+      -- V47: Thêm cột cho legacy exam_* tables để chuẩn bị cho cutover sang chuyen_sau_*.
+      -- Mọi block đều kiểm tra sự tồn tại của table trước → an toàn trên fresh DB.
 
-      WITH key_seed AS (
-        SELECT
-          id,
-          LOWER(REGEXP_REPLACE(COALESCE(NULLIF(subject_key, ''), subject_code, subject_name), '[^a-zA-Z0-9]+', '_', 'g')) AS base_key
-        FROM exam_subject_catalog
-      ),
-      ranked AS (
-        SELECT
-          id,
-          base_key,
-          ROW_NUMBER() OVER (PARTITION BY base_key ORDER BY id) AS rn
-        FROM key_seed
-      )
-      UPDATE exam_subject_catalog esc
-      SET subject_key = CASE
-        WHEN r.rn = 1 THEN r.base_key
-        ELSE CONCAT(r.base_key, '_', esc.id::text)
-      END
-      FROM ranked r
-      WHERE esc.id = r.id
-        AND (esc.subject_key IS NULL OR TRIM(esc.subject_key) = '' OR esc.subject_key <> CASE WHEN r.rn = 1 THEN r.base_key ELSE CONCAT(r.base_key, '_', esc.id::text) END);
-
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_exam_subject_catalog_subject_key
-      ON exam_subject_catalog(subject_key)
-      WHERE subject_key IS NOT NULL;
-
-      -- Sets: add setup-quality and governance columns aligned with current features
-      ALTER TABLE exam_sets
-        ADD COLUMN IF NOT EXISTS min_questions_required INTEGER NOT NULL DEFAULT 1,
-        ADD COLUMN IF NOT EXISTS scoring_mode VARCHAR(20) NOT NULL DEFAULT 'raw_10',
-        ADD COLUMN IF NOT EXISTS random_weight INTEGER NOT NULL DEFAULT 1,
-        ADD COLUMN IF NOT EXISTS setup_note TEXT,
-        ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-        ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;
-
+      -- exam_subject_catalog: stable key + metadata
       DO $$
       BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_exam_sets_min_questions_required') THEN
-          ALTER TABLE exam_sets
-          ADD CONSTRAINT ck_exam_sets_min_questions_required CHECK (min_questions_required > 0);
-        END IF;
+        IF to_regclass('public.exam_subject_catalog') IS NOT NULL THEN
+          ALTER TABLE exam_subject_catalog
+            ADD COLUMN IF NOT EXISTS subject_key VARCHAR(120),
+            ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_exam_sets_random_weight') THEN
-          ALTER TABLE exam_sets
-          ADD CONSTRAINT ck_exam_sets_random_weight CHECK (random_weight > 0);
-        END IF;
+          WITH key_seed AS (
+            SELECT
+              id,
+              LOWER(REGEXP_REPLACE(COALESCE(NULLIF(subject_key, ''), subject_code, subject_name), '[^a-zA-Z0-9]+', '_', 'g')) AS base_key
+            FROM exam_subject_catalog
+          ),
+          ranked AS (
+            SELECT id, base_key, ROW_NUMBER() OVER (PARTITION BY base_key ORDER BY id) AS rn
+            FROM key_seed
+          )
+          UPDATE exam_subject_catalog esc
+          SET subject_key = CASE WHEN r.rn = 1 THEN r.base_key ELSE CONCAT(r.base_key, '_', esc.id::text) END
+          FROM ranked r
+          WHERE esc.id = r.id
+            AND (esc.subject_key IS NULL OR TRIM(esc.subject_key) = ''
+              OR esc.subject_key <> CASE WHEN r.rn = 1 THEN r.base_key ELSE CONCAT(r.base_key, '_', esc.id::text) END);
 
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_exam_sets_score_bounds') THEN
-          ALTER TABLE exam_sets
-          ADD CONSTRAINT ck_exam_sets_score_bounds CHECK (total_points > 0 AND passing_score >= 0 AND passing_score <= total_points);
-        END IF;
-
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_exam_sets_scoring_mode') THEN
-          ALTER TABLE exam_sets
-          ADD CONSTRAINT ck_exam_sets_scoring_mode CHECK (scoring_mode IN ('raw_10', 'scaled_10', 'weighted'));
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_exam_subject_catalog_subject_key
+          ON exam_subject_catalog(subject_key) WHERE subject_key IS NOT NULL;
         END IF;
       END $$;
 
-      CREATE INDEX IF NOT EXISTS idx_exam_sets_subject_status ON exam_sets(subject_id, status);
-
-      -- Questions: persist current UI fields (difficulty/tags) instead of hardcoded defaults
-      ALTER TABLE exam_set_questions
-        ADD COLUMN IF NOT EXISTS difficulty VARCHAR(20) NOT NULL DEFAULT 'medium',
-        ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-        ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE,
-        ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
-
+      -- exam_sets: governance + quality columns
       DO $$
       BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_exam_set_questions_difficulty') THEN
+        IF to_regclass('public.exam_sets') IS NOT NULL THEN
+          ALTER TABLE exam_sets
+            ADD COLUMN IF NOT EXISTS min_questions_required INTEGER NOT NULL DEFAULT 1,
+            ADD COLUMN IF NOT EXISTS scoring_mode VARCHAR(20) NOT NULL DEFAULT 'raw_10',
+            ADD COLUMN IF NOT EXISTS random_weight INTEGER NOT NULL DEFAULT 1,
+            ADD COLUMN IF NOT EXISTS setup_note TEXT,
+            ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+            ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;
+
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_exam_sets_min_questions_required') THEN
+            ALTER TABLE exam_sets ADD CONSTRAINT ck_exam_sets_min_questions_required CHECK (min_questions_required > 0);
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_exam_sets_random_weight') THEN
+            ALTER TABLE exam_sets ADD CONSTRAINT ck_exam_sets_random_weight CHECK (random_weight > 0);
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_exam_sets_score_bounds') THEN
+            ALTER TABLE exam_sets ADD CONSTRAINT ck_exam_sets_score_bounds CHECK (total_points > 0 AND passing_score >= 0 AND passing_score <= total_points);
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_exam_sets_scoring_mode') THEN
+            ALTER TABLE exam_sets ADD CONSTRAINT ck_exam_sets_scoring_mode CHECK (scoring_mode IN ('raw_10', 'scaled_10', 'weighted'));
+          END IF;
+
+          CREATE INDEX IF NOT EXISTS idx_exam_sets_subject_status ON exam_sets(subject_id, status);
+        END IF;
+      END $$;
+
+      -- exam_set_questions: difficulty/tags UI fields
+      DO $$
+      BEGIN
+        IF to_regclass('public.exam_set_questions') IS NOT NULL THEN
           ALTER TABLE exam_set_questions
-          ADD CONSTRAINT ck_exam_set_questions_difficulty CHECK (difficulty IN ('easy', 'medium', 'hard'));
+            ADD COLUMN IF NOT EXISTS difficulty VARCHAR(20) NOT NULL DEFAULT 'medium',
+            ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+            ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_exam_set_questions_difficulty') THEN
+            ALTER TABLE exam_set_questions ADD CONSTRAINT ck_exam_set_questions_difficulty CHECK (difficulty IN ('easy', 'medium', 'hard'));
+          END IF;
         END IF;
       END $$;
 
-      -- Monthly setup: track lock mode/random seed/snapshot for auditable setup flow
-      ALTER TABLE monthly_exam_selections
-        ADD COLUMN IF NOT EXISTS setup_source VARCHAR(20) NOT NULL DEFAULT 'manual',
-        ADD COLUMN IF NOT EXISTS lock_mode VARCHAR(20) NOT NULL DEFAULT 'locked',
-        ADD COLUMN IF NOT EXISTS random_seed VARCHAR(100),
-        ADD COLUMN IF NOT EXISTS set_question_count_snapshot INTEGER,
-        ADD COLUMN IF NOT EXISTS selected_by TEXT,
-        ADD COLUMN IF NOT EXISTS selected_at TIMESTAMP WITH TIME ZONE,
-        ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
-
-      UPDATE monthly_exam_selections
-      SET selected_by = COALESCE(selected_by, created_by),
-          selected_at = COALESCE(selected_at, created_at)
-      WHERE selected_by IS NULL OR selected_at IS NULL;
-
-      UPDATE monthly_exam_selections mes
-      SET set_question_count_snapshot = qc.question_count
-      FROM (
-        SELECT set_id, COUNT(*)::INT AS question_count
-        FROM exam_set_questions
-        GROUP BY set_id
-      ) qc
-      WHERE mes.selected_set_id = qc.set_id
-        AND mes.set_question_count_snapshot IS NULL;
-
+      -- monthly_exam_selections: lock mode/random seed/snapshot auditing
       DO $$
       BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_monthly_exam_selections_setup_source') THEN
+        IF to_regclass('public.monthly_exam_selections') IS NOT NULL THEN
           ALTER TABLE monthly_exam_selections
-          ADD CONSTRAINT ck_monthly_exam_selections_setup_source
-          CHECK (setup_source IN ('manual', 'random', 'auto'));
-        END IF;
+            ADD COLUMN IF NOT EXISTS setup_source VARCHAR(20) NOT NULL DEFAULT 'manual',
+            ADD COLUMN IF NOT EXISTS lock_mode VARCHAR(20) NOT NULL DEFAULT 'locked',
+            ADD COLUMN IF NOT EXISTS random_seed VARCHAR(100),
+            ADD COLUMN IF NOT EXISTS set_question_count_snapshot INTEGER,
+            ADD COLUMN IF NOT EXISTS selected_by TEXT,
+            ADD COLUMN IF NOT EXISTS selected_at TIMESTAMP WITH TIME ZONE,
+            ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_monthly_exam_selections_lock_mode') THEN
-          ALTER TABLE monthly_exam_selections
-          ADD CONSTRAINT ck_monthly_exam_selections_lock_mode
-          CHECK (lock_mode IN ('locked', 'fallback_random'));
+          UPDATE monthly_exam_selections
+          SET selected_by = COALESCE(selected_by, created_by),
+              selected_at = COALESCE(selected_at, created_at)
+          WHERE selected_by IS NULL OR selected_at IS NULL;
+
+          IF to_regclass('public.exam_set_questions') IS NOT NULL THEN
+            UPDATE monthly_exam_selections mes
+            SET set_question_count_snapshot = qc.question_count
+            FROM (SELECT set_id, COUNT(*)::INT AS question_count FROM exam_set_questions GROUP BY set_id) qc
+            WHERE mes.selected_set_id = qc.set_id AND mes.set_question_count_snapshot IS NULL;
+          END IF;
+
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_monthly_exam_selections_setup_source') THEN
+            ALTER TABLE monthly_exam_selections ADD CONSTRAINT ck_monthly_exam_selections_setup_source CHECK (setup_source IN ('manual', 'random', 'auto'));
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_monthly_exam_selections_lock_mode') THEN
+            ALTER TABLE monthly_exam_selections ADD CONSTRAINT ck_monthly_exam_selections_lock_mode CHECK (lock_mode IN ('locked', 'fallback_random'));
+          END IF;
+
+          CREATE INDEX IF NOT EXISTS idx_monthly_exam_selections_scope_v2
+          ON monthly_exam_selections(subject_id, year, month, selection_mode);
         END IF;
       END $$;
-
-      CREATE INDEX IF NOT EXISTS idx_monthly_exam_selections_scope_v2
-      ON monthly_exam_selections(subject_id, year, month, selection_mode);
     `,
   },
   {
@@ -1878,7 +1870,7 @@ const migrations: Migration[] = [
 
       CREATE TABLE IF NOT EXISTS chuyen_sau_sukien_phancong (
         id BIGSERIAL PRIMARY KEY,
-        assignment_id BIGINT NOT NULL REFERENCES teacher_exam_assignments(id) ON DELETE CASCADE,
+        assignment_id BIGINT NOT NULL,
         actor_type VARCHAR(20) NOT NULL,
         actor_code VARCHAR(50),
         event_type VARCHAR(50) NOT NULL,
@@ -1910,6 +1902,12 @@ const migrations: Migration[] = [
       CREATE UNIQUE INDEX IF NOT EXISTS idx_chuyen_sau_sukien_legacy_event
       ON chuyen_sau_sukien_phancong(legacy_event_id)
       WHERE legacy_event_id IS NOT NULL;
+
+      -- Data migration block: only runs when legacy exam_* tables still exist (non-fresh DB).
+      -- On a fresh DB these tables don't exist, so we skip safely.
+      DO $$
+      BEGIN
+        IF to_regclass('public.exam_subject_catalog') IS NOT NULL THEN
 
       -- Subjects
       INSERT INTO chuyen_sau_monhoc (
@@ -2157,11 +2155,11 @@ const migrations: Migration[] = [
       );
 
       -- Drop exam-linked FKs before remapping to canonical IDs.
-      ALTER TABLE IF EXISTS teacher_exam_answers DROP CONSTRAINT IF EXISTS teacher_exam_answers_question_id_fkey;
-      ALTER TABLE IF EXISTS teacher_exam_assignments DROP CONSTRAINT IF EXISTS teacher_exam_assignments_selected_set_id_fkey;
-      ALTER TABLE IF EXISTS teacher_exam_assignments DROP CONSTRAINT IF EXISTS teacher_exam_assignments_registration_id_fkey;
-      ALTER TABLE IF EXISTS monthly_exam_selections DROP CONSTRAINT IF EXISTS monthly_exam_selections_subject_id_fkey;
-      ALTER TABLE IF EXISTS monthly_exam_selections DROP CONSTRAINT IF EXISTS monthly_exam_selections_selected_set_id_fkey;
+      EXECUTE 'ALTER TABLE IF EXISTS teacher_exam_answers DROP CONSTRAINT IF EXISTS teacher_exam_answers_question_id_fkey';
+      EXECUTE 'ALTER TABLE IF EXISTS teacher_exam_assignments DROP CONSTRAINT IF EXISTS teacher_exam_assignments_selected_set_id_fkey';
+      EXECUTE 'ALTER TABLE IF EXISTS teacher_exam_assignments DROP CONSTRAINT IF EXISTS teacher_exam_assignments_registration_id_fkey';
+      EXECUTE 'ALTER TABLE IF EXISTS monthly_exam_selections DROP CONSTRAINT IF EXISTS monthly_exam_selections_subject_id_fkey';
+      EXECUTE 'ALTER TABLE IF EXISTS monthly_exam_selections DROP CONSTRAINT IF EXISTS monthly_exam_selections_selected_set_id_fkey';
 
       -- Remap dependent IDs from exam_* IDs to chuyen_sau_* IDs
       UPDATE teacher_exam_assignments tea
@@ -2190,39 +2188,59 @@ const migrations: Migration[] = [
       WHERE csb.legacy_set_id = mes.selected_set_id;
 
       -- Rewire FKs
-      ALTER TABLE IF EXISTS teacher_exam_answers DROP CONSTRAINT IF EXISTS teacher_exam_answers_question_id_fkey;
-      ALTER TABLE IF EXISTS teacher_exam_assignments DROP CONSTRAINT IF EXISTS teacher_exam_assignments_selected_set_id_fkey;
-      ALTER TABLE IF EXISTS teacher_exam_assignments DROP CONSTRAINT IF EXISTS teacher_exam_assignments_registration_id_fkey;
-      ALTER TABLE IF EXISTS monthly_exam_selections DROP CONSTRAINT IF EXISTS monthly_exam_selections_subject_id_fkey;
-      ALTER TABLE IF EXISTS monthly_exam_selections DROP CONSTRAINT IF EXISTS monthly_exam_selections_selected_set_id_fkey;
+      EXECUTE 'ALTER TABLE IF EXISTS teacher_exam_answers DROP CONSTRAINT IF EXISTS teacher_exam_answers_question_id_fkey';
+      EXECUTE 'ALTER TABLE IF EXISTS teacher_exam_assignments DROP CONSTRAINT IF EXISTS teacher_exam_assignments_selected_set_id_fkey';
+      EXECUTE 'ALTER TABLE IF EXISTS teacher_exam_assignments DROP CONSTRAINT IF EXISTS teacher_exam_assignments_registration_id_fkey';
+      EXECUTE 'ALTER TABLE IF EXISTS monthly_exam_selections DROP CONSTRAINT IF EXISTS monthly_exam_selections_subject_id_fkey';
+      EXECUTE 'ALTER TABLE IF EXISTS monthly_exam_selections DROP CONSTRAINT IF EXISTS monthly_exam_selections_selected_set_id_fkey';
 
-      ALTER TABLE teacher_exam_answers
-        ADD CONSTRAINT teacher_exam_answers_question_id_fkey
-        FOREIGN KEY (question_id) REFERENCES chuyen_sau_cauhoi(id) ON DELETE RESTRICT;
+      IF to_regclass('public.teacher_exam_answers') IS NOT NULL THEN
+        ALTER TABLE teacher_exam_answers
+          ADD CONSTRAINT teacher_exam_answers_question_id_fkey
+          FOREIGN KEY (question_id) REFERENCES chuyen_sau_cauhoi(id) ON DELETE RESTRICT;
+      END IF;
 
-      ALTER TABLE teacher_exam_assignments
-        ADD CONSTRAINT teacher_exam_assignments_selected_set_id_fkey
-        FOREIGN KEY (selected_set_id) REFERENCES chuyen_sau_bode(id) ON DELETE RESTRICT;
+      IF to_regclass('public.teacher_exam_assignments') IS NOT NULL THEN
+        ALTER TABLE teacher_exam_assignments
+          ADD CONSTRAINT teacher_exam_assignments_selected_set_id_fkey
+          FOREIGN KEY (selected_set_id) REFERENCES chuyen_sau_bode(id) ON DELETE RESTRICT;
 
-      ALTER TABLE teacher_exam_assignments
-        ADD CONSTRAINT teacher_exam_assignments_registration_id_fkey
-        FOREIGN KEY (registration_id) REFERENCES chuyen_sau_dangky(id) ON DELETE CASCADE;
+        ALTER TABLE teacher_exam_assignments
+          ADD CONSTRAINT teacher_exam_assignments_registration_id_fkey
+          FOREIGN KEY (registration_id) REFERENCES chuyen_sau_dangky(id) ON DELETE CASCADE;
+      END IF;
 
-      ALTER TABLE monthly_exam_selections
-        ADD CONSTRAINT monthly_exam_selections_subject_id_fkey
-        FOREIGN KEY (subject_id) REFERENCES chuyen_sau_monhoc(id) ON DELETE CASCADE;
+      IF to_regclass('public.monthly_exam_selections') IS NOT NULL THEN
+        ALTER TABLE monthly_exam_selections
+          ADD CONSTRAINT monthly_exam_selections_subject_id_fkey
+          FOREIGN KEY (subject_id) REFERENCES chuyen_sau_monhoc(id) ON DELETE CASCADE;
 
-      ALTER TABLE monthly_exam_selections
-        ADD CONSTRAINT monthly_exam_selections_selected_set_id_fkey
-        FOREIGN KEY (selected_set_id) REFERENCES chuyen_sau_bode(id) ON DELETE SET NULL;
+        ALTER TABLE monthly_exam_selections
+          ADD CONSTRAINT monthly_exam_selections_selected_set_id_fkey
+          FOREIGN KEY (selected_set_id) REFERENCES chuyen_sau_bode(id) ON DELETE SET NULL;
+      END IF;
 
       -- Remove physical exam_* tables
       DROP TABLE IF EXISTS exam_assignment_events;
       DROP TABLE IF EXISTS exam_explanations;
-      DROP TABLE IF EXISTS exam_registrations;
+      DROP TABLE IF EXISTS exam_registrations CASCADE;
       DROP TABLE IF EXISTS exam_set_questions;
       DROP TABLE IF EXISTS exam_sets;
       DROP TABLE IF EXISTS exam_subject_catalog;
+
+        END IF; -- end: exam_subject_catalog exists
+      END $$;
+
+      -- ENUM types needed by compatibility views (safe to re-run)
+      DO $$ BEGIN
+        CREATE TYPE exam_type_enum AS ENUM ('expertise', 'experience');
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+      DO $$ BEGIN
+        CREATE TYPE registration_type_enum AS ENUM ('official', 'additional');
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+      DO $$ BEGIN
+        CREATE TYPE explanation_status_enum AS ENUM ('pending', 'accepted', 'rejected');
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
       -- Compatibility views (exam_* names now point to chuyen_sau_* structures)
       CREATE VIEW exam_subject_catalog AS
