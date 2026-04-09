@@ -483,8 +483,8 @@ export function BirthdayWishPopup({
                     <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-red-300/10 blur-3xl" />
                 </div>
 
-                <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-6xl items-center px-4 py-3 sm:px-6 sm:py-4">
-                    <div className="w-full h-[calc(100dvh-1.5rem)] sm:h-[calc(100dvh-2rem)] max-h-205 rounded-2xl border border-white/20 bg-[#980f24]/70 shadow-2xl backdrop-blur-md overflow-hidden animate-popup-entry origin-top flex flex-col">
+                <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-6xl items-start px-2 py-2 sm:items-center sm:px-6 sm:py-4">
+                    <div className="w-full h-[calc(100dvh-1rem)] sm:h-[calc(100dvh-2rem)] max-h-205 rounded-2xl border border-white/20 bg-[#980f24]/70 shadow-2xl backdrop-blur-md overflow-hidden animate-popup-entry origin-top flex flex-col">
                         <div className="flex items-center justify-end gap-1 border-b border-white/15 px-4 py-3">
                             <button
                                 type="button"
@@ -510,7 +510,7 @@ export function BirthdayWishPopup({
                                 <div
                                     ref={posterRef}
                                     id="birthday-export-poster"
-                                    className="rounded-[30px] border-2 border-rose-200/90 bg-linear-to-br from-[#fffaf5] via-[#fff4f6] to-[#ffeef2] p-5 sm:p-6 relative overflow-hidden shadow-[0_18px_50px_rgba(127,29,29,0.24)]"
+                                    className="rounded-[30px] border-2 border-rose-200/90 bg-linear-to-br from-[#fffaf5] via-[#fff4f6] to-[#ffeef2] p-4 sm:p-6 relative overflow-visible sm:overflow-hidden shadow-[0_18px_50px_rgba(127,29,29,0.24)]"
                                 >
                                     <div className="absolute inset-0 z-0 opacity-60 bg-[radial-gradient(circle_at_18%_16%,rgba(251,113,133,0.28),transparent_42%),radial-gradient(circle_at_84%_76%,rgba(254,205,211,0.36),transparent_38%)]" />
 
@@ -537,7 +537,7 @@ export function BirthdayWishPopup({
                                     <div className="absolute bottom-10 right-6 text-red-300 text-lg opacity-70 z-10" data-export="star">★</div>
 
                                     <p
-                                        className="mt-2 mb-2 text-center relative z-20 text-[34px] leading-[1.14] tracking-wide bg-linear-to-b from-[#1d3f78] via-[#10274f] to-[#0a0f1e] bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.16)] sm:text-[44px]"
+                                        className="mt-1 mb-1 text-center relative z-20 text-[30px] leading-[1.12] tracking-wide bg-linear-to-b from-[#1d3f78] via-[#10274f] to-[#0a0f1e] bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.16)] sm:mt-2 sm:mb-2 sm:text-[44px]"
                                         style={{ fontFamily: 'Kaushan Script, cursive' }}
                                         data-export="title"
                                     >
@@ -549,7 +549,7 @@ export function BirthdayWishPopup({
                                             alt="Bánh sinh nhật MindX"
                                             width={280}
                                             height={280}
-                                            className="w-36 h-36 sm:w-48 sm:h-48 object-contain drop-shadow-[0_14px_30px_rgba(127,29,29,0.26)]"
+                                            className="w-32 h-32 sm:w-48 sm:h-48 object-contain drop-shadow-[0_14px_30px_rgba(127,29,29,0.26)]"
                                             priority
                                             unoptimized
                                             data-export="cake-image"
@@ -561,8 +561,8 @@ export function BirthdayWishPopup({
                                             {visibleBirthdays.length > 0 ? (
                                                 visibleBirthdays.map((person, index) => (
                                                     <div key={`${person.name}-${index}`} className="text-black">
-                                                        <p className="text-[30px] sm:text-[38px] font-black leading-tight tracking-tight" data-export="name">{person.name}</p>
-                                                        <p className="text-base sm:text-lg text-black font-medium" data-export="date">{person.date}</p>
+                                                        <p className="text-[24px] sm:text-[38px] font-black leading-tight tracking-tight" data-export="name">{person.name}</p>
+                                                        <p className="text-sm sm:text-lg text-black font-medium" data-export="date">{person.date}</p>
                                                     </div>
                                                 ))
                                             ) : (
@@ -571,7 +571,7 @@ export function BirthdayWishPopup({
                                         </div>
                                     </div>
 
-                                    <div className="mt-2 rounded-2xl bg-white/90 border border-rose-300 border-dashed p-3 text-center min-h-16 max-h-24 sm:max-h-28 overflow-y-auto custom-scrollbar flex items-start justify-center relative z-20 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]" data-export="wish">
+                                    <div className="mt-2 rounded-2xl bg-white/90 border border-rose-300 border-dashed p-3 text-center min-h-14 max-h-20 sm:max-h-28 overflow-y-auto custom-scrollbar flex items-start justify-center relative z-20 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]" data-export="wish">
                                         <p className="text-black text-sm sm:text-base font-semibold transition-all duration-500 leading-relaxed wrap-break-word whitespace-pre-line" data-export="wish-text">
                                             {randomWish}
                                         </p>

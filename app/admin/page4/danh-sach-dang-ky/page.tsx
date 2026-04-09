@@ -129,7 +129,7 @@ export default function ExamRegistrationListPage() {
     const expired = row.assignment_status === "expired";
 
     return (
-      <div className="w-[300px]">
+      <div className="w-full sm:w-75">
         <Stepper
           compact
           steps={[

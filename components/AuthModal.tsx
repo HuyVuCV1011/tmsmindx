@@ -20,8 +20,8 @@ export default function AuthModal({ open, onClose }: { open: boolean; onClose: (
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl flex w-[768px] h-[540px] relative overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4">
+      <div className="bg-white rounded-xl shadow-2xl flex w-full max-w-4xl md:h-135 max-h-[92vh] relative overflow-hidden">
         {/* Left side: Banner */}
         <div className="hidden md:flex flex-col justify-between items-start bg-[#a1001f] w-1/2 h-full p-8 text-white relative">
           <div>
@@ -41,7 +41,7 @@ export default function AuthModal({ open, onClose }: { open: boolean; onClose: (
           </button>
         </div>
         {/* Right side: Login form */}
-        <div className="flex-1 flex flex-col justify-center px-8 py-6 relative">
+        <div className="flex-1 flex flex-col justify-center px-5 sm:px-8 py-6 relative overflow-y-auto">
           <button
             className="absolute top-3 right-3 text-gray-400 text-2xl font-bold hover:text-gray-700 md:hidden"
             onClick={onClose}
@@ -54,7 +54,7 @@ export default function AuthModal({ open, onClose }: { open: boolean; onClose: (
             <div className="text-lg font-semibold text-gray-900 text-center mt-2 mb-1">Welcome to Portal</div>
             <div className="text-sm text-gray-500 text-center mb-2">Lựa chọn vai trò của bạn để tiếp tục</div>
           </div>
-          <div className="flex justify-center gap-3 mb-4">
+          <div className="flex justify-center gap-3 mb-4 flex-wrap">
             <button
               className={`px-4 py-1 rounded-full border text-sm font-medium transition-all ${role === 'teacher' ? 'bg-[#a1001f] text-white border-[#a1001f]' : 'bg-white text-[#a1001f] border-[#a1001f]'}`}
               onClick={() => setRole('teacher')}

@@ -164,6 +164,25 @@ export default function K12DocsClient({
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [expandedLevelOne, setExpandedLevelOne] = useState<Record<string, boolean>>({});
   const [isMiniToc, setIsMiniToc] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+
+    const updateViewport = (event?: MediaQueryListEvent) => {
+      const matches = event ? event.matches : mediaQuery.matches;
+      setIsMobileViewport(matches);
+    };
+
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+    return () => mediaQuery.removeEventListener("change", updateViewport);
+  }, []);
+
+  const handleTocSelect = () => {
+    if (!isMobileViewport) return;
+    setIsMiniToc(true);
+  };
 
   const selectedDoc = useMemo(() => {
     const effective = selectedSlug || defaultSlug;
@@ -293,6 +312,7 @@ export default function K12DocsClient({
 
                 <Link
                   href={`${basePath}?doc=${encodeURIComponent(node.slug)}`}
+                  onClick={handleTocSelect}
                   className="min-w-0 flex-1"
                 >
                   <span
@@ -404,12 +424,12 @@ export default function K12DocsClient({
       </div>
 
       <div
-        className="grid grid-cols-1 gap-4 lg:[transition:grid-template-columns_320ms_ease]"
-        style={{
-          gridTemplateColumns: isMiniToc
-            ? "120px minmax(0,1fr) 220px"
-            : "300px minmax(0,1fr) 220px",
-        }}
+        className={cn(
+          "grid grid-cols-1 gap-4 lg:[transition:grid-template-columns_320ms_ease]",
+          isMiniToc
+            ? "lg:grid-cols-[120px_minmax(0,1fr)_220px]"
+            : "lg:grid-cols-[300px_minmax(0,1fr)_220px]"
+        )}
       >
         <aside
           className={cn(

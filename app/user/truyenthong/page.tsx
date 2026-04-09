@@ -80,7 +80,7 @@ export default function CommunicationsPage() {
     ]
 
     return (
-        <PageContainer padding="none">
+        <PageContainer>
             <div className="bg-white pb-20">
                 {/* Hero Slider - Now at the top */}
                 {!isLoading && posts.length > 0 && (

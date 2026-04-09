@@ -63,7 +63,7 @@ export default function Slider({ posts }: SliderProps) {
 
     return (
         <div
-            className="relative w-full h-[500px] md:h-[600px] rounded-3xl overflow-hidden bg-gray-950 group shadow-2xl ring-1 ring-white/10"
+            className="relative w-full h-90 sm:h-105 md:h-150 rounded-3xl overflow-hidden bg-gray-950 group shadow-2xl ring-1 ring-white/10"
             onMouseEnter={() => setAutoPlay(false)}
             onMouseLeave={() => setAutoPlay(true)}
         >
@@ -88,7 +88,7 @@ export default function Slider({ posts }: SliderProps) {
                         />
 
                         {/* Contrast Overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/35 to-transparent" />
+                        <div className="absolute inset-0 bg-linear-to-r from-black/70 via-black/35 to-transparent" />
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.12),transparent_45%)]" />
 
                         {/* Content */}
@@ -112,7 +112,7 @@ export default function Slider({ posts }: SliderProps) {
                                     </Link>
                                 </h3>
 
-                                <div className="mt-5 h-1 w-16 rounded-full bg-gradient-to-r from-white/90 via-white/60 to-transparent" />
+                                <div className="mt-5 h-1 w-16 rounded-full bg-linear-to-r from-white/90 via-white/60 to-transparent" />
 
                                 {/* Description */}
                                 <p className="mt-4 text-base md:text-lg text-white/80 line-clamp-2 max-w-2xl leading-relaxed font-light">
@@ -138,7 +138,7 @@ export default function Slider({ posts }: SliderProps) {
             </div>
 
             {/* Navigation Arrows - Minimalist */}
-            <div className="absolute bottom-12 right-12 z-20 flex gap-4 hidden md:flex">
+            <div className="absolute bottom-12 right-12 z-20 hidden gap-4 md:flex">
                 <button
                     onClick={goToPrevious}
                     className="p-4 rounded-full border border-white/20 bg-black/20 text-white backdrop-blur-sm hover:bg-white hover:text-black transition-all active:scale-95 group"
@@ -176,7 +176,7 @@ export default function Slider({ posts }: SliderProps) {
             {autoPlay && (
                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 z-20">
                     <div
-                        className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                        className="h-full bg-linear-to-r from-blue-500 via-purple-500 to-pink-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
                         style={{
                             width: '100%',
                             transition: 'width 6000ms linear'

@@ -31,7 +31,7 @@ export default function UserManagementPage() {
     ];
 
     return (
-        <div className="p-6 w-full">
+        <div className="p-4 w-full">
             <div className="mb-6">
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                     <ShieldCheck className="h-7 w-7 text-[#a1001f]" />

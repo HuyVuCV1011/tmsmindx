@@ -504,15 +504,6 @@ export function UpcomingEventsSidebar() {
                             <span className="group-hover:scale-125 transition-transform">💌</span>
                         </span>
                     </button>
-
-                    <button
-                        type="button"
-                        className="mt-2 w-full rounded-xl border border-white/25 bg-white/5 py-2.5 text-xs font-semibold tracking-wide text-white/90 transition-colors duration-200 hover:border-white/50 hover:bg-white/15"
-                        onClick={() => setIsWishPopupOpen(true)}
-                    >
-                        Test popup sinh nhật
-                    </button>
-
                   
                 </div>
             </div>

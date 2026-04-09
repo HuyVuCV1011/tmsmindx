@@ -16,6 +16,12 @@ export function Sidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  const closeSidebarOnMobile = useCallback(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setIsOpen(false);
+    }
+  }, [setIsOpen]);
+
   const normalizeRoleToken = (value?: string) =>
     (value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
 
@@ -293,6 +299,11 @@ export function Sidebar() {
       }
     });
   }, [menuItems, pathname, searchParams, expandedMenus, hasActiveDescendant]);
+
+  useEffect(() => {
+    closeSidebarOnMobile();
+  }, [pathname, closeSidebarOnMobile]);
+
   const toggleSubmenu = (label: string) => {
     setExpandedMenus(prev => {
       const updated = prev.includes(label)
@@ -346,13 +357,13 @@ export function Sidebar() {
       {/* Sidebar - Modern glass-morphism design */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-sidebar-custom h-screen backdrop-blur-xl bg-white/95 border-r border-gray-200 shadow-xl w-56",
+          "fixed inset-y-0 left-0 z-sidebar-custom h-dvh max-h-dvh overflow-hidden backdrop-blur-xl bg-white/95 border-r border-gray-200 shadow-xl w-56",
           "transition-all duration-500 ease-in-out will-change-transform",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
         style={{ transform: `translate3d(${isOpen ? '0' : '-100%'}, 0, 0)` }}
       >
-        <div className="flex h-full flex-col">
+        <div className="flex h-full min-h-0 flex-col">
           {/* Header - Solid brand header */}
           <div className="relative flex h-14 items-center justify-between bg-[#a1001f] px-4 text-white shadow-md">
             <div className="flex items-center gap-2">
@@ -373,7 +384,7 @@ export function Sidebar() {
           </div>
 
           {/* Navigation - Modern cards with smooth hover effects */}
-          <nav className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
+          <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1 pb-4 custom-scrollbar">
             {menuItems.map((item) => {
               const Icon = item.icon;
               const hasSubmenu = 'submenu' in item;
@@ -416,7 +427,14 @@ export function Sidebar() {
                           <Icon className="h-3.5 w-3.5" />
                         </div>
                         {item.href ? (
-                          <Link href={item.href} onClick={() => toggleSubmenu(item.label)} className="flex-1 text-left">
+                          <Link
+                            href={item.href}
+                            onClick={() => {
+                              toggleSubmenu(item.label);
+                              closeSidebarOnMobile();
+                            }}
+                            className="flex-1 text-left"
+                          >
                             {toTitleCase(item.label)}
                           </Link>
                         ) : (
@@ -478,6 +496,7 @@ export function Sidebar() {
                                         <Link
                                           key={nestedItem.href}
                                           href={nestedItem.href}
+                                          onClick={closeSidebarOnMobile}
                                           className={cn(
                                             "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium tracking-wide transition-all duration-300 hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-1",
                                             isNestedActive
@@ -501,6 +520,7 @@ export function Sidebar() {
                               <Link
                                 key={subItem.href}
                                 href={subItem.href}
+                                onClick={closeSidebarOnMobile}
                                 className={cn(
                                   "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium tracking-wide transition-all duration-300 hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-1",
                                   isSubActive
@@ -518,7 +538,10 @@ export function Sidebar() {
                   ) : (
                     <Link
                       href={item.href}
-                      onClick={handleTopLevelTabNavigation}
+                      onClick={() => {
+                        handleTopLevelTabNavigation();
+                        closeSidebarOnMobile();
+                      }}
                       className={cn(
                         "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold tracking-wide transition-all duration-300 group/item focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2",
                         isActive
@@ -544,9 +567,10 @@ export function Sidebar() {
 
           {/* User Info and Logout - Modern card design */}
           {user && (
-            <div className="border-t border-gray-200 bg-gray-50 p-3">
+            <div className="shrink-0 border-t border-gray-200 bg-gray-50 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
               <Link 
                 href={user.isAdmin ? '/admin/profile' : '/user/profile'}
+                onClick={closeSidebarOnMobile}
                 className={cn(
                   "mb-2 block cursor-pointer rounded-lg border p-2 shadow-sm transition-all duration-300 hover:scale-[1.01] hover:border-[#a1001f]/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2",
                   pathname === "/user/profile" || pathname === "/admin/profile"
@@ -571,7 +595,10 @@ export function Sidebar() {
               
               <button
                 className="group flex w-full items-center justify-center gap-2 rounded-lg border-2 border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all duration-300 hover:border-[#a1001f] hover:bg-[#a1001f] hover:text-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2"
-                onClick={logout}
+                onClick={() => {
+                  closeSidebarOnMobile();
+                  logout();
+                }}
               >
                 <LogOut className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
                 <span>Đăng Xuất</span>

@@ -225,7 +225,7 @@ export default function AdminDealLuongPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen p-4">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3">

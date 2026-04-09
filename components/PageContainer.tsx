@@ -31,10 +31,10 @@ export function PageContainer({
   };
 
   const paddingClasses = {
-    none: "",
-    sm: "p-0 sm:p-0 lg:p-1",
-    md: "p-0 sm:p-1 lg:p-1",
-    lg: "p-1 sm:p-1 lg:p-2",
+    none: "p-4",
+    sm: "p-4",
+    md: "p-4",
+    lg: "p-4",
   };
 
   return (

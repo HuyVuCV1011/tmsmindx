@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:migrate": "node scripts/run-all-migrations.js"
+    "db:migrate": "node scripts/run-all-migrations.js",
+    "ngrok:auth": "ngrok config add-authtoken",
+    "ngrok": "ngrok http 3000 --pooling-enabled"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",
@@ -79,6 +81,7 @@
     "baseline-browser-mapping": "^2.10.10",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
+    "ngrok": "^5.0.0-beta.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

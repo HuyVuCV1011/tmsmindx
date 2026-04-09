@@ -367,8 +367,8 @@ export default function TeacherProfilePage() {
 
                     <div className="p-6 space-y-4">
                         {/* Show Birthday Toggle */}
-                        <div className="flex items-center justify-between p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all">
-                            <div className="flex items-start gap-4">
+                        <div className="flex flex-col gap-3 p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-start gap-4 sm:pr-4">
                                 <div className="w-10 h-10 bg-[#f9e2e8] rounded-lg flex items-center justify-center shrink-0">
                                     <Calendar className="w-5 h-5 text-[#a1001f]" />
                                 </div>
@@ -382,21 +382,22 @@ export default function TeacherProfilePage() {
                             <button
                                 onClick={() => handlePrivacyToggle('show_birthday')}
                                 disabled={!privacySettings}
-                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 ${
+                                aria-label="Bật/tắt hiển thị sinh nhật"
+                                className={`relative inline-flex h-9 w-16 self-end items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 sm:h-8 sm:w-14 sm:self-center ${
                                     privacySettings?.show_birthday ? 'bg-[#a1001f]' : 'bg-gray-300'
                                 }`}
                             >
                                 <span
-                                    className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform ${
-                                        privacySettings?.show_birthday ? 'translate-x-7' : 'translate-x-1'
+                                    className={`inline-block h-7 w-7 transform rounded-full bg-white shadow-lg transition-transform sm:h-6 sm:w-6 ${
+                                        privacySettings?.show_birthday ? 'translate-x-8 sm:translate-x-7' : 'translate-x-1'
                                     }`}
                                 />
                             </button>
                         </div>
 
                         {/* Show on Public List Toggle */}
-                        <div className="flex items-center justify-between p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all">
-                            <div className="flex items-start gap-4">
+                        <div className="flex flex-col gap-3 p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-start gap-4 sm:pr-4">
                                 <div className="w-10 h-10 bg-[#f9e2e8] rounded-lg flex items-center justify-center shrink-0">
                                     {privacySettings?.show_on_public_list ? <Eye className="w-5 h-5 text-[#a1001f]" /> : <EyeOff className="w-5 h-5 text-[#a1001f]" />}
                                 </div>
@@ -410,21 +411,22 @@ export default function TeacherProfilePage() {
                             <button
                                 onClick={() => handlePrivacyToggle('show_on_public_list')}
                                 disabled={!privacySettings}
-                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 ${
+                                aria-label="Bật/tắt hiển thị trong danh sách công khai"
+                                className={`relative inline-flex h-9 w-16 self-end items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 sm:h-8 sm:w-14 sm:self-center ${
                                     privacySettings?.show_on_public_list ? 'bg-[#a1001f]' : 'bg-gray-300'
                                 }`}
                             >
                                 <span
-                                    className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform ${
-                                        privacySettings?.show_on_public_list ? 'translate-x-7' : 'translate-x-1'
+                                    className={`inline-block h-7 w-7 transform rounded-full bg-white shadow-lg transition-transform sm:h-6 sm:w-6 ${
+                                        privacySettings?.show_on_public_list ? 'translate-x-8 sm:translate-x-7' : 'translate-x-1'
                                     }`}
                                 />
                             </button>
                         </div>
 
                         {/* Show Phone Toggle */}
-                        <div className="flex items-center justify-between p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all">
-                            <div className="flex items-start gap-4">
+                        <div className="flex flex-col gap-3 p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-start gap-4 sm:pr-4">
                                 <div className="w-10 h-10 bg-[#f9e2e8] rounded-lg flex items-center justify-center shrink-0">
                                     <Mail className="w-5 h-5 text-[#a1001f]" />
                                 </div>
@@ -438,21 +440,22 @@ export default function TeacherProfilePage() {
                             <button
                                 onClick={() => handlePrivacyToggle('show_phone')}
                                 disabled={!privacySettings}
-                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 ${
+                                aria-label="Bật/tắt hiển thị số điện thoại"
+                                className={`relative inline-flex h-9 w-16 self-end items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 sm:h-8 sm:w-14 sm:self-center ${
                                     privacySettings?.show_phone ? 'bg-[#a1001f]' : 'bg-gray-300'
                                 }`}
                             >
                                 <span
-                                    className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform ${
-                                        privacySettings?.show_phone ? 'translate-x-7' : 'translate-x-1'
+                                    className={`inline-block h-7 w-7 transform rounded-full bg-white shadow-lg transition-transform sm:h-6 sm:w-6 ${
+                                        privacySettings?.show_phone ? 'translate-x-8 sm:translate-x-7' : 'translate-x-1'
                                     }`}
                                 />
                             </button>
                         </div>
 
                         {/* Show Personal Email Toggle */}
-                        <div className="flex items-center justify-between p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all">
-                            <div className="flex items-start gap-4">
+                        <div className="flex flex-col gap-3 p-4 bg-[#fff5f7] rounded-xl border border-[#f1d1d8] hover:border-[#d47a8b] transition-all sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-start gap-4 sm:pr-4">
                                 <div className="w-10 h-10 bg-[#f9e2e8] rounded-lg flex items-center justify-center shrink-0">
                                     <Mail className="w-5 h-5 text-[#a1001f]" />
                                 </div>
@@ -466,13 +469,14 @@ export default function TeacherProfilePage() {
                             <button
                                 onClick={() => handlePrivacyToggle('show_personal_email')}
                                 disabled={!privacySettings}
-                                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 ${
+                                aria-label="Bật/tắt hiển thị email cá nhân"
+                                className={`relative inline-flex h-9 w-16 self-end items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#a1001f] focus:ring-offset-2 disabled:opacity-50 sm:h-8 sm:w-14 sm:self-center ${
                                     privacySettings?.show_personal_email ? 'bg-[#a1001f]' : 'bg-gray-300'
                                 }`}
                             >
                                 <span
-                                    className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform ${
-                                        privacySettings?.show_personal_email ? 'translate-x-7' : 'translate-x-1'
+                                    className={`inline-block h-7 w-7 transform rounded-full bg-white shadow-lg transition-transform sm:h-6 sm:w-6 ${
+                                        privacySettings?.show_personal_email ? 'translate-x-8 sm:translate-x-7' : 'translate-x-1'
                                     }`}
                                 />
                             </button>
