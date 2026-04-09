@@ -315,3 +315,66 @@ export async function PUT(request: Request) {
     );
   }
 }
+
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const subjectId = Number(searchParams.get('id'));
+
+  if (!Number.isFinite(subjectId) || subjectId <= 0) {
+    return NextResponse.json(
+      { success: false, error: 'id bộ môn không hợp lệ' },
+      { status: 400 }
+    );
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Check subject exists
+    const existed = await client.query(
+      `SELECT id FROM chuyen_sau_monhoc WHERE id = $1`,
+      [subjectId]
+    );
+    if (existed.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { success: false, error: 'Không tìm thấy bộ môn' },
+        { status: 404 }
+      );
+    }
+
+    // Nullify selected_set_id on assignments pointing to sets of this subject
+    // (teacher_exam_assignments.selected_set_id has ON DELETE RESTRICT)
+    await client.query(
+      `UPDATE teacher_exam_assignments
+       SET selected_set_id = NULL
+       WHERE selected_set_id IN (
+         SELECT id FROM chuyen_sau_bode WHERE id_mon = $1
+       )`,
+      [subjectId]
+    );
+
+    // Delete the subject — cascades to:
+    //   chuyen_sau_bode (id_mon FK ON DELETE CASCADE)
+    //   chuyen_sau_chonde_thang (id_mon FK ON DELETE CASCADE)
+    //   chuyen_sau_bode_cauhoi via bode cascade (if FK exists)
+    //   monthly_exam_selections (subject_id FK ON DELETE CASCADE)
+    await client.query(
+      `DELETE FROM chuyen_sau_monhoc WHERE id = $1`,
+      [subjectId]
+    );
+
+    await client.query('COMMIT');
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    console.error('Error deleting exam subject:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to delete exam subject' },
+      { status: 500 }
+    );
+  } finally {
+    client.release();
+  }
+}

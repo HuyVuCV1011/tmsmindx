@@ -67,13 +67,23 @@ export default function SubjectDetailPage() {
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/exam-sets?subject_key=${encodeURIComponent(subject.subjectKey)}`);
+      // Filter by the DB subject id (URL param = chuyen_sau_monhoc.id) for accurate results
+      const dbSubjectId = parseInt(subjectId || '0', 10);
+      const url = dbSubjectId > 0
+        ? `/api/exam-sets?block_code=${encodeURIComponent(subject.blockCode)}&subject_code=${encodeURIComponent(subject.label)}`
+        : `/api/exam-sets?block_code=${encodeURIComponent(subject.blockCode)}`;
+      const response = await fetch(url);
       const data = await response.json();
 
       if (data.success) {
         const rows = (data.data || []) as Array<ExamSetRecord & { subject_id?: number }>;
         setSets(rows);
-        setSubjectDbId(rows[0]?.subject_id ?? null);
+        // Use URL param as the authoritative subject DB id
+        if (dbSubjectId > 0) {
+          setSubjectDbId(dbSubjectId);
+        } else {
+          setSubjectDbId(rows[0]?.subject_id ?? null);
+        }
       } else {
         toast.error(data.error || "Không thể tải danh sách bộ đề");
       }
@@ -113,6 +123,12 @@ export default function SubjectDetailPage() {
     return () => {
       cancelled = true;
     };
+  }, [subjectId]);
+
+  // Derive subjectDbId directly from URL param (= chuyen_sau_monhoc.id) immediately
+  useEffect(() => {
+    const id = parseInt(subjectId || '0', 10);
+    if (id > 0) setSubjectDbId(id);
   }, [subjectId]);
 
   useEffect(() => {

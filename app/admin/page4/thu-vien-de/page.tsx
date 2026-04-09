@@ -290,6 +290,7 @@ export default function ProfessionalAssignmentLibraryPage() {
   const [isCreatingSubject, setIsCreatingSubject] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectBlockCode, setNewSubjectBlockCode] = useState<BlockCode>("CODING");
+  const [isSubjectDropdownOpen, setIsSubjectDropdownOpen] = useState(false);
   const [newSubjectDurationMinutes, setNewSubjectDurationMinutes] = useState(120);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -318,6 +319,8 @@ export default function ProfessionalAssignmentLibraryPage() {
   const [isDurationSettingsOpen, setIsDurationSettingsOpen] = useState(false);
   const [isSavingDurationSettings, setIsSavingDurationSettings] = useState(false);
   const [durationFocusSubjectId, setDurationFocusSubjectId] = useState<string | null>(null);
+  const [isDeletingSubject, setIsDeletingSubject] = useState(false);
+  const [deleteSubjectConfirm, setDeleteSubjectConfirm] = useState(false);
   const [subjectDurations, setSubjectDurations] = useState<Record<string, number>>({});
 
   const [plannedEvents, setPlannedEvents] = useState<PlannedEvent[]>([]);
@@ -364,6 +367,7 @@ export default function ProfessionalAssignmentLibraryPage() {
   const closeDurationSettings = () => {
     setIsDurationSettingsOpen(false);
     setDurationFocusSubjectId(null);
+    setDeleteSubjectConfirm(false);
   };
 
   const setDragOverDateKeyThrottled = useCallback((nextKey: string | null) => {
@@ -779,6 +783,23 @@ export default function ProfessionalAssignmentLibraryPage() {
     setSubjectDurations(next);
   };
 
+  const handleDeleteSubject = async () => {
+    if (!durationFocusSubjectId) return;
+    setIsDeletingSubject(true);
+    try {
+      const res = await fetch(`/api/exam-subjects?id=${durationFocusSubjectId}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Xóa thất bại');
+      closeDurationSettings();
+      setDeleteSubjectConfirm(false);
+      await fetchSubjects();
+    } catch (err: any) {
+      alert('Lỗi khi xóa môn: ' + err.message);
+    } finally {
+      setIsDeletingSubject(false);
+    }
+  };
+
   const applyDurationSettingsToPlannedEvents = async () => {
     try {
       setIsSavingDurationSettings(true);
@@ -1116,7 +1137,8 @@ export default function ProfessionalAssignmentLibraryPage() {
   const handleOpenCreateSubjectModal = (blockCode?: BlockCode) => {
     const nextBlock = blockCode || selectedBlockCode || "CODING";
     setNewSubjectBlockCode(nextBlock);
-    setNewSubjectName("");
+    setNewSubjectName(nextBlock === "ART" ? "[ART] Chuyên Sâu" : "");
+    setIsSubjectDropdownOpen(false);
     setNewSubjectDurationMinutes(nextBlock === "PROCESS" ? 60 : 120);
     setIsCreateSubjectModalOpen(true);
   };
@@ -2126,20 +2148,86 @@ export default function ProfessionalAssignmentLibraryPage() {
         subtitle="Nhập tên môn để tạo thẻ môn học mới"
         maxWidth="md"
         headerColor="from-[#7f1d1d] to-[#b91c1c]"
+        overflowContent="visible"
       >
         <form onSubmit={handleCreateSubject} className="space-y-4">
           <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
             Tạo trong khối: <span className="font-semibold text-gray-800">{BLOCK_CONFIGS.find((block) => block.blockCode === newSubjectBlockCode)?.label || newSubjectBlockCode}</span>
           </div>
 
-          <div>
+          <div className="relative">
             <label className="mb-1 block text-sm font-medium text-gray-700">Tên môn</label>
-            <input
-              value={newSubjectName}
-              onChange={(e) => setNewSubjectName(e.target.value)}
-              placeholder="Ví dụ: [COD] JavaScript Nâng cao"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
+            {newSubjectBlockCode === "CODING" ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsSubjectDropdownOpen((v) => !v)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-left flex items-center justify-between bg-white"
+                >
+                  <span className={newSubjectName ? "text-gray-900" : "text-gray-400"}>
+                    {newSubjectName || "-- Chọn môn --"}
+                  </span>
+                  <svg className={`h-4 w-4 text-gray-500 transition-transform ${isSubjectDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </button>
+                {isSubjectDropdownOpen && (
+                  <ul className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg overflow-y-auto" style={{ maxHeight: '112px' }}>
+                    {["-- Chọn môn --", "[COD] Scratch", "[COD] GameMaker", "[COD] App Producer", "[COD] Web", "[COD] Computer Science"].map((opt) => (
+                      <li
+                        key={opt}
+                        onClick={() => { setNewSubjectName(opt === "-- Chọn môn --" ? "" : opt); setIsSubjectDropdownOpen(false); }}
+                        className={`cursor-pointer px-3 py-2 text-sm hover:bg-violet-50 hover:text-violet-700 ${
+                          (newSubjectName === opt || (opt === "-- Chọn môn --" && !newSubjectName)) ? "bg-violet-50 font-medium text-violet-700" : "text-gray-700"
+                        }`}
+                      >
+                        {opt}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : newSubjectBlockCode === "ROBOTICS" ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsSubjectDropdownOpen((v) => !v)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-left flex items-center justify-between bg-white"
+                >
+                  <span className={newSubjectName ? "text-gray-900" : "text-gray-400"}>
+                    {newSubjectName || "-- Chọn môn --"}
+                  </span>
+                  <svg className={`h-4 w-4 text-gray-500 transition-transform ${isSubjectDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </button>
+                {isSubjectDropdownOpen && (
+                  <ul className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg overflow-y-auto" style={{ maxHeight: '112px' }}>
+                    {["-- Chọn môn --", "[ROB] Vex GO", "[ROB] Vex IQ"].map((opt) => (
+                      <li
+                        key={opt}
+                        onClick={() => { setNewSubjectName(opt === "-- Chọn môn --" ? "" : opt); setIsSubjectDropdownOpen(false); }}
+                        className={`cursor-pointer px-3 py-2 text-sm hover:bg-orange-50 hover:text-orange-700 ${
+                          (newSubjectName === opt || (opt === "-- Chọn môn --" && !newSubjectName)) ? "bg-orange-50 font-medium text-orange-700" : "text-gray-700"
+                        }`}
+                      >
+                        {opt}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : newSubjectBlockCode === "ART" ? (
+              <input
+                value={newSubjectName || "[ART] Chuyên Sâu"}
+                onChange={(e) => setNewSubjectName(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                readOnly
+              />
+            ) : (
+              <input
+                value={newSubjectName}
+                onChange={(e) => setNewSubjectName(e.target.value)}
+                placeholder="Ví dụ: [COD] JavaScript Nâng cao"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            )}
           </div>
 
           <div>
@@ -2856,14 +2944,47 @@ export default function ProfessionalAssignmentLibraryPage() {
           </div>
 
           <div className="flex justify-between gap-2 border-t border-gray-200 pt-3">
-            <button
-              type="button"
-              onClick={handleResetSubjectDurations}
-              disabled={isSavingDurationSettings}
-              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              {durationFocusSubjectId ? "Khôi phục môn này" : "Khôi phục mặc định"}
-            </button>
+            {durationFocusSubjectId ? (
+              deleteSubjectConfirm ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-red-600 font-medium">Xác nhận xóa môn này?</span>
+                  <button
+                    type="button"
+                    onClick={handleDeleteSubject}
+                    disabled={isDeletingSubject}
+                    className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-60"
+                  >
+                    {isDeletingSubject ? "Đang xóa..." : "Xác nhận"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteSubjectConfirm(false)}
+                    disabled={isDeletingSubject}
+                    className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Hủy
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setDeleteSubjectConfirm(true)}
+                  disabled={isSavingDurationSettings}
+                  className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-60"
+                >
+                  Xóa môn
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                onClick={handleResetSubjectDurations}
+                disabled={isSavingDurationSettings}
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Khôi phục mặc định
+              </button>
+            )}
             <div className="flex gap-2">
               <button
                 type="button"

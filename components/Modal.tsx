@@ -11,6 +11,7 @@ interface ModalProps {
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | '6xl' | '7xl';
   footer?: ReactNode;
   headerColor?: string;
+  overflowContent?: 'auto' | 'visible';
 }
 
 export default function Modal({
@@ -21,7 +22,8 @@ export default function Modal({
   children,
   maxWidth = '2xl',
   footer,
-  headerColor = 'from-blue-600 to-blue-700'
+  headerColor = 'from-blue-600 to-blue-700',
+  overflowContent = 'auto'
 }: ModalProps) {
   // Handle ESC key
   useEffect(() => {
@@ -71,7 +73,7 @@ export default function Modal({
 
       {/* Modal Content */}
       <div
-        className={`relative bg-white rounded-xl shadow-2xl w-full ${maxWidthClasses[maxWidth]} max-h-[95vh] overflow-y-auto my-4 animate-modal-in`}
+        className={`relative bg-white rounded-xl shadow-2xl w-full ${maxWidthClasses[maxWidth]} max-h-[95vh] my-4 animate-modal-in ${overflowContent === 'visible' ? 'overflow-visible' : 'overflow-y-auto'}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
