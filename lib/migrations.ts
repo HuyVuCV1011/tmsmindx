@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 
 // ============================================================
 // Hệ thống Migration tự động cho TMS
@@ -3055,7 +3055,7 @@ export async function runMigrations(pool: Pool): Promise<{ success: boolean; app
   const errors: string[] = [];
 
   // Use a single client for all migrations to ensure connection stability and performance
-  let client;
+  let client: PoolClient | undefined;
   try {
     client = await pool.connect();
 
@@ -3074,6 +3074,37 @@ export async function runMigrations(pool: Pool): Promise<{ success: boolean; app
       const result = await client.query('SELECT name FROM _migrations');
       const appliedMigrations = new Set(result.rows.map((r: { name: string }) => r.name));
 
+      // Cache cho legacy bridge check (chỉ cần query 1 lần cho cả V43 và V52)
+      let cachedBridgeState: {
+        hasLegacyExamTables: boolean;
+        hasCanonicalChuyenSau: boolean;
+      } | null = null;
+
+      const getBridgeState = async () => {
+        if (cachedBridgeState) return cachedBridgeState;
+        const tableState = await client!.query(`
+          SELECT
+            to_regclass('public.exam_subject_catalog') IS NOT NULL AS has_exam_subject_catalog,
+            to_regclass('public.exam_sets') IS NOT NULL AS has_exam_sets,
+            to_regclass('public.exam_set_questions') IS NOT NULL AS has_exam_set_questions,
+            to_regclass('public.chuyen_sau_monhoc') IS NOT NULL AS has_chuyen_sau_monhoc,
+            to_regclass('public.chuyen_sau_bode') IS NOT NULL AS has_chuyen_sau_bode,
+            to_regclass('public.chuyen_sau_cauhoi') IS NOT NULL AS has_chuyen_sau_cauhoi
+        `);
+        const state = tableState.rows[0] || {};
+        cachedBridgeState = {
+          hasLegacyExamTables:
+            Boolean(state.has_exam_subject_catalog) &&
+            Boolean(state.has_exam_sets) &&
+            Boolean(state.has_exam_set_questions),
+          hasCanonicalChuyenSau:
+            Boolean(state.has_chuyen_sau_monhoc) &&
+            Boolean(state.has_chuyen_sau_bode) &&
+            Boolean(state.has_chuyen_sau_cauhoi),
+        };
+        return cachedBridgeState;
+      };
+
       // Bước 3: Chạy từng migration chưa applied
       for (const migration of migrations) {
         if (appliedMigrations.has(migration.name)) {
@@ -3083,25 +3114,7 @@ export async function runMigrations(pool: Pool): Promise<{ success: boolean; app
         // Legacy bridge: if old exam_* tables are gone and canonical chuyen_sau_* exists,
         // mark legacy-dependent migrations as applied to avoid repeated "relation exam_sets does not exist" errors.
         if (migration.name === 'V43_create_chuyensau_database_model' || migration.name === 'V52_subject_driven_exam_config') {
-          const tableState = await client.query(`
-            SELECT
-              to_regclass('public.exam_subject_catalog') IS NOT NULL AS has_exam_subject_catalog,
-              to_regclass('public.exam_sets') IS NOT NULL AS has_exam_sets,
-              to_regclass('public.exam_set_questions') IS NOT NULL AS has_exam_set_questions,
-              to_regclass('public.chuyen_sau_monhoc') IS NOT NULL AS has_chuyen_sau_monhoc,
-              to_regclass('public.chuyen_sau_bode') IS NOT NULL AS has_chuyen_sau_bode,
-              to_regclass('public.chuyen_sau_cauhoi') IS NOT NULL AS has_chuyen_sau_cauhoi
-          `);
-
-          const state = tableState.rows[0] || {};
-          const hasLegacyExamTables =
-            Boolean(state.has_exam_subject_catalog) &&
-            Boolean(state.has_exam_sets) &&
-            Boolean(state.has_exam_set_questions);
-          const hasCanonicalChuyenSau =
-            Boolean(state.has_chuyen_sau_monhoc) &&
-            Boolean(state.has_chuyen_sau_bode) &&
-            Boolean(state.has_chuyen_sau_cauhoi);
+          const { hasLegacyExamTables, hasCanonicalChuyenSau } = await getBridgeState();
 
           if (!hasLegacyExamTables && hasCanonicalChuyenSau) {
             await client.query(
