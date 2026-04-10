@@ -3,6 +3,7 @@
 import { Calendar, Clock, ArrowRight, Users, Lock } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import useSWR from 'swr'
 
 import { useAuth } from '@/lib/auth-context'
@@ -430,8 +431,8 @@ export function UpcomingEventsSidebar() {
             </div>
 
             {/* Upcoming Birthdays Section */}
-            <div className="bg-linear-to-br from-red-800 via-red-900 to-rose-900 rounded-2xl overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300">
-                <div className="p-4 border-b border-white/10 bg-linear-to-r from-red-700/50 to-transparent">
+            <div className="bg-red-900 rounded-2xl overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300">
+                <div className="p-4 border-b border-white/10 bg-red-800">
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2.5">
                         <span className="text-xl">🎂</span>
                         <span>
@@ -503,8 +504,7 @@ export function UpcomingEventsSidebar() {
                             <span className="group-hover:scale-125 transition-transform">💌</span>
                         </span>
                     </button>
-
-                   
+                  
                 </div>
             </div>
         </div>
@@ -531,16 +531,16 @@ export function UpcomingEventsSidebar() {
                 fallbackSenderEmail={user?.email || null}
             />
 
-            {isPopupPreferenceDialogOpen && (
+            {isPopupPreferenceDialogOpen && typeof document !== 'undefined' && createPortal(
                 <div
-                    className="fixed inset-0 z-120 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4"
+                    className="fixed inset-0 z-9999 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4"
                     onClick={() => setIsPopupPreferenceDialogOpen(false)}
                 >
                     <div
                         className="w-full max-w-md rounded-2xl border border-white/70 bg-white shadow-2xl overflow-hidden"
                         onClick={(event) => event.stopPropagation()}
                     >
-                        <div className="h-1.5 bg-linear-to-r from-[#a1001f] to-[#c41230]" />
+                        <div className="h-1.5 bg-[#a1001f]" />
                         <div className="p-5">
                             <h3 className="text-lg font-bold text-gray-900">Hiển thị lại popup sinh nhật?</h3>
                             <p className="mt-2 text-sm text-gray-600 leading-relaxed">
@@ -558,14 +558,15 @@ export function UpcomingEventsSidebar() {
                                 <button
                                     type="button"
                                     onClick={handleEnablePopupNextLogin}
-                                    className="rounded-xl bg-linear-to-r from-[#a1001f] to-[#c41230] px-3 py-2.5 text-sm font-semibold text-white hover:from-[#8a001a] hover:to-[#ad102a]"
+                                    className="rounded-xl bg-[#a1001f] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[#8a001a]"
                                 >
                                     Có, tiếp tục hiển thị
                                 </button>
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     )

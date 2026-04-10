@@ -79,7 +79,7 @@ export function AuthLayout() {
                   variant="link"
                   className="w-full text-sm text-muted-foreground"
                 >
-                  Forgot password?
+                 Quên mật khẩu?
                 </Button>
               </CardFooter>
             </form>

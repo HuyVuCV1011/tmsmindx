@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { NextRequest, NextResponse } from 'next/server';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'tms-app-secret-key-2024';
+const JWT_SECRET = process.env.JWT_SECRET || 'tps-app-secret-key-2024';
 
 export async function POST(request: NextRequest) {
     try {
@@ -89,25 +89,26 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Get direct permissions
-        const directPerms = await pool.query(
-            'SELECT route_path FROM app_permissions WHERE user_id = $1 AND can_access = true',
+        // Fetch direct and role-based permissions in one round-trip to reduce
+        // pressure on the shared pool during login.
+        const permissionsResult = await pool.query(
+            `SELECT DISTINCT route_path
+             FROM (
+               SELECT route_path
+               FROM app_permissions
+               WHERE user_id = $1 AND can_access = true
+
+               UNION
+
+               SELECT rp.route_path
+               FROM user_roles ur
+               JOIN role_permissions rp ON rp.role_code = ur.role_code
+               WHERE ur.user_id = $1
+             ) permissions`,
             [user.id]
         );
 
-        // Get role-based permissions (via user_roles → role_permissions)
-        const rolePerms = await pool.query(`
-            SELECT DISTINCT rp.route_path
-            FROM user_roles ur
-            JOIN role_permissions rp ON rp.role_code = ur.role_code
-            WHERE ur.user_id = $1
-        `, [user.id]);
-
-        // Merge: union of direct + role-based
-        const allPerms = new Set<string>();
-        directPerms.rows.forEach((r: { route_path: string }) => allPerms.add(r.route_path));
-        rolePerms.rows.forEach((r: { route_path: string }) => allPerms.add(r.route_path));
-        const permissions = Array.from(allPerms);
+        const permissions = permissionsResult.rows.map((row: { route_path: string }) => row.route_path);
 
         const hasAdminPerms = permissions.some(p => p.startsWith('/admin'));
         const isAdmin = ['super_admin', 'admin', 'manager'].includes(user.role) || hasAdminPerms;

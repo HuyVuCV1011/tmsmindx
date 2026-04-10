@@ -209,7 +209,7 @@ export default function TrainingDetailPage() {
                   : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
-              Tong quan
+              TỔNG QUAN
             </button>
             <button
               type="button"

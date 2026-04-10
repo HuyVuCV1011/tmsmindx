@@ -42,7 +42,7 @@ export default function TrainingTestPage() {
               value={teacherCode}
               onChange={(e) => setTeacherCode(e.target.value)}
               placeholder="Enter teacher code (e.g., trucnt2)"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#a1001f] focus:ring-1 focus:ring-[#a1001f]/25"
             />
             <button
               onClick={fetchData}

@@ -217,7 +217,7 @@ export default function CreatePostPage() {
     }
 
     return (
-        <div className="space-y-5">
+        <div className="w-full px-4 lg:px-6 py-5 space-y-5">
             {/* Header */}
             <div className="flex items-center gap-3 pb-4 border-b border-gray-200">
                 <Link href="/admin/truyenthong/posts">

@@ -14,7 +14,7 @@ export default async function UserPage2({ searchParams }: PageProps) {
   return (
     <K12DocsClient
       basePath="/user/page2"
-      pageTitle="Quy trình quy định K12 Teaching"
+      pageTitle="Quy Trình, Quy Định K12 Teaching"
       tree={docs.tree}
       documents={docs.documents}
       selectedSlug={selectedSlug}

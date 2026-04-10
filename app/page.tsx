@@ -41,7 +41,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-gray-300 rounded w-1/4"></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -191,7 +191,7 @@ export default function AssignmentManagementPage() {
 
   return (
     <PageContainer
-      title="Quản lý Assignments"
+      title="Cấu hình bài kiểm tra"
       description="Tạo và quản lý bài tập, quiz cho video đào tạo"
     >
       {/* Create Button */}

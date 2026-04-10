@@ -5,6 +5,7 @@
 File này hướng dẫn chi tiết cách đo lường số lượng người truy cập đồng thời (concurrent users) cho ứng dụng Next.js 15 + PostgreSQL, giúp dự tính khả năng chịu tải của hệ thống.
 
 **Stack hiện tại:**
+
 - Next.js 15 (Vercel deployment)
 - PostgreSQL
 - Firebase Auth
@@ -17,7 +18,9 @@ File này hướng dẫn chi tiết cách đo lường số lượng người tr
 ### 1. **Realtime Analytics (Ngay lập tức)**
 
 #### 1.1 Google Analytics 4 (GA4) - RECOMMENDED cho Web
+
 **Ưu điểm:**
+
 - ✅ Miễn phí, dễ setup
 - ✅ Real-time viewed users
 - ✅ Xem được số người đang truy cập lúc này
@@ -48,6 +51,7 @@ export function initializeGoogleAnalytics() {
 ```
 
 **Cách xem metrics:**
+
 - Google Analytics > Reports > Realtime > Overview
 - Xem "Currently active users" (người online lúc này)
 - Xem "Active users past 30 mins"
@@ -55,7 +59,9 @@ export function initializeGoogleAnalytics() {
 ---
 
 #### 1.2 Vercel Web Analytics - EASIEST
+
 **Ưu điểm:**
+
 - ✅ Đơn giản nhất (chỉ 1 dòng)
 - ✅ Không cần GA4 setup phức tạp
 - ✅ Real-time data
@@ -88,6 +94,7 @@ export default function RootLayout({
 ```
 
 **Xem metrics:**
+
 - Vercel Dashboard > Project > Analytics
 - Xem real-time users
 
@@ -142,7 +149,7 @@ export async function GET() {
       FROM session_tracking
       WHERE last_activity > $1
     `,
-      [fiveMinutesAgo]
+      [fiveMinutesAgo],
     );
 
     const data = result.rows[0];
@@ -160,7 +167,7 @@ export async function GET() {
       ORDER BY users_on_page DESC
       LIMIT 20
     `,
-      [fiveMinutesAgo]
+      [fiveMinutesAgo],
     );
 
     return Response.json({
@@ -175,7 +182,9 @@ export async function GET() {
         by_route: routeBreakdown.rows,
       },
       metrics: {
-        pages_per_user: (routeBreakdown.rows.length / data.unique_users).toFixed(2),
+        pages_per_user: (
+          routeBreakdown.rows.length / data.unique_users
+        ).toFixed(2),
         bounce_rate: "Cần track view duration", // TODO
       },
     });
@@ -196,7 +205,7 @@ import { db } from "@/lib/db";
 export async function trackSession(
   request: Request,
   userId?: string,
-  userEmail?: string
+  userEmail?: string,
 ) {
   try {
     const cookieStore = await cookies();
@@ -214,7 +223,8 @@ export async function trackSession(
     const url = new URL(request.url);
     const headers = request.headers;
     const userAgent = headers.get("user-agent") || "unknown";
-    const ipAddress = headers.get("x-forwarded-for") || headers.get("x-real-ip") || "unknown";
+    const ipAddress =
+      headers.get("x-forwarded-for") || headers.get("x-real-ip") || "unknown";
 
     // Detect device type
     const isMobile = /mobile|android|iphone/i.test(userAgent);
@@ -233,7 +243,15 @@ export async function trackSession(
         user_id = COALESCE($2, user_id),
         user_email = COALESCE($3, user_email)
     `,
-      [sessionId, userId || null, userEmail || null, ipAddress, userAgent, url.pathname, deviceType]
+      [
+        sessionId,
+        userId || null,
+        userEmail || null,
+        ipAddress,
+        userAgent,
+        url.pathname,
+        deviceType,
+      ],
     );
   } catch (error) {
     console.error("Session tracking error:", error);
@@ -274,6 +292,7 @@ export default async function RootLayout({
 ### 3. **Advanced Monitoring Tools**
 
 #### 3.1 Sentry (Error + Performance)
+
 **Tốt cho:** Error tracking + Performance monitoring
 
 ```bash
@@ -298,6 +317,7 @@ Sentry.init({
 ```
 
 **Metrics available:**
+
 - Transaction count
 - User sessions
 - Performance data
@@ -305,6 +325,7 @@ Sentry.init({
 ---
 
 #### 3.2 Datadog (Enterprise solution)
+
 **Tốt cho:** Full-stack monitoring
 
 ```bash
@@ -316,9 +337,11 @@ npm install @datadog/browser-rum
 ---
 
 #### 3.3 New Relic (Recommended Alternative)
+
 **Setup:** Sinh API key, thêm script
 
 **Metrics:**
+
 - Throughput
 - Response time
 - Error rate
@@ -374,7 +397,7 @@ DAU = 50 × 30 / 120 = 12.5 users/minute
 
 ```sql
 -- Concurrent Users Timeline
-SELECT 
+SELECT
   DATE_TRUNC('minute', last_activity) as minute,
   COUNT(*) as concurrent_users,
   COUNT(DISTINCT user_id) as unique_users
@@ -383,7 +406,7 @@ GROUP BY DATE_TRUNC('minute', last_activity)
 ORDER BY minute DESC;
 
 -- Peak Hours Analysis
-SELECT 
+SELECT
   DATE_TRUNC('hour', created_at) as hour,
   COUNT(DISTINCT session_id) as sessions,
   COUNT(DISTINCT user_id) as users,
@@ -393,7 +416,7 @@ GROUP BY DATE_TRUNC('hour', created_at)
 ORDER BY sessions DESC;
 
 -- Device Distribution
-SELECT 
+SELECT
   device_type,
   COUNT(*) as count,
   ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER(), 2) as percentage
@@ -402,7 +425,7 @@ WHERE last_activity > NOW() - INTERVAL '1 hour'
 GROUP BY device_type;
 
 -- Geographic Distribution (if IP tracking)
-SELECT 
+SELECT
   ip_address,
   COUNT(DISTINCT session_id) as sessions,
   MAX(last_activity) as last_seen
@@ -416,23 +439,27 @@ ORDER BY sessions DESC;
 ## 🛠️ Implementation Checklist
 
 ### Phase 1: Setup Cơ Bản (1-2 hours)
+
 - [ ] Install Vercel Analytics hoặc Google Analytics
 - [ ] Setup GA4 property
 - [ ] Add tracking script to `app/layout.tsx`
 - [ ] Test real-time data
 
 ### Phase 2: Custom Tracking (3-4 hours)
+
 - [ ] Create `session_tracking` table
 - [ ] Create `/api/metrics/concurrent-users` endpoint
 - [ ] Add session tracking middleware
 - [ ] Cleanup old sessions (cron job)
 
 ### Phase 3: Dashboard (2-3 hours)
+
 - [ ] Create monitoring dashboard page
 - [ ] Display real-time charts
 - [ ] Setup alerts
 
 ### Phase 4: Analysis (Ongoing)
+
 - [ ] Daily review metrics
 - [ ] Monthly capacity report
 - [ ] Identify growth trends
@@ -442,6 +469,7 @@ ORDER BY sessions DESC;
 ## 📋 Recommended Setup Order
 
 ### Bước 1: Quick Start (Ngay hôm nay)
+
 ```bash
 # Setup Vercel Analytics - Easiest
 npm install @vercel/analytics @vercel/web-vitals
@@ -451,15 +479,17 @@ import { Analytics } from "@vercel/analytics/react";
 ```
 
 ### Bước 2: Custom Session Tracking
+
 ```bash
 # Add migration
-psql -d teachingms < scripts/create_session_tracking.sql
+psql -d teaching_portal_system < scripts/create_session_tracking.sql
 
 # Implement middleware
 # Implement API endpoint
 ```
 
 ### Bước 3: Monitoring Dashboard
+
 ```typescript
 // Create app/admin/monitoring/page.tsx
 // Display real-time concurrent users chart
@@ -469,13 +499,13 @@ psql -d teachingms < scripts/create_session_tracking.sql
 
 ## 📌 Key Metrics to Monitor
 
-| Metric | Target | Warning | Critical |
-|--------|--------|---------|----------|
-| Concurrent Users | 10 | 50 | 100 |
-| Response Time (p95) | <500ms | >1s | >3s |
-| Database Connections | <20 | >50 | >80 |
-| Error Rate | <0.1% | >1% | >5% |
-| Page Load Time (LCP) | <2.5s | >4s | >10s |
+| Metric               | Target | Warning | Critical |
+| -------------------- | ------ | ------- | -------- |
+| Concurrent Users     | 10     | 50      | 100      |
+| Response Time (p95)  | <500ms | >1s     | >3s      |
+| Database Connections | <20    | >50     | >80      |
+| Error Rate           | <0.1%  | >1%     | >5%      |
+| Page Load Time (LCP) | <2.5s  | >4s     | >10s     |
 
 ---
 
@@ -512,14 +542,14 @@ cron.schedule("0 * * * *", async () => {
 
 ## 🔗 Useful Services
 
-| Service | Cost | Use Case |
-|---------|------|----------|
-| Google Analytics 4 | Free | Real-time users, detailed events |
-| Vercel Analytics | Free (built-in) | Basic web metrics |
-| Sentry | Free tier | Error tracking + perf |
-| Datadog | $15+/month | Enterprise monitoring |
-| New Relic | $9.99/month | Comprehensive APM |
-| AWS CloudWatch | Pay-per-use | If use AWS |
+| Service            | Cost            | Use Case                         |
+| ------------------ | --------------- | -------------------------------- |
+| Google Analytics 4 | Free            | Real-time users, detailed events |
+| Vercel Analytics   | Free (built-in) | Basic web metrics                |
+| Sentry             | Free tier       | Error tracking + perf            |
+| Datadog            | $15+/month      | Enterprise monitoring            |
+| New Relic          | $9.99/month     | Comprehensive APM                |
+| AWS CloudWatch     | Pay-per-use     | If use AWS                       |
 
 ---
 
@@ -530,10 +560,10 @@ cron.schedule("0 * * * *", async () => {
 curl http://localhost:3000/api/metrics/concurrent-users
 
 # Check database
-psql -d teachingms -c "SELECT COUNT(*) FROM session_tracking;"
+psql -d teaching_portal_system -c "SELECT COUNT(*) FROM session_tracking;"
 
 # Monitor live
-watch -n 5 'psql -d teachingms -c "SELECT COUNT(*) FROM session_tracking WHERE last_activity > NOW() - INTERVAL 5m;"'
+watch -n 5 'psql -d teaching_portal_system -c "SELECT COUNT(*) FROM session_tracking WHERE last_activity > NOW() - INTERVAL 5m;"'
 ```
 
 ---
