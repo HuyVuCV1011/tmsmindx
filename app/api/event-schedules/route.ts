@@ -13,24 +13,36 @@ const EVENT_TYPES = [
 
 type EventType = (typeof EVENT_TYPES)[number];
 
+const VN_TZ = 'Asia/Ho_Chi_Minh';
+
 function isValidEventType(value: string): value is EventType {
   return EVENT_TYPES.includes(value as EventType);
 }
 
-function parseDateValue(value: string | null | undefined) {
+// Convert any datetime string to VN wall-clock string (YYYY-MM-DD HH:MM:SS).
+// Returns a string (not Date) so pg driver skips prepareDate, avoiding server-TZ-dependent shifts.
+function parseDateValue(value: string | null | undefined): string | null {
   if (!value) return null;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
+  const fmt = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: VN_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
+  return fmt.format(parsed); // "YYYY-MM-DD HH:MM:SS" VN wall-clock
 }
 
-function toTimestampString(value: Date | string | null | undefined) {
+// Read TIMESTAMP WITHOUT TIME ZONE from pg and return VN wall-clock string.
+// Uses Intl so result is correct on any server timezone (Vercel UTC or local VN).
+function toTimestampString(value: Date | string | null | undefined): string | null {
   if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
+  const date = value instanceof Date ? value : new Date(value as string);
   if (Number.isNaN(date.getTime())) return null;
-
-  const pad = (part: number) => String(part).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  const fmt = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: VN_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
+  return fmt.format(date);
 }
 
 function serializeEventScheduleRow(row: Record<string, any>) {
@@ -149,6 +161,13 @@ export const POST = withApiProtection(async (request: NextRequest) => {
         { status: 400 }
       );
     }
+    // Validate chronological order using Date objects
+    if (new Date(endAt) <= new Date(startAt)) {
+      return NextResponse.json(
+        { success: false, error: 'end_at must be after start_at' },
+        { status: 400 }
+      );
+    }
 
     if (registration_template && !['official', 'supplement'].includes(String(registration_template))) {
       return NextResponse.json(
@@ -171,7 +190,7 @@ export const POST = withApiProtection(async (request: NextRequest) => {
         created_by,
         updated_by
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6::timestamp, $7::timestamp, $8, $9::jsonb, $10, $11)
       RETURNING *
     `;
 
@@ -268,7 +287,8 @@ export const PUT = withApiProtection(async (request: NextRequest) => {
           { status: 400 }
         );
       }
-      pushField('start_at', parsed);
+      values.push(parsed);
+      fields.push(`start_at = $${values.length}::timestamp`);
     }
 
     if (end_at !== undefined) {
@@ -279,7 +299,8 @@ export const PUT = withApiProtection(async (request: NextRequest) => {
           { status: 400 }
         );
       }
-      pushField('end_at', parsed);
+      values.push(parsed);
+      fields.push(`end_at = $${values.length}::timestamp`);
     }
 
     if (note !== undefined) pushField('note', note ? String(note) : null);
@@ -313,12 +334,6 @@ export const PUT = withApiProtection(async (request: NextRequest) => {
     }
 
     const updated = result.rows[0];
-    if (new Date(updated.end_at) <= new Date(updated.start_at)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid start_at/end_at after update' },
-        { status: 400 }
-      );
-    }
 
     return NextResponse.json({
       success: true,
