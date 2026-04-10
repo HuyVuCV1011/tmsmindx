@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/PageContainer";
 import { cn } from "@/lib/utils";
 import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { Children, isValidElement, useMemo, useState, useEffect, useRef } from "react";
 import Markdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
@@ -52,6 +52,12 @@ function slugify(input: string) {
 
 function normalizeGitbookMarkdown(raw: string) {
   let content = raw;
+
+  // Remove decorative hero/banner image at the top of GitBook pages.
+  // Support CRLF/LF and both raw HTML <figure> and markdown image syntaxes.
+  content = content.replace(/^<figure>[\s\S]*?<\/figure>(?:\r?\n)*/i, "");
+  content = content.replace(/^(#\s+.+\r?\n)(?:\r?\n)?<figure>[\s\S]*?<\/figure>(?:\r?\n)*/i, "$1\n");
+  content = content.replace(/^(#\s+.+\r?\n)(?:\r?\n)?!\[[^\]]*\]\([^\)]+\)(?:\r?\n)*/i, "$1\n");
 
   // Convert GitBook hint blocks to quote blocks so they remain readable in markdown.
   content = content.replace(
@@ -104,6 +110,48 @@ function mapGitbookHref(href: string, basePath: string) {
   return href;
 }
 
+function getPlainText(node: unknown): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map((item) => getPlainText(item)).join("").trim();
+  if (isValidElement(node)) {
+    const props = (node.props as { children?: unknown }) || {};
+    return getPlainText(props.children);
+  }
+  return "";
+}
+
+function findFirstAnchor(node: unknown): { href: string; label: string } | null {
+  if (!isValidElement(node)) return null;
+
+  if (node.type === "a") {
+    const anchorProps = node.props as { href?: string; children?: unknown };
+    const href = (anchorProps.href || "").trim();
+    if (!href) return null;
+
+    const label = getPlainText(anchorProps.children).trim();
+    if (!label) return null;
+
+    return { href, label };
+  }
+
+  const props = node.props as { children?: unknown };
+  const children = Children.toArray(props.children as any);
+  for (const child of children) {
+    const found = findFirstAnchor(child);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+function extractListItemLink(liNode: unknown): { href: string; label: string } | null {
+  if (!isValidElement(liNode) || liNode.type !== "li") return null;
+
+  const anchor = findFirstAnchor(liNode);
+  return anchor;
+}
+
 export default function K12DocsClient({
   basePath,
   pageTitle,
@@ -116,6 +164,25 @@ export default function K12DocsClient({
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [expandedLevelOne, setExpandedLevelOne] = useState<Record<string, boolean>>({});
   const [isMiniToc, setIsMiniToc] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+
+    const updateViewport = (event?: MediaQueryListEvent) => {
+      const matches = event ? event.matches : mediaQuery.matches;
+      setIsMobileViewport(matches);
+    };
+
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+    return () => mediaQuery.removeEventListener("change", updateViewport);
+  }, []);
+
+  const handleTocSelect = () => {
+    if (!isMobileViewport) return;
+    setIsMiniToc(true);
+  };
 
   const selectedDoc = useMemo(() => {
     const effective = selectedSlug || defaultSlug;
@@ -126,16 +193,20 @@ export default function K12DocsClient({
     const targetSlug = selectedDoc?.slug;
     if (!targetSlug) return null;
 
-    const findRootBySlug = (nodes: K12ClientDocNode[], rootId: string | null): string | null => {
+    const findRootBySlug = (
+      nodes: K12ClientDocNode[],
+      rootId: string | null,
+      depth = 0
+    ): string | null => {
       for (const node of nodes) {
-        const nextRootId = rootId ?? (!node.slug && node.children?.length ? node.id : null);
+        const nextRootId = rootId ?? (depth === 0 && node.children?.length ? node.id : null);
 
         if (node.slug === targetSlug) {
           return nextRootId;
         }
 
         if (node.children?.length) {
-          const found = findRootBySlug(node.children, nextRootId);
+          const found = findRootBySlug(node.children, nextRootId, depth + 1);
           if (found) return found;
         }
       }
@@ -150,7 +221,7 @@ export default function K12DocsClient({
     const initial: Record<string, boolean> = {};
 
     tree.forEach((node) => {
-      if (!node.slug && node.children && node.children.length > 0) {
+      if (node.children && node.children.length > 0) {
         initial[node.id] = true;
       }
     });
@@ -196,23 +267,18 @@ export default function K12DocsClient({
     return normalizeGitbookMarkdown(selectedDoc.content);
   }, [selectedDoc]);
 
-  const heroImage = selectedDoc?.coverImageUrl || "";
-  const heroTopic = selectedDoc?.topic || pageTitle;
-  const heroExcerpt = selectedDoc?.excerpt || "";
-
   const renderTree = (nodes: K12ClientDocNode[], depth = 0) => {
     return nodes
       .map((node) => {
         const hasChildren = Boolean(node.children && node.children.length > 0);
-        const isDoc = Boolean(node.slug);
         const renderedChildren = hasChildren ? renderTree(node.children as K12ClientDocNode[], depth + 1) : [];
 
         const isActive = node.slug && selectedDoc?.slug === node.slug;
+        const isExpanded = expandedLevelOne[node.id] ?? true;
         return (
           <div key={node.id} className="space-y-1">
             {node.slug ? (
-              <Link
-                href={`${basePath}?doc=${encodeURIComponent(node.slug)}`}
+              <div
                 className={cn(
                   "group flex items-center rounded-md px-2 py-1.5 text-sm transition-colors",
                   isActive
@@ -221,22 +287,45 @@ export default function K12DocsClient({
                 )}
                 style={{ paddingLeft: `${8 + depth * 14}px` }}
               >
-                <ChevronRight
-                  className={cn(
-                    "mr-1 h-3.5 w-3.5 shrink-0",
-                    isActive ? "text-white" : "text-gray-400"
-                  )}
-                />
-                <span
-                  className={cn(
-                    isMiniToc ? "line-clamp-1 text-[11px] font-medium" : "line-clamp-2"
-                  )}
-                  title={node.title}
+                {hasChildren ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setExpandedLevelOne((prev) => ({
+                        ...prev,
+                        [node.id]: !isExpanded,
+                      }));
+                    }}
+                    className={cn(
+                      "mr-1 rounded p-0.5",
+                      isActive ? "text-white hover:bg-white/20" : "text-gray-500 hover:bg-gray-200"
+                    )}
+                    aria-label={isExpanded ? "Thu gọn" : "Mở rộng"}
+                  >
+                    <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", isExpanded ? "rotate-90" : "rotate-0")} />
+                  </button>
+                ) : (
+                  <span className="mr-1 inline-block h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                )}
+
+                <Link
+                  href={`${basePath}?doc=${encodeURIComponent(node.slug)}`}
+                  onClick={handleTocSelect}
+                  className="min-w-0 flex-1"
                 >
-                  {node.title}
-                </span>
-              </Link>
-            ) : depth === 0 && hasChildren ? (
+                  <span
+                    className={cn(
+                      isMiniToc ? "line-clamp-1 text-[11px] font-medium" : "line-clamp-2"
+                    )}
+                    title={node.title}
+                  >
+                    {node.title}
+                  </span>
+                </Link>
+              </div>
+            ) : hasChildren ? (
               <button
                 type="button"
                 onClick={() =>
@@ -251,7 +340,7 @@ export default function K12DocsClient({
                 <ChevronRight
                   className={cn(
                     "mr-1 h-3.5 w-3.5 shrink-0 text-gray-500 transition-transform",
-                    expandedLevelOne[node.id] ? "rotate-90" : "rotate-0"
+                    isExpanded ? "rotate-90" : "rotate-0"
                   )}
                 />
                 <span className="line-clamp-1" title={node.title}>{node.title}</span>
@@ -265,7 +354,7 @@ export default function K12DocsClient({
                 <span className={cn(isMiniToc ? "line-clamp-1 text-[11px]" : "line-clamp-2")}>{node.title}</span>
               </div>
             )}
-            {depth === 0 && hasChildren && !expandedLevelOne[node.id] ? null : renderedChildren}
+            {hasChildren && !isExpanded ? null : renderedChildren}
           </div>
         );
         })
@@ -297,7 +386,7 @@ export default function K12DocsClient({
                 }}
                 onFocus={() => query.length > 0 && setShowSearchResults(true)}
                 placeholder="Tìm theo tiêu đề hoặc nội dung"
-                className="w-full rounded-md border border-gray-300 py-2 pl-8 pr-2 text-sm focus:border-[#a1001f] focus:outline-none"
+                className="w-full rounded-md border border-gray-300 py-2 pl-8 pr-2 text-sm focus:border-[#a1001f] focus:ring-1 focus:ring-[#a1001f]/25 focus:outline-none transition-all"
               />
               
               {/* Search Results Dropdown */}
@@ -335,12 +424,12 @@ export default function K12DocsClient({
       </div>
 
       <div
-        className="grid grid-cols-1 gap-4 lg:[transition:grid-template-columns_320ms_ease]"
-        style={{
-          gridTemplateColumns: isMiniToc
-            ? "120px minmax(0,1fr) 220px"
-            : "300px minmax(0,1fr) 220px",
-        }}
+        className={cn(
+          "grid grid-cols-1 gap-4 lg:[transition:grid-template-columns_320ms_ease]",
+          isMiniToc
+            ? "lg:grid-cols-[120px_minmax(0,1fr)_220px]"
+            : "lg:grid-cols-[300px_minmax(0,1fr)_220px]"
+        )}
       >
         <aside
           className={cn(
@@ -367,8 +456,10 @@ export default function K12DocsClient({
           </div>
           <div
             className={cn(
-              "overflow-hidden transition-all duration-300 ease-out",
-              isMiniToc ? "max-h-0 opacity-0 -translate-y-1" : "max-h-500 opacity-100 translate-y-0"
+              "transition-all duration-300 ease-out",
+              isMiniToc
+                ? "max-h-0 overflow-hidden opacity-0 -translate-y-1 pointer-events-none"
+                : "max-h-none overflow-visible opacity-100 translate-y-0"
             )}
           >
             <div className="space-y-1">{renderTree(tree)}</div>
@@ -378,36 +469,6 @@ export default function K12DocsClient({
         <article className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           {selectedDoc ? (
             <>
-              <div className="mb-5 overflow-hidden rounded-2xl border border-gray-200 bg-linear-to-br from-white to-gray-50 shadow-sm">
-                <div className="grid gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
-                  <div className="relative min-h-48 bg-gray-100">
-                    {heroImage ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={heroImage}
-                        alt={selectedDoc.title}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full min-h-48 items-end bg-linear-to-br from-[#a1001f] via-[#c41230] to-[#f2b705] p-5 text-white">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/80">
-                            {heroTopic}
-                          </p>
-                          <h1 className="mt-2 text-2xl font-black leading-tight">
-                            {selectedDoc.title}
-                          </h1>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col justify-center p-5 lg:p-6">
-                    <h1 className="text-2xl font-black text-gray-900 lg:text-3xl">{selectedDoc.title}</h1>
-                    {heroExcerpt && <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-600">{heroExcerpt}</p>}
-                  </div>
-                </div>
-              </div>
               <div className="k12-markdown text-gray-800">
                 <Markdown
                   remarkPlugins={[remarkGfm]}
@@ -429,10 +490,13 @@ export default function K12DocsClient({
                         );
                       }
 
+                      const className = (props as { className?: string }).className;
+                      const title = (props as { title?: string }).title;
+
                       return (
-                        <a href={mappedHref} {...props}>
+                        <Link href={mappedHref} className={className} title={title}>
                           {children}
-                        </a>
+                        </Link>
                       );
                     },
                     h1: ({ children }) => {
@@ -483,6 +547,54 @@ export default function K12DocsClient({
                         {children}
                       </th>
                     ),
+                    li: ({ children }) => {
+                      const childNodes = Children.toArray(children as any);
+                      let firstAnchor: { href: string; label: string } | null = null;
+
+                      for (const child of childNodes) {
+                        const found = findFirstAnchor(child);
+                        if (found) {
+                          firstAnchor = found;
+                          break;
+                        }
+                      }
+
+                      const plainText = getPlainText(children).trim();
+                      const normalizedPlainText = plainText.replace(/\s+/g, " ").trim();
+                      const normalizedAnchorLabel = (firstAnchor?.label || "").replace(/\s+/g, " ").trim();
+                      const residue = normalizedPlainText
+                        .replace(normalizedAnchorLabel, "")
+                        .replace(/[\s.\-:()\[\]{}]+/g, "")
+                        .trim();
+
+                      const isLinkOnlyItem = Boolean(firstAnchor) && residue.length === 0;
+
+                      if (isLinkOnlyItem && firstAnchor) {
+                        const mappedHref = mapGitbookHref(firstAnchor.href, basePath);
+                        const isExternal = /^https?:\/\//.test(mappedHref);
+
+                        const cardClassName =
+                          "group flex items-center justify-between rounded-md border border-[#e5d6d6] bg-white px-4 py-3 no-underline transition-colors hover:border-[#a1001f]/40 hover:bg-[#a1001f]/4";
+
+                        return (
+                          <li className="my-2 list-none">
+                            {isExternal ? (
+                              <a href={mappedHref} target="_blank" rel="noreferrer" className={cardClassName}>
+                                <span className="text-base font-medium text-[#161b22]">{firstAnchor.label}</span>
+                                <ChevronRight className="h-4 w-4 text-[#8c919a] group-hover:text-[#a1001f]" />
+                              </a>
+                            ) : (
+                              <Link href={mappedHref} className={cardClassName}>
+                                <span className="text-base font-medium text-[#161b22]">{firstAnchor.label}</span>
+                                <ChevronRight className="h-4 w-4 text-[#8c919a] group-hover:text-[#a1001f]" />
+                              </Link>
+                            )}
+                          </li>
+                        );
+                      }
+
+                      return <li>{children}</li>;
+                    },
                     td: ({ children }) => (
                       <td className="border border-gray-200 px-3 py-2 align-top">{children}</td>
                     ),
@@ -491,6 +603,49 @@ export default function K12DocsClient({
                         {children}
                       </details>
                     ),
+                    ul: ({ children }) => {
+                      const items = Children.toArray(children).filter(
+                        (child) => !(typeof child === "string" && child.trim() === "")
+                      );
+                      const linkItems = items.map((item) => extractListItemLink(item));
+                      const validLinkItems = linkItems.filter((item): item is { href: string; label: string } => Boolean(item));
+                      const canUseLinkCards = validLinkItems.length >= 1 && validLinkItems.length === items.length;
+
+                      if (canUseLinkCards) {
+                        return (
+                          <div className="my-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            {validLinkItems.map((safeItem) => {
+                              const mappedHref = mapGitbookHref(safeItem.href, basePath);
+                              const isExternal = /^https?:\/\//.test(mappedHref);
+
+                              return isExternal ? (
+                                <a
+                                  key={`${safeItem.href}-${safeItem.label}`}
+                                  href={mappedHref}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="group flex items-center justify-between rounded-md border border-[#e5d6d6] bg-white px-4 py-3 no-underline transition-colors hover:border-[#a1001f]/40 hover:bg-[#a1001f]/4"
+                                >
+                                  <span className="text-base font-medium text-[#161b22]">{safeItem.label}</span>
+                                  <ChevronRight className="h-4 w-4 text-[#8c919a] group-hover:text-[#a1001f]" />
+                                </a>
+                              ) : (
+                                <Link
+                                  key={`${safeItem.href}-${safeItem.label}`}
+                                  href={mappedHref}
+                                  className="group flex items-center justify-between rounded-md border border-[#e5d6d6] bg-white px-4 py-3 no-underline transition-colors hover:border-[#a1001f]/40 hover:bg-[#a1001f]/4"
+                                >
+                                  <span className="text-base font-medium text-[#161b22]">{safeItem.label}</span>
+                                  <ChevronRight className="h-4 w-4 text-[#8c919a] group-hover:text-[#a1001f]" />
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        );
+                      }
+
+                      return <ul>{children}</ul>;
+                    },
                     summary: ({ children }) => (
                       <summary className="cursor-pointer font-semibold text-gray-900">{children}</summary>
                     ),

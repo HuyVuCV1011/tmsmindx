@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface QuestionBuilderProps {
-  onSave: (question: Partial<Question>) => void;
+  onSave: (question: Partial<Question>) => Promise<void> | void;
   onCancel: () => void;
   initialData?: Partial<Question>;
   assignmentId?: number;
@@ -31,6 +31,15 @@ const normalizeDifficulty = (difficulty?: string): QuestionFormData['difficulty'
     default:
       return 'medium';
   }
+};
+
+const hasMeaningfulRichContent = (value: string) => {
+  if (!value) return false;
+
+  const plainText = value.replace(/<[^>]*>/g, '').trim();
+  if (plainText.length > 0) return true;
+
+  return /<(img|video|audio|iframe|object|embed|svg|canvas)\b/i.test(value);
 };
 
 export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }: QuestionBuilderProps) {
@@ -67,6 +76,7 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
   const [imagePreview, setImagePreview] = useState(initData?.imagePreview || initData?.image_url || '');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [savingQuestion, setSavingQuestion] = useState(false);
   const [showToolbar, setShowToolbar] = useState(true);
 
   // Handle ESC key to close modal
@@ -211,16 +221,15 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
   };
 
   const handleSave = async () => {
-    // Strip HTML tags for validation
-    const plainText = questionText.replace(/<[^>]*>/g, '').trim();
-    
-    if (!plainText) {
+    if (savingQuestion) return;
+
+    if (!hasMeaningfulRichContent(questionText)) {
       toast.error('Vui lòng nhập câu hỏi');
       return;
     }
 
     if (questionType === 'multiple_choice') {
-      const validOptions = options.filter(opt => opt.replace(/<[^>]*>/g, '').trim());
+      const validOptions = options.filter((opt) => hasMeaningfulRichContent(opt));
       if (validOptions.length < 2) {
         toast.error('Cần ít nhất 2 đáp án');
         return;
@@ -236,56 +245,67 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
       return;
     }
 
-    // Upload ảnh nếu có file mới
-    let finalImageUrl = imageUrl;
-    if (imageFile) {
-      setUploadingImage(true);
-      toast.loading('Đang tải ảnh lên...', { id: 'uploading' });
-      
-      try {
-        const formData = new FormData();
-        formData.append('image', imageFile);
+    setSavingQuestion(true);
+    toast.loading('Đang lưu câu hỏi...', { id: 'saving-question' });
 
-        const response = await fetch('/api/upload-question-image', {
-          method: 'POST',
-          body: formData
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Upload failed');
-        }
+    try {
+      // Upload ảnh nếu có file mới
+      let finalImageUrl = imageUrl;
+      if (imageFile) {
+        setUploadingImage(true);
+        toast.loading('Đang tải ảnh lên...', { id: 'uploading' });
         
-        finalImageUrl = data.url;
-        toast.success('Tải ảnh lên thành công!', { id: 'uploading' });
-      } catch (error: any) {
-        console.error('Error uploading image:', error);
-        toast.error(error.message || 'Lỗi upload ảnh. Vui lòng thử lại.', { id: 'uploading' });
-        setUploadingImage(false);
-        return; // Dừng lại nếu upload ảnh thất bại
-      } finally {
-        setUploadingImage(false);
+        try {
+          const formData = new FormData();
+          formData.append('image', imageFile);
+
+          const response = await fetch('/api/upload-question-image', {
+            method: 'POST',
+            body: formData
+          });
+
+          const data = await response.json();
+
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Upload failed');
+          }
+          
+          finalImageUrl = data.url;
+          toast.success('Tải ảnh lên thành công!', { id: 'uploading' });
+        } catch (error: any) {
+          console.error('Error uploading image:', error);
+          toast.error(error.message || 'Lỗi upload ảnh. Vui lòng thử lại.', { id: 'uploading' });
+          return; // Dừng lại nếu upload ảnh thất bại
+        } finally {
+          setUploadingImage(false);
+        }
       }
+
+      const questionData: Partial<Question> = {
+        ...initialData,
+        question_text: questionText,
+        question_type: questionType,
+        correct_answer: correctAnswer,
+        options: questionType === 'multiple_choice' || questionType === 'true_false' 
+          ? options.filter((opt) => hasMeaningfulRichContent(opt)) 
+          : null,
+        image_url: finalImageUrl || null,
+        explanation,
+        points,
+        difficulty
+      };
+
+      await Promise.resolve(onSave(questionData));
+
+      // Clear draft sau khi save thành công
+      clearDraft();
+      toast.dismiss('saving-question');
+    } catch (error) {
+      console.error('Error saving question:', error);
+      toast.error('Lưu câu hỏi thất bại. Vui lòng thử lại.', { id: 'saving-question' });
+    } finally {
+      setSavingQuestion(false);
     }
-
-    const questionData: Partial<Question> = {
-      ...initialData,
-      question_text: questionText,
-      question_type: questionType,
-      correct_answer: correctAnswer,
-      options: questionType === 'multiple_choice' || questionType === 'true_false' 
-        ? options.filter(opt => opt.replace(/<[^>]*>/g, '').trim()) 
-        : null,
-      image_url: finalImageUrl || null,
-      explanation,
-      points,
-      difficulty
-    };
-
-    // Clear draft sau khi save thành công
-    clearDraft();
-    onSave(questionData);
   };
 
   return (
@@ -621,17 +641,22 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
               clearDraft();
               onCancel();
             }}
-            disabled={uploadingImage}
+            disabled={uploadingImage || savingQuestion}
             className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Hủy
           </button>
           <button
             onClick={handleSave}
-            disabled={uploadingImage}
+            disabled={uploadingImage || savingQuestion}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            {uploadingImage ? (
+            {savingQuestion ? (
+              <>
+                <div className="h-4 w-4 bg-white/50 rounded-full animate-pulse"></div>
+                <span>Đang lưu câu hỏi...</span>
+              </>
+            ) : uploadingImage ? (
               <>
                 <div className="h-4 w-4 bg-white/50 rounded-full animate-pulse"></div>
                 <span>Đang tải ảnh lên...</span>

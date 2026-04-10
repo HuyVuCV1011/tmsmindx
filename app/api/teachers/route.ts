@@ -6,6 +6,9 @@ import { NextRequest, NextResponse } from "next/server";
 const TEACHER_PROFILE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_PROFILE_CSV_URL || "";
 const TEACHER_EXPERTISE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERTISE_CSV_URL || "";
 const TEACHER_EXPERIENCE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERIENCE_CSV_URL || "";
+const SHEET_FETCH_TIMEOUT_MS = 30000;
+const SHEET_FETCH_RETRIES = 3;
+const SHEET_RETRY_DELAY_MS = 500;
 
 // In-memory cache with global persistence for dev mode and pending promise tracking
 interface CacheEntry<T> {
@@ -53,7 +56,70 @@ function isCacheValid<T>(entry: CacheEntry<T> | null): boolean {
   return Date.now() - entry.timestamp < CACHE_TTL;
 }
 
-// Fetch data từ Google Sheets với caching
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableFetchError(error: unknown): boolean {
+  const err = error as any;
+  const message = String(err?.message || "").toLowerCase();
+  const causeCode = String(err?.cause?.code || "").toUpperCase();
+
+  return (
+    causeCode === "UND_ERR_SOCKET" ||
+    causeCode === "ECONNRESET" ||
+    causeCode === "ETIMEDOUT" ||
+    message.includes("fetch failed") ||
+    message.includes("socket") ||
+    message.includes("timed out") ||
+    message.includes("timeout") ||
+    err?.name === "AbortError" ||
+    err?.name === "TimeoutError"
+  );
+}
+
+async function fetchCsvWithRetry(url: string, label: string): Promise<string> {
+  if (!url) {
+    throw new Error(`${label} URL is empty`);
+  }
+
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= SHEET_FETCH_RETRIES; attempt++) {
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(SHEET_FETCH_TIMEOUT_MS),
+      });
+
+      if (!response.ok) {
+        const retryableStatus = response.status >= 500 || response.status === 429;
+        if (retryableStatus && attempt < SHEET_FETCH_RETRIES) {
+          await sleep(SHEET_RETRY_DELAY_MS * (attempt + 1));
+          continue;
+        }
+        throw new Error(`Cannot fetch ${label}. Status: ${response.status}`);
+      }
+
+      return await response.text();
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableFetchError(error);
+      const hasMoreAttempts = attempt < SHEET_FETCH_RETRIES;
+      if (!retryable || !hasMoreAttempts) {
+        break;
+      }
+      // Exponential backoff
+      const delay = SHEET_RETRY_DELAY_MS * Math.pow(2, attempt);
+      console.warn(`⚠️ Retrying fetch for ${label} (attempt ${attempt + 1}/${SHEET_FETCH_RETRIES}) after ${delay}ms delay... Cause: ${error instanceof Error ? error.message : "Unknown"}`);
+      await sleep(delay);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(`Cannot fetch ${label}`);
+}
+
+// Fetch data từ Google Sheets với caching  
 async function fetchTeachersFromSheet(): Promise<Teacher[]> {
   // Ensure cache is initialized
   if (!cache || !cache.pendingRequests) {
@@ -78,21 +144,10 @@ async function fetchTeachersFromSheet(): Promise<Teacher[]> {
   }
 
   // Deduplicate
-  let didStartFreshFetch = false;
-
   if (!cache.pendingRequests.teachers) {
-    didStartFreshFetch = true;
     console.log("🔄 Starting fresh fetch for teachers data...");
     cache.pendingRequests.teachers = (async () => {
-      const response = await fetch(TEACHER_PROFILE_CSV_URL, { 
-        cache: 'no-store' 
-      });
-      
-      if (!response.ok) {
-        throw new Error("Cannot fetch sheet data");
-      }
-
-      const csvText = await response.text();
+      const csvText = await fetchCsvWithRetry(TEACHER_PROFILE_CSV_URL, "teacher profile data");
       const lines = csvText.split("\n");
       
       // Skip first 2 rows (title row + header row)
@@ -143,9 +198,7 @@ async function fetchTeachersFromSheet(): Promise<Teacher[]> {
       timestamp: Date.now()
     };
     
-    if (didStartFreshFetch) {
-      console.log(`✅ Cached ${data.length} teachers`);
-    }
+    console.log(`✅ Cached ${data.length} teachers`);
     return data;
   } catch (error) {
     console.error("Error fetching from Google Sheets:", error);
@@ -165,7 +218,6 @@ async function fetchTeachersFromSheet(): Promise<Teacher[]> {
 async function fetchExpertiseScores(teacherCode: string): Promise<{ [key: string]: string }> {
   try {
     let csvText: string;
-    let didFetchFresh = false;
     
     // Kiểm tra cache
     if (isCacheValid(cache.expertiseRaw)) {
@@ -173,13 +225,11 @@ async function fetchExpertiseScores(teacherCode: string): Promise<{ [key: string
     } else {
       // Deduplicate simultaneous requests
       if (!cache.pendingRequests.expertiseRaw) {
-        didFetchFresh = true;
         console.log("🔄 Fetching fresh expertise data from Google Sheets...");
-        cache.pendingRequests.expertiseRaw = fetch(TEACHER_EXPERTISE_CSV_URL, { cache: 'no-store' })
-          .then(async (res) => {
-            if (!res.ok) throw new Error(`Cannot fetch expertise data. Status: ${res.status}`);
-            return res.text();
-          });
+        cache.pendingRequests.expertiseRaw = fetchCsvWithRetry(
+          TEACHER_EXPERTISE_CSV_URL,
+          "expertise data"
+        );
       } else {
         console.log("⏳ Waiting for pending expertise fetch...");
       }
@@ -196,9 +246,7 @@ async function fetchExpertiseScores(teacherCode: string): Promise<{ [key: string
         // Clear pending flag so subsequent failures can retry
         cache.pendingRequests.expertiseRaw = null;
       }
-      if (didFetchFresh) {
-        console.log("✅ Cached expertise data");
-      }
+      console.log("✅ Cached expertise data");
     }
 
     // Parse CSV và tính toán scores
@@ -251,7 +299,6 @@ async function fetchExpertiseScores(teacherCode: string): Promise<{ [key: string
 async function fetchExperienceScores(teacherCode: string): Promise<{ [key: string]: string }> {
   try {
     let csvText: string;
-    let didFetchFresh = false;
     
     // Kiểm tra cache
     if (isCacheValid(cache.experienceRaw)) {
@@ -259,13 +306,11 @@ async function fetchExperienceScores(teacherCode: string): Promise<{ [key: strin
     } else {
       // Deduplicate pending requests
       if (!cache.pendingRequests.experienceRaw) {
-        didFetchFresh = true;
         console.log("🔄 Fetching fresh experience data from Google Sheets...");
-        cache.pendingRequests.experienceRaw = fetch(TEACHER_EXPERIENCE_CSV_URL, { cache: 'no-store' })
-          .then(async (res) => {
-            if (!res.ok) throw new Error(`Cannot fetch experience data. Status: ${res.status}`);
-            return res.text();
-          });
+        cache.pendingRequests.experienceRaw = fetchCsvWithRetry(
+          TEACHER_EXPERIENCE_CSV_URL,
+          "experience data"
+        );
       } else {
         console.log("⏳ Waiting for pending experience fetch...");
       }
@@ -282,9 +327,7 @@ async function fetchExperienceScores(teacherCode: string): Promise<{ [key: strin
         // Clear pending flag
         cache.pendingRequests.experienceRaw = null;
       }
-      if (didFetchFresh) {
-        console.log("✅ Cached experience data");
-      }
+      console.log("✅ Cached experience data");
     }
 
     // Parse CSV và tính toán scores
@@ -415,8 +458,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
   const emailParam = searchParams.get("email");
-  const basicParam = searchParams.get("basic");
-  const isBasicLookup = basicParam === "1" || basicParam === "true";
+  const isBasicLookup = searchParams.get("basic") === "true";
 
   if (!code && !emailParam) {
     return NextResponse.json(
@@ -484,31 +526,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       { status: 404 }
     );
   }
-  // Lightweight mode for fast code/email resolution in pages that don't need monthly metrics.
-  if (isBasicLookup) {
-    return NextResponse.json({ teacher });
-  }
 
-  // Fetch updated status from external API
-  const updateExternalStatusPromise = (async () => {
-    try {
-      const emailToFetch = teacher.emailMindx || teacher.emailPersonal || emailParam;
-      if (!emailToFetch) return;
-
-      const externalRes = await fetch(`https://tmsmindx.vercel.app/api/teachers?email=${encodeURIComponent(emailToFetch)}`, {
-        next: { revalidate: 60 }
-      });
-
-      if (!externalRes.ok) return;
-
-      const externalData = await externalRes.json();
-      if (externalData.teacher?.status) {
-        teacher.status = externalData.teacher.status;
-      }
-    } catch (error) {
-      console.error("Error fetching external teacher status:", error);
-    }
-  })();
   // � TEMPORARY: Bỏ qua authorization check để test
   // if (!isAdmin) {
   //   ... (authorization code commented out for testing)
@@ -519,8 +537,6 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     fetchExpertiseScores(teacher.code),
     fetchExperienceScores(teacher.code)
   ]);
-
-  await updateExternalStatusPromise;
 
   // Initialize với "3T" cho tất cả các tháng
   const currentYear = new Date().getFullYear();

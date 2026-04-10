@@ -233,10 +233,10 @@ export default function LoginPage() {
   }, [role]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white p-4 animate-fade-in">
-      <div className="bg-white rounded-xl shadow-2xl flex w-[768px] h-[540px] overflow-hidden transform transition-all duration-500 hover:shadow-3xl animate-fade-in-up">
+    <div className="box-border h-dvh w-full overflow-hidden bg-white p-0 sm:min-h-screen sm:p-4 flex items-stretch sm:items-center sm:justify-center animate-fade-in">
+      <div className="bg-white flex h-full w-full overflow-hidden sm:max-w-4xl sm:rounded-xl sm:shadow-2xl md:h-135 transform transition-all duration-500 sm:hover:shadow-3xl animate-fade-in-up">
         {/* Left side: Banner */}
-        <div className="hidden md:flex flex-col justify-between items-start bg-gradient-to-br from-[#800000] to-[#E31F26] w-1/3 h-full p-8 text-white">
+        <div className="hidden md:flex flex-col justify-between items-start bg-linear-to-br from-[#800000] to-[#E31F26] w-1/3 h-full p-8 text-white">
           <div>
             <img src="/logo_white.svg" alt="logo" className="h-20 mb-8 animate-fade-in" />
             <h2 className="text-2xl font-bold mb-4 leading-tight animate-slide-up"> Teaching<br />Portal System (TPS)</h2>
@@ -248,9 +248,12 @@ export default function LoginPage() {
         </div>
 
         {/* Right side: Login form */}
-        <div className="flex-1 flex flex-col justify-center px-12 py-6 animate-fade-in animation-delay-200">
+        <div className="flex-1 flex flex-col justify-center px-4 sm:px-8 md:px-12 py-4 sm:py-6 animate-fade-in animation-delay-200">
           <div className="flex flex-col gap-4 mb-2">
-            <h2 className="text-xl font-bold text-center text-[#800000] animate-slide-up">MindX Technology School</h2>
+            <div className="flex justify-center md:hidden">
+              <img src="/logo.svg" alt="MindX logo" className="h-14 w-auto" />
+            </div>
+            <h2 className="hidden md:block text-xl font-bold text-center text-[#800000] animate-slide-up">MindX Technology School</h2>
             <div className="text-lg font-semibold text-gray-900 text-center mt-2 mb-1 animate-slide-up animation-delay-200">Chào mừng bạn đến với TPS</div>
             <div className="text-sm text-gray-500 text-center mb-2 animate-fade-in animation-delay-300">Lựa chọn vai trò của bạn để tiếp tục</div>
           </div>
@@ -261,7 +264,7 @@ export default function LoginPage() {
             </div>
           )}
   <div>
-          <div className="flex justify-center gap-3 mb-4">
+          <div className="flex justify-center gap-3 mb-4 flex-wrap">
             <button
               className={getRoleButtonClass('teacher')}
               onClick={() => handleRoleChange('teacher')}

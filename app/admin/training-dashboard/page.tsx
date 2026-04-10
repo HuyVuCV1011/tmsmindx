@@ -169,7 +169,7 @@ function ExportButton({ onExport }: { onExport: (fmt: ExportFormat) => void }) {
         <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden min-w-[160px]">
+        <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden min-w-40">
           {options.map(({ fmt, label, icon }) => (
             <button
               key={fmt}
@@ -321,9 +321,9 @@ function FilterPanel({
     : allCenters;
 
   return (
-    <div className="flex flex-wrap gap-3 items-start mb-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
+    <div className="flex flex-col gap-3 items-stretch mb-4 p-3 bg-slate-50 rounded-xl border border-slate-200 lg:flex-row lg:items-start">
       {/* Centers multi-select */}
-      <div className="flex-1 min-w-[240px]" ref={centerDropdownRef}>
+      <div className="w-full min-w-0 lg:flex-1 lg:min-w-60" ref={centerDropdownRef}>
         <label className="text-xs font-medium text-slate-500 block mb-1.5">Cơ sở</label>
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -405,7 +405,7 @@ function FilterPanel({
       </div>
 
       {/* Teacher code search */}
-      <div className="min-w-[160px]">
+      <div className="w-full min-w-0 lg:min-w-40">
         <label className="text-xs font-medium text-slate-500 block mb-1.5">Mã GV</label>
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -428,7 +428,7 @@ function FilterPanel({
       </div>
 
       {/* Block filter */}
-      <div className="min-w-[120px]">
+      <div className="w-full min-w-0 lg:min-w-30">
         <label className="text-xs font-medium text-slate-500 block mb-1.5">Khối</label>
         <select
           value={filters.block}
@@ -444,10 +444,10 @@ function FilterPanel({
 
       {/* Clear all */}
       {(filters.selectedCenters.length > 0 || filters.centerQuery || filters.teacherCodeQuery || filters.block) && (
-        <div className="flex items-end">
+        <div className="flex items-end w-full lg:w-auto">
           <button
             onClick={() => onChange({ selectedCenters: [], centerQuery: '', teacherCodeQuery: '', block: '' })}
-            className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 underline"
+            className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 underline w-full text-left lg:w-auto lg:text-center"
           >
             Xóa filter
           </button>
@@ -597,8 +597,8 @@ export default function TrainingDashboardPage() {
         />
 
         {/* ── Shared Filters + Export ── */}
-        <div className="mt-4 flex items-start gap-3">
-          <div className="flex-1">
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-start">
+          <div className="w-full min-w-0 md:flex-1">
             <FilterPanel
               allCenters={allCenters}
               allBlocks={allBlocks}
@@ -606,7 +606,7 @@ export default function TrainingDashboardPage() {
               onChange={setFilters}
             />
           </div>
-          <div className="pt-0.5">
+          <div className="w-full pt-0.5 md:w-auto md:pt-0">
             {tab === 'teacher_stats'
               ? <ExportButton onExport={handleExportTeacher} />
               : <ExportButton onExport={handleExportVideo} />
@@ -642,7 +642,7 @@ export default function TrainingDashboardPage() {
                       <TableHead className="text-center">Điểm TK</TableHead>
                       {/* Dynamic video columns */}
                       {videoColumns.map(v => (
-                        <TableHead key={v.id} className="text-center min-w-[100px]">
+                        <TableHead key={v.id} className="text-center min-w-25">
                           <span className="block text-xs font-medium leading-tight line-clamp-2" title={v.title}>
                             {v.title.length > 20 ? v.title.slice(0, 18) + '…' : v.title}
                           </span>
@@ -712,7 +712,7 @@ export default function TrainingDashboardPage() {
                   <>
                     <div className="space-y-3">
                       <h3 className="text-sm font-semibold text-slate-700">Tổng quan từng video</h3>
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto -mx-4 sm:mx-0">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -728,7 +728,7 @@ export default function TrainingDashboardPage() {
                           <TableBody>
                             {videoStats.map(v => (
                               <TableRow key={v.video_id}>
-                                <TableCell className="font-medium max-w-[200px]">
+                                <TableCell className="font-medium max-w-50">
                                   <span className="line-clamp-2 text-sm">{v.title}</span>
                                 </TableCell>
                                 <TableCell className="text-center">{v.total_assigned}</TableCell>
@@ -770,7 +770,7 @@ export default function TrainingDashboardPage() {
                       {filteredMatrix.length === 0 ? (
                         <p className="text-slate-400 text-sm text-center py-4">Không có dữ liệu</p>
                       ) : (
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto -mx-4 sm:mx-0">
                           <Table>
                             <TableHeader>
                               <TableRow>
@@ -781,7 +781,7 @@ export default function TrainingDashboardPage() {
                                 <TableHead>Khối</TableHead>
                                 <TableHead className="text-center">Điểm TK</TableHead>
                                 {videoStats.map(v => (
-                                  <TableHead key={v.video_id} className="text-center min-w-[90px]">
+                                  <TableHead key={v.video_id} className="text-center min-w-22.5">
                                     <span className="text-xs leading-tight block line-clamp-2" title={v.title}>
                                       {v.title.length > 18 ? v.title.slice(0, 16) + '…' : v.title}
                                     </span>

@@ -1,143 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-
-async function ensureAssignmentsFromRegistrations(teacherCodes: string[]) {
-  if (!teacherCodes.length) return;
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    await client.query(
-      `
-      WITH missing AS (
-        SELECT
-          er.id AS registration_id,
-          er.teacher_code,
-          er.exam_type,
-          er.registration_type,
-          er.block_code,
-          er.subject_code,
-          er.scheduled_at
-        FROM exam_registrations er
-        LEFT JOIN teacher_exam_assignments tea ON tea.registration_id = er.id
-        WHERE tea.id IS NULL
-          AND LOWER(TRIM(er.teacher_code)) = ANY($1::text[])
-      ),
-      resolved AS (
-        SELECT
-          m.*,
-          COALESCE(month_pick.id, set_pick.id) AS set_id
-        FROM missing m
-        LEFT JOIN LATERAL (
-          SELECT es.id
-          FROM exam_subject_catalog esc
-          JOIN monthly_exam_selections mes
-            ON mes.subject_id = esc.id
-           AND mes.year = EXTRACT(YEAR FROM m.scheduled_at)::int
-           AND mes.month = EXTRACT(MONTH FROM m.scheduled_at)::int
-          JOIN exam_sets es ON es.id = mes.selected_set_id
-          WHERE esc.exam_type = m.exam_type
-            AND esc.block_code = m.block_code
-            AND esc.subject_code = m.subject_code
-            AND es.status = 'active'
-            AND (es.valid_from IS NULL OR m.scheduled_at >= es.valid_from)
-            AND (es.valid_to IS NULL OR m.scheduled_at <= es.valid_to)
-            AND EXISTS (
-              SELECT 1
-              FROM exam_set_questions esq
-              WHERE esq.set_id = es.id
-            )
-          LIMIT 1
-        ) month_pick ON TRUE
-        LEFT JOIN LATERAL (
-          SELECT es.id
-          FROM exam_sets es
-          JOIN exam_subject_catalog esc ON esc.id = es.subject_id
-          WHERE esc.exam_type = m.exam_type
-            AND esc.block_code = m.block_code
-            AND esc.subject_code = m.subject_code
-            AND es.status = 'active'
-            AND (es.valid_from IS NULL OR m.scheduled_at >= es.valid_from)
-            AND (es.valid_to IS NULL OR m.scheduled_at <= es.valid_to)
-            AND EXISTS (
-              SELECT 1
-              FROM exam_set_questions esq
-              WHERE esq.set_id = es.id
-            )
-          ORDER BY RANDOM()
-          LIMIT 1
-        ) set_pick ON TRUE
-      ),
-      inserted AS (
-        INSERT INTO teacher_exam_assignments (
-          registration_id,
-          teacher_code,
-          exam_type,
-          registration_type,
-          block_code,
-          subject_code,
-          selected_set_id,
-          random_seed,
-          random_assigned_at,
-          open_at,
-          close_at,
-          assignment_status,
-          score,
-          score_status,
-          expired_at
-        )
-        SELECT
-          r.registration_id,
-          r.teacher_code,
-          r.exam_type,
-          r.registration_type,
-          r.block_code,
-          r.subject_code,
-          r.set_id,
-          NULL,
-          CURRENT_TIMESTAMP,
-          r.scheduled_at,
-          r.scheduled_at + INTERVAL '45 minutes',
-          'assigned',
-          NULL,
-          'null',
-          NULL
-        FROM resolved r
-        WHERE r.set_id IS NOT NULL
-        RETURNING id, registration_id
-      )
-      INSERT INTO exam_assignment_events (
-        assignment_id,
-        event_type,
-        actor_type,
-        actor_code,
-        payload
-      )
-      SELECT
-        i.id,
-        'assigned',
-        'system',
-        NULL,
-        jsonb_build_object(
-          'registration_id', i.registration_id,
-          'source', 'exam-assignments-backfill'
-        )
-      FROM inserted i
-      `,
-      [teacherCodes]
-    );
-
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -145,135 +9,287 @@ export async function GET(request: NextRequest) {
     const teacherCode = searchParams.get('teacher_code');
     const teacherCodesRaw = searchParams.get('teacher_codes');
     const month = searchParams.get('month');
+    const since = searchParams.get('since');
+    const before = searchParams.get('before');
 
-    if (!teacherCode) {
+    if (!teacherCode && !teacherCodesRaw) {
       return NextResponse.json(
-        { success: false, error: 'teacher_code is required' },
+        { success: false, error: 'teacher_code or teacher_codes is required' },
         { status: 400 }
       );
     }
 
+    // Guard: kiểm tra bảng chuyen_sau_results có tồn tại không
+    const tableCheck = await pool.query(`
+      SELECT
+        to_regclass('public.chuyen_sau_results') IS NOT NULL AS has_results,
+        to_regclass('public.chuyen_sau_giaitrinh') IS NOT NULL AS has_giaitrinh
+    `);
+    const hasResults = Boolean(tableCheck.rows[0]?.has_results);
+    const hasGiaitrinh = Boolean(tableCheck.rows[0]?.has_giaitrinh);
+
+    if (!hasResults) {
+      return NextResponse.json({ success: true, data: [], count: 0 });
+    }
+
+    const teacherCodes = (teacherCodesRaw || '')
+      .split(',')
+      .map((c) => c.trim().toLowerCase())
+      .filter(Boolean);
+    const normalizedPrimary = (teacherCode || '').trim().toLowerCase();
+
+    // JOIN với chuyen_sau_giaitrinh nếu tồn tại
+    const giaitrinh_join = hasGiaitrinh
+      ? `
+      LEFT JOIN LATERAL (
+        SELECT csg.tru_diem, csg.xu_ly_giai_trinh
+        FROM chuyen_sau_giaitrinh csg
+        WHERE csg.id_ket_qua = csr.id
+        ORDER BY csg.tao_luc DESC
+        LIMIT 1
+      ) csg ON TRUE
+      `
+      : '';
+
+    const giaitrinh_select = hasGiaitrinh
+      ? `COALESCE(csg.tru_diem, 0)::numeric AS penalty_deduction,`
+      : `0::numeric AS penalty_deduction,`;
+
+    const giaitrinh_explanation_status = hasGiaitrinh
+      ? `CASE COALESCE(csg.xu_ly_giai_trinh, '')
+          WHEN 'đã duyệt'       THEN 'accepted'
+          WHEN 'từ chối'         THEN 'rejected'
+          WHEN 'chờ giải trình' THEN 'pending'
+          ELSE NULL
+        END::text AS explanation_status,`
+      : `NULL::text AS explanation_status,`;
+
     let query = `
       SELECT
-        tea.id,
-        tea.teacher_code,
-        tea.exam_type,
-        tea.registration_type,
-        tea.block_code,
-        tea.subject_code,
-        tea.open_at,
-        tea.close_at,
-        tea.assignment_status,
-        tea.score,
-        tea.score_status,
-        tea.selected_set_id,
-        tea.created_at,
-        tea.updated_at,
-        es.set_code,
-        es.set_name,
-        es.total_points,
-        es.passing_score,
-        es.status AS set_status,
-        es.valid_from AS set_valid_from,
-        es.valid_to AS set_valid_to,
+        csr.id                                                    AS result_id,
+        csr.id                                                    AS id,
+        LOWER(TRIM(COALESCE(csr.ma_giao_vien, '')))              AS teacher_code,
+        csr.ho_ten,
+        csr.dia_chi_email,
+        csr.co_so_lam_viec,
+        csr.khu_vuc,
+        COALESCE(csr.hinh_thuc, 'Chính Thức')                    AS registration_type,
+        csr.khoi_giang_day                                       AS block_code,
+        csm.ma_mon                                               AS subject_code,
+        csm.ten_mon                                              AS subject_name,
+        csm.ma_khoi                                              AS subject_block,
+        -- Thời gian làm bài thực tế: đọc từ event_schedules (ket_thuc - bat_dau), fallback từ cột môn học
+        COALESCE(ev_dur.duration_min, csm.thoi_gian_thi_phut, 90)::int AS duration_minutes,
+        csr.id_mon,
+        COALESCE(csr.id_de_thi, fallback_chonde.id_de)          AS selected_set_id,
+        csr.id_su_kien::text                                     AS event_schedule_id,
+        csr.thang_dk,
+        csr.nam_dk,
+        csr.dot,
+        -- Thời điểm thi (open_at): ưu tiên event_schedules.bat_dau_luc (admin đặt), fallback logic cũ
+        COALESCE(
+          ev_dur.event_open_at,
+          CASE
+            WHEN COALESCE(csr.thoi_gian_kiem_tra, '') ~ '^[0-9]{1,2}:[0-9]{2} [0-9]{2}/[0-9]{2}/[0-9]{4}$'
+              THEN (to_timestamp(csr.thoi_gian_kiem_tra, 'HH24:MI DD/MM/YYYY')::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
+            ELSE NULL
+          END,
+          CASE WHEN csr.nam_dk IS NOT NULL AND csr.thang_dk IS NOT NULL
+               THEN make_timestamp(csr.nam_dk, csr.thang_dk, 1, 0, 0, 0)
+               ELSE NULL END,
+          csr.dang_ky_luc
+        ) AS open_at,
+        COALESCE(
+          ev_dur.event_close_at,
+          CASE
+            WHEN COALESCE(csr.thoi_gian_kiem_tra, '') ~ '^[0-9]{1,2}:[0-9]{2} [0-9]{2}/[0-9]{2}/[0-9]{4}$'
+              THEN (to_timestamp(csr.thoi_gian_kiem_tra, 'HH24:MI DD/MM/YYYY')::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
+                    + make_interval(mins => COALESCE(ev_dur.duration_min, csm.thoi_gian_thi_phut, 90))
+            ELSE NULL
+          END,
+          CASE WHEN csr.nam_dk IS NOT NULL AND csr.thang_dk IS NOT NULL
+               THEN make_timestamp(csr.nam_dk, csr.thang_dk, 1, 0, 0, 0) + INTERVAL '1 month'
+               ELSE NULL END,
+          csr.dang_ky_luc + make_interval(mins => COALESCE(ev_dur.duration_min, csm.thoi_gian_thi_phut, 90))
+        ) AS close_at,
+        -- Trạng thái bài thi
+        CASE
+          WHEN LOWER(TRIM(COALESCE(csr.xu_ly_diem, ''))) = 'đã hoàn thành' THEN 'graded'
+          WHEN LOWER(TRIM(COALESCE(csr.xu_ly_diem, ''))) = 'da thi'         THEN 'graded'
+          WHEN COALESCE(csr.diem, 0) > 0                                     THEN 'graded'
+          ELSE 'assigned'
+        END AS assignment_status,
+        csr.diem::numeric                                        AS score,
+        CASE
+          WHEN LOWER(TRIM(COALESCE(csr.xu_ly_diem, ''))) = 'đã hoàn thành' THEN 'graded'
+          WHEN csr.diem IS NULL OR csr.xu_ly_diem = 'chờ giải trình'        THEN 'null'
+          ELSE 'graded'
+        END AS score_status,
+        COALESCE(csr.xu_ly_diem, '')::text                       AS score_handling_note,
+        COALESCE(csr.cau_dung, 0)::int                           AS correct_answers,
+        csr.da_giai_thich,
+        csr.so_lan_giai_thich,
+        csr.tong_diem_bi_tru,
+        ${giaitrinh_select}
+        -- Thông tin bộ đề (dùng COALESCE fallback từ chonde_thang nếu id_de_thi chưa set)
+        es.ma_de                                                 AS set_code,
+        es.ten_de                                                AS set_name,
+        es.tong_diem                                             AS total_points,
+        es.diem_dat                                              AS passing_score,
+        es.trang_thai                                            AS set_status,
+        NULL::timestamp                                          AS set_valid_from,
+        NULL::timestamp                                          AS set_valid_to,
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM chuyen_sau_bode_cauhoi bq
+          WHERE bq.id_de = COALESCE(csr.id_de_thi, fallback_chonde.id_de)
+        ), 0) AS total_questions,
         EXISTS (
           SELECT 1
-          FROM exam_set_questions esq
-          WHERE esq.set_id = tea.selected_set_id
+          FROM chuyen_sau_bode_cauhoi bq
+          WHERE bq.id_de = COALESCE(csr.id_de_thi, fallback_chonde.id_de)
         ) AS has_questions,
-        COALESCE(ex.status::text, old_ex.status::text) AS explanation_status,
-        COALESCE(ex.admin_note, old_ex.admin_note) AS admin_note
-      FROM teacher_exam_assignments tea
-      LEFT JOIN exam_sets es ON es.id = tea.selected_set_id
-      LEFT JOIN exam_explanations ex ON ex.assignment_id = tea.id
+        -- Explanation status from chuyen_sau_giaitrinh.xu_ly_diem
+        ${giaitrinh_explanation_status}
+        NULL::text AS admin_note,
+        csr.tao_luc  AS created_at,
+        csr.tao_luc  AS updated_at
+      FROM chuyen_sau_results csr
+      LEFT JOIN chuyen_sau_monhoc csm ON csm.id = csr.id_mon
+      -- Fallback bộ đề từ chonde_thang khi id_de_thi chưa được set
       LEFT JOIN LATERAL (
-        SELECT status, admin_note
-        FROM explanations
-        WHERE lms_code = tea.teacher_code
-          AND subject = tea.subject_code
-          AND EXTRACT(MONTH FROM test_date) = EXTRACT(MONTH FROM tea.open_at)
-          AND EXTRACT(YEAR FROM test_date) = EXTRACT(YEAR FROM tea.open_at)
-        ORDER BY created_at DESC
+        SELECT ct.id_de
+        FROM chuyen_sau_chonde_thang ct
+        WHERE ct.id_mon = csr.id_mon
+          AND ct.nam = COALESCE(csr.nam_dk, EXTRACT(YEAR FROM NOW())::int)
+          AND ct.thang = COALESCE(csr.thang_dk, EXTRACT(MONTH FROM NOW())::int)
         LIMIT 1
-      ) old_ex ON TRUE
+      ) fallback_chonde ON (csr.id_de_thi IS NULL)
+      LEFT JOIN chuyen_sau_bode   es  ON es.id = COALESCE(csr.id_de_thi, fallback_chonde.id_de)
+      -- Lấy thời gian làm bài từ event_schedules: ưu tiên id_su_kien, fallback tìm theo tháng/năm/môn
+      LEFT JOIN LATERAL (
+        SELECT
+          (EXTRACT(EPOCH FROM (ket_thuc_luc - bat_dau_luc)) / 60)::int AS duration_min,
+          bat_dau_luc AT TIME ZONE 'Asia/Ho_Chi_Minh' AS event_open_at,
+          ket_thuc_luc AT TIME ZONE 'Asia/Ho_Chi_Minh' AS event_close_at
+        FROM event_schedules
+        WHERE loai_su_kien = 'exam'
+          AND (
+            (csr.id_su_kien IS NOT NULL AND id = csr.id_su_kien)
+            OR (
+              csr.id_su_kien IS NULL
+              AND chuyen_nganh = csm.ma_mon
+              AND EXTRACT(YEAR  FROM bat_dau_luc) = COALESCE(csr.nam_dk,  EXTRACT(YEAR  FROM NOW()))
+              AND EXTRACT(MONTH FROM bat_dau_luc) = COALESCE(csr.thang_dk, EXTRACT(MONTH FROM NOW()))
+            )
+          )
+        ORDER BY (csr.id_su_kien IS NOT NULL AND id = csr.id_su_kien) DESC, bat_dau_luc DESC
+        LIMIT 1
+      ) ev_dur ON TRUE
+      ${giaitrinh_join}
       WHERE TRUE
     `;
 
     const values: any[] = [];
 
-    const teacherCodes = (teacherCodesRaw || '')
-      .split(',')
-      .map((code) => code.trim().toLowerCase())
-      .filter(Boolean);
-
-    await ensureAssignmentsFromRegistrations(
-      teacherCodes.length > 0 ? teacherCodes : [teacherCode.trim().toLowerCase()]
-    );
-
     if (teacherCodes.length > 0) {
       values.push(teacherCodes);
       query += `
-        AND LOWER(TRIM(tea.teacher_code)) = ANY($${values.length}::text[])
+        AND LOWER(TRIM(COALESCE(csr.ma_giao_vien, ''))) = ANY($${values.length}::text[])
       `;
     } else {
-      values.push(teacherCode.trim().toLowerCase());
+      values.push(normalizedPrimary);
       query += `
-        AND LOWER(TRIM(tea.teacher_code)) = $${values.length}
+        AND LOWER(TRIM(COALESCE(csr.ma_giao_vien, ''))) = $${values.length}
       `;
     }
 
     if (month) {
-      values.push(month);
-      query += `
-        AND TO_CHAR(tea.open_at, 'YYYY-MM') = $${values.length}
-      `;
+      const [monthYear, monthNumber] = month.split('-').map(Number);
+      if (Number.isFinite(monthYear) && Number.isFinite(monthNumber)) {
+        values.push(monthYear);
+        values.push(monthNumber);
+        query += `
+          AND csr.nam_dk = $${values.length - 1}
+          AND csr.thang_dk = $${values.length}
+        `;
+      }
     }
 
-    const since = searchParams.get('since');
     if (since) {
       values.push(since);
       query += `
-        AND tea.open_at >= $${values.length}::date
+        AND COALESCE(csr.dang_ky_luc::date, make_date(csr.nam_dk, csr.thang_dk, 1)) >= $${values.length}::date
       `;
     }
 
-    const before = searchParams.get('before');
     if (before) {
       values.push(before);
       query += `
-        AND tea.open_at < $${values.length}::date
+        AND COALESCE(csr.dang_ky_luc::date, make_date(csr.nam_dk, csr.thang_dk, 1)) < $${values.length}::date
       `;
     }
 
     query += `
-      ORDER BY tea.open_at DESC, tea.created_at DESC
+      ORDER BY csr.nam_dk DESC, csr.thang_dk DESC, csr.tao_luc DESC
     `;
 
     const result = await pool.query(query, values);
 
     const now = new Date();
     const mapped = result.rows.map((row) => {
-      const openAt = new Date(row.open_at);
-      const closeAt = new Date(row.close_at);
-      const isOpen = now >= openAt && now <= closeAt;
-      const validFrom = row.set_valid_from ? new Date(row.set_valid_from) : null;
-      const validTo = row.set_valid_to ? new Date(row.set_valid_to) : null;
+      const openAt = row.open_at ? new Date(row.open_at) : null;
+      const closeAt = row.close_at ? new Date(row.close_at) : null;
+      const isOpen = openAt && closeAt ? now >= openAt && now <= closeAt : false;
 
-      const isWithinSetWindow =
-        (!validFrom || now >= validFrom) &&
-        (!validTo || now <= validTo);
+      const isSetActive = row.set_status === 'hoat_dong' || row.set_status === 'active';
+      const selectedSetId = Number(row.selected_set_id || 0);
+      const hasSet = Number.isFinite(selectedSetId) && selectedSetId > 0;
+      const resultId = Number(row.result_id || 0);
+      const hasRuntimeId = Number.isFinite(resultId) && resultId > 0;
 
-      const isSetActiveNow = row.set_status === 'active' && isWithinSetWindow;
+      const rawStatus = String(row.assignment_status || '').toLowerCase();
+      const handlingNote = String(row.score_handling_note || '').toLowerCase();
+      const isDefaultZeroNeedExplanation =
+        handlingNote.includes('mac dinh 0') || handlingNote.includes('mặc định 0') ||
+        handlingNote.includes('chờ giải trình') || handlingNote.includes('cho giai trinh');
+      const isSubmittedOrGraded = rawStatus === 'submitted' || rawStatus === 'graded';
+      const isExpiredByTime = closeAt ? now > closeAt : false;
+
+      let effectiveAssignmentStatus = rawStatus || 'assigned';
+      let effectiveExplanationStatus = row.explanation_status || null;
+
+      if (isDefaultZeroNeedExplanation && !isSubmittedOrGraded) {
+        if (isExpiredByTime) {
+          effectiveAssignmentStatus = 'expired';
+          if (!effectiveExplanationStatus || effectiveExplanationStatus === 'rejected') {
+            effectiveExplanationStatus = 'pending';
+          }
+        } else {
+          effectiveExplanationStatus = null;
+          if (!['assigned', 'in_progress'].includes(effectiveAssignmentStatus)) {
+            effectiveAssignmentStatus = 'assigned';
+          }
+        }
+      }
+
+      const isAllowedStatus = ['assigned', 'in_progress'].includes(effectiveAssignmentStatus);
       const canTake =
+        hasRuntimeId &&
+        hasSet &&
         isOpen &&
-        isSetActiveNow &&
+        isSetActive &&
         row.has_questions === true &&
-        ['assigned', 'in_progress'].includes(row.assignment_status);
+        isAllowedStatus &&
+        effectiveExplanationStatus !== 'accepted';
 
       return {
         ...row,
+        assignment_status: effectiveAssignmentStatus,
+        explanation_status: effectiveExplanationStatus,
+        id: resultId,
         is_open: isOpen,
-        is_set_active_now: isSetActiveNow,
+        is_set_active_now: isSetActive,
         can_take: canTake,
       };
     });

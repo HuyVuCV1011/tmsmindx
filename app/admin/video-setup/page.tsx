@@ -520,7 +520,7 @@ function VideoSetupContent() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-8">
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="w-full space-y-6">
           <div className="h-8 bg-white/50 backdrop-blur rounded-lg w-64 animate-pulse"></div>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -595,7 +595,7 @@ function VideoSetupContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>

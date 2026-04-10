@@ -219,7 +219,7 @@ export function AssignmentWizard({ onSubmit, onCancel, initialData, isSubmitting
                 <label className="block text-sm font-semibold text-gray-700 mb-3">
                   Loại bài tập <span className="text-red-500">*</span>
                 </label>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {ASSIGNMENT_TYPES.map((type) => (
                     <label
                       key={type.value}
@@ -283,7 +283,7 @@ export function AssignmentWizard({ onSubmit, onCancel, initialData, isSubmitting
                 <p className="text-sm text-gray-600">Thiết lập điểm số và quy định</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {/* Total Points */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -319,7 +319,7 @@ export function AssignmentWizard({ onSubmit, onCancel, initialData, isSubmitting
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Thời gian làm bài (phút)
                 </label>
-                <div className="flex gap-2 mb-2">
+                <div className="flex flex-wrap gap-2 mb-2">
                   {TIME_PRESETS.map((time) => (
                     <button
                       key={time}

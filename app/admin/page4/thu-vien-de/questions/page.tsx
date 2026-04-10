@@ -74,9 +74,9 @@ function ExamSetQuestionsContent() {
     }
   };
 
-  const fetchQuestions = async () => {
+  const fetchQuestions = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await fetch(`/api/exam-set-questions?set_id=${setId}`);
       const data = await response.json();
       if (data.success) {
@@ -95,16 +95,12 @@ function ExamSetQuestionsContent() {
       const isEditing = editingQuestion?.id;
       const method = isEditing ? 'PUT' : 'POST';
       const questionText = (questionData.question_text || '').trim();
+      const normalizedQuestionText = questionText || '[Tạm] Chưa dán nội dung từ doc';
       const questionType: Question['question_type'] = questionData.question_type || 'multiple_choice';
       const normalizedOptions = Array.isArray(questionData.options)
         ? questionData.options.map((option) => option.trim()).filter(Boolean)
         : null;
       let correctAnswer = String(questionData.correct_answer || '').trim();
-
-      if (!questionText) {
-        toast.error('Vui lòng nhập câu hỏi');
-        return;
-      }
 
       if (questionType === 'multiple_choice') {
         if (!normalizedOptions || normalizedOptions.length < 2) {
@@ -130,7 +126,7 @@ function ExamSetQuestionsContent() {
 
       const payload: SetQuestionRequestPayload = {
         set_id: Number(setId),
-        question_text: questionText,
+        question_text: normalizedQuestionText,
         question_type: questionType,
         correct_answer: correctAnswer,
         options: questionType === 'multiple_choice' || questionType === 'true_false'
@@ -147,6 +143,24 @@ function ExamSetQuestionsContent() {
         ? { ...payload, id: editingQuestion.id }
         : payload;
 
+      // --- OPTIMISTIC UI ---
+      // Close modal and update state immediately
+      setShowBuilder(false);
+      setEditingQuestion(null);
+
+      if (!isEditing) {
+        const optimisticQuestion: Question = {
+          id: -Date.now(), // Temporary ID
+          ...payload,
+          assignment_id: 0, // Satisfy Question type
+          difficulty: payload.difficulty as any
+        };
+        setQuestions(prev => [...prev, optimisticQuestion]);
+      } else {
+        setQuestions(prev => prev.map(q => q.id === editingQuestion.id ? { ...q, ...payload, assignment_id: 0 } as Question : q));
+      }
+      // ---------------------
+
       const response = await fetch('/api/exam-set-questions', {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -156,20 +170,25 @@ function ExamSetQuestionsContent() {
       const data = await response.json();
       if (data.success) {
         toast.success(isEditing ? 'Cập nhật câu hỏi thành công!' : 'Tạo câu hỏi thành công!');
-        setShowBuilder(false);
-        setEditingQuestion(null);
-        fetchQuestions();
+        fetchQuestions(true); // Sync with DB silently
       } else {
         toast.error('Lỗi: ' + data.error);
+        fetchQuestions(true); // Rollback
       }
     } catch (error) {
       console.error('Error saving set question:', error);
       toast.error('Lỗi khi lưu câu hỏi');
+      fetchQuestions(true); // Rollback
     }
   };
 
   const handleDeleteQuestion = async (id: number) => {
     try {
+      // --- OPTIMISTIC UI ---
+      const originalQuestions = [...questions];
+      setQuestions(prev => prev.filter(q => q.id !== id));
+      // ---------------------
+
       const response = await fetch(`/api/exam-set-questions?id=${id}`, {
         method: 'DELETE',
       });
@@ -177,13 +196,15 @@ function ExamSetQuestionsContent() {
       const data = await response.json();
       if (data.success) {
         toast.success('Xóa câu hỏi thành công!');
-        fetchQuestions();
+        fetchQuestions(true); // Sync silently
       } else {
         toast.error('Lỗi: ' + data.error);
+        setQuestions(originalQuestions); // Rollback
       }
     } catch (error) {
       console.error('Error deleting set question:', error);
       toast.error('Lỗi khi xóa câu hỏi');
+      fetchQuestions(true); // Rollback
     }
   };
 
@@ -301,7 +322,7 @@ function ExamSetQuestionsContent() {
         <div className="text-center py-12">
           <p className="text-red-600">Không tìm thấy bộ đề</p>
           <button
-            onClick={() => router.push('/admin/page4/thu-vien-de')}
+            onClick={() => router.push('/admin/thu-vien-de')}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Quay lại thư viện đề
@@ -341,7 +362,7 @@ function ExamSetQuestionsContent() {
 
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <button
-          onClick={() => router.push('/admin/page4/thu-vien-de')}
+          onClick={() => router.push('/admin/thu-vien-de')}
           className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />

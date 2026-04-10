@@ -187,10 +187,10 @@ export function BirthdaySendWishPopup({
     const counterTone = messageLength > 450 ? 'text-amber-200' : 'text-white/75'
 
     const popupContent = (
-        <div className="fixed inset-0 z-130">
+        <div className="fixed inset-0 z-9999">
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative z-10 flex h-full w-full items-center justify-center p-4">
-                <div className="relative w-full max-w-xl overflow-hidden rounded-3xl border border-white/20 bg-[#8f1428] shadow-[0_28px_80px_rgba(0,0,0,0.45)]">
+            <div className="relative z-10 flex h-full w-full items-start justify-center overflow-y-auto p-3 sm:items-center sm:p-4">
+                <div className="relative w-full max-w-xl max-h-[92dvh] overflow-y-auto rounded-3xl border border-white/20 bg-[#8f1428] shadow-[0_28px_80px_rgba(0,0,0,0.45)]">
                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.22)_0,rgba(255,255,255,0)_40%),linear-gradient(145deg,#7b1122_0%,#9f1630_45%,#7d1022_100%)]" />
 
                     <div className="relative flex items-start justify-between border-b border-white/15 px-5 py-4">

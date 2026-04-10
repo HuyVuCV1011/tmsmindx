@@ -45,9 +45,9 @@ type StatusFilter = 'all' | 'pending' | 'tegl_approved' | 'admin_approved' | 're
 
 // ─── Constants ──────────────────────────────────────
 const DEAL_TYPE_LABELS: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  bonus: { label: 'Bonus', icon: <Award className="w-3.5 h-3.5" />, color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+  bonus: { label: 'Nâng lương', icon: <Award className="w-3.5 h-3.5" />, color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
   salary_reduction: { label: 'Hạ lương', icon: <TrendingDown className="w-3.5 h-3.5" />, color: 'text-amber-700 bg-amber-50 border-amber-200' },
-  salary_deal: { label: 'Deal lương', icon: <DollarSign className="w-3.5 h-3.5" />, color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  salary_deal: { label: 'Thỏa thuận lương', icon: <DollarSign className="w-3.5 h-3.5" />, color: 'text-blue-700 bg-blue-50 border-blue-200' },
 };
 
 const STATUS_TABS: { key: StatusFilter; label: string; color: string }[] = [
@@ -225,14 +225,13 @@ export default function AdminDealLuongPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen p-4">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3">
           
-          {`Quản lý ${DEAL_TYPE_LABELS[dealTypeTab]?.label || 'Deal lương'}`}
+          {`Quản lý ${DEAL_TYPE_LABELS[dealTypeTab]?.label || 'Thỏa thuận lương'}`}
         </h1>
-        <p className="text-slate-500 mt-2 text-sm">Duyệt yêu cầu bonus, hạ lương, deal lương từ Leader/TE/TC</p>
       </div>
 
       {/* Stats Cards */}
