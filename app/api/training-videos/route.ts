@@ -7,6 +7,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const status = searchParams.get('status');
+    const videoGroupId = searchParams.get('video_group_id');
 
     let query = `
       SELECT
@@ -29,13 +30,18 @@ export async function GET(request: Request) {
       params.push(status);
     }
 
+    if (videoGroupId) {
+      conditions.push(`tv.video_group_id = $${params.length + 1}`);
+      params.push(videoGroupId);
+    }
+
     if (conditions.length > 0) {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
     query += ' GROUP BY tv.id';
 
-    query += ' ORDER BY tv.lesson_number ASC, tv.created_at DESC';
+    query += ' ORDER BY tv.lesson_number ASC NULLS LAST, tv.created_at DESC, tv.chunk_index ASC NULLS LAST';
 
     const result = await pool.query(query, params);
 
@@ -60,11 +66,18 @@ export async function POST(request: Request) {
     const {
       title,
       video_link,
+      unified_stream_url,
+      duration_seconds,
       start_date,
       duration_minutes,
       description,
       thumbnail_url,
       lesson_number,
+      video_group_id,
+      chunk_index,
+      chunk_total,
+      original_filename,
+      original_size_bytes,
       status = 'draft'
     } = body;
 
@@ -78,8 +91,24 @@ export async function POST(request: Request) {
 
     const query = `
       INSERT INTO training_videos 
-      (title, video_link, start_date, duration_minutes, description, thumbnail_url, lesson_number, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      (
+        title,
+        video_link,
+        start_date,
+        duration_minutes,
+        description,
+        thumbnail_url,
+        lesson_number,
+        status,
+        unified_stream_url,
+        duration_seconds,
+        video_group_id,
+        chunk_index,
+        chunk_total,
+        original_filename,
+        original_size_bytes
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *
     `;
 
@@ -91,7 +120,14 @@ export async function POST(request: Request) {
       description,
       thumbnail_url,
       lesson_number,
-      status
+      status,
+      unified_stream_url,
+      duration_seconds || null,
+      video_group_id,
+      chunk_index,
+      chunk_total,
+      original_filename,
+      original_size_bytes
     ];
 
     const result = await pool.query(query, values);
@@ -123,6 +159,16 @@ export async function PUT(request: Request) {
       );
     }
 
+    const checkResult = await pool.query('SELECT video_group_id FROM training_videos WHERE id = $1', [id]);
+    if (checkResult.rows.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Video not found' },
+        { status: 404 }
+      );
+    }
+
+    const groupId = checkResult.rows[0].video_group_id;
+
     // Build dynamic update query
     const fields = Object.keys(updateData).filter(key => updateData[key] !== undefined);
     if (fields.length === 0) {
@@ -132,22 +178,47 @@ export async function PUT(request: Request) {
       );
     }
 
-    const setClause = fields.map((field, index) => `${field} = $${index + 2}`).join(', ');
-    const query = `
-      UPDATE training_videos 
-      SET ${setClause}
-      WHERE id = $1
-      RETURNING *
-    `;
+    let result;
 
-    const values = [id, ...fields.map(field => updateData[field])];
-    const result = await pool.query(query, values);
+    if (groupId) {
+      const groupFields = fields.filter(f => f !== 'duration_minutes'); 
+      if (groupFields.length === 0) {
+        return NextResponse.json({ success: true, data: { id } });
+      }
 
-    if (result.rows.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Video not found' },
-        { status: 404 }
-      );
+      const setClauses = [];
+      const values = [groupId];
+      let paramIndex = 2;
+
+      for (const field of groupFields) {
+        if (field === 'title') {
+           setClauses.push(`title = $${paramIndex}`);
+           setClauses.push(`original_filename = $${paramIndex}`);
+        } else {
+           setClauses.push(`${field} = $${paramIndex}`);
+        }
+        values.push(updateData[field]);
+        paramIndex++;
+      }
+
+      const query = `
+        UPDATE training_videos 
+        SET ${setClauses.join(', ')}
+        WHERE video_group_id = $1
+        RETURNING *
+      `;
+
+      result = await pool.query(query, values);
+    } else {
+      const setClause = fields.map((field, index) => `${field} = $${index + 2}`).join(', ');
+      const query = `
+        UPDATE training_videos 
+        SET ${setClause}
+        WHERE id = $1
+        RETURNING *
+      `;
+      const values = [id, ...fields.map(field => updateData[field])];
+      result = await pool.query(query, values);
     }
 
     return NextResponse.json({
@@ -177,14 +248,21 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const query = 'DELETE FROM training_videos WHERE id = $1 RETURNING *';
-    const result = await pool.query(query, [id]);
-
-    if (result.rows.length === 0) {
+    const checkResult = await pool.query('SELECT video_group_id FROM training_videos WHERE id = $1', [id]);
+    if (checkResult.rows.length === 0) {
       return NextResponse.json(
         { success: false, error: 'Video not found' },
         { status: 404 }
       );
+    }
+
+    const groupId = checkResult.rows[0].video_group_id;
+    let result;
+
+    if (groupId) {
+      result = await pool.query('DELETE FROM training_videos WHERE video_group_id = $1 RETURNING *', [groupId]);
+    } else {
+      result = await pool.query('DELETE FROM training_videos WHERE id = $1 RETURNING *', [id]);
     }
 
     return NextResponse.json({

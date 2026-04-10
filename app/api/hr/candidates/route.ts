@@ -104,22 +104,6 @@ async function validateHrAccess(requestEmail: string): Promise<{ ok: boolean; st
     return { ok: true, status: 200 };
   }
 
-  const rolesResult = await pool.query(
-    `SELECT role_code
-     FROM user_roles
-     WHERE user_id = $1`,
-    [user.id]
-  );
-
-  const hasTrainingInputRole = rolesResult.rows.some((row: { role_code: string }) => {
-    const roleCode = normalizeValue(row.role_code).toUpperCase();
-    return roleCode === 'HR' || roleCode === 'TE' || roleCode === 'TF';
-  });
-
-  if (hasTrainingInputRole) {
-    return { ok: true, status: 200 };
-  }
-
   const permissionResult = await pool.query(
     `SELECT route_path FROM app_permissions WHERE user_id = $1 AND can_access = true
      UNION
@@ -132,10 +116,7 @@ async function validateHrAccess(requestEmail: string): Promise<{ ok: boolean; st
 
   const permissions = permissionResult.rows.map((row: { route_path: string }) => row.route_path);
   const hasAccess = permissions.some(
-    (routePath) =>
-      routePath === HR_PERMISSION_ROUTE ||
-      HR_PERMISSION_ROUTE.startsWith(`${routePath}/`) ||
-      routePath.startsWith(`${HR_PERMISSION_ROUTE}/`)
+    (routePath) => routePath === HR_PERMISSION_ROUTE || HR_PERMISSION_ROUTE.startsWith(`${routePath}/`)
   );
 
   if (!hasAccess) {
@@ -316,8 +297,6 @@ const handleGet = async (request: NextRequest) => {
     });
 
     const regionTotal = regionScopedRows.length;
-    const regionAssigned = regionScopedRows.filter((row) => !row.isUnassigned).length;
-    const regionUnassigned = regionScopedRows.filter((row) => row.isUnassigned).length;
 
     const regionScopedByGen = regionScopedRows.reduce<Record<string, number>>((acc, row) => {
       const gen = normalizeValue(row.effectiveGen);
@@ -410,8 +389,6 @@ const handleGet = async (request: NextRequest) => {
         availableGens: regionScopedGens,
         region: regionFilter || 'all',
         regionTotal,
-        regionAssigned,
-        regionUnassigned,
       },
       headers: sheetData.headers,
       source: {

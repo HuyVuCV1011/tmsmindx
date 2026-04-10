@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { PageContainer } from '@/components/PageContainer';
 import { SkeletonTable } from '@/components/skeletons';
 import { Edit, List, Plus, Trash2, X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -17,13 +17,6 @@ interface Assignment {
   assignment_title: string;
   assignment_type: string;
   description: string;
-  total_points: number;
-  passing_score: number;
-  time_limit_minutes: number;
-  max_attempts: number;
-  is_required: boolean;
-  due_date: string;
-  status: string;
   question_count: number;
 }
 
@@ -41,25 +34,28 @@ export default function AssignmentManagementPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromVideoId = searchParams.get('from_video'); // video_id được truyền từ video-setup
 
   const [formData, setFormData] = useState({
     video_id: '',
     assignment_title: '',
     assignment_type: 'quiz',
     description: '',
-    total_points: '10',
-    passing_score: '7',
-    time_limit_minutes: '30',
-    max_attempts: '3',
-    is_required: true,
-    due_date: '',
-    status: 'published'
   });
 
   useEffect(() => {
     fetchAssignments();
     fetchVideos();
   }, []);
+
+  // Nếu có from_video → tự mở modal và điền sẵn video_id
+  useEffect(() => {
+    if (fromVideoId && videos.length > 0) {
+      setFormData(prev => ({ ...prev, video_id: fromVideoId }));
+      setShowModal(true);
+    }
+  }, [fromVideoId, videos]);
 
   const fetchVideos = async () => {
     try {
@@ -113,6 +109,10 @@ export default function AssignmentManagementPage() {
         setShowModal(false);
         resetForm();
         fetchAssignments();
+        // Sau khi tạo mới: chuyển đến trang quản lý câu hỏi
+        if (!editingId && data.data?.id) {
+          router.push(`/admin/assignment-questions?assignment_id=${data.data.id}`);
+        }
       } else {
         toast.error('Lỗi: ' + data.error);
       }
@@ -129,13 +129,6 @@ export default function AssignmentManagementPage() {
       assignment_title: assignment.assignment_title,
       assignment_type: assignment.assignment_type,
       description: assignment.description || '',
-      total_points: assignment.total_points.toString(),
-      passing_score: assignment.passing_score.toString(),
-      time_limit_minutes: assignment.time_limit_minutes?.toString() || '30',
-      max_attempts: assignment.max_attempts?.toString() || '3',
-      is_required: assignment.is_required,
-      due_date: assignment.due_date ? new Date(assignment.due_date).toISOString().split('T')[0] : '',
-      status: assignment.status
     });
     setShowModal(true);
   };
@@ -167,13 +160,6 @@ export default function AssignmentManagementPage() {
       assignment_title: '',
       assignment_type: 'quiz',
       description: '',
-      total_points: '10',
-      passing_score: '7',
-      time_limit_minutes: '30',
-      max_attempts: '3',
-      is_required: true,
-      due_date: '',
-      status: 'published'
     });
   };
 
@@ -228,9 +214,6 @@ export default function AssignmentManagementPage() {
                   <TableHead>Tên Assignment</TableHead>
                   <TableHead>Loại</TableHead>
                   <TableHead className="text-center">Câu hỏi</TableHead>
-                  <TableHead className="text-center">Điểm</TableHead>
-                  <TableHead className="text-center">Điểm đạt</TableHead>
-                  <TableHead className="text-center">Trạng thái</TableHead>
                   <TableHead className="text-center">Hành động</TableHead>
                 </TableRow>
               </TableHeader>
@@ -246,17 +229,6 @@ export default function AssignmentManagementPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-center">{assignment.question_count || 0}</TableCell>
-                    <TableCell className="text-center font-medium">{assignment.total_points}</TableCell>
-                    <TableCell className="text-center">{assignment.passing_score}</TableCell>
-                    <TableCell className="text-center">
-                      <span className={`px-2 py-0.5 rounded text-xs ${
-                        assignment.status === 'published' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {assignment.status}
-                      </span>
-                    </TableCell>
                     <TableCell>
                       <div className="flex gap-1 justify-center">
                         <button
@@ -358,81 +330,6 @@ export default function AssignmentManagementPage() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
                   rows={2}
                 />
-              </div>
-
-              <div className="grid grid-cols-4 gap-3">
-                <div>
-                  <label className="block mb-1 text-sm font-medium">Điểm tối đa</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.total_points}
-                    onChange={e => setFormData({...formData, total_points: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 text-sm font-medium">Điểm đạt</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.passing_score}
-                    onChange={e => setFormData({...formData, passing_score: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 text-sm font-medium">TG (phút)</label>
-                  <input
-                    type="number"
-                    value={formData.time_limit_minutes}
-                    onChange={e => setFormData({...formData, time_limit_minutes: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 text-sm font-medium">Số lần</label>
-                  <input
-                    type="number"
-                    value={formData.max_attempts}
-                    onChange={e => setFormData({...formData, max_attempts: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 text-sm font-medium">Hạn nộp</label>
-                  <input
-                    type="date"
-                    value={formData.due_date}
-                    onChange={e => setFormData({...formData, due_date: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 text-sm font-medium">Trạng thái</label>
-                  <select
-                    value={formData.status}
-                    onChange={e => setFormData({...formData, status: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]"
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="published">Published</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={formData.is_required}
-                  onChange={e => setFormData({...formData, is_required: e.target.checked})}
-                  className="mr-2"
-                />
-                <label className="text-sm">Bắt buộc hoàn thành</label>
               </div>
 
               <div className="flex gap-2 justify-end pt-2">

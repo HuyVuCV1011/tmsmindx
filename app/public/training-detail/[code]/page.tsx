@@ -224,7 +224,7 @@ export default function TrainingDetailPage() {
             </button>
           </div>
           {activeTab === 'overview' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
                 <h3 className="font-semibold text-slate-800">Chi tiết từng video</h3>
                 <a
@@ -240,8 +240,8 @@ export default function TrainingDetailPage() {
               {video_scores.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-sm">Chưa có dữ liệu video</div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div className="">
+                  <table className="w-full text-sm border-separate border-spacing-0">
                     <thead>
                       <tr className="bg-slate-50 text-left">
                         <th className="px-4 py-3 font-medium text-slate-600">Video</th>
@@ -254,7 +254,7 @@ export default function TrainingDetailPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {video_scores.map((v) => (
-                        <tr key={v.video_id} className="hover:bg-slate-50 transition-colors">
+                        <tr key={v.video_id} className="hover:bg-slate-50 transition-all relative z-10 hover:z-50 group/row">
                           <td className="px-4 py-3">
                             {v.video_link ? (
                               <a
@@ -273,7 +273,7 @@ export default function TrainingDetailPage() {
                               <div className="text-xs text-slate-400 mt-0.5 line-clamp-1">{v.video_description}</div>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-4 py-3 text-center relative">
                             <StatusBadge status={v.completion_status} />
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -283,14 +283,14 @@ export default function TrainingDetailPage() {
                               <span className="text-slate-300">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-4 py-3 text-center relative z-20 group-hover/row:z-[100]">
                             {v.attempt_logs && v.attempt_logs.length > 0 ? (
                               <div className="flex flex-col items-center gap-1.5">
                                 <span className="text-[11px] text-slate-500">
                                   {v.attempt_logs.length} luot lam
                                 </span>
                                 <div className="flex flex-wrap items-center justify-center gap-1.5">
-                                  {v.attempt_logs.slice(0, 3).map((attempt) => (
+                                  {v.attempt_logs.slice(0, 2).map((attempt) => (
                                     <a
                                       key={attempt.submission_id}
                                       href={`/public/training-submission-detail/${attempt.submission_id}`}
@@ -302,10 +302,40 @@ export default function TrainingDetailPage() {
                                       Lan {attempt.attempt_number}
                                     </a>
                                   ))}
+                                  
+                                  {v.attempt_logs.length > 2 && (
+                                    <div className="relative group/popover">
+                                      <span className="cursor-default inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-slate-500 bg-slate-50 border border-slate-100 rounded hover:bg-slate-100 transition-colors">
+                                        +{v.attempt_logs.length - 2} luot khac
+                                      </span>
+                                      
+                                      {/* Popover */}
+                                        <div className="invisible group-hover/popover:visible absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 p-2 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200">
+                                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 mb-1 border-b border-slate-50">
+                                            Các lượt làm khác
+                                          </div>
+                                         <div className="max-h-40 overflow-y-auto custom-scrollbar flex flex-col gap-1">
+                                           {v.attempt_logs.slice(2).map((attempt) => (
+                                             <a
+                                               key={attempt.submission_id}
+                                               href={`/public/training-submission-detail/${attempt.submission_id}`}
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-slate-50 text-[11px] transition-colors group/item"
+                                             >
+                                               <span className="font-medium text-slate-700">Lan {attempt.attempt_number}</span>
+                                               <span className="text-slate-400 group-hover/item:text-blue-500 font-mono">
+                                                 {attempt.score !== null ? attempt.score.toFixed(1) : '—'} đ
+                                               </span>
+                                             </a>
+                                           ))}
+                                         </div>
+                                         {/* Arrow pointing up */}
+                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-1 border-8 border-transparent border-b-white drop-shadow-sm"></div>
+                                       </div>
+                                    </div>
+                                  )}
                                 </div>
-                                {v.attempt_logs.length > 3 && (
-                                  <span className="text-[11px] text-slate-400">+{v.attempt_logs.length - 3} luot khac</span>
-                                )}
                               </div>
                             ) : (
                               <span className="text-slate-300 text-xs italic">Chưa làm bài</span>

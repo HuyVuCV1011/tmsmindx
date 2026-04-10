@@ -10,6 +10,7 @@ interface Video {
   id: number;
   title: string;
   video_link: string;
+  unified_stream_url?: string;
   start_date: string;
   duration_minutes: number;
   view_count: number;
@@ -18,6 +19,9 @@ interface Video {
   thumbnail_url: string;
   lesson_number: number;
   created_at: string;
+  video_group_id?: string;
+  chunk_index?: number;
+  chunk_total?: number;
 }
 
 interface Question {
@@ -33,8 +37,10 @@ function VideoSetupContent() {
   const router = useRouter();
   const toast = useToast();
   const videoId = searchParams.get("id");
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRefA = useRef<HTMLVideoElement>(null);
+  const videoRefB = useRef<HTMLVideoElement>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
+  const isTransitioningRef = useRef(false);
 
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -50,6 +56,17 @@ function VideoSetupContent() {
   });
 
   const [video, setVideo] = useState<Video | null>(null);
+  const [groupVideos, setGroupVideos] = useState<Video[]>([]);
+  const [unifiedStreamUrl, setUnifiedStreamUrl] = useState<string | null>(null);
+  const [disableUnifiedStream, setDisableUnifiedStream] = useState(false);
+  const [cloudinaryOrigin, setCloudinaryOrigin] = useState<string | null>(null);
+  const [activePreviewVideoId, setActivePreviewVideoId] = useState<number | null>(null);
+  const [bufferVideoIds, setBufferVideoIds] = useState<{ A: number | null; B: number | null }>({ A: null, B: null });
+  const [activeBuffer, setActiveBuffer] = useState<'A' | 'B'>('A');
+  const [shouldPreloadNextPart, setShouldPreloadNextPart] = useState(false);
+  const [isNextBufferReady, setIsNextBufferReady] = useState(false);
+  const [pendingSwitchOnReady, setPendingSwitchOnReady] = useState(false);
+  const [shouldAutoPlayNextPart, setShouldAutoPlayNextPart] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<'questions' | 'assignment'>('questions');
@@ -82,6 +99,93 @@ function VideoSetupContent() {
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>("");
   const [currentAssignment, setCurrentAssignment] = useState<any>(null);
 
+  const NEXT_PRELOAD_LEAD_SECONDS = 25;
+  const EARLY_SWITCH_SECONDS = 0.18;
+
+  const normalizeGroupTitle = (title: string) => {
+    return title.replace(/\s*[-–—]?\s*P\d+\s*$/i, '').trim();
+  };
+
+  const parseCloudinaryAsset = (assetUrl: string) => {
+    try {
+      const parsed = new URL(assetUrl);
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      // /<cloud>/video/upload/<transform...>/v123/folder/file.mp4
+      if (parts.length < 5 || parts[1] !== 'video' || parts[2] !== 'upload') {
+        return null;
+      }
+
+      const cloudName = parts[0];
+      const uploadIndex = 2;
+      let startPublicIdIndex = uploadIndex + 1;
+
+      for (let i = uploadIndex + 1; i < parts.length; i += 1) {
+        if (/^v\d+$/.test(parts[i])) {
+          startPublicIdIndex = i + 1;
+          break;
+        }
+      }
+
+      const publicPath = parts.slice(startPublicIdIndex).join('/');
+      if (!publicPath) return null;
+
+      const dotIndex = publicPath.lastIndexOf('.');
+      const publicId = dotIndex > 0 ? publicPath.slice(0, dotIndex) : publicPath;
+      if (!publicId) return null;
+
+      return { cloudName, publicId };
+    } catch {
+      return null;
+    }
+  };
+
+  const buildUnifiedCloudinaryStreamUrl = (videos: Video[]) => {
+    if (videos.length <= 1) return null;
+
+    const parsedVideos = videos
+      .map((item) => parseCloudinaryAsset(item.video_link))
+      .filter((item): item is { cloudName: string; publicId: string } => !!item);
+
+    if (parsedVideos.length !== videos.length) return null;
+
+    const cloudName = parsedVideos[0].cloudName;
+    if (parsedVideos.some((item) => item.cloudName !== cloudName)) return null;
+
+    const basePublicId = parsedVideos[0].publicId
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+
+    const spliceTransforms = parsedVideos
+      .slice(1)
+      .map((item) => {
+        const layerPublicId = item.publicId
+          .split('/')
+          .map((segment) => encodeURIComponent(segment))
+          .join(':');
+        return `l_video:${layerPublicId},fl_splice`;
+      })
+      .join('/');
+
+    const transformPath = spliceTransforms ? `${spliceTransforms}/` : '';
+    return `https://res.cloudinary.com/${cloudName}/video/upload/sp_auto/${transformPath}${basePublicId}.m3u8`;
+  };
+
+  const ensureHlsManifestUrl = (url: string | null) => {
+    if (!url) return null;
+    let nextUrl = url;
+
+    if (!/\.m3u8($|\?)/i.test(nextUrl) && /\.mp4($|\?)/i.test(nextUrl)) {
+      nextUrl = nextUrl.replace(/\.mp4($|\?)/i, '.m3u8$1');
+    }
+
+    if (nextUrl.includes('/video/upload/') && !nextUrl.includes('/video/upload/sp_auto/')) {
+      nextUrl = nextUrl.replace('/video/upload/', '/video/upload/sp_auto/');
+    }
+
+    return nextUrl;
+  };
+
   useEffect(() => {
     // Fetch all assignments for selection
     const fetchAssignments = async () => {
@@ -96,15 +200,28 @@ function VideoSetupContent() {
         }
     };
     fetchAssignments();
+
+    // Refresh khi user quay lại tab này (sau khi tạo assignment ở tab/trang khác)
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') fetchAssignments();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
   useEffect(() => {
     if (allAssignments.length > 0 && videoId) {
-        // Check if there is already an assignment for this video
-        const linked = allAssignments.find((a: any) => a.video_id === parseInt(videoId!));
+        const vid = parseInt(videoId, 10);
+        // So sánh cả number và string để tránh type mismatch
+        const linked = allAssignments.find((a: any) =>
+          Number(a.video_id) === vid
+        );
         if (linked) {
             setCurrentAssignment(linked);
             setSelectedAssignmentId(linked.id.toString());
+        } else {
+            // Không có assignment nào linked với video này
+            setCurrentAssignment(null);
         }
     }
   }, [allAssignments, videoId]);
@@ -129,6 +246,27 @@ function VideoSetupContent() {
         if (videoData.success && videoData.data.length > 0) {
           const currentVideo = videoData.data[0];
           setVideo(currentVideo);
+          setActivePreviewVideoId(currentVideo.id);
+          setBufferVideoIds({ A: currentVideo.id, B: null });
+          setActiveBuffer('A');
+
+          const baseTitle = normalizeGroupTitle(currentVideo.title || "");
+
+          if (currentVideo.video_group_id) {
+            const groupResponse = await fetch(`/api/training-videos?video_group_id=${encodeURIComponent(currentVideo.video_group_id)}`);
+            const groupData = await groupResponse.json();
+            if (groupData.success && Array.isArray(groupData.data)) {
+              const sortedGroupVideos = [...groupData.data].sort((a: Video, b: Video) => {
+                const left = a.chunk_index ?? 0;
+                const right = b.chunk_index ?? 0;
+                if (left !== right) return left - right;
+                return a.id - b.id;
+              });
+              setGroupVideos(sortedGroupVideos);
+            }
+          } else {
+            setGroupVideos([currentVideo]);
+          }
           
           // Calculate next lesson number (max lesson number + 1)
           let maxLesson = 0;
@@ -139,7 +277,7 @@ function VideoSetupContent() {
           
           // Set form with current video data or defaults
           setVideoForm({
-            title: currentVideo.title || "",
+            title: baseTitle || currentVideo.title || "",
             lesson_number: currentVideo.lesson_number ? currentVideo.lesson_number.toString() : nextLesson.toString(),
             duration_minutes: currentVideo.duration_minutes ? currentVideo.duration_minutes.toString() : "30",
             start_date: currentVideo.start_date ? new Date(currentVideo.start_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
@@ -249,8 +387,12 @@ function VideoSetupContent() {
   };
 
   // Update duration from video element when loaded
+  const getActiveVideoElement = () => {
+    return activeBuffer === 'A' ? videoRefA.current : videoRefB.current;
+  };
+
   useEffect(() => {
-    const videoElement = videoRef.current;
+    const videoElement = getActiveVideoElement();
     if (videoElement) {
       const handleLoadedMetadata = () => {
         const durationInMinutes = Math.ceil(videoElement.duration / 60);
@@ -262,18 +404,19 @@ function VideoSetupContent() {
       videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
       return () => videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
     }
-  }, [video]);
+  }, [activePreviewVideoId, activeBuffer]);
 
   const getCurrentTime = () => {
-    if (videoRef.current) {
-      setAddTime(Math.floor(videoRef.current.currentTime).toString());
+    const videoElement = getActiveVideoElement();
+    if (videoElement) {
+      setAddTime(Math.floor(videoElement.currentTime).toString());
     }
   };
 
 
   // Auto-sync time from video when form is open
   useEffect(() => {
-    const videoElement = videoRef.current;
+    const videoElement = getActiveVideoElement();
     if (!videoElement || !showQuestionForm) return;
 
     const handleTimeUpdate = () => {
@@ -296,7 +439,263 @@ function VideoSetupContent() {
         videoElement.removeEventListener('seeked', handleSeeked);
         videoElement.removeEventListener('pause', handleSeeked);
     };
-  }, [showQuestionForm]);
+  }, [showQuestionForm, activeBuffer]);
+
+  useEffect(() => {
+    setShouldPreloadNextPart(false);
+    setIsNextBufferReady(false);
+    setPendingSwitchOnReady(false);
+    setShouldAutoPlayNextPart(false);
+    if (video) {
+      setActivePreviewVideoId(video.id);
+      setBufferVideoIds({ A: video.id, B: null });
+      setActiveBuffer('A');
+    }
+  }, [video?.id]);
+
+  useEffect(() => {
+    if (groupVideos.length > 1) {
+      const persistedUrl =
+        groupVideos.find((item) => Boolean(item.unified_stream_url))?.unified_stream_url || null;
+      const computedUrl = buildUnifiedCloudinaryStreamUrl(groupVideos);
+      setUnifiedStreamUrl(ensureHlsManifestUrl(persistedUrl || computedUrl));
+      setDisableUnifiedStream(false);
+      return;
+    }
+    setUnifiedStreamUrl(null);
+    setDisableUnifiedStream(false);
+  }, [groupVideos]);
+
+  useEffect(() => {
+    const activeVideo =
+      groupVideos.find((item) => item.id === activePreviewVideoId) || video;
+    const sourceUrl = unifiedStreamUrl || activeVideo?.video_link || null;
+    if (!sourceUrl) {
+      setCloudinaryOrigin(null);
+      return;
+    }
+
+    try {
+      const parsed = new URL(sourceUrl);
+      setCloudinaryOrigin(parsed.origin);
+    } catch {
+      setCloudinaryOrigin(null);
+    }
+  }, [unifiedStreamUrl, activePreviewVideoId, groupVideos, video]);
+
+  useEffect(() => {
+    if (!cloudinaryOrigin) return;
+
+    const preconnectId = `preconnect-${cloudinaryOrigin}`;
+    const dnsPrefetchId = `dns-prefetch-${cloudinaryOrigin}`;
+
+    const ensureLink = (id: string, rel: string, href: string, withCors = false) => {
+      let link = document.head.querySelector(`link[data-net-hint="${id}"]`) as HTMLLinkElement | null;
+      if (!link) {
+        link = document.createElement('link');
+        link.setAttribute('data-net-hint', id);
+        document.head.appendChild(link);
+      }
+      link.rel = rel;
+      link.href = href;
+      if (withCors) {
+        link.crossOrigin = 'anonymous';
+      }
+    };
+
+    ensureLink(preconnectId, 'preconnect', cloudinaryOrigin, true);
+    ensureLink(dnsPrefetchId, 'dns-prefetch', cloudinaryOrigin);
+  }, [cloudinaryOrigin]);
+
+  const currentPreviewVideo =
+    groupVideos.find((item) => item.id === activePreviewVideoId) || video;
+
+  const useUnifiedStream = Boolean(unifiedStreamUrl) && !disableUnifiedStream;
+
+  const handleUnifiedStreamError = () => {
+    setDisableUnifiedStream(true);
+    toast.error('Unified stream tạm thời bị lỗi, đã chuyển về chế độ cơ bản.');
+  };
+
+  const resolveVideoById = (id: number | null) => {
+    if (!id) return null;
+    return groupVideos.find((item) => item.id === id) || (video?.id === id ? video : null);
+  };
+
+  const inactiveBuffer: 'A' | 'B' = activeBuffer === 'A' ? 'B' : 'A';
+  const activeBufferVideo = resolveVideoById(bufferVideoIds[activeBuffer]) || currentPreviewVideo;
+  const inactiveBufferVideo = resolveVideoById(bufferVideoIds[inactiveBuffer]);
+
+  const getVideoElementByBuffer = (buffer: 'A' | 'B') => {
+    if (useUnifiedStream) {
+      return videoRefA.current;
+    }
+    return buffer === 'A' ? videoRefA.current : videoRefB.current;
+  };
+
+  const switchToNextPart = () => {
+    if (useUnifiedStream) return;
+    const nextPart = getNextPartVideo();
+    if (!nextPart || isTransitioningRef.current || !isNextBufferReady) return;
+
+    const currentEl = getVideoElementByBuffer(activeBuffer);
+    const nextEl = getVideoElementByBuffer(inactiveBuffer);
+    if (currentEl && nextEl) {
+      nextEl.volume = currentEl.volume;
+      nextEl.muted = currentEl.muted;
+      nextEl.playbackRate = currentEl.playbackRate;
+    }
+
+    isTransitioningRef.current = true;
+    setBufferVideoIds((prev) => ({
+      ...prev,
+      [inactiveBuffer]: nextPart.id,
+    }));
+    setShouldPreloadNextPart(false);
+    setIsNextBufferReady(false);
+    setPendingSwitchOnReady(false);
+    setShouldAutoPlayNextPart(true);
+    setActiveBuffer(inactiveBuffer);
+    setActivePreviewVideoId(nextPart.id);
+  };
+
+  const getCurrentPartIndex = () => {
+    if (!currentPreviewVideo || groupVideos.length <= 1) return -1;
+    return groupVideos.findIndex((item) => item.id === currentPreviewVideo.id);
+  };
+
+  const getNextPartVideo = () => {
+    const currentIndex = getCurrentPartIndex();
+    if (currentIndex < 0) return null;
+    const nextIndex = currentIndex + 1;
+    if (nextIndex >= groupVideos.length) return null;
+    return groupVideos[nextIndex];
+  };
+
+  useEffect(() => {
+    if (useUnifiedStream) return;
+    const nextPart = getNextPartVideo();
+    if (!nextPart) {
+      setShouldPreloadNextPart(false);
+      setIsNextBufferReady(false);
+      return;
+    }
+
+    // Keep next buffer primed from the beginning of current part.
+    setBufferVideoIds((prev) => ({
+      ...prev,
+      [inactiveBuffer]: nextPart.id,
+    }));
+    setShouldPreloadNextPart(true);
+  }, [useUnifiedStream, activePreviewVideoId, inactiveBuffer, groupVideos.length]);
+
+  const handlePreviewTimeUpdate = () => {
+    if (useUnifiedStream) return;
+    const videoElement = getActiveVideoElement();
+    if (!videoElement) return;
+    const nextPart = getNextPartVideo();
+    if (!nextPart) return;
+
+    const remainingSeconds = videoElement.duration - videoElement.currentTime;
+    if (!Number.isFinite(remainingSeconds)) return;
+
+    if (!shouldPreloadNextPart && remainingSeconds <= NEXT_PRELOAD_LEAD_SECONDS) {
+      setBufferVideoIds((prev) => ({
+        ...prev,
+        [inactiveBuffer]: nextPart.id,
+      }));
+      setIsNextBufferReady(false);
+      setShouldPreloadNextPart(true);
+    }
+
+    // Switch slightly before ended event to avoid event-loop and decoder latency.
+    if (remainingSeconds <= EARLY_SWITCH_SECONDS && isNextBufferReady) {
+      switchToNextPart();
+    }
+  };
+
+  const handlePreviewEnded = () => {
+    if (useUnifiedStream) return;
+    if (isNextBufferReady) {
+      switchToNextPart();
+      return;
+    }
+
+    // If next part is not ready exactly at ended event, wait for canplay and switch immediately.
+    setPendingSwitchOnReady(true);
+    setShouldPreloadNextPart(true);
+  };
+
+  useEffect(() => {
+    if (!pendingSwitchOnReady || useUnifiedStream || !isNextBufferReady) return;
+    switchToNextPart();
+  }, [pendingSwitchOnReady, useUnifiedStream, isNextBufferReady]);
+
+  useEffect(() => {
+    if (useUnifiedStream) return;
+    const inactiveVideoEl = getVideoElementByBuffer(inactiveBuffer);
+    if (!inactiveVideoEl || !inactiveBufferVideo || !shouldPreloadNextPart) return;
+
+    const markReady = () => setIsNextBufferReady(true);
+    const markLoading = () => setIsNextBufferReady(false);
+
+    inactiveVideoEl.addEventListener('canplay', markReady);
+    inactiveVideoEl.addEventListener('loadeddata', markReady);
+    inactiveVideoEl.addEventListener('waiting', markLoading);
+
+    if (inactiveVideoEl.readyState >= 3) {
+      setIsNextBufferReady(true);
+    }
+
+    // Warm up decode pipeline for next part to reduce first-frame latency.
+    const warmup = async () => {
+      try {
+        inactiveVideoEl.currentTime = 0;
+        if (inactiveVideoEl.readyState < 2) {
+          inactiveVideoEl.load();
+        }
+        await inactiveVideoEl.play();
+        inactiveVideoEl.pause();
+        inactiveVideoEl.currentTime = 0;
+      } catch {
+        // Ignore warmup failures; normal preload still works.
+      }
+    };
+
+    warmup();
+
+    return () => {
+      inactiveVideoEl.removeEventListener('canplay', markReady);
+      inactiveVideoEl.removeEventListener('loadeddata', markReady);
+      inactiveVideoEl.removeEventListener('waiting', markLoading);
+    };
+  }, [inactiveBuffer, inactiveBufferVideo?.id, shouldPreloadNextPart, useUnifiedStream]);
+
+  useEffect(() => {
+    if (useUnifiedStream) return;
+    const videoElement = getActiveVideoElement();
+    if (!videoElement || !shouldAutoPlayNextPart || loading) return;
+
+    const attemptAutoPlay = async () => {
+      try {
+        await videoElement.play();
+      } catch (err) {
+        console.warn('[Video Setup] Next part autoplay blocked:', err);
+      } finally {
+        setShouldAutoPlayNextPart(false);
+        isTransitioningRef.current = false;
+      }
+    };
+
+    videoElement.addEventListener('loadedmetadata', attemptAutoPlay, { once: true });
+    if (videoElement.readyState >= 1) {
+      attemptAutoPlay();
+    }
+
+    return () => {
+      videoElement.removeEventListener('loadedmetadata', attemptAutoPlay);
+    };
+  }, [activePreviewVideoId, shouldAutoPlayNextPart, loading, activeBuffer, useUnifiedStream]);
 
   const handleAddQuestion = async () => {
     if (!newQuestion || newOptions.some(opt => !opt)) {
@@ -452,12 +851,16 @@ function VideoSetupContent() {
         }
       }
       
+      const baseTitle = videoForm.title || '';
+      const isGroupedVideo = groupVideos.length > 1;
+      const currentVideoTitle = baseTitle;
+
       const response = await fetch('/api/training-videos', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: video!.id, // video is checked before calling
-          title: videoForm.title,
+          title: currentVideoTitle,
           lesson_number: parseInt(videoForm.lesson_number) || null,
           duration_minutes: parseInt(videoForm.duration_minutes) || 30,
           start_date: videoForm.start_date,
@@ -469,6 +872,34 @@ function VideoSetupContent() {
 
       const data = await response.json();
       if (data.success) {
+        if (isGroupedVideo) {
+          const siblings = groupVideos.filter((item) => item.id !== video!.id);
+          await Promise.all(
+            siblings.map((partVideo, index) => {
+              const chunkIndex = partVideo.chunk_index || index + 1;
+              return fetch('/api/training-videos', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: partVideo.id,
+                  title: baseTitle,
+                  status: status,
+                }),
+              });
+            })
+          );
+
+          setGroupVideos((prev) =>
+            prev.map((item, index) => {
+              return {
+                ...item,
+                title: baseTitle,
+                status,
+              };
+            })
+          );
+        }
+
         toast.success(status === 'draft' ? 'Lưu draft thành công!' : 'Giao bài thành công!');
         router.push('/admin/page5');
       } else {
@@ -634,6 +1065,36 @@ function VideoSetupContent() {
           </div>
         </div>
 
+        {groupVideos.length > 1 && (
+          <div className="mb-8 bg-white rounded-2xl shadow-lg shadow-blue-100/50 p-6 border border-blue-50">
+            <h2 className="text-lg font-bold text-gray-800 mb-3">Danh sách các phần video đã cắt ({groupVideos.length} phần)</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {groupVideos.map((partVideo) => {
+                const isCurrent = partVideo.id === (currentPreviewVideo?.id || video.id);
+                return (
+                  <button
+                    key={partVideo.id}
+                    type="button"
+                    onClick={() => router.push(`/admin/video-setup?id=${partVideo.id}`)}
+                    className={`text-left rounded-xl border p-3 transition-all ${isCurrent
+                      ? 'border-[#a1001f] bg-[#fff1f4] shadow-md'
+                      : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                      }`}
+                  >
+                    <p className="text-xs font-semibold text-gray-500 mb-2">
+                      {partVideo.chunk_index && partVideo.chunk_total
+                        ? `P${partVideo.chunk_index}/${partVideo.chunk_total}`
+                        : `ID #${partVideo.id}`}
+                    </p>
+                    <p className="text-sm font-semibold text-gray-900 line-clamp-2 mb-2">{partVideo.title}</p>
+                    <video src={partVideo.video_link} className="w-full h-28 rounded-lg bg-gray-100 object-cover" preload="metadata" controls={false} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Left: Video Preview & Info */}
           <div className="space-y-6">
@@ -645,14 +1106,46 @@ function VideoSetupContent() {
                 </span>
                 Preview Video
               </h2>
-              <div className="aspect-video bg-gray-900 rounded-xl overflow-hidden shadow-inner ring-1 ring-gray-200">
-                <video
-                  ref={videoRef}
-                  src={video.video_link}
-                  controls
-                  className="w-full h-full"
-                />
-              </div>
+              {useUnifiedStream ? (
+                <div className="aspect-video bg-gray-900 rounded-xl overflow-hidden shadow-inner ring-1 ring-gray-200">
+                  <video
+                    ref={videoRefA}
+                    preload="auto"
+                    onError={handleUnifiedStreamError}
+                    playsInline
+                    controls
+                    className="w-full h-full"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="relative aspect-video bg-gray-900 rounded-xl overflow-hidden shadow-inner ring-1 ring-gray-200">
+                    <video
+                      ref={videoRefA}
+                      src={bufferVideoIds.A ? (resolveVideoById(bufferVideoIds.A)?.video_link || undefined) : undefined}
+                      preload="auto"
+                      controls={activeBuffer === 'A'}
+                      muted={activeBuffer !== 'A'}
+                      onTimeUpdate={activeBuffer === 'A' ? handlePreviewTimeUpdate : undefined}
+                      onEnded={activeBuffer === 'A' ? handlePreviewEnded : undefined}
+                      className={`absolute inset-0 w-full h-full transition-opacity duration-150 ${activeBuffer === 'A' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
+                    />
+                    <video
+                      ref={videoRefB}
+                      src={bufferVideoIds.B ? (resolveVideoById(bufferVideoIds.B)?.video_link || undefined) : undefined}
+                      preload="auto"
+                      controls={activeBuffer === 'B'}
+                      muted={activeBuffer !== 'B'}
+                      onTimeUpdate={activeBuffer === 'B' ? handlePreviewTimeUpdate : undefined}
+                      onEnded={activeBuffer === 'B' ? handlePreviewEnded : undefined}
+                      className={`absolute inset-0 w-full h-full transition-opacity duration-150 ${activeBuffer === 'B' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
+                    />
+                  </div>
+                  {shouldPreloadNextPart && inactiveBufferVideo && (
+                    <p className="mt-2 text-xs text-gray-500">Dang tai truoc phan tiep theo de chuyen lien mach...</p>
+                  )}
+                </>
+              )}
               {/* Video info display below video */}
               <div className="mt-4 flex gap-6 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-100">
                 <div className="flex items-center gap-2">
@@ -853,7 +1346,7 @@ function VideoSetupContent() {
                       
                       <div className="space-y-6">
                         <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
-                          <label className="block mb-2 font-medium text-sm text-gray-700 flex justify-between">
+                          <label className="mb-2 font-medium text-sm text-gray-700 flex justify-between">
                               <span>Thời điểm hiển thị (giây)</span>
                               <span className="text-xs text-blue-600 font-normal">
                                   💡 Mẹo: Bấm lên timeline video bên trái để chọn thời gian
@@ -976,9 +1469,10 @@ function VideoSetupContent() {
                             <div className="flex items-center gap-3">
                               <span className="bg-blue-100 text-blue-800 px-2.5 py-1 rounded-md text-xs font-mono font-bold flex items-center gap-1 cursor-pointer hover:bg-blue-200 transition-colors"
                                   onClick={() => {
-                                      if (videoRef.current) {
-                                          videoRef.current.currentTime = q.time;
-                                          videoRef.current.pause(); // Optional: pause to let them see
+                                        const activeVideoElement = getActiveVideoElement();
+                                        if (activeVideoElement) {
+                                          activeVideoElement.currentTime = q.time;
+                                          activeVideoElement.pause(); // Optional: pause to let them see
                                       }
                                   }}
                                   title="Click để xem tại thời điểm này"
@@ -1005,9 +1499,10 @@ function VideoSetupContent() {
                             <button
                               onClick={() => {
                                   // Pre-seek to the question time
-                                  if (videoRef.current) {
-                                      videoRef.current.currentTime = q.time;
-                                      videoRef.current.pause();
+                                    const activeVideoElement = getActiveVideoElement();
+                                    if (activeVideoElement) {
+                                      activeVideoElement.currentTime = q.time;
+                                      activeVideoElement.pause();
                                   }
                                   handleEditQuestion(idx);
                               }}
@@ -1126,11 +1621,16 @@ function VideoSetupContent() {
                               onChange={(e) => setSelectedAssignmentId(e.target.value)}
                           >
                               <option value="">-- Chọn một Assignment --</option>
-                              {allAssignments.filter(a => !currentAssignment || a.id !== currentAssignment.id).map(a => (
+                              {allAssignments.map(a => {
+                                const isCurrentVideo = videoId && Number(a.video_id) === parseInt(videoId, 10);
+                                const isOtherVideo = a.video_id && !isCurrentVideo;
+                                return (
                                   <option key={a.id} value={a.id}>
-                                      {a.assignment_title} {a.video_id ? `(⚠️ Đang dùng cho video #${a.video_id})` : '(✅ Có sẵn)'}
+                                    {a.assignment_title}
+                                    {isCurrentVideo ? ' ✅ (Video này)' : isOtherVideo ? ` ⚠️ (Video #${a.video_id})` : ' (Chưa liên kết)'}
                                   </option>
-                              ))}
+                                );
+                              })}
                           </select>
                           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -1160,7 +1660,7 @@ function VideoSetupContent() {
                     <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-5 rounded-xl text-center mt-6 border border-gray-200">
                         <p className="text-sm text-gray-600 mb-3 font-medium">Chưa có form phù hợp?</p>
                         <Button 
-                            onClick={() => router.push('/admin/assignments')}
+                            onClick={() => router.push(`/admin/assignments?from_video=${videoId}`)}
                             variant="secondary"
                             className="bg-white border hover:bg-gray-50 shadow-sm"
                         >

@@ -8,7 +8,7 @@ import { useAppDispatch } from "@/lib/redux/hooks";
 import { useTeacher } from "@/lib/teacher-context";
 import { Award, BookOpen, CheckCircle, Clock, FileText } from 'lucide-react';
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import AssignmentsPage from "../assignments/page";
 
@@ -17,6 +17,7 @@ interface TrainingLesson {
   name: string;
   score: number;
   link?: string;
+  segments?: Array<{ id: number; url: string; duration_minutes: number; duration_seconds?: number | null }>;
   thumbnail_url?: string;
   description?: string;
   duration_minutes?: number;
@@ -77,6 +78,11 @@ export default function TrainingPage() {
   const [submitCode, setSubmitCode] = useState("");
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
   const [isResolvingCode, setIsResolvingCode] = useState(false);
+  const prewarmedLessonIdsRef = useRef<Set<number>>(new Set());
+  const prewarmedGroupIdsRef = useRef<Set<string>>(new Set());
+  const prewarmInFlightRef = useRef<Map<string, Promise<void>>>(new Map());
+  const prewarmLastAtRef = useRef<Map<string, number>>(new Map());
+  const prewarmTimerByLessonRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
 
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
 
@@ -244,14 +250,93 @@ export default function TrainingPage() {
     ).length;
   }, [trainingData]);
 
+  const prewarmLessonManifest = useCallback(async (lessonId: number) => {
+    if (!lessonId || prewarmedLessonIdsRef.current.has(lessonId)) return;
+
+    try {
+      const videoRes = await fetch(`/api/training-videos?id=${lessonId}`);
+      const videoData = await videoRes.json();
+
+      if (!videoRes.ok || !videoData?.success || !Array.isArray(videoData.data) || videoData.data.length === 0) {
+        return;
+      }
+
+      const groupId = videoData.data[0]?.video_group_id;
+      if (!groupId) {
+        prewarmedLessonIdsRef.current.add(lessonId);
+        return;
+      }
+
+      if (prewarmedGroupIdsRef.current.has(groupId)) {
+        prewarmedLessonIdsRef.current.add(lessonId);
+        return;
+      }
+
+      const now = Date.now();
+      const lastAt = prewarmLastAtRef.current.get(groupId) || 0;
+      if (now - lastAt < 1200) {
+        return;
+      }
+      prewarmLastAtRef.current.set(groupId, now);
+
+      const existing = prewarmInFlightRef.current.get(groupId);
+      if (existing) {
+        await existing;
+        prewarmedLessonIdsRef.current.add(lessonId);
+        return;
+      }
+
+      const task = (async () => {
+        await fetch(`/api/video/${encodeURIComponent(groupId)}`);
+        prewarmedGroupIdsRef.current.add(groupId);
+      })().finally(() => {
+        prewarmInFlightRef.current.delete(groupId);
+      });
+
+      prewarmInFlightRef.current.set(groupId, task);
+      await task;
+      prewarmedLessonIdsRef.current.add(lessonId);
+    } catch {
+      // Best-effort only. Playback flow will still work without prewarm.
+    }
+  }, []);
+
+  const schedulePrewarmLessonManifest = useCallback((lessonId: number) => {
+    const activeTimer = prewarmTimerByLessonRef.current.get(lessonId);
+    if (activeTimer) {
+      clearTimeout(activeTimer);
+    }
+
+    const timer = setTimeout(() => {
+      prewarmLessonManifest(lessonId);
+      prewarmTimerByLessonRef.current.delete(lessonId);
+    }, 180);
+
+    prewarmTimerByLessonRef.current.set(lessonId, timer);
+  }, [prewarmLessonManifest]);
+
+  useEffect(() => {
+    return () => {
+      prewarmTimerByLessonRef.current.forEach((timer) => clearTimeout(timer));
+      prewarmTimerByLessonRef.current.clear();
+    };
+  }, []);
+
   const handleLessonClick = (lesson: TrainingLesson, index: number) => {
     if (lesson.link) {
       console.log('[Training] Opening lesson:', { id: lesson.id, name: lesson.name, index: index + 1 });
+      const activeTimer = prewarmTimerByLessonRef.current.get(lesson.id);
+      if (activeTimer) {
+        clearTimeout(activeTimer);
+        prewarmTimerByLessonRef.current.delete(lesson.id);
+      }
+      prewarmLessonManifest(lesson.id);
       dispatch(setVideo({
         id: lesson.id,
         link: lesson.link,
         duration: lesson.duration_minutes || 0,
-        title: lesson.name
+        title: lesson.name,
+        segments: lesson.segments
       }));
       router.push(`/user/training/lesson?id=${lesson.id}`);
     }
@@ -398,6 +483,8 @@ export default function TrainingPage() {
                               ? 'border-green-300 bg-green-50/30' 
                               : 'border-gray-200'
                           }`}
+                          onMouseEnter={() => schedulePrewarmLessonManifest(lesson.id)}
+                          onFocus={() => schedulePrewarmLessonManifest(lesson.id)}
                           onClick={() => handleLessonClick(lesson, idx)}
                         >
                           {/* Thumbnail */}

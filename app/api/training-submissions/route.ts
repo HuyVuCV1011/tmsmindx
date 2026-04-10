@@ -178,9 +178,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get total points from assignment
-    const assignmentQuery = 'SELECT total_points, max_attempts FROM training_video_assignments WHERE id = $1';
-    const assignmentResult = await pool.query(assignmentQuery, [assignment_id]);
+    // total_points và max_attempts đã bị xóa khỏi training_video_assignments (migration V42)
+    // Chỉ cần kiểm tra assignment tồn tại
+    const assignmentResult = await pool.query(
+      'SELECT id FROM training_video_assignments WHERE id = $1',
+      [assignment_id]
+    );
 
     if (assignmentResult.rows.length === 0) {
       return NextResponse.json(
@@ -189,24 +192,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { total_points: totalPoints, max_attempts: maxAttempts } = assignmentResult.rows[0];
+    // Tính total_points từ số câu hỏi (mỗi câu = 1 điểm, thang 10)
+    const qCountResult = await pool.query(
+      'SELECT COUNT(*) as cnt FROM training_assignment_questions WHERE assignment_id = $1',
+      [assignment_id]
+    );
+    const totalPoints = 10.00; // Thang điểm cố định 10
 
     // Calculate next attempt number
-    const attemptQuery = `
-      SELECT COALESCE(MAX(attempt_number), 0) + 1 as next_attempt
-      FROM training_assignment_submissions
-      WHERE teacher_code = $1 AND assignment_id = $2
-    `;
-    const attemptResult = await pool.query(attemptQuery, [teacher_code, assignment_id]);
+    const attemptResult = await pool.query(
+      `SELECT COALESCE(MAX(attempt_number), 0) + 1 as next_attempt
+       FROM training_assignment_submissions
+       WHERE teacher_code = $1 AND assignment_id = $2`,
+      [teacher_code, assignment_id]
+    );
     const nextAttempt = attemptResult.rows[0].next_attempt;
-
-    // Check max attempts (if set)
-    if (maxAttempts > 0 && nextAttempt > maxAttempts) {
-        return NextResponse.json(
-            { error: `Bạn đã hết lượt làm bài (Tối đa ${maxAttempts} lượt)` },
-            { status: 400 }
-        );
-    }
+    // max_attempts đã bị xóa — không giới hạn số lần làm
 
     const query = `
       INSERT INTO training_assignment_submissions (
@@ -290,7 +291,30 @@ export async function PUT(request: NextRequest) {
         );
       }
 
-      console.log('[Submission] Grading submission:', { id, score: parsedScore, is_passed });
+      // Tính điểm dựa trên số câu đúng / tổng câu hỏi, thang 10
+      const qResult = await pool.query(`
+        SELECT (SELECT COUNT(*) FROM training_assignment_questions q WHERE q.assignment_id = ta.id) as total_questions 
+        FROM training_video_assignments ta 
+        WHERE ta.id = (SELECT assignment_id FROM training_assignment_submissions WHERE id = $1)
+      `, [id]);
+      
+      const totalQuestions = parseInt(qResult.rows[0]?.total_questions) || 1;
+      const passingScore = 7.00; // Ngưỡng đạt cố định 7/10
+
+      // Assume parsedScore comes from frontend as the raw correct answers count (e.g. 16 for 16/25)
+      let normalizedScore = (parsedScore / totalQuestions) * 10;
+      normalizedScore = Math.round(normalizedScore * 100) / 100;
+      const pointsPerQuestion = 10 / totalQuestions;
+      const isPassedStatus = normalizedScore >= passingScore;
+
+      console.log('[Submission] Grading logic updated:', { 
+         id, 
+         raw_score: parsedScore, 
+         total_questions: totalQuestions, 
+         normalized_score: normalizedScore,
+         is_passed: isPassedStatus,
+         points_per_q: pointsPerQuestion
+      });
 
       query = `
         UPDATE training_assignment_submissions
@@ -304,7 +328,7 @@ export async function PUT(request: NextRequest) {
         RETURNING *, (SELECT teacher_code FROM training_assignment_submissions WHERE id = $3) as teacher_code,
                      (SELECT video_id FROM training_video_assignments WHERE id = (SELECT assignment_id FROM training_assignment_submissions WHERE id = $3)) as video_id
       `;
-      values = [parsedScore, is_passed, id];
+      values = [normalizedScore, isPassedStatus, id];
       
       // Execute the update
       const result = await pool.query(query, values);
@@ -323,8 +347,8 @@ export async function PUT(request: NextRequest) {
         console.log('[Submission] Updating video stats:', {
           teacher_code: submission.teacher_code,
           video_id: submission.video_id,
-          score: score,
-          is_passed: is_passed
+          score: normalizedScore,
+          is_passed: isPassedStatus
         });
 
         // Ensure teacher exists in training_teacher_stats (auto-create if not exists)
@@ -335,7 +359,7 @@ export async function PUT(request: NextRequest) {
         `;
         await pool.query(ensureTeacherQuery, [submission.teacher_code]);
 
-        const status = is_passed ? 'completed' : 'in_progress';
+        const status = isPassedStatus ? 'completed' : 'in_progress';
 
         const updateVideoScoreQuery = `
           INSERT INTO training_teacher_video_scores (
@@ -364,9 +388,9 @@ export async function PUT(request: NextRequest) {
         await pool.query(updateVideoScoreQuery, [
           submission.teacher_code,
           submission.video_id,
-          score,
+          normalizedScore,
           status,
-          is_passed
+          isPassedStatus
         ]);
         
         // Sync teacher answers in one bulk query and only for valid training_video_questions IDs.
@@ -379,8 +403,7 @@ export async function PUT(request: NextRequest) {
                 FROM jsonb_to_recordset($3::jsonb) AS x(
                   question_id INT,
                   answer_text TEXT,
-                  is_correct BOOLEAN,
-                  points_earned NUMERIC
+                  is_correct BOOLEAN
                 )
               )
               INSERT INTO training_teacher_answers (
@@ -397,7 +420,7 @@ export async function PUT(request: NextRequest) {
                 incoming.question_id,
                 incoming.answer_text,
                 COALESCE(incoming.is_correct, false),
-                COALESCE(incoming.points_earned, 0)
+                CASE WHEN incoming.is_correct THEN $4::numeric ELSE 0 END
               FROM incoming
               INNER JOIN training_video_questions tvq
                 ON tvq.id = incoming.question_id
@@ -407,7 +430,8 @@ export async function PUT(request: NextRequest) {
             await pool.query(syncTeacherAnswersQuery, [
               submission.teacher_code,
               submission.video_id,
-              JSON.stringify(updates.answers)
+              JSON.stringify(updates.answers),
+              pointsPerQuestion
             ]);
           } catch (err: any) {
             console.warn('[Submission] Skipped syncing answers to teacher_answers:', err.message);
@@ -425,8 +449,7 @@ export async function PUT(request: NextRequest) {
               FROM jsonb_to_recordset($2::jsonb) AS x(
                 question_id INT,
                 answer_text TEXT,
-                is_correct BOOLEAN,
-                points_earned NUMERIC
+                is_correct BOOLEAN
               )
               WHERE question_id IS NOT NULL
             )
@@ -442,7 +465,7 @@ export async function PUT(request: NextRequest) {
               incoming.question_id,
               incoming.answer_text,
               COALESCE(incoming.is_correct, false),
-              COALESCE(incoming.points_earned, 0)
+              CASE WHEN incoming.is_correct THEN $3::numeric ELSE 0 END
             FROM incoming
             ON CONFLICT (submission_id, question_id) DO UPDATE SET
               answer_text = EXCLUDED.answer_text,
@@ -451,7 +474,7 @@ export async function PUT(request: NextRequest) {
               answered_at = NOW()
           `;
 
-          await pool.query(saveAnswersQuery, [id, JSON.stringify(updates.answers)]);
+          await pool.query(saveAnswersQuery, [id, JSON.stringify(updates.answers), pointsPerQuestion]);
         } catch (err) {
             console.error('[Submission] Error saving answers:', err);
         }

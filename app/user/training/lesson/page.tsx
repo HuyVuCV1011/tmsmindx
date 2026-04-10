@@ -6,7 +6,8 @@ import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks";
 import { useTeacher } from "@/lib/teacher-context";
 import { useToast } from "@/lib/use-toast";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState, useMemo } from "react";
+import { Loader2 } from "lucide-react";
 
 interface Question {
   id: number;
@@ -24,22 +25,54 @@ function LessonContent() {
   const toast = useToast();
   const searchParams = useSearchParams();
   const lessonIdParam = searchParams.get('id');
-  
+
   // Get video details from Redux
-  const { currentVideoId, videoLink, title: reduxTitle } = useAppSelector((state) => state.training);
+  const { currentVideoId, videoLink, title: reduxTitle, duration: reduxDurationMinutes, segments } = useAppSelector((state) => state.training);
 
   // If IDs don't match or no video link, session is invalid (e.g. refresh)
   const isSessionValid = currentVideoId?.toString() === lessonIdParam && !!videoLink;
 
   const lessonId = isSessionValid ? currentVideoId!.toString() : null;
-  const videoUrl = isSessionValid ? videoLink : null;
   const title = isSessionValid ? reduxTitle : null;
+  // Convert minutes from Redux to seconds for the video player overlay
+  const overrideDurationSeconds = isSessionValid ? (reduxDurationMinutes || 1) * 60 : 0;
+
+  const videoSegments = useMemo(() => {
+    return isSessionValid && segments && segments.length > 0
+      ? segments
+      : (videoLink ? [{ id: currentVideoId!, url: videoLink, duration_minutes: overrideDurationSeconds / 60 }] : []);
+  }, [isSessionValid, segments, videoLink, currentVideoId, overrideDurationSeconds]);
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [localTime, setLocalTime] = useState(0); // Thời gian của video hiện tại
+  const [pendingSeekTime, setPendingSeekTime] = useState<number | null>(null);
+
+  // Tính toán trước mốc thời gian bắt đầu của từng video và tổng thời lượng từ DB / Redux
+  const { totalDurationMap, startTimes } = useMemo(() => {
+    let total = 0;
+    const starts: number[] = [];
+    videoSegments.forEach((vid: any) => {
+      starts.push(total);
+      // Sử dụng ưu tiên duration_seconds nếu có, else duration_minutes
+      let segmentSecs = vid.duration_seconds != null ? Number(vid.duration_seconds) : (vid.duration_minutes || 0) * 60;
+      total += segmentSecs;
+    });
+    // Nếu db không có chi tiết segment length nhưng có overide length
+    if (total === 0) total = overrideDurationSeconds;
+
+    return { totalDurationMap: total, startTimes: starts };
+  }, [videoSegments, overrideDurationSeconds]);
+
+  // globalTime sẽ là thời gian thực tế trong chuỗi video (để match với tracking progress API)
+  const globalTime = (startTimes[currentIndex] ?? 0) + localTime;
+  const videoUrl = videoSegments[currentIndex]?.url || null;
 
   const [progress, setProgress] = useState(0);
   const [showQuiz, setShowQuiz] = useState(false);
   const [videoCompleted, setVideoCompleted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isWaiting, setIsWaiting] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState<number | null>(null);
   const [userAnswer, setUserAnswer] = useState<number | null>(null);
@@ -52,7 +85,7 @@ function LessonContent() {
   const [nextLessonData, setNextLessonData] = useState<any>(null);
   const [currentAssignment, setCurrentAssignment] = useState<any>(null); // Trạng thái bài tập của video hiện tại
   const [maxWatchedTime, setMaxWatchedTime] = useState(0);
-   
+
   // Ref to track user for event handlers
   const userRef = useRef(user);
   useEffect(() => {
@@ -72,7 +105,7 @@ function LessonContent() {
 
     const isAdmin = (user as any).role === 'admin' || (user as any).isAdmin === true;
     if (isAdmin) return;
-    
+
     // Check if teacher profile is valid
     if (!teacherProfile) {
       // Clear session data and redirect
@@ -82,27 +115,28 @@ function LessonContent() {
       router.replace('/login');
     }
   }, [user, isTeacherLoading, teacherProfile, router]);
-  
+
+
   // Helper to save progress
   const saveCompletion = async (id: string | null, time: number) => {
     const currentUser = userRef.current;
     if (!id || !currentUser?.email) return;
     try {
-        const teacherCode = currentUser.email.split('@')[0];
-        await fetch('/api/training-progress', {
+      const teacherCode = currentUser.email.split('@')[0];
+      await fetch('/api/training-progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            teacherCode,
-            videoId: id,
-            timeSpent: time,
-            isCompleted: true,
-            totalDuration: time, // Send total duration to update metadata
+          teacherCode,
+          videoId: id,
+          timeSpent: time,
+          isCompleted: true,
+          totalDuration: time, // Send total duration to update metadata
         })
-        });
-        console.log(`[Lesson] Saved completion for ${id}`);
+      });
+      console.log(`[Lesson] Saved completion for ${id}`);
     } catch (err) {
-        console.error('[Lesson] Failed to save completion:', err);
+      console.error('[Lesson] Failed to save completion:', err);
     }
   };
 
@@ -114,13 +148,13 @@ function LessonContent() {
         // Fetch assignment linked to this video
         const res = await fetch(`/api/training-assignments?video_id=${lessonId}&status=published`);
         const data = await res.json();
-        
+
         if (data.success && data.data && data.data.length > 0) {
           // Lấy bài tập đầu tiên (hoặc có thể thêm logic chọn bài tập phù hợp)
-          setCurrentAssignment(data.data[0]); 
+          setCurrentAssignment(data.data[0]);
           console.log('[Lesson] Found assignment:', data.data[0]);
         } else {
-             setCurrentAssignment(null);
+          setCurrentAssignment(null);
         }
       } catch (err) {
         console.error('[Lesson] Failed to load assignment:', err);
@@ -128,7 +162,7 @@ function LessonContent() {
     };
     loadAssignment();
   }, [lessonId]);
-  
+
   // (Rest of the component code...)
 
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
@@ -139,12 +173,19 @@ function LessonContent() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
-  
+
   // Ref to track if we are in quiz mode (to prevent auto-resume)
   const isQuizActiveRef = useRef(false);
+  const isPlayingRef = useRef(false);
+  /** false after tab hide / blur — blocks segment switch, loadedmetadata, canplay from calling play() until user clicks Play */
+  const playbackAllowedRef = useRef(false);
   useEffect(() => {
     isQuizActiveRef.current = videoPaused || currentQuestionIdx !== null;
   }, [videoPaused, currentQuestionIdx]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   // Reset state when lesson changes
   useEffect(() => {
@@ -161,7 +202,8 @@ function LessonContent() {
     setIsCorrectAnswer(false);
     setMaxWatchedTime(0);
     setIsPlaying(false);
-    
+    playbackAllowedRef.current = false;
+
     // Reset video element
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
@@ -169,76 +211,95 @@ function LessonContent() {
     }
   }, [lessonId]);
 
-  // Handle visibility change (Tab Throttling - Pause video when tab is hidden)
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      // Check actual video playing state
-      const isHidden = document.hidden || document.visibilityState === 'hidden';
-      
-      if (isHidden) {
-        // Pause if playing
-        if (videoRef.current && !videoRef.current.paused) {
-          videoRef.current.pause();
-          setIsPlaying(false);
-          console.log('[Lesson] ⏸️ Paused due to hidden tab');
-        }
-      } else {
-        // Resume if paused and not ended
-        // BUT only if we are NOT in a quiz
-        if (videoRef.current && videoRef.current.paused && !videoRef.current.ended) {
-          // Check if quiz is active using ref
-          if (isQuizActiveRef.current) {
-            console.log('[Lesson] ⚠️ Not resuming because quiz is active');
-            return;
-          }
+    const docHidden = () =>
+      typeof document !== 'undefined' &&
+      (document.hidden ||
+        document.visibilityState !== 'visible' ||
+        // Safari legacy
+        !!(document as Document & { webkitHidden?: boolean }).webkitHidden);
 
-          videoRef.current.play()
-            .then(() => setIsPlaying(true))
-            .catch(e => console.error("Auto-resume failed:", e));
-          console.log('[Lesson] ▶️ Resumed due to visible tab');
-        }
+    const pauseAllVideos = (reason: string) => {
+      playbackAllowedRef.current = false;
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      document.querySelectorAll('video').forEach((v) => {
+        if (!v.paused) v.pause();
+      });
+      console.log(`[Lesson] ⏸️ Paused: ${reason}`);
+    };
+
+    const handleVisibilityChange = () => {
+      if (docHidden()) pauseAllVideos('visibility');
+    };
+
+    const handlePageHide = () => pauseAllVideos('pagehide');
+
+    // Bổ sung khi visibility không đổi (ví dụ focus sang app/cửa sổ khác) — document mất focus → dừng phát
+    const handleWindowBlur = () => {
+      if (typeof document !== 'undefined' && !document.hasFocus()) {
+        pauseAllVideos('window-blur');
       }
     };
 
-    // Also handle window blur for stricter focus enforcement
-    const handleBlur = () => {
-       if (videoRef.current && !videoRef.current.paused) {
-         videoRef.current.pause();
-         setIsPlaying(false);
-         // toast.warning('Vui lòng giữ cửa sổ này hoạt động để tiếp tục xem.');
-         console.log('[Lesson] ⏸️ Paused due to window blur (Focus Loss)');
-       }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    // window.addEventListener("blur", handleBlur); // Optional: Comment out if too strict
+    document.addEventListener('visibilitychange', handleVisibilityChange, true);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('blur', handleWindowBlur);
 
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      // window.removeEventListener("blur", handleBlur);
+      document.removeEventListener('visibilitychange', handleVisibilityChange, true);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('blur', handleWindowBlur);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only bind once
+  }, []);
 
   // Load saved progress
   useEffect(() => {
     const loadProgress = async () => {
       if (!lessonId || !user?.email) return;
-      
+
       try {
         const teacherCode = user.email.split('@')[0];
         const res = await fetch(`/api/training-progress?teacherCode=${teacherCode}&videoId=${lessonId}`);
         const data = await res.json();
-        
+
         if (data.success && data.data) {
           const { time_spent_seconds, completion_status } = data.data;
-          
-          if (time_spent_seconds > 0 && videoRef.current) {
-            videoRef.current.currentTime = time_spent_seconds;
-            setCurrentTime(time_spent_seconds);
+
+          if (time_spent_seconds > 0) {
+            // Find target video segment
+            let targetIndex = 0;
+            let timeInTargetVideo = time_spent_seconds;
+
+            for (let i = 0; i < startTimes.length; i++) {
+              const start = startTimes[i];
+              const nextStart = startTimes[i + 1] || totalDurationMap;
+
+              if (time_spent_seconds >= start && time_spent_seconds < nextStart) {
+                targetIndex = i;
+                timeInTargetVideo = time_spent_seconds - start;
+                break;
+              }
+            }
+
+            if (targetIndex === currentIndex) {
+              if (videoRef.current) {
+                const offset = videoRef.current.seekable.length > 0 ? videoRef.current.seekable.start(0) : 0;
+                lastValidTimeRef.current = time_spent_seconds;
+                videoRef.current.currentTime = timeInTargetVideo + offset;
+                setLocalTime(timeInTargetVideo);
+              }
+            } else {
+              setIsPlaying(false);
+              isPlayingRef.current = false;
+              lastValidTimeRef.current = time_spent_seconds;
+              setCurrentIndex(targetIndex);
+              setPendingSeekTime(timeInTargetVideo);
+            }
             console.log(`[Lesson] Resumed at ${time_spent_seconds}s`);
           }
-          
+
           if (completion_status === 'completed') {
             // setVideoCompleted(true); // Don't show overlay immediately
             setProgress(100);
@@ -248,7 +309,7 @@ function LessonContent() {
         console.error('[Lesson] Failed to load progress:', err);
       }
     };
-    
+
     loadProgress();
   }, [lessonId, user]);
 
@@ -272,7 +333,7 @@ function LessonContent() {
             videoId: lessonId,
             timeSpent: time,
             isCompleted: false,
-            totalDuration: duration > 0 ? duration : undefined 
+            totalDuration: duration > 0 ? duration : undefined
           })
         });
       } catch (err) {
@@ -303,7 +364,7 @@ function LessonContent() {
         const response = await fetch(`/api/training-video-questions?video_id=${lessonId}`);
         const data = await response.json();
         console.log('[Lesson] API Response:', { success: data.success, count: data.data?.length || 0, data });
-        
+
         if (data.success && data.data && data.data.length > 0) {
           const loadedQuestions = data.data.map((q: any) => ({
             id: q.id,
@@ -338,16 +399,16 @@ function LessonContent() {
   useEffect(() => {
     const checkNextLesson = async () => {
       if (!lessonId) return;
-      
+
       try {
         console.log(`[Lesson] Checking for next lesson after video_id=${lessonId}`);
         const response = await fetch('/api/training-videos');
         const data = await response.json();
-        
+
         if (data.success && data.data && data.data.length > 0) {
           const videos = data.data;
           const currentIndex = videos.findIndex((v: any) => v.id.toString() === lessonId);
-          
+
           if (currentIndex !== -1 && currentIndex < videos.length - 1) {
             // Has next lesson
             setHasNextLesson(true);
@@ -363,7 +424,7 @@ function LessonContent() {
         console.error('[Lesson] Error checking next lesson:', err);
       }
     };
-    
+
     checkNextLesson();
   }, [lessonId]);
 
@@ -371,20 +432,20 @@ function LessonContent() {
   useEffect(() => {
     if (videoPaused || questions.length === 0 || currentQuestionIdx !== null) return;
     if (currentTime === 0 || duration === 0) return;
-    
+
     // Log question status periodically
     if (Math.floor(currentTime) % 5 === 0 && Math.floor(currentTime) !== 0) {
-      console.log(`[Lesson] Checking questions at ${currentTime.toFixed(2)}s. Found ${questions.length} questions:`, 
+      console.log(`[Lesson] Checking questions at ${currentTime.toFixed(2)}s. Found ${questions.length} questions:`,
         questions.map(q => `Q${q.id}@${q.time}s(${answeredQuestions.has(q.id) ? 'answered' : 'pending'})`).join(', ')
       );
     }
-    
+
     // Find question at current time (within 2 second tolerance)
     const foundQuestion = questions.findIndex(q => {
       const timeDiff = Math.abs(q.time - currentTime);
       return timeDiff <= 2 && !answeredQuestions.has(q.id);
     });
-    
+
     if (foundQuestion !== -1) {
       console.log(`[Lesson] 🎯 Question triggered at ${currentTime.toFixed(2)}s:`, questions[foundQuestion]);
       setCurrentQuestionIdx(foundQuestion);
@@ -402,7 +463,37 @@ function LessonContent() {
     const video = videoRef.current;
     if (!video) return;
 
+    // Immediately play if already buffered — chỉ khi user đã bật phát (không tự play sau khi vừa ẩn tab)
+    if (
+      playbackAllowedRef.current &&
+      isPlayingRef.current &&
+      video.readyState >= 1 &&
+      !document.hidden &&
+      document.visibilityState === 'visible'
+    ) {
+      video.play().catch(e => console.log('[Lesson] Play blocked:', e));
+      setIsWaiting(false);
+    }
+
+    // Đảm bảo volume áp dụng lại cho video mới
+    video.volume = volume;
+
     const handleTimeUpdate = () => {
+      const webkitHidden = !!(document as Document & { webkitHidden?: boolean }).webkitHidden;
+      if (document.hidden || document.visibilityState !== 'visible' || webkitHidden) {
+        if (!video.paused) video.pause();
+        playbackAllowedRef.current = false;
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        return;
+      }
+      if (!playbackAllowedRef.current) {
+        if (!video.paused) video.pause();
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        return;
+      }
+
       // Security: Enforce max playback speed of 2x (Anti-cheat)
       if (video.playbackRate > 2) {
         console.log('[Lesson] ⚠️ Speed limit exceeded! Resetting to 2x');
@@ -410,87 +501,200 @@ function LessonContent() {
         setPlaybackSpeed(2);
       }
 
-      const currentTime = video.currentTime;
+      const offset = video.seekable.length > 0 ? video.seekable.start(0) : 0;
+      const localCrtTime = Math.max(0, video.currentTime - offset);
+      const gTime = (startTimes[currentIndex] ?? 0) + localCrtTime;
       const lastTime = lastValidTimeRef.current;
-      
-      // Allow rewind (currentTime < lastTime) but check forward seek
-      // Threshold 3s is sufficient for 2x speed (1s real = 2s video)
+
+      // Block both forward and backward seeking beyond 3 seconds (to allow natural playback and normal minor variations)
       const allowedJump = Math.max(3, video.playbackRate * 2);
-      
-      if (currentTime > lastTime + allowedJump) {
-         console.log(`[Lesson] 🚫 Forward skip blocked! Attempted: ${currentTime.toFixed(2)}s (Last: ${lastTime.toFixed(2)}s)`);
-         video.currentTime = lastTime;
-         return; 
+
+      if (Math.abs(gTime - lastTime) > allowedJump) {
+        console.log(`[Lesson] 🚫 Seek blocked! Attempted: ${gTime.toFixed(2)}s (Last: ${lastTime.toFixed(2)}s)`);
+        video.currentTime = Math.max(0, lastValidTimeRef.current - (startTimes[currentIndex] ?? 0)) + offset;
+        return;
       }
 
       // Update last valid time (for seeking prevention)
-      lastValidTimeRef.current = currentTime;
-      
-      setCurrentTime(currentTime);
-      
+      lastValidTimeRef.current = gTime;
+
+      setLocalTime(localCrtTime);
+      setCurrentTime(gTime);
+
       // Update max watched time
-      setMaxWatchedTime(prev => Math.max(prev, currentTime));
-      
+      setMaxWatchedTime(prev => Math.max(prev, gTime));
+
+      // [Pre-Fetching & Early Switch] Chuyển trước 250ms — không làm khi tab ẩn (tránh vẫn phát / auto-next ở background)
+      if (currentIndex < videoSegments.length - 1 && video.duration > 0) {
+        const timeRemaining = video.duration - localCrtTime;
+        if (timeRemaining <= 0.25) {
+          const tabHidden = document.hidden || document.visibilityState !== 'visible' || webkitHidden;
+          if (tabHidden || !playbackAllowedRef.current) {
+            if (!video.paused) video.pause();
+            setIsPlaying(false);
+            isPlayingRef.current = false;
+            return;
+          }
+          console.log(`[Lesson] Early switching to segment ${currentIndex + 1} (Pre-ending by ${timeRemaining.toFixed(2)}s)`);
+          setIsWaiting(true);
+          setCurrentIndex(prev => prev + 1);
+          setIsPlaying(true);
+          isPlayingRef.current = true;
+          return;
+        }
+      }
+
       // Log every 5 seconds
-      if (Math.floor(currentTime) % 5 === 0 && Math.floor(currentTime) !== 0) {
-        console.log(`[Lesson] Video time: ${currentTime.toFixed(2)}s`);
+      if (Math.floor(gTime) % 5 === 0 && Math.floor(gTime) !== 0) {
+        console.log(`[Lesson] Video time: ${gTime.toFixed(2)}s`);
       }
     };
 
     const handleLoadedMetadata = () => {
-      setDuration(video.duration);
-      console.log(`[Lesson] ✓ Video loaded - Duration: ${video.duration.toFixed(2)}s`);
+      const webkitHidden = !!(document as Document & { webkitHidden?: boolean }).webkitHidden;
+      const visible =
+        !document.hidden && document.visibilityState === 'visible' && !webkitHidden;
+      // Setup the real video segment duration mapped against start times if DB missed them
+      const offset = video.seekable.length > 0 ? video.seekable.start(0) : 0;
+      if (pendingSeekTime !== null) {
+        video.currentTime = pendingSeekTime + offset;
+        setPendingSeekTime(null);
+      } else {
+        if (playbackAllowedRef.current && isPlayingRef.current && visible) {
+          video.play().catch(e => console.log('[Lesson] Auto-play policy blocked next video play:', e));
+          setIsWaiting(false);
+        }
+      }
+
+      if (playbackAllowedRef.current && (isPlayingRef.current || pendingSeekTime !== null) && visible) {
+        video.play().catch(console.error);
+        setIsPlaying(true);
+        isPlayingRef.current = true;
+      }
+
+      // If we are at segment 0 and total is basically unknown or relies on default 30 mins
+      if (startTimes.length === 1) {
+        setDuration(overrideDurationSeconds > 0 ? overrideDurationSeconds : video.duration);
+      } else {
+        setDuration(totalDurationMap);
+      }
+    };
+
+    const handleCanPlay = () => {
+      if (
+        playbackAllowedRef.current &&
+        isPlayingRef.current &&
+        !document.hidden &&
+        document.visibilityState === 'visible'
+      ) {
+        video.play().catch(e => console.log('Auto-play issue:', e));
+        setIsWaiting(false);
+      }
     };
 
     const handleEnded = () => {
-      setProgress(100);
-      setVideoCompleted(true);
-      console.log('[Lesson] Video ended');
-      
-      // Save completion immediately using the current lesson ID and user
-      if (lessonIdRef.current && userRef.current?.email) {
-         saveCompletion(lessonIdRef.current, video.duration);
+      if (currentIndex < videoSegments.length - 1) {
+        // Có phần tiếp theo của video hiện tại (Cloudinary parts)
+        console.log(`[Lesson] Switching to segment ${currentIndex + 1}`);
+
+        // Vanilla DOM fix for gapless transitions
+        const nextVideoEl = document.getElementById(`video-part-${currentIndex + 1}`) as HTMLVideoElement;
+        if (nextVideoEl) {
+          nextVideoEl.muted = volume === 0;
+          nextVideoEl.volume = volume;
+          nextVideoEl.currentTime = 0;
+          
+          const isHidden =
+            document.hidden ||
+            document.visibilityState === 'hidden' ||
+            !!(document as Document & { webkitHidden?: boolean }).webkitHidden;
+          if (playbackAllowedRef.current && isPlayingRef.current && !isHidden) {
+            nextVideoEl.play().catch(e => console.error('[Lesson] Gapless playback blocked:', e));
+            setIsPlaying(true);
+          } else {
+            setIsPlaying(false);
+            isPlayingRef.current = false;
+          }
+          
+          nextVideoEl.classList.remove('hidden');
+          nextVideoEl.classList.add('block');
+
+          video.classList.remove('block');
+          video.classList.add('hidden');
+        }
+
+        setIsWaiting(false);
+        setCurrentIndex(prev => prev + 1);
+        if (!document.hidden && playbackAllowedRef.current && isPlayingRef.current) {
+          setIsPlaying(true);
+        } else {
+          setIsPlaying(false);
+          isPlayingRef.current = false;
+        }
+      } else {
+        setProgress(100);
+        setVideoCompleted(true);
+        setIsPlaying(false);
+        console.log('[Lesson] Video ended');
+
+        // Save completion immediately using the current lesson ID and user
+        if (lessonIdRef.current && userRef.current?.email) {
+          saveCompletion(lessonIdRef.current, totalDurationMap || duration);
+        }
       }
     };
 
     const handlePlaying = () => {
+      const webkitHidden = !!(document as Document & { webkitHidden?: boolean }).webkitHidden;
+      if (document.hidden || document.visibilityState !== 'visible' || webkitHidden || !playbackAllowedRef.current) {
+        video.pause();
+        playbackAllowedRef.current = false;
+        setIsPlaying(false);
+        isPlayingRef.current = false;
+        return;
+      }
+      setIsWaiting(false);
       console.log('[Lesson] Video playing');
     };
 
     const handlePause = () => {
-        console.log('[Lesson] Video paused at', video.currentTime.toFixed(2) + 's');
-        if (lessonIdRef.current && userRef.current?.email) {
-            const teacherCode = userRef.current.email.split('@')[0];
-            fetch('/api/training-progress', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    teacherCode,
-                    videoId: lessonIdRef.current,
-                    timeSpent: video.currentTime,
-                    isCompleted: false,
-                    totalDuration: video.duration // Update duration
-                })
-            }).catch(err => console.error('[Lesson] Failed to save on pause:', err));
-        }
+      console.log('[Lesson] Video paused at', video.currentTime.toFixed(2) + 's');
+      if (lessonIdRef.current && userRef.current?.email) {
+        const teacherCode = userRef.current.email.split('@')[0];
+        fetch('/api/training-progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            teacherCode,
+            videoId: lessonIdRef.current,
+            timeSpent: video.currentTime,
+            isCompleted: false,
+            totalDuration: video.duration // Update duration
+          })
+        }).catch(err => console.error('[Lesson] Failed to save on pause:', err));
+      }
     };
 
     const handleError = (e: any) => {
       console.error('[Lesson] Video error:', video.error, e);
+      if (video.error && video.error.code === 4) {
+        toast.error("Không thể ghép nối video trên bộ nhớ Cloudinary (Vượt size 100MB!).");
+      } else {
+        toast.error("Lỗi tải luồng trình phát video, vui lòng tải lại trang.");
+      }
     };
 
     const handleSeeking = () => {
-      const attemptedTime = video.currentTime;
-      const lastTime = lastValidTimeRef.current;
-      
-      // Check forward seeking (> allowedJump threshold)
+      const offset = video.seekable.length > 0 ? video.seekable.start(0) : 0;
+      const attemptedTime = Math.max(0, video.currentTime - offset);
+      const localLastTime = Math.max(0, lastValidTimeRef.current - (startTimes[currentIndex] ?? 0));
+
       const allowedJump = Math.max(5, video.playbackRate * 2);
-      if (attemptedTime > lastTime + allowedJump) {
-        console.log(`[Lesson] 🚫 Forward seeking blocked! Attempted: ${attemptedTime.toFixed(2)}s → Reverted to: ${lastTime.toFixed(2)}s`);
-        video.currentTime = lastTime;
-      } else if (attemptedTime < lastTime) {
-         // Allow rewind - update reference to current time
-         lastValidTimeRef.current = attemptedTime; 
+
+      // Block seeking both forward and backward
+      if (Math.abs(attemptedTime - localLastTime) > allowedJump) {
+        console.log(`[Lesson] 🚫 Seeking blocked! Attempted: ${attemptedTime.toFixed(2)}s → Reverted to: ${localLastTime.toFixed(2)}s`);
+        video.currentTime = localLastTime + offset;
       }
     };
 
@@ -502,26 +706,32 @@ function LessonContent() {
       }
     };
 
+    const handleWaiting = () => setIsWaiting(true);
+
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('ratechange', handleRateChange);
     video.addEventListener('seeking', handleSeeking);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('ended', handleEnded);
     video.addEventListener('playing', handlePlaying);
     video.addEventListener('pause', handlePause);
     video.addEventListener('error', handleError);
+    video.addEventListener('waiting', handleWaiting);
 
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('ratechange', handleRateChange);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('playing', handlePlaying);
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('error', handleError);
       video.removeEventListener('seeking', handleSeeking);
+      video.removeEventListener('waiting', handleWaiting);
     };
-  }, []);
+  }, [currentIndex, isPlaying, volume, pendingSeekTime, videoSegments, startTimes, overrideDurationSeconds, totalDurationMap, duration]);
 
   // Update progress bar based on video time
   useEffect(() => {
@@ -533,20 +743,20 @@ function LessonContent() {
 
   const handleAnswerQuestion = () => {
     if (currentQuestionIdx === null || userAnswer === null) return;
-    
+
     const question = questions[currentQuestionIdx];
     const isCorrect = userAnswer === question.answer;
-    
+
     console.log(`[Lesson] Answer submitted:`, {
       question: question.question,
       userAnswer: userAnswer,
       correctAnswer: question.answer,
       isCorrect: isCorrect
     });
-    
+
     // Mark as answered
     setAnsweredQuestions(prev => new Set([...prev, question.id]));
-    
+
     // Show result UI
     setIsCorrectAnswer(isCorrect);
     setShowResult(true);
@@ -561,6 +771,7 @@ function LessonContent() {
     setVideoPaused(false);
     console.log('[Lesson] Resuming video playback');
     if (videoRef.current) {
+      playbackAllowedRef.current = true;
       videoRef.current.play();
       setIsPlaying(true);
     }
@@ -573,6 +784,7 @@ function LessonContent() {
         videoRef.current.pause();
         setIsPlaying(false);
       } else {
+        playbackAllowedRef.current = true;
         videoRef.current.play();
         setIsPlaying(true);
       }
@@ -588,7 +800,7 @@ function LessonContent() {
 
   const toggleFullscreen = () => {
     if (!playerContainerRef.current) return;
-    
+
     if (!isFullscreen) {
       if (playerContainerRef.current.requestFullscreen) {
         playerContainerRef.current.requestFullscreen();
@@ -652,20 +864,45 @@ function LessonContent() {
         </div>
 
         {/* Video player container */}
-        <div 
+        <div
           ref={playerContainerRef}
           className="flex-1 relative bg-black overflow-hidden"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => isPlaying && setShowControls(false)}
         >
-          {/* Video element - NO CONTROLS */}
-          <video
-            ref={videoRef}
-            src={videoUrl || ''}
-            className="w-full h-full object-contain"
-            onClick={togglePlayPause}
-            onContextMenu={(e) => e.preventDefault()}
-          />
+          {/* Multi-video buffering logic: We render ALL video segments but only ONE is visible and attached to videoRef.
+              This guarantees the browser completes DNS handshake, preload cache, and audio initialization bounds BEFORE they appear.
+          */}
+          {videoSegments.map((segment: any, idx: number) => {
+            const isActive = idx === currentIndex;
+            const isNext = idx === currentIndex + 1;
+
+            // Only render current, next, or keep DOM alive to prevent re-load
+            if (!isActive && !isNext) return null;
+
+            return (
+              <video
+                key={segment.id}
+                id={`video-part-${idx}`}
+                ref={isActive ? videoRef : null}
+                src={segment.url}
+                preload={isActive || isNext ? "auto" : "none"}
+                className={`w-full h-full object-contain ${isActive ? 'block' : 'hidden'}`}
+                onClick={isActive ? togglePlayPause : undefined}
+                onContextMenu={(e) => e.preventDefault()}
+                playsInline
+                // If this is the next video, keep it muted so browser aggressive autoplay policies don't complain during background buffer
+                muted={!isActive || volume === 0}
+              />
+            );
+          })}
+
+          {/* Loading overlay */}
+          {isWaiting && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10 pointer-events-none">
+              <Loader2 className="w-16 h-16 text-white animate-spin" />
+            </div>
+          )}
 
           {/* Central Play/Pause overlay */}
           {!isPlaying && currentQuestionIdx === null && (
@@ -682,22 +919,23 @@ function LessonContent() {
           )}
 
           {/* Custom Controls Overlay */}
-          <div 
-            className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6 transition-all duration-300 ${
-              showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-            }`}
+          <div
+            className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6 transition-all duration-300 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+              }`}
           >
-            {/* Progress bar - READ ONLY with question markers */}
+            {/* Progress bar - Enhanced MultiVideoPlayer features */}
             <div className="mb-4">
-              <div className="relative h-10 flex items-center">
+              <div
+                className="relative h-10 flex items-center cursor-pointer group"
+              >
                 {/* Progress bar background */}
-                <div className="absolute left-0 right-0 h-1.5 bg-white/20 rounded-full top-1/2 transform -translate-y-1/2">
+                <div className="absolute left-0 right-0 h-1.5 bg-white/20 rounded-full top-1/2 transform -translate-y-1/2 group-hover:h-2 transition-all">
                   <div
-                    className="h-1.5 bg-gradient-to-r from-purple-500 to-yellow-500 rounded-full transition-all"
+                    className="h-full bg-gradient-to-r from-purple-500 to-yellow-500 rounded-full transition-all"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                
+
                 {/* Question markers */}
                 <div className="absolute left-0 right-0 h-10 flex items-center top-1/2 transform -translate-y-1/2">
                   {questions.map((q, idx) => (
@@ -709,11 +947,10 @@ function LessonContent() {
                       }}
                     >
                       <div
-                        className={`w-3 h-3 rounded-full border-2 transition ${
-                          answeredQuestions.has(q.id)
+                        className={`w-3 h-3 rounded-full border-2 transition ${answeredQuestions.has(q.id)
                             ? 'bg-green-400 border-green-500'
                             : 'bg-orange-400 border-orange-500 animate-pulse'
-                        }`}
+                          }`}
                       />
                     </div>
                   ))}
@@ -775,11 +1012,10 @@ function LessonContent() {
                   <button
                     key={speed}
                     onClick={() => setPlaybackSpeed(speed)}
-                    className={`px-2 py-1 rounded text-xs font-semibold transition ${
-                      playbackSpeed === speed
+                    className={`px-2 py-1 rounded text-xs font-semibold transition ${playbackSpeed === speed
                         ? 'bg-purple-600 text-white'
                         : 'text-white/70 hover:bg-white/10'
-                    }`}
+                      }`}
                   >
                     {speed}x
                   </button>
@@ -818,11 +1054,10 @@ function LessonContent() {
                 <div className="mb-6">
                   {/* Result indicator */}
                   {showResult && (
-                    <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
-                      isCorrectAnswer 
-                        ? 'bg-green-100 border-2 border-green-500' 
+                    <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${isCorrectAnswer
+                        ? 'bg-green-100 border-2 border-green-500'
                         : 'bg-red-100 border-2 border-red-500'
-                    }`}>
+                      }`}>
                       {isCorrectAnswer ? (
                         <>
                           <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
@@ -840,7 +1075,7 @@ function LessonContent() {
                       )}
                     </div>
                   )}
-                  
+
                   <h3 className="text-lg font-bold text-gray-800 mb-4">
                     {questions[currentQuestionIdx]?.question}
                   </h3>
@@ -848,9 +1083,9 @@ function LessonContent() {
                     {questions[currentQuestionIdx]?.options.map((option: string, idx: number) => {
                       const isUserAnswer = userAnswer === idx;
                       const isCorrectOption = questions[currentQuestionIdx].answer === idx;
-                      
+
                       let buttonClass = 'w-full p-3 text-left rounded-lg border-2 transition ';
-                      
+
                       if (!showResult) {
                         // Before answering
                         buttonClass += isUserAnswer
@@ -869,7 +1104,7 @@ function LessonContent() {
                           buttonClass += 'border-gray-200 bg-gray-50';
                         }
                       }
-                      
+
                       return (
                         <button
                           key={idx}
@@ -879,21 +1114,20 @@ function LessonContent() {
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className={`font-semibold mr-2 ${
-                                showResult && isCorrectOption 
-                                  ? 'text-green-600' 
+                              <span className={`font-semibold mr-2 ${showResult && isCorrectOption
+                                  ? 'text-green-600'
                                   : showResult && isUserAnswer && !isCorrectAnswer
-                                  ? 'text-red-600'
-                                  : 'text-purple-600'
-                              }`}>
+                                    ? 'text-red-600'
+                                    : 'text-purple-600'
+                                }`}>
                                 {String.fromCharCode(65 + idx)}.
                               </span>
                               <span className={
-                                showResult && isCorrectOption 
-                                  ? 'text-green-700 font-semibold' 
+                                showResult && isCorrectOption
+                                  ? 'text-green-700 font-semibold'
                                   : showResult && isUserAnswer && !isCorrectAnswer
-                                  ? 'text-red-700'
-                                  : 'text-gray-800'
+                                    ? 'text-red-700'
+                                    : 'text-gray-800'
                               }>
                                 {option}
                               </span>
@@ -943,7 +1177,7 @@ function LessonContent() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                
+
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-2">Chúc mừng bạn đã hoàn thành!</h2>
                   <p className="text-gray-600">Bạn đã xem hết nội dung bài học này.</p>
@@ -952,13 +1186,13 @@ function LessonContent() {
                 <div className="grid grid-cols-1 gap-3 w-full">
                   <Button
                     onClick={() => {
-                        if (currentAssignment) {
-                            // User requested to keep flow in /user/training
-                            router.push(`/user/training?start_assignment_id=${currentAssignment.id}`);
-                        } else {
-                            // Fallback to training list if no assignment found
-                            router.push(`/user/training`); 
-                        }
+                      if (currentAssignment) {
+                        // User requested to keep flow in /user/training
+                        router.push(`/user/training?start_assignment_id=${currentAssignment.id}`);
+                      } else {
+                        // Fallback to training list if no assignment found
+                        router.push(`/user/training`);
+                      }
                     }}
                     className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 h-auto text-lg rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1"
                   >
@@ -970,14 +1204,16 @@ function LessonContent() {
                       Làm bài tập & Kiểm tra
                     </div>
                   </Button>
-                  
-                   {/* Next Lesson button removed */}
+
+                  {/* Next Lesson button removed */}
 
                   <Button
                     variant="ghost"
                     onClick={() => {
-                       setVideoCompleted(false);
-                       videoRef.current?.play();
+                      playbackAllowedRef.current = true;
+                      setVideoCompleted(false);
+                      videoRef.current?.play();
+                      setIsPlaying(true);
                     }}
                     className="text-gray-500 hover:text-gray-700"
                   >

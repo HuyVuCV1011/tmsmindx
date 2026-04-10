@@ -11,6 +11,7 @@ import { Eye, Lock, Trash2, Upload, Video } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import toast from 'react-hot-toast';
+import { useUploadVideo } from "@/components/UploadVideoContext";
 
 interface Video {
   id: number;
@@ -25,12 +26,16 @@ interface Video {
   lesson_number: number;
   actual_view_count?: number;
   actual_viewers?: number;
+  video_group_id?: string;
+  chunk_index?: number;
+  chunk_total?: number;
+  original_filename?: string;
 }
 
 export default function Page5() {
   const [tab, setTab] = useState<'assigned' | 'draft' | 'locked'>('assigned');
   const [search, setSearch] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const { uploadState, startUpload } = useUploadVideo();
   const [videos, setVideos] = useState<Video[]>([]);
   const [videoDurations, setVideoDurations] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
@@ -55,6 +60,12 @@ export default function Page5() {
 
   useEffect(() => {
     fetchVideos();
+
+    const handleUploadDone = () => {
+        fetchVideos();
+    };
+    window.addEventListener("videoUploaded", handleUploadDone);
+    return () => window.removeEventListener("videoUploaded", handleUploadDone);
   }, []);
 
   const fetchVideos = async () => {
@@ -143,81 +154,33 @@ export default function Page5() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploading(true);
-
-    try {
-      // Step 1: Get signature from our API
-      const signatureRes = await fetch("/api/cloudinary-signature", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folder: "mindx_videos" }),
-      });
-
-      if (!signatureRes.ok) {
-        throw new Error("Không thể tạo signature cho upload");
-      }
-
-      const { signature, timestamp, cloudName, apiKey, folder } = await signatureRes.json();
-
-      // Step 2: Upload directly to Cloudinary from client
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("signature", signature);
-      formData.append("timestamp", timestamp.toString());
-      formData.append("api_key", apiKey);
-      formData.append("folder", folder);
-
-      const uploadRes = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-
-      if (!uploadRes.ok) {
-        const errorData = await uploadRes.json();
-        throw new Error(errorData.error?.message || "Upload lên Cloudinary thất bại");
-      }
-
-      const uploadData = await uploadRes.json();
-
-      // Step 3: Save video record to database
-      const response = await fetch('/api/training-videos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: file.name.replace(/\.[^/.]+$/, ""), // Use filename without extension as default title
-          video_link: uploadData.secure_url,
-          start_date: new Date().toISOString().split('T')[0],
-          duration_minutes: Math.ceil(uploadData.duration / 60) || 30, // Convert seconds to minutes
-          status: "draft"
-        })
-      });
-
-      const videoData = await response.json();
-      if (videoData.success) {
-        toast.success('Upload video thành công!');
-        // Redirect to setup page to fill in details
-        setTimeout(() => {
-          router.push(`/admin/video-setup?id=${videoData.data.id}`);
-        }, 500);
-      } else {
-        toast.error("Lỗi khi lưu video: " + videoData.error);
-      }
-    } catch (err) {
-      console.error("Upload error:", err);
-      toast.error(err instanceof Error ? err.message : "Lỗi khi upload video!");
-    } finally {
-      setUploading(false);
-      // Reset file input
-      if (fileInputRef.current) {
+    await startUpload(file);
+    if (fileInputRef.current) {
         fileInputRef.current.value = '';
-      }
     }
   };
 
-  const filteredVideos = videos
+  const groupedVideos = videos.reduce((acc, video) => {
+    if (!video.video_group_id) {
+      acc.push(video);
+    } else {
+      const existingGroup = acc.find(v => v.video_group_id === video.video_group_id);
+      if (existingGroup) {
+        existingGroup.duration_minutes = (existingGroup.duration_minutes || 0) + (video.duration_minutes || 0);
+      } else {
+        const groupRep = { ...video };
+        if (groupRep.original_filename) {
+            groupRep.title = groupRep.original_filename.replace(/\.[^/.]+$/, "");
+        } else {
+            groupRep.title = groupRep.title.replace(/\s*\(Phần \d+\)$/i, "");
+        }
+        acc.push(groupRep);
+      }
+    }
+    return acc;
+  }, [] as Video[]);
+
+  const filteredVideos = groupedVideos
     .filter((v) => {
       if (tab === 'assigned') return v.status === 'active';
       if (tab === 'draft') return v.status === 'draft';
@@ -227,9 +190,9 @@ export default function Page5() {
     .filter((v) => v.title.toLowerCase().includes(search.toLowerCase()));
 
   const tabCounts = {
-    assigned: videos.filter(v => v.status === 'active').length,
-    draft: videos.filter(v => v.status === 'draft').length,
-    locked: videos.filter(v => v.status === 'inactive').length,
+    assigned: groupedVideos.filter(v => v.status === 'active').length,
+    draft: groupedVideos.filter(v => v.status === 'draft').length,
+    locked: groupedVideos.filter(v => v.status === 'inactive').length,
   };
 
   // Show skeleton while loading
@@ -261,27 +224,15 @@ export default function Page5() {
         <button
           className="flex items-center gap-2 bg-[#a1001f] hover:bg-[#c41230] text-white px-4 py-2 rounded-lg font-semibold disabled:bg-gray-400 transition-colors"
           onClick={handleUploadClick}
-          disabled={uploading}
+          disabled={uploadState.isUploading}
         >
           <Upload className="h-4 w-4" />
-          {uploading ? "Đang tải lên..." : "Upload video"}
+          {uploadState.isUploading ? "Đang tải lên..." : "Upload video"}
         </button>
       </div>
 
       {/* Loading Overlay */}
-      {uploading && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="max-w-sm" padding="lg">
-            <div className="text-center">
-              <div className="animate-pulse space-y-3">
-                <div className="h-12 w-12 bg-gray-300 rounded-full mx-auto"></div>
-                <div className="h-4 bg-gray-300 rounded w-3/4 mx-auto"></div>
-              </div>
-              <p className="text-sm text-gray-500 mt-4">Vui lòng đợi trong giây lát</p>
-            </div>
-          </Card>
-        </div>
-      )}
+      
 
       <Card>
         {/* Tabs */}

@@ -11,6 +11,7 @@ interface Post {
     id: string | number
     title: string
     description: string
+    featured_image?: string
     banner_image: string
     post_type: string
     slug?: string // Optional slug for compatibility
@@ -79,7 +80,7 @@ export default function Slider({ posts }: SliderProps) {
                     >
                         {/* Image with Parallax-like feel */}
                         <Image
-                            src={post.banner_image || "/placeholder-banner.jpg"}
+                            src={post.featured_image || "/placeholder-banner.jpg"}
                             alt={post.title}
                             fill
                             className="object-cover"

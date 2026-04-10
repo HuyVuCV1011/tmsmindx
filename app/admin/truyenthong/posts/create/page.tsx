@@ -32,21 +32,18 @@ export default function CreatePostPage() {
     })
 
     const [errors, setErrors] = useState<Record<string, string>>({})
+    // Dùng ref để lưu content editor — tránh re-render mỗi lần gõ
+    const contentRef = React.useRef<string>('')
 
     const [files, setFiles] = useState<{
         thumbnail: File | null;
-        banner: File | null;
     }>({
-        thumbnail: null,
-        banner: null
+        thumbnail: null
     })
 
     const [thumbnailPreview, setThumbnailPreview] = useState<string>('')
-    const [bannerPreview, setBannerPreview] = useState<string>('')
     const [previousThumbnail, setPreviousThumbnail] = useState<string>('')
-    const [previousBanner, setPreviousBanner] = useState<string>('')
     const [previousThumbnailFile, setPreviousThumbnailFile] = useState<File | null>(null)
-    const [previousBannerFile, setPreviousBannerFile] = useState<File | null>(null)
 
     // Handle Ctrl+Z for undo delete
     useEffect(() => {
@@ -65,26 +62,14 @@ export default function CreatePostPage() {
                     toast.success('Đã khôi phục ảnh thumbnail')
                     return
                 }
-                
-                // Restore banner if it was deleted
-                if (!bannerPreview && previousBanner) {
-                    setBannerPreview(previousBanner)
-                    if (previousBannerFile) {
-                        setFiles(prev => ({ ...prev, banner: previousBannerFile }))
-                    }
-                    setPreviousBanner('')
-                    setPreviousBannerFile(null)
-                    toast.success('Đã khôi phục ảnh banner')
-                    return
-                }
             }
         }
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [thumbnailPreview, bannerPreview, previousThumbnail, previousBanner, previousThumbnailFile, previousBannerFile])
+    }, [thumbnailPreview, previousThumbnail, previousThumbnailFile])
 
-    const handleImageFile = (file: File, type: 'thumbnail' | 'banner') => {
+    const handleImageFile = (file: File) => {
         // Validate file size (max 5MB)
         if (file.size > 5 * 1024 * 1024) {
             toast.error('Kích thước ảnh không được vượt quá 5MB')
@@ -98,23 +83,19 @@ export default function CreatePostPage() {
         }
 
         // Set file
-        setFiles(prev => ({ ...prev, [type]: file }))
+        setFiles(prev => ({ ...prev, thumbnail: file }))
 
         // Show preview
         const reader = new FileReader()
         reader.onloadend = () => {
-            if (type === 'thumbnail') {
-                setThumbnailPreview(reader.result as string)
-            } else {
-                setBannerPreview(reader.result as string)
-            }
+            setThumbnailPreview(reader.result as string)
         }
         reader.readAsDataURL(file)
 
-        toast.success(`Đã chọn ảnh ${type === 'thumbnail' ? 'thumbnail' : 'banner'}. Ảnh sẽ được tải lên khi bạn lưu.`)
+        toast.success(`Đã chọn ảnh thumbnail. Ảnh sẽ được tải lên khi bạn lưu.`)
     }
 
-    const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>, type: 'thumbnail' | 'banner') => {
+    const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
         const items = e.clipboardData?.items
         if (!items) return
 
@@ -126,7 +107,7 @@ export default function CreatePostPage() {
                 const file = item.getAsFile()
                 if (!file) continue
 
-                handleImageFile(file, type)
+                handleImageFile(file)
                 break
             }
         }
@@ -155,7 +136,7 @@ export default function CreatePostPage() {
         const newErrors: Record<string, string> = {}
         if (!formData.title.trim()) newErrors.title = 'Tiêu đề không được để trống'
         if (!formData.description.trim()) newErrors.description = 'Mô tả ngắn không được để trống'
-        if (!formData.content.trim()) newErrors.content = 'Nội dung không được để trống'
+        if (!contentRef.current.trim()) newErrors.content = 'Nội dung không được để trống'
 
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors)
@@ -168,26 +149,22 @@ export default function CreatePostPage() {
         try {
             const defaultImage = '/images/default-post.png'
             let featured_image = defaultImage
-            let banner_image = defaultImage
 
             // Upload images if exist
             if (files.thumbnail) {
                 featured_image = await uploadImage(files.thumbnail)
             }
-            if (files.banner) {
-                banner_image = await uploadImage(files.banner)
-            }
 
             const payload = {
                 title: formData.title,
                 description: formData.description,
-                content: formData.content,
+                content: contentRef.current,
                 post_type: formData.type,
                 status: formData.status,
                 audience: formData.audience,
                 published_at: formData.publishDate || new Date().toISOString(),
                 featured_image,
-                banner_image
+                banner_image: featured_image // Pass the same image to DB
             }
 
             const res = await fetch('/api/truyenthong/posts', {
@@ -207,7 +184,7 @@ export default function CreatePostPage() {
             if (!res.ok) throw new Error('Failed to create post')
 
             toast.success('Bài viết đã được tạo thành công!')
-            router.push('/admin/truyenthong/posts')
+            router.push('/admin/truyenthong')
         } catch (error) {
             console.error(error)
             toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra khi tạo bài viết')
@@ -220,7 +197,7 @@ export default function CreatePostPage() {
         <div className="space-y-5">
             {/* Header */}
             <div className="flex items-center gap-3 pb-4 border-b border-gray-200">
-                <Link href="/admin/truyenthong/posts">
+                <Link href="/admin/truyenthong">
                     <Button variant="ghost" size="sm" className="gap-2 hover:bg-gray-100 transition-all hover:-translate-x-0.5">
                         <ArrowLeft className="w-4 h-4" />
                         Quay lại
@@ -285,7 +262,7 @@ export default function CreatePostPage() {
                                     <RichTextEditor
                                         content={formData.content}
                                         onChange={(html) => {
-                                            setFormData({ ...formData, content: html })
+                                            contentRef.current = html
                                             if (errors.content) setErrors({ ...errors, content: '' })
                                         }}
                                         error={errors.content}
@@ -315,22 +292,22 @@ export default function CreatePostPage() {
                                 <div className="space-y-2">
                                     <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                                         <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
-                                        Hình ảnh nhỏ (Thumbnail)
+                                        Hình đại diện (Thumbnail)
                                     </Label>
                                     <div 
                                         tabIndex={0} 
-                                        onPaste={(e) => handlePaste(e, 'thumbnail')} 
+                                        onPaste={handlePaste} 
                                         className="group focus:outline-none focus-within:ring-2 focus-within:ring-blue-500/50 rounded-xl transition-all"
                                     >
                                         {thumbnailPreview ? (
                                             <div className="relative">
-                                                <div className="relative overflow-hidden rounded-xl border-2 border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 p-3">
+                                                <div className="relative overflow-hidden rounded-xl border-2 border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 p-3 flex justify-center">
                                                     <Image 
                                                         src={thumbnailPreview} 
                                                         alt="Thumbnail preview" 
-                                                        width={400} 
-                                                        height={250} 
-                                                        className="rounded-lg w-full h-auto object-cover shadow-md" 
+                                                        width={600} 
+                                                        height={350} 
+                                                        className="rounded-lg max-h-[300px] w-auto object-contain shadow-md" 
                                                     />
                                                 </div>
                                                 <button
@@ -357,7 +334,7 @@ export default function CreatePostPage() {
                                                     <svg className="w-12 h-12 text-blue-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                     </svg>
-                                                    <p className="text-sm font-semibold text-gray-700 mb-1">Chọn hoặc dán ảnh thumbnail</p>
+                                                    <p className="text-sm font-semibold text-gray-700 mb-1">Chọn hoặc dán ảnh gốc / cover</p>
                                                     <p className="text-xs text-gray-500 mb-3">
                                                         <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-xs font-mono shadow-sm">Ctrl</kbd>
                                                         {' + '}
@@ -374,89 +351,9 @@ export default function CreatePostPage() {
                                             accept="image/*"
                                             onChange={e => {
                                                 const file = e.target.files?.[0]
-                                                if (file) handleImageFile(file, 'thumbnail')
+                                                if (file) handleImageFile(file)
                                             }}
                                             className="mt-2 h-10 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Divider */}
-                                <div className="relative">
-                                    <div className="absolute inset-0 flex items-center">
-                                        <div className="w-full border-t border-gray-200"></div>
-                                    </div>
-                                    <div className="relative flex justify-center text-xs">
-                                        <span className="bg-white px-2 text-gray-400">và</span>
-                                    </div>
-                                </div>
-
-                                {/* Banner Upload */}
-                                <div className="space-y-2">
-                                    <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                                        <span className="w-2 h-2 bg-indigo-600 rounded-full"></span>
-                                        Hình ảnh lớn (Banner)
-                                    </Label>
-                                    <div 
-                                        tabIndex={0} 
-                                        onPaste={(e) => handlePaste(e, 'banner')} 
-                                        className="group focus:outline-none focus-within:ring-2 focus-within:ring-indigo-500/50 rounded-xl transition-all"
-                                    >
-                                        {bannerPreview ? (
-                                            <div className="relative">
-                                                <div className="relative overflow-hidden rounded-xl border-2 border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 p-3">
-                                                    <Image 
-                                                        src={bannerPreview} 
-                                                        alt="Banner preview" 
-                                                        width={600} 
-                                                        height={300} 
-                                                        className="rounded-lg w-full h-auto object-cover shadow-md" 
-                                                    />
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        // Save current state for undo
-                                                        setPreviousBanner(bannerPreview)
-                                                        setPreviousBannerFile(files.banner)
-                                                        
-                                                        setBannerPreview('')
-                                                        setFiles(prev => ({ ...prev, banner: null }))
-                                                        toast.success('Đã xóa ảnh banner. Nhấn Ctrl+Z để khôi phục')
-                                                    }}
-                                                    className="absolute -top-2 -right-2 p-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full hover:from-red-600 hover:to-red-700 transition-all shadow-lg hover:shadow-xl hover:scale-110 cursor-pointer"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 hover:from-indigo-50 hover:to-purple-50 transition-all">
-                                                <div className="text-center">
-                                                    <svg className="w-12 h-12 text-indigo-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                    </svg>
-                                                    <p className="text-sm font-semibold text-gray-700 mb-1">Chọn hoặc dán ảnh banner</p>
-                                                    <p className="text-xs text-gray-500 mb-3">
-                                                        <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-xs font-mono shadow-sm">Ctrl</kbd>
-                                                        {' + '}
-                                                        <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-xs font-mono shadow-sm">V</kbd>
-                                                        {' để dán ảnh'}
-                                                    </p>
-                                                    <p className="text-xs text-gray-400">JPG, PNG, GIF (tối đa 5MB)</p>
-                                                </div>
-                                            </div>
-                                        )}
-                                        <Input
-                                            id="banner"
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={e => {
-                                                const file = e.target.files?.[0]
-                                                if (file) handleImageFile(file, 'banner')
-                                            }}
-                                            className="mt-2 h-10 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
                                         />
                                     </div>
                                 </div>
@@ -541,7 +438,7 @@ export default function CreatePostPage() {
                                 {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                                 Lưu bài viết
                             </Button>
-                            <Link href="/admin/truyenthong/posts" className="w-full">
+                            <Link href="/admin/truyenthong" className="w-full">
                                 <Button type="button" variant="outline" className="w-full h-11 text-sm hover:bg-gray-100 hover:border-gray-300 transition-all font-semibold">
                                     Hủy bỏ
                                 </Button>
