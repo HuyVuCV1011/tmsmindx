@@ -144,7 +144,7 @@ export function Sidebar() {
         {
           label: "Kiểm tra chuyên môn/Trải nghiệm",
           submenu: [
-            { href: "/user/assignments", label: "Kiểm tra chuyên môn/trải nghiệm" },
+            { href: "/user/assignments", label: "Quản lý kiểm tra" },
             { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
           ]
         },
