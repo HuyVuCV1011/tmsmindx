@@ -51,6 +51,23 @@ interface ExamScheduleItem {
   specialty: string;
   startTime: string;
   endTime: string;
+  subjectId: number | null;
+  selectedSetId: number | null;
+}
+
+interface ExamSubjectOption {
+  id: number;
+  subject_code: string;
+  subject_name: string;
+  exam_type: string;
+  duration_minutes: number | null;
+}
+
+interface ExamSetOption {
+  id: number;
+  set_code: string;
+  set_name: string;
+  question_count: number;
 }
 
 interface EventParticipant {
@@ -64,10 +81,8 @@ interface EventParticipant {
 }
 
 const REGISTRATION_TEMPLATE_LABELS: Record<RegistrationTemplate, string> = {
-  official:
-    "Đăng ký Kiểm tra chuyên sâu &\nQuy trình - Kỹ năng trải nghiệm\n[Chính thức]",
-  supplement:
-    "Đăng ký Kiểm tra chuyên sâu &\nQuy trình - Kỹ năng trải nghiệm\n[Bổ sung]",
+  official: "Đăng ký kiểm tra chuyên sâu chính thức",
+  supplement: "Đăng ký kiểm tra chuyên sâu bổ sung",
 };
 
 const EVENT_TYPE_LABELS: Record<EventCategory, string> = {
@@ -162,7 +177,17 @@ function formatDateOnly(date: Date) {
 }
 
 function combineDateAndTime(date: string, time: string) {
-  return `${date}T${time}`;
+  // Build a Date in local (browser) time so we preserve the admin's intended VN wall-clock.
+  // Appending the local timezone offset makes the API round-trip timezone-independent.
+  const [h, m] = (time || '00:00').split(':').map(Number);
+  const [y, mo, d] = (date || '').split('-').map(Number);
+  const dt = new Date(y, mo - 1, d, h || 0, m || 0, 0, 0);
+  const offsetMinutes = -dt.getTimezoneOffset(); // e.g. 420 for UTC+7
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absOff = Math.abs(offsetMinutes);
+  const oh = Math.floor(absOff / 60).toString().padStart(2, '0');
+  const om = (absOff % 60).toString().padStart(2, '0');
+  return `${date}T${time}:00${sign}${oh}:${om}`; // e.g. "2026-04-05T22:30:00+07:00"
 }
 
 function formatEventTimeRange(startAt: string, endAt: string) {
@@ -176,20 +201,11 @@ function formatEventTimeRange(startAt: string, endAt: string) {
   return `${hhmm(start)} - ${hhmm(end)}`;
 }
 
-function getExamEventTitle(specialty: string) {
-  if (specialty === "Kiểm tra chuyên sâu bổ sung") {
-    return "Kiểm tra chuyên sâu bổ sung";
-  }
-
-  if (specialty === "Kiểm tra quy trình - kỹ năng trải nghiệm bổ sung") {
-    return "Kiểm tra quy trình - kỹ năng trải nghiệm bổ sung";
-  }
-
-  if (specialty === "Quy trình quy định") {
+function getExamEventTitle(label: string) {
+  if (label.toLowerCase().includes("quy trình")) {
     return "Kiểm tra quy trình - kỹ năng trải nghiệm";
   }
-
-  return `Kiểm tra chuyên sâu ${specialty}`;
+  return `Kiểm tra chuyên sâu ${label}`;
 }
 
 function formatTimeOnly(value: string) {
@@ -197,6 +213,12 @@ function formatTimeOnly(value: string) {
   const h = date.getHours().toString().padStart(2, "0");
   const m = date.getMinutes().toString().padStart(2, "0");
   return `${h}:${m}`;
+}
+
+function addMinutes(timeStr: string, mins: number) {
+  const [h, m] = (timeStr || "00:00").split(":").map(Number);
+  const total = h * 60 + m + mins;
+  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
 function buildCalendarCells(focusDate: Date, view: CalendarView): CalendarCell[] {
@@ -246,6 +268,10 @@ export default function ProfessionalEvaluationSchedulePage() {
   const [acceptedParticipants, setAcceptedParticipants] = useState<EventParticipant[]>([]);
   const calendarPermissionPath = "/admin/page4/lich-danh-gia";
 
+  // Subjects & sets (giống thu-vien-de)
+  const [subjectList, setSubjectList] = useState<ExamSubjectOption[]>([]);
+  const [setsBySubjectId, setSetsBySubjectId] = useState<Map<number, ExamSetOption[]>>(new Map());
+
   const [formData, setFormData] = useState(() => {
     const start = new Date();
     const defaultDate = formatDateOnly(start);
@@ -262,9 +288,11 @@ export default function ProfessionalEvaluationSchedulePage() {
       commonEndTime: "09:00",
       examSchedules: [
         {
-          specialty: "Coding - Scratch",
+          specialty: "",
           startTime: "21:00",
           endTime: "21:45",
+          subjectId: null,
+          selectedSetId: null,
         },
       ] as ExamScheduleItem[],
       title: "",
@@ -303,6 +331,45 @@ export default function ProfessionalEvaluationSchedulePage() {
 
   useEffect(() => {
     fetchEvents();
+  }, []);
+
+  // Tải danh sách môn + bộ đề (giống thu-vien-de)
+  useEffect(() => {
+    const loadSubjectsAndSets = async () => {
+      try {
+        const [subjectRes, setRes] = await Promise.all([
+          fetch('/api/exam-subjects'),
+          fetch('/api/exam-sets'),
+        ]);
+        const subjectData = await subjectRes.json();
+        const setData = await setRes.json();
+
+        if (subjectData.success) {
+          setSubjectList((subjectData.data || []) as ExamSubjectOption[]);
+        }
+
+        if (setData.success) {
+          const allSets: Array<ExamSetOption & { subject_id: number }> = (setData.data || []).map((s: any) => ({
+            id: Number(s.id),
+            set_code: String(s.set_code || ''),
+            set_name: String(s.set_name || ''),
+            question_count: Number(s.question_count || 0),
+            subject_id: Number(s.subject_id),
+          }));
+
+          const map = new Map<number, ExamSetOption[]>();
+          allSets.forEach((s) => {
+            const list = map.get(s.subject_id) || [];
+            list.push({ id: s.id, set_code: s.set_code, set_name: s.set_name, question_count: s.question_count });
+            map.set(s.subject_id, list);
+          });
+          setSetsBySubjectId(map);
+        }
+      } catch (err) {
+        console.error('Error loading subjects/sets:', err);
+      }
+    };
+    loadSubjectsAndSets();
   }, []);
 
   const canManageCalendar = user?.role === "super_admin";
@@ -433,9 +500,11 @@ export default function ProfessionalEvaluationSchedulePage() {
       commonEndTime: "09:00",
       examSchedules: [
         {
-          specialty: "Coding - Scratch",
+          specialty: "",
           startTime: "21:00",
           endTime: "21:45",
+          subjectId: null,
+          selectedSetId: null,
         },
       ],
       title: "",
@@ -494,6 +563,8 @@ export default function ProfessionalEvaluationSchedulePage() {
             specialty: event.specialty,
             startTime: formatTimeOnly(event.startAt),
             endTime: formatTimeOnly(event.endAt),
+            subjectId: null,
+            selectedSetId: null,
           },
         ],
         note: event.note || "",
@@ -570,6 +641,36 @@ export default function ProfessionalEvaluationSchedulePage() {
     }
   };
 
+  // Kiểm tra sự kiện trùng để cảnh báo trong form
+  const duplicateConflicts = useMemo(() => {
+    if (!showCreateModal) return [];
+    const conflicts: string[] = [];
+    if (formData.eventType === "exam" && formData.examDate) {
+      for (const schedule of formData.examSchedules) {
+        if (!schedule.subjectId) continue;
+        const subject = subjectList.find((s) => s.id === schedule.subjectId);
+        if (!subject) continue;
+        const exists = events.some(
+          (ev) =>
+            ev.eventType === "exam" &&
+            ev.specialty === subject.subject_code &&
+            formatDateKey(new Date(ev.startAt)) === formData.examDate &&
+            ev.id !== editingEventId
+        );
+        if (exists) conflicts.push(subject.subject_name);
+      }
+    } else if (formData.eventType === "registration" && formData.registrationStartDate) {
+      const exists = events.some(
+        (ev) =>
+          ev.eventType === "registration" &&
+          ev.registrationTemplate === formData.registrationTemplate &&
+          ev.id !== editingEventId
+      );
+      if (exists) conflicts.push(REGISTRATION_TEMPLATE_LABELS[formData.registrationTemplate]);
+    }
+    return conflicts;
+  }, [showCreateModal, formData, events, subjectList, editingEventId]);
+
   const handleCreateEvent = async () => {
     if (!canManageCalendar) {
       return;
@@ -611,10 +712,16 @@ export default function ProfessionalEvaluationSchedulePage() {
       }
 
       const hasInvalidSchedule = formData.examSchedules.some(
-        (schedule) => !schedule.specialty || !schedule.startTime || !schedule.endTime
+        (schedule) => !schedule.subjectId || !schedule.startTime || !schedule.endTime
       );
       if (hasInvalidSchedule) {
-        toast.error("Vui lòng nhập đầy đủ môn và thời gian cho tất cả lịch kiểm tra");
+        toast.error("Vui lòng chọn môn kiểm tra và thời gian cho tất cả lịch");
+        return;
+      }
+
+      const hasNoSet = formData.examSchedules.some((s) => !s.selectedSetId);
+      if (hasNoSet) {
+        toast.error("Vui lòng chọn bộ đề cho tất cả lịch kiểm tra");
         return;
       }
 
@@ -628,14 +735,42 @@ export default function ProfessionalEvaluationSchedulePage() {
         return;
       }
 
+      // Trước khi tạo event_schedule: set bộ đề mặc định tháng (giống thu-vien-de)
+      const examDateObj = new Date(formData.examDate);
+      const examYear = examDateObj.getFullYear();
+      const examMonth = examDateObj.getMonth() + 1;
+
+      for (const schedule of formData.examSchedules) {
+        if (!schedule.subjectId || !schedule.selectedSetId) continue;
+        try {
+          await fetch('/api/chuyensau-chonde-thang', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subject_id: schedule.subjectId,
+              selected_set_id: schedule.selectedSetId,
+              year: examYear,
+              month: examMonth,
+              note: `Set từ lich-danh-gia ${formData.examDate}`,
+            }),
+          });
+        } catch (err) {
+          console.error('chonde-thang error:', err);
+        }
+      }
+
       nextEvents = formData.examSchedules.map((schedule) => {
+        const subject = subjectList.find((s) => s.id === schedule.subjectId);
+        // specialty = ma_mon để khớp với chuyen_sau_monhoc khi lookup event
+        const specialty = subject?.subject_code || schedule.specialty;
+        const title = getExamEventTitle(subject?.subject_name || specialty);
         const startAt = combineDateAndTime(formData.examDate, schedule.startTime);
         const endAt = combineDateAndTime(formData.examDate, schedule.endTime);
         return {
           id: crypto.randomUUID(),
           eventType: "exam" as EventCategory,
-          title: getExamEventTitle(schedule.specialty),
-          specialty: schedule.specialty,
+          title,
+          specialty,
           startAt,
           endAt,
           note: formData.note.trim(),
@@ -1098,6 +1233,17 @@ export default function ProfessionalEvaluationSchedulePage() {
             </div>
 
             <div className="space-y-3 px-4 py-4 flex-1 overflow-y-auto">
+              {duplicateConflicts.length > 0 && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  <span className="font-semibold">⚠ Đã có sự kiện tương tự:</span>
+                  <ul className="mt-1 ml-3 list-disc text-xs">
+                    {duplicateConflicts.map((c) => (
+                      <li key={c}>{c}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-xs text-amber-700">Bạn vẫn có thể lưu nếu cần tạo thêm lịch.</p>
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium">Loại sự kiện</label>
                 <select
@@ -1162,8 +1308,8 @@ export default function ProfessionalEvaluationSchedulePage() {
                         }
                         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
                       >
-                        <option value="official">Đăng ký Kiểm tra chuyên sâu & Quy trình - Kỹ năng trải nghiệm [Chính thức]</option>
-                        <option value="supplement">Đăng ký Kiểm tra chuyên sâu & Quy trình - Kỹ năng trải nghiệm [Bổ sung]</option>
+                        <option value="official">{REGISTRATION_TEMPLATE_LABELS.official}</option>
+                        <option value="supplement">{REGISTRATION_TEMPLATE_LABELS.supplement}</option>
                       </select>
                     </div>
 
@@ -1235,33 +1381,74 @@ export default function ProfessionalEvaluationSchedulePage() {
                           <div>
                             <label className="mb-1 block text-sm font-medium">Môn kiểm tra</label>
                             <select
-                              value={schedule.specialty}
-                              onChange={(event) =>
+                              value={schedule.subjectId ?? ""}
+                              onChange={(e) => {
+                                const newSubjectId = Number(e.target.value) || null;
+                                const firstValidSet = newSubjectId
+                                  ? (setsBySubjectId.get(newSubjectId) || []).find(s => s.question_count > 0)
+                                  : null;
+                                const subject = subjectList.find(s => s.id === newSubjectId);
                                 setFormData((previous) => ({
                                   ...previous,
                                   examSchedules: previous.examSchedules.map((item, itemIndex) =>
                                     itemIndex === index
-                                      ? { ...item, specialty: event.target.value }
+                                      ? {
+                                          ...item,
+                                          subjectId: newSubjectId,
+                                          selectedSetId: firstValidSet?.id ?? null,
+                                          specialty: subject?.subject_code || "",
+                                          endTime: newSubjectId && subject?.duration_minutes
+                                            ? addMinutes(item.startTime, subject.duration_minutes)
+                                            : item.endTime,
+                                        }
                                       : item
                                   ),
-                                }))
-                              }
+                                }));
+                              }}
                               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
                             >
-                              <option>Coding - Scratch</option>
-                              <option>Coding - Game</option>
-                              <option>Coding - App</option>
-                              <option>Coding - Web</option>
-                              <option>Computer Science</option>
-                              <option>Robotics Lego Spike 4+</option>
-                              <option>Robotics VexGo</option>
-                              <option>Robotics Vex IQ</option>
-                              <option>Art</option>
-                              <option>Quy trình quy định</option>
-                              <option>Kiểm tra chuyên sâu bổ sung</option>
-                              <option>Kiểm tra quy trình - kỹ năng trải nghiệm bổ sung</option>
+                              <option value="">-- Chọn môn --</option>
+                              {subjectList.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.subject_name}
+                                </option>
+                              ))}
                             </select>
                           </div>
+
+                          {schedule.subjectId && (
+                            <div className="mt-2">
+                              <label className="mb-1 block text-sm font-medium">Bộ đề áp dụng</label>
+                              {(setsBySubjectId.get(schedule.subjectId) || []).filter(s => s.question_count > 0).length === 0 ? (
+                                <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                  Môn này chưa có bộ đề nào có câu hỏi.
+                                </div>
+                              ) : (
+                                <select
+                                  value={schedule.selectedSetId ?? ""}
+                                  onChange={(e) => {
+                                    const newSetId = Number(e.target.value) || null;
+                                    setFormData((previous) => ({
+                                      ...previous,
+                                      examSchedules: previous.examSchedules.map((item, itemIndex) =>
+                                        itemIndex === index ? { ...item, selectedSetId: newSetId } : item
+                                      ),
+                                    }));
+                                  }}
+                                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                                >
+                                  <option value="">-- Chọn bộ đề --</option>
+                                  {(setsBySubjectId.get(schedule.subjectId) || [])
+                                    .filter(s => s.question_count > 0)
+                                    .map((s) => (
+                                      <option key={s.id} value={s.id}>
+                                        {s.set_code}{s.set_name ? ` · ${s.set_name}` : ""} ({s.question_count} câu)
+                                      </option>
+                                    ))}
+                                </select>
+                              )}
+                            </div>
+                          )}
 
                           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
@@ -1314,9 +1501,11 @@ export default function ProfessionalEvaluationSchedulePage() {
                               examSchedules: [
                                 ...previous.examSchedules,
                                 {
-                                  specialty: "Coding - Scratch",
+                                  specialty: "",
                                   startTime: "21:00",
                                   endTime: "21:45",
+                                  subjectId: null,
+                                  selectedSetId: null,
                                 },
                               ],
                             }))

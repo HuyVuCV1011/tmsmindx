@@ -11,15 +11,17 @@ const poolMax = Math.max(1, parseInt(process.env.DB_POOL_MAX || '2', 10));
 
 // Prevent creating multiple pools during hot reloads in development (Next.js specific fix for serverless/HMR)
 if (!global.pool) {
+  const poolMax = Math.max(1, parseInt(process.env.DB_POOL_MAX || '2', 10));
   global.pool = new Pool({
     host: process.env.DB_HOST,
     port: parseInt(process.env.DB_PORT || '5432'),
     database: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    max: poolMax, // Keep this low by default; can be overridden via DB_POOL_MAX
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000, // Increased to 10s to avoid timeout on slow networks
+    max: poolMax,
+    idleTimeoutMillis: 15000,
+    connectionTimeoutMillis: 3000,
+    allowExitOnIdle: true,
     ssl: {
       rejectUnauthorized: false
     }

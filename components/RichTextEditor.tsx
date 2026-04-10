@@ -15,27 +15,27 @@ import { NodeSelection } from '@tiptap/pm/state'
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type NodeViewProps } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import {
-    AlignCenter,
-    AlignJustify,
-    AlignLeft,
-    AlignRight,
-    Bold,
-    Code,
-    Heading1,
-    Heading2,
-    Heading3,
-    Image as ImageIcon,
-    Italic,
-    Link as LinkIcon,
-    List,
-    ListOrdered,
-    Minus,
-    Quote,
-    Redo,
-    Table as TableIcon,
-    Trash2,
-    Underline as UnderlineIcon,
-    Undo
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  Bold,
+  Code,
+  Heading1,
+  Heading2,
+  Heading3,
+  Image as ImageIcon,
+  Italic,
+  Link as LinkIcon,
+  List,
+  ListOrdered,
+  Minus,
+  Quote,
+  Redo,
+  Table as TableIcon,
+  Trash2,
+  Underline as UnderlineIcon,
+  Undo
 } from 'lucide-react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
@@ -271,6 +271,13 @@ export default function RichTextEditor({
     setShowSlashMenu((prev) => (prev ? prev : true))
   }, [])
 
+  const dataUrlToFile = useCallback(async (dataUrl: string, fallbackName: string) => {
+    const response = await fetch(dataUrl)
+    const blob = await response.blob()
+    const ext = blob.type.split('/')[1] || 'png'
+    return new File([blob], `${fallbackName}.${ext}`, { type: blob.type || 'image/png' })
+  }, [])
+
   const uploadImageFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
       throw new Error('Chi ho tro dinh dang anh')
@@ -349,11 +356,71 @@ export default function RichTextEditor({
         }`
       },
       handlePaste: (_view, event) => {
-        const items = event.clipboardData?.items
+        const clipboard = event.clipboardData
+        const items = clipboard?.items
         if (!items?.length) return false
+
+        const html = clipboard?.getData('text/html') || ''
+        const hasHtml = Boolean(html && html.trim())
+        const hasDataImageInHtml = /<img[^>]+src=["']data:image/i.test(html)
+
+        if (hasHtml && hasDataImageInHtml) {
+          event.preventDefault()
+          ;(async () => {
+            try {
+              toast.loading('Dang xu ly anh tu noi dung paste...', { id: 'richtext-image-upload' })
+
+              const parser = new DOMParser()
+              const doc = parser.parseFromString(html, 'text/html')
+              const images = Array.from(doc.querySelectorAll('img'))
+              let uploadedCount = 0
+
+              for (let i = 0; i < images.length; i += 1) {
+                const img = images[i]
+                const src = img.getAttribute('src') || ''
+                if (!src.startsWith('data:image')) continue
+
+                try {
+                  const file = await dataUrlToFile(src, `pasted-image-${Date.now()}-${i}`)
+                  const imageUrl = await uploadImageFile(file)
+                  img.setAttribute('src', imageUrl)
+                  uploadedCount += 1
+                } catch {
+                  // Cloud-only mode: remove image if upload fails.
+                  img.remove()
+                }
+              }
+
+              const finalHtml = doc.body.innerHTML
+              if (finalHtml.trim()) {
+                editor?.chain().focus().insertContent(finalHtml).run()
+              }
+
+              if (uploadedCount > 0) {
+                toast.success(`Da paste noi dung va tai ${uploadedCount} anh len cloud`, {
+                  id: 'richtext-image-upload'
+                })
+              } else {
+                toast.error('Khong tai duoc anh tu noi dung paste. Da chen phan text.', {
+                  id: 'richtext-image-upload'
+                })
+              }
+            } catch (error) {
+              console.error('Rich HTML paste processing error:', error)
+              toast.error('Khong the xu ly noi dung paste tu doc', { id: 'richtext-image-upload' })
+            }
+          })()
+
+          return true
+        }
 
         for (const item of Array.from(items)) {
           if (!item.type.startsWith('image/')) continue
+
+          if (hasHtml) {
+            // If rich HTML is present, keep default paste flow for full text content.
+            return false
+          }
 
           const file = item.getAsFile()
           if (!file) continue
@@ -404,8 +471,7 @@ export default function RichTextEditor({
     onUpdate: ({ editor }) => {
       const html = editor.getHTML()
 
-      // Blob URLs are temporary browser-local references and become invalid
-      // after refresh. Persisting them causes broken rich text rendering later.
+      // Blob/Data URLs are temporary and should not be persisted.
       const hasUnstableSource = /<img[^>]+src=["'](?:blob:|data:image)/i.test(html)
       if (hasUnstableSource) {
         const sanitized = html.replace(/<img[^>]+src=["'](?:blob:[^"']*|data:image[^"']*)["'][^>]*>/gi, '')
@@ -413,7 +479,7 @@ export default function RichTextEditor({
           editor.commands.setContent(sanitized, { emitUpdate: false })
           lastEmittedContentRef.current = sanitized
           onChange(sanitized)
-          toast.error('Anh paste tam thoi da duoc loai bo. Vui long doi upload len cloud truoc khi luu.')
+          toast.error('Anh tam (blob/base64) da bi loai bo. Vui long upload Cloudinary truoc khi luu.')
           return
         }
       }

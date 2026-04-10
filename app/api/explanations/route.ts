@@ -1,223 +1,391 @@
+﻿/**
+ * /api/explanations
+ *
+ * HoĂ n toĂ n dĂ¹ng báº£ng má»›i, khĂ´ng cĂ²n báº£ng explanations cÅ©:
+ *   - chuyen_sau_giaitrinh  â†’ Ä‘Æ¡n giáº£i trĂ¬nh
+ *       noi_dung_giai_thich : lĂ½ do giáº£i trĂ¬nh (reason)
+ *       html_giai_thich     : pháº£n há»“i admin (admin_note)
+ *       status              : pending / accepted / rejected
+ *       id_ket_qua          : FK â†’ chuyen_sau_results.id
+ *       admin_name          : tĂªn ngÆ°á»i xá»­ lĂ½
+ *       reviewer_email      : email ngÆ°á»i xá»­ lĂ½
+ *
+ *   - chuyen_sau_results    â†’ káº¿t quáº£ Ä‘Äƒng kĂ½ thi
+ *       ho_ten              : teacher_name
+ *       ma_giao_vien        : lms_code
+ *       dia_chi_email       : email
+ *       co_so_lam_viec      : campus
+ *       id_mon              : FK â†’ chuyen_sau_monhoc.id
+ *       thoi_gian_kiem_tra  : test_date
+ *       xu_ly_diem          : 'chá» giáº£i trĂ¬nh' | 'Ä‘Ă£ hoĂ n thĂ nh'
+ *       email_giai_trinh    : email của giáo viên gửi giải trình (set khi POST, không thay đổi khi admin duyệt)
+ *       da_giai_thich       : Ä‘Ă£ tá»«ng giáº£i trĂ¬nh
+ *       so_lan_giai_thich   : sá»‘ láº§n giáº£i trĂ¬nh
+ *
+ * xu_ly_diem chá»‰ cĂ³ 2 tráº¡ng thĂ¡i:
+ *   - 'chá» giáº£i trĂ¬nh'  : Ä‘Äƒng kĂ½ / Ä‘ang thi / háº¿t giá» chÆ°a ná»™p
+ *   - 'Ä‘Ă£ hoĂ n thĂ nh'   : Ä‘Ă£ ná»™p bĂ i
+ * Tráº¡ng thĂ¡i giáº£i trĂ¬nh Ä‘Æ°á»£c theo dĂµi qua chuyen_sau_giaitrinh.status.
+ */
+
 import pool from '@/lib/db';
 import { NextResponse } from 'next/server';
 
-// GET: Lấy danh sách giải thích
-// Query params: email (để lọc theo user), status (để lọc theo trạng thái)
+
+// â”€â”€â”€ GET â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Query params: email, status, result_id
+
 export async function GET(request: Request) {
   let client;
-  
+
   try {
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get('email');
-    const status = searchParams.get('status');
-    
-    client = await pool.connect();
-    
-    let query = 'SELECT * FROM explanations';
-    const conditions = [];
-    const values: any[] = [];
-    let paramCount = 1;
-    
+    const email    = searchParams.get('email');
+    const status   = searchParams.get('status');
+    const resultId = searchParams.get('result_id');
+
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+
     if (email) {
-      conditions.push(`email = $${paramCount}`);
       values.push(email);
-      paramCount++;
+      conditions.push(
+        `LOWER(TRIM(COALESCE(r.dia_chi_email, ''))) = LOWER(TRIM($${values.length}))`
+      );
     }
-    
     if (status) {
-      conditions.push(`status = $${paramCount}`);
-      values.push(status);
-      paramCount++;
+      if (status === 'accepted') {
+        conditions.push(`g.xu_ly_giai_trinh = 'đã duyệt'`);
+      } else if (status === 'rejected') {
+        conditions.push(`g.xu_ly_giai_trinh = 'từ chối'`);
+      } else {
+        conditions.push(`COALESCE(g.xu_ly_giai_trinh, 'chờ giải trình') NOT IN ('đã duyệt', 'từ chối')`);
+      }
     }
-    
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
+    if (resultId) {
+      values.push(resultId);
+      conditions.push(`g.id_ket_qua = $${values.length}`);
     }
-    
-    query += ' ORDER BY created_at DESC';
-    
-    const result = await client.query(query, values);
-    
-    return NextResponse.json({
-      success: true,
-      data: result.rows,
-      count: result.rowCount
-    });
-    
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    client = await pool.connect();
+
+    const result = await client.query(
+      `SELECT
+         g.id,
+         g.id_ket_qua                                              AS result_id,
+         COALESCE(r.ho_ten, '')                                    AS teacher_name,
+         COALESCE(r.ma_giao_vien, '')                              AS lms_code,
+         COALESCE(r.dia_chi_email, '')                             AS email,
+         COALESCE(r.co_so_lam_viec, '')                           AS campus,
+         COALESCE(mh.ten_mon, mh.ma_mon, r.id_mon::text, '')       AS subject,
+         COALESCE(
+           es.bat_dau_luc AT TIME ZONE 'Asia/Ho_Chi_Minh',
+           CASE
+             WHEN COALESCE(r.thoi_gian_kiem_tra, '') ~ '^[0-9]{1,2}:[0-9]{2} [0-9]{2}/[0-9]{2}/[0-9]{4}$'
+               THEN to_timestamp(r.thoi_gian_kiem_tra, 'HH24:MI DD/MM/YYYY')
+             ELSE NULL
+           END,
+           make_timestamp(COALESCE(r.nam_dk, EXTRACT(YEAR FROM NOW())::int),
+                         COALESCE(r.thang_dk, EXTRACT(MONTH FROM NOW())::int), 1, 0, 0, 0)
+         )                                                           AS test_date,
+         COALESCE(g.noi_dung_giai_thich, '')                       AS reason,
+         CASE g.xu_ly_giai_trinh
+           WHEN 'đã duyệt'   THEN 'accepted'
+           WHEN 'từ chối'    THEN 'rejected'
+           ELSE 'pending'
+         END                                                        AS status,
+         g.html_giai_thich                                          AS admin_note,
+         g.tao_luc                                                  AS created_at
+       FROM chuyen_sau_giaitrinh g
+       JOIN chuyen_sau_results r ON r.id = g.id_ket_qua
+       LEFT JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
+       LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
+       ${where}
+       ORDER BY g.tao_luc DESC`,
+      values
+    );
+
+    return NextResponse.json({ success: true, data: result.rows, count: result.rowCount });
   } catch (error: any) {
-    console.error('Database error:', error);
-    return NextResponse.json({
-      success: false,
-      error: error.message
-    }, { status: 500 });
-    
+    console.error('GET /api/explanations error:', error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   } finally {
-    if (client) {
-      client.release();
-    }
+    client?.release();
   }
 }
 
-// POST: Tạo giải trình mới
+// â”€â”€â”€ POST: User ná»™p giáº£i trĂ¬nh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Body: result_id (hoáº·c assignment_id), lms_code, email, reason
+//       CĂ¡c trÆ°á»ng teacher_name, campus, subject, test_date khĂ´ng cáº§n gá»­i â€”
+//       Ä‘Ă£ cĂ³ sáºµn trong chuyen_sau_results.
+
 export async function POST(request: Request) {
   let client;
-  
+
   try {
     const body = await request.json();
     const {
-      teacher_name,
+      result_id,
+      assignment_id,  // backward compat â€” frontend váº«n gá»­i field nĂ y
       lms_code,
       email,
-      campus,
-      subject,
-      test_date,
-      reason
+      reason,
     } = body;
-    
-    // Validate required fields
-    if (!teacher_name || !lms_code || !email || !campus || !subject || !test_date || !reason) {
-      return NextResponse.json({
-        success: false,
-        error: 'Vui lòng điền đầy đủ thông tin'
-      }, { status: 400 });
+
+    const resolvedResultId = Number(result_id || assignment_id || 0) || null;
+
+    if (!reason?.trim()) {
+      return NextResponse.json(
+        { success: false, error: 'Vui lĂ²ng nháº­p ná»™i dung giáº£i trĂ¬nh' },
+        { status: 400 }
+      );
     }
-    
+    if (!resolvedResultId) {
+      return NextResponse.json(
+        { success: false, error: 'KhĂ´ng xĂ¡c Ä‘á»‹nh Ä‘Æ°á»£c káº¿t quáº£ thi cáº§n giáº£i trĂ¬nh' },
+        { status: 400 }
+      );
+    }
+
     client = await pool.connect();
-    
-    const query = `
-      INSERT INTO explanations (
-        teacher_name, lms_code, email, campus, subject, test_date, reason, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-      RETURNING *
-    `;
-    
-    const values = [teacher_name, lms_code, email, campus, subject, test_date, reason];
-    const result = await client.query(query, values);
-    
-    // Gửi email thông báo
+    await client.query('BEGIN');
+
+    // 1. Kiá»ƒm tra result tá»“n táº¡i vĂ  Ä‘iá»ƒm = 0
+    const resultRow = await client.query(
+      `SELECT id, diem, xu_ly_diem, ma_giao_vien, dia_chi_email
+       FROM chuyen_sau_results
+       WHERE id = $1
+       LIMIT 1`,
+      [resolvedResultId]
+    );
+
+    if (!resultRow.rows.length) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ success: false, error: 'KhĂ´ng tĂ¬m tháº¥y káº¿t quáº£ thi' }, { status: 404 });
+    }
+
+    const record = resultRow.rows[0];
+    if (Number(record.diem ?? 0) > 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ success: false, error: 'Chá»‰ Ä‘Æ°á»£c gá»­i giáº£i trĂ¬nh khi Ä‘iá»ƒm báº±ng 0' }, { status: 400 });
+    }
+
+    // 2. Kiá»ƒm tra khĂ´ng cho giáº£i trĂ¬nh láº¡i khi Ä‘Ă£ Ä‘Æ°á»£c cháº¥p nháº­n
+    const existingGT = await client.query(
+      `SELECT id, xu_ly_giai_trinh FROM chuyen_sau_giaitrinh WHERE id_ket_qua = $1 LIMIT 1`,
+      [resolvedResultId]
+    );
+
+    if (existingGT.rows.length > 0 && existingGT.rows[0].xu_ly_giai_trinh === 'đã duyệt') {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ success: false, error: 'Giáº£i trĂ¬nh nĂ y Ä‘Ă£ Ä‘Æ°á»£c cháº¥p nháº­n' }, { status: 409 });
+    }
+
+    const resolvedTeacherCode = (lms_code || record.ma_giao_vien || '').toString().trim();
+    const resolvedEmail       = (email || record.dia_chi_email || '').toString().trim();
+    const trimmedReason       = reason.trim();
+
+    // 3. INSERT má»›i hoáº·c reset láº¡i náº¿u Ä‘Ă£ cĂ³ giáº£i trĂ¬nh cÅ© (rejected / pending)
+    let gtResult;
+    if (existingGT.rows.length > 0) {
+      gtResult = await client.query(
+        `UPDATE chuyen_sau_giaitrinh
+         SET noi_dung_giai_thich = $2,
+             xu_ly_giai_trinh    = 'chờ giải trình',
+             html_giai_thich     = NULL
+         WHERE id_ket_qua = $1
+         RETURNING *`,
+        [resolvedResultId, trimmedReason]
+      );
+    } else {
+      gtResult = await client.query(
+        `INSERT INTO chuyen_sau_giaitrinh
+           (id_ket_qua, noi_dung_giai_thich, xu_ly_giai_trinh, tao_luc)
+         VALUES ($1, $2, 'chờ giải trình', NOW())
+         RETURNING *`,
+        [resolvedResultId, trimmedReason]
+      );
+    }
+
+    // 4. ÄĂ¡nh dáº¥u Ä‘Ă£ giáº£i trĂ¬nh trong chuyen_sau_results
+    await client.query(
+      `UPDATE chuyen_sau_results
+       SET da_giai_thich     = TRUE,
+           so_lan_giai_thich = COALESCE(so_lan_giai_thich, 0) + 1,
+           email_giai_trinh  = COALESCE($2, email_giai_trinh)
+       WHERE id = $1`,
+      [resolvedResultId, resolvedEmail || null]
+    );
+
+    await client.query('COMMIT');
+
+    // 5. Gá»­i email thĂ´ng bĂ¡o (best-effort)
     let emailNotSent = false;
     try {
-      const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/send-explanation-email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'new',
-          explanation: result.rows[0]
-        })
-      });
-      
+      const emailResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/send-explanation-email`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'new', explanation: gtResult.rows[0] }),
+        }
+      );
       const emailData = await emailResponse.json();
-      if (emailData.emailNotSent) {
-        emailNotSent = true;
-        console.warn('⚠️ Email not sent for new explanation:', result.rows[0].id);
-      }
-    } catch (emailError) {
-      console.error('Error sending email:', emailError);
+      if (emailData.emailNotSent) emailNotSent = true;
+    } catch {
       emailNotSent = true;
-      // Không throw error, vẫn trả về thành công
     }
-    
-    return NextResponse.json({
-      success: true,
-      message: 'Tạo giải thích thành công',
-      data: result.rows[0],
-      emailNotSent
-    });
-    
+
+    return NextResponse.json(
+      { success: true, message: 'Gá»­i giáº£i trĂ¬nh thĂ nh cĂ´ng', data: gtResult.rows[0], emailNotSent },
+      { status: 201 }
+    );
   } catch (error: any) {
-    console.error('Database error:', error);
-    return NextResponse.json({
-      success: false,
-      error: error.message
-    }, { status: 500 });
-    
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    console.error('POST /api/explanations error:', error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   } finally {
-    if (client) {
-      client.release();
-    }
+    client?.release();
   }
 }
 
-// PATCH: Cập nhật trạng thái giải trình (admin)
+// â”€â”€â”€ PATCH: Admin phĂª duyá»‡t / tá»« chá»‘i â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Body: id (chuyen_sau_giaitrinh.id), status, admin_note, admin_email, admin_name
+
 export async function PATCH(request: Request) {
   let client;
-  
+
   try {
     const body = await request.json();
-    const { id, status, admin_note, admin_email, admin_name } = body;
-    
+    const { id, status, admin_note, admin_email, admin_name, tong_diem_bi_tru } = body;
+
     if (!id || !status) {
-      return NextResponse.json({
-        success: false,
-        error: 'Thiếu thông tin bắt buộc'
-      }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: 'Thiáº¿u thĂ´ng tin báº¯t buá»™c (id, status)' },
+        { status: 400 }
+      );
     }
-    
     if (!['accepted', 'rejected'].includes(status)) {
-      return NextResponse.json({
-        success: false,
-        error: 'Trạng thái không hợp lệ'
-      }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: 'Tráº¡ng thĂ¡i khĂ´ng há»£p lá»‡ â€” chá»‰ cháº¥p nháº­n: accepted, rejected' },
+        { status: 400 }
+      );
     }
-    
+
+    const statusDbValue = status === 'accepted' ? 'đã duyệt' : 'từ chối';
+
     client = await pool.connect();
-    
-    const query = `
-      UPDATE explanations 
-      SET status = $1, admin_note = $2, admin_email = $3, admin_name = $4
-      WHERE id = $5
-      RETURNING *
-    `;
-    
-    const values = [status, admin_note, admin_email, admin_name, id];
-    const result = await client.query(query, values);
-    
-    if (result.rowCount === 0) {
-      return NextResponse.json({
-        success: false,
-        error: 'Không tìm thấy giải thích'
-      }, { status: 404 });
+    await client.query('BEGIN');
+
+    // 1. Cập nhật chuyen_sau_giaitrinh
+    const gtResult = await client.query(
+      `UPDATE chuyen_sau_giaitrinh
+       SET xu_ly_giai_trinh = $2,
+           html_giai_thich  = $3
+       WHERE id = $1
+       RETURNING *, id_ket_qua`,
+      [id, statusDbValue, admin_note || null]
+    );
+
+    if (!gtResult.rows.length) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ success: false, error: 'KhĂ´ng tĂ¬m tháº¥y giáº£i trĂ¬nh' }, { status: 404 });
     }
-    
-    // Gửi email thông báo cho giáo viên
+
+    const ketQuaId = gtResult.rows[0].id_ket_qua;
+
+    // 2. Update chuyen_sau_results based on admin decision
+    if (ketQuaId) {
+      await client.query(
+        `UPDATE chuyen_sau_results
+         SET cau_dung        = NULL,
+             diem            = NULL,
+             xu_ly_diem      = $2,
+             tong_diem_bi_tru = $3
+         WHERE id = $1`,
+        [
+          ketQuaId,
+          statusDbValue,
+          status === 'accepted' ? null : (tong_diem_bi_tru ?? null),
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    // 3. Fetch full explanation data for email (JOIN results + monhoc)
+    const fullDataResult = await client.query(
+      `SELECT
+         g.id,
+         g.id_ket_qua                                        AS result_id,
+         g.noi_dung_giai_thich                               AS reason,
+         g.html_giai_thich                                   AS admin_note,
+         g.tao_luc                                           AS created_at,
+         COALESCE(r.ho_ten, '')                              AS teacher_name,
+         COALESCE(r.ma_giao_vien, '')                        AS lms_code,
+         COALESCE(r.dia_chi_email, '')                       AS email,
+         COALESCE(r.co_so_lam_viec, '')                      AS campus,
+         COALESCE(mh.ten_mon, mh.ma_mon, r.id_mon::text, '') AS subject,
+         COALESCE(
+           es.bat_dau_luc AT TIME ZONE 'Asia/Ho_Chi_Minh',
+           CASE
+             WHEN COALESCE(r.thoi_gian_kiem_tra, '') ~ '^[0-9]{1,2}:[0-9]{2} [0-9]{2}/[0-9]{2}/[0-9]{4}$'
+               THEN to_timestamp(r.thoi_gian_kiem_tra, 'HH24:MI DD/MM/YYYY')
+             ELSE NULL
+           END,
+           make_timestamp(COALESCE(r.nam_dk, EXTRACT(YEAR FROM NOW())::int),
+                         COALESCE(r.thang_dk, EXTRACT(MONTH FROM NOW())::int), 1, 0, 0, 0)
+         )                                                   AS test_date
+       FROM chuyen_sau_giaitrinh g
+       JOIN chuyen_sau_results r   ON r.id = g.id_ket_qua
+       LEFT JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
+       LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
+       WHERE g.id = $1`,
+      [id]
+    );
+
+    const emailPayload = {
+      ...(fullDataResult.rows[0] || {}),
+      admin_name:  admin_name  || null,
+      admin_email: admin_email || null,
+      admin_note:  admin_note  || null,
+      updated_at:  new Date().toISOString(),
+    };
+
+    // 4. Send email notification (best-effort)
     let emailNotSent = false;
     try {
-      const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/send-explanation-email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: status === 'accepted' ? 'accepted' : 'rejected',
-          explanation: result.rows[0]
-        })
-      });
-      
+      const emailResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/send-explanation-email`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: status === 'accepted' ? 'accepted' : 'rejected',
+            explanation: emailPayload,
+          }),
+        }
+      );
       const emailData = await emailResponse.json();
-      if (emailData.emailNotSent) {
-        emailNotSent = true;
-        console.warn('⚠️ Email not sent for explanation status update:', result.rows[0].id);
-      }
-    } catch (emailError) {
-      console.error('Error sending email:', emailError);
+      if (emailData.emailNotSent) emailNotSent = true;
+    } catch {
       emailNotSent = true;
     }
-    
+
     return NextResponse.json({
       success: true,
-      message: `Đã ${status === 'accepted' ? 'chấp nhận' : 'từ chối'} giải thích`,
-      data: result.rows[0],
-      emailNotSent
+      message: status === 'accepted' ? 'Da chap nhan giai trinh' : 'Da tu choi giai trinh',
+      data: gtResult.rows[0],
+      emailNotSent,
     });
-    
   } catch (error: any) {
-    console.error('Database error:', error);
-    return NextResponse.json({
-      success: false,
-      error: error.message
-    }, { status: 500 });
-    
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    console.error('PATCH /api/explanations error:', error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   } finally {
-    if (client) {
-      client.release();
-    }
+    client?.release();
   }
 }
+

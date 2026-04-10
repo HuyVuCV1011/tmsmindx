@@ -5,26 +5,29 @@ import { PageContainer } from "@/components/PageContainer";
 import { Stepper } from "@/components/ui/stepper";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { ClipboardList, Search, Trash2 } from "lucide-react";
+import { ClipboardList, Download, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
 interface RegistrationRow {
   id: number;
   teacher_code: string;
-  exam_type: "expertise" | "experience";
+  exam_type: string;
   registration_type: "official" | "additional";
   block_code: string;
   subject_code: string;
   subject_name: string | null;
   center_code: string | null;
   scheduled_at: string;
-  source_form: "main_form" | "additional_form" | "system";
+  source_form: string;
   created_at: string;
   assignment_id: number | null;
   assignment_status: string | null;
   score: number | null;
   score_status: string | null;
+  xu_ly_diem: string | null;
+  tong_diem_bi_tru: number | null;
+  dang_ky_luc: string | null;
   open_at: string | null;
   close_at: string | null;
   selected_set_id: number | null;
@@ -33,6 +36,7 @@ interface RegistrationRow {
   set_name: string | null;
   total_points: number | null;
   passing_score: number | null;
+  da_giai_thich: boolean | null;
 }
 
 export default function ExamRegistrationListPage() {
@@ -111,6 +115,50 @@ export default function ExamRegistrationListPage() {
     }
   };
 
+  const exportCsv = () => {
+    const getHoStatus = (row: RegistrationRow) => {
+      const xu = row.xu_ly_diem || '';
+      if (xu === 'đã duyệt') return 'Accepted';
+      if (xu === 'từ chối') return 'Rejected';
+      if (xu === 'chờ giải trình') return 'Waiting';
+      if (row.score !== null || xu === 'đã hoàn thành') return 'Done';
+      return 'Pending';
+    };
+
+    const headers = ['STT', 'Mã GV', 'Loại đăng ký', 'Khối', 'Môn', 'Lịch thi', 'Điểm', 'Xử lý điểm', 'Ngày đăng ký', 'Trạng thái HO'];
+    const csvRows = rows.map((row, i) => {
+      const start = row.open_at ? new Date(row.open_at) : (row.scheduled_at ? new Date(row.scheduled_at) : null);
+      const lichThi = start ? format(start, 'HH:mm dd/MM/yyyy') : 'N/A';
+      const ngayDk = new Date(row.dang_ky_luc || row.created_at).toLocaleDateString('vi-VN');
+      return [
+        i + 1,
+        row.teacher_code,
+        row.registration_type === 'official' ? 'Chính thức' : 'Bổ sung',
+        row.block_code,
+        row.subject_name || row.subject_code,
+        lichThi,
+        row.score ?? '',
+        row.xu_ly_diem || '',
+        ngayDk,
+        getHoStatus(row),
+      ];
+    });
+
+    const escape = (v: unknown) => {
+      const s = String(v ?? '');
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    const content = [headers, ...csvRows].map(r => r.map(escape).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `danh-sach-dang-ky-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const monthOptions = useMemo(() => {
     const options = new Set<string>();
     rows.forEach((row) => {
@@ -123,13 +171,47 @@ export default function ExamRegistrationListPage() {
   }, [rows]);
 
   const getAssignmentBadge = (row: RegistrationRow) => {
+    const gtPending = row.xu_ly_diem === 'chờ giải trình';
+    const gtApproved = row.xu_ly_diem === 'đã duyệt';
+    const gtRejected = row.xu_ly_diem === 'từ chối';
+    const hasGiaiTrinh = row.da_giai_thich || gtPending || gtApproved || gtRejected;
+
+    if (hasGiaiTrinh) {
+      return (
+        <div className="w-[300px] mx-auto">
+          <Stepper
+            compact
+            steps={[
+              {
+                id: 1,
+                label: 'Đăng ký',
+                description: 'Đã đăng ký',
+                status: 'completed'
+              },
+              {
+                id: 2,
+                label: 'Giải trình',
+                description: gtPending ? 'Chờ duyệt' : 'Đã gửi',
+                status: gtPending ? 'current' : 'completed'
+              },
+              {
+                id: 3,
+                label: 'Kết quả',
+                description: gtApproved ? 'Giải trình\n(Đã duyệt)' : gtRejected ? 'Giải trình\n(Từ chối)' : 'Chờ',
+                status: gtApproved ? 'success' : gtRejected ? 'error' : 'upcoming'
+              }
+            ]}
+          />
+        </div>
+      );
+    }
+
     const assigned = !!row.assignment_id;
-    const submitted = row.assignment_status === "submitted" || row.assignment_status === "graded";
-    const graded = row.assignment_status === "graded";
-    const expired = row.assignment_status === "expired";
+    const graded = row.assignment_status === 'graded';
+    const expired = row.assignment_status === 'expired';
 
     return (
-      <div className="w-full sm:w-75">
+      <div className="w-[300px] mx-auto">
         <Stepper
           compact
           steps={[
@@ -142,14 +224,14 @@ export default function ExamRegistrationListPage() {
             {
               id: 2,
               label: 'Nộp bài',
-              description: expired ? 'Quá hạn' : submitted ? 'Đã nộp' : assigned ? 'Đang làm' : 'Chưa',
-              status: expired ? 'error' : submitted ? 'completed' : assigned ? 'current' : 'upcoming'
+              description: expired ? 'Quá hạn' : graded ? 'Đã nộp' : assigned ? 'Đang làm' : 'Chưa',
+              status: expired ? 'error' : graded ? 'completed' : assigned ? 'current' : 'upcoming'
             },
             {
               id: 3,
               label: 'Chấm điểm',
-              description: graded ? 'Hoàn tất' : submitted ? 'Chờ chấm' : 'Chưa',
-              status: graded ? 'success' : submitted ? 'current' : 'upcoming'
+              description: graded ? 'Hoàn thành' : 'Chưa',
+              status: graded ? 'success' : 'upcoming'
             }
           ]}
         />
@@ -200,6 +282,14 @@ export default function ExamRegistrationListPage() {
             >
               Tải dữ liệu
             </button>
+            <button
+              onClick={exportCsv}
+              disabled={rows.length === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Download className="h-4 w-4" />
+              Xuất dữ liệu
+            </button>
           </div>
         </div>
 
@@ -212,33 +302,31 @@ export default function ExamRegistrationListPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Mã GV</TableHead>
-                  <TableHead>Loại đăng ký</TableHead>
-                  <TableHead>Khối / Môn</TableHead>
-                  <TableHead>Lịch thi</TableHead>
-                  <TableHead>Bộ đề random</TableHead>
-                  <TableHead>Trạng thái assignment</TableHead>
-                  <TableHead>Điểm</TableHead>
-                  <TableHead>Nguồn form</TableHead>
-                  <TableHead>Ngày tạo</TableHead>
-                  <TableHead>Thao tác HO</TableHead>
+                  <TableHead className="text-center w-10">#</TableHead>
+                  <TableHead className="text-center">Mã GV</TableHead>
+                  <TableHead className="text-center">Loại đăng ký</TableHead>
+                  <TableHead className="text-center">Khối / Môn</TableHead>
+                  <TableHead className="text-center">Lịch thi</TableHead>
+                  <TableHead className="text-center">Trạng thái assignment</TableHead>
+                  <TableHead className="text-center">Điểm</TableHead>
+                  <TableHead className="text-center">Ngày đăng ký</TableHead>
+                  <TableHead className="text-center">Thao tác HO</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((row, index) => (
                   <TableRow key={row.id}>
-                    <TableCell className="text-gray-600">{index + 1}</TableCell>
-                    <TableCell className="font-semibold text-gray-900">{row.teacher_code}</TableCell>
-                    <TableCell>
+                    <TableCell className="text-center text-gray-600">{index + 1}</TableCell>
+                    <TableCell className="text-center font-semibold text-gray-900">{row.teacher_code}</TableCell>
+                    <TableCell className="text-center">
                       <div className="text-gray-900 font-medium">{row.registration_type === "official" ? "Chính thức" : "Bổ sung"}</div>
                       <div className="text-xs text-gray-500">{row.exam_type}</div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-center">
                       <div className="font-medium text-gray-900">{row.block_code}</div>
                       <div className="text-xs text-gray-600">{row.subject_name || row.subject_code}</div>
                     </TableCell>
-                    <TableCell className="text-xs text-gray-700">
+                    <TableCell className="text-center text-xs text-gray-700">
                       {(() => {
                         const start = row.open_at ? new Date(row.open_at) : (row.scheduled_at ? new Date(row.scheduled_at) : null);
                         const end = row.close_at ? new Date(row.close_at) : null;
@@ -250,7 +338,7 @@ export default function ExamRegistrationListPage() {
                         const dateStr = format(start, "dd/MM/yyyy");
                         
                         return (
-                          <div className="flex flex-col">
+                          <div className="flex flex-col items-center">
                             <span className="font-semibold text-gray-900">
                               {startTime}{endTime ? ` - ${endTime}` : ""}
                             </span>
@@ -259,48 +347,48 @@ export default function ExamRegistrationListPage() {
                         );
                       })()}
                     </TableCell>
-                    <TableCell>
-                      {row.set_code ? (
+                    <TableCell className="text-center">{getAssignmentBadge(row)}</TableCell>
+                    <TableCell className="text-center text-xs text-gray-700">
+                      {row.xu_ly_diem === 'đã duyệt' ? (
+                        <div className="text-purple-700 font-semibold">Miễn (giải trình)</div>
+                      ) : row.xu_ly_diem === 'từ chối' ? (
                         <>
-                          <div className="text-gray-900 font-medium">{row.set_code}</div>
-                          <div className="text-xs text-gray-600">{row.set_name}</div>
+                          <div className="text-red-700 font-semibold">Từ chối GT</div>
+                          {row.tong_diem_bi_tru != null && (
+                            <div className="text-gray-500">Trừ: {row.tong_diem_bi_tru}</div>
+                          )}
                         </>
+                      ) : row.score === null ? (
+                        <div className="text-gray-400">Chưa có</div>
                       ) : (
-                        <span className="text-xs text-gray-500">Chưa có</span>
+                        <div className="font-semibold text-gray-900">{row.score}</div>
                       )}
+                      <div className="text-gray-400 text-[11px]">{row.xu_ly_diem || '-'}</div>
                     </TableCell>
-                    <TableCell>{getAssignmentBadge(row)}</TableCell>
-                    <TableCell className="text-xs text-gray-700">
-                      <div>{row.score === null ? "Chưa có" : row.score}</div>
-                      <div className="text-gray-500">{row.score_status || "-"}</div>
-                    </TableCell>
-                    <TableCell className="text-xs text-gray-700 capitalize">{row.source_form.replace("_", " ")}</TableCell>
-                    <TableCell className="text-xs text-gray-600">
-                      {new Date(row.created_at).toLocaleString("vi-VN", {
+                    <TableCell className="text-center text-xs text-gray-600">
+                      {new Date(row.dang_ky_luc || row.created_at).toLocaleDateString("vi-VN", {
                         year: "numeric",
                         month: "2-digit",
                         day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                        hour12: false,
                       })}
                     </TableCell>
-                    <TableCell>
-                      {row.assignment_id ? (
-                        <button
-                          onClick={() => handleSetPending(row)}
-                          disabled={removingRegistrationId === row.id}
-                          className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          {removingRegistrationId === row.id ? "Đang xử lý..." : "Đưa về pending"}
-                        </button>
-                      ) : (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                          Pending
-                        </span>
-                      )}
+                    <TableCell className="text-center">
+                      {(() => {
+                        const xu = row.xu_ly_diem || '';
+                        if (xu === 'đã duyệt') {
+                          return <span className="inline-block rounded-full bg-green-100 px-2.5 py-0.5 text-[11px] font-semibold text-green-700">Accepted</span>;
+                        }
+                        if (xu === 'từ chối') {
+                          return <span className="inline-block rounded-full bg-red-100 px-2.5 py-0.5 text-[11px] font-semibold text-red-700">Rejected</span>;
+                        }
+                        if (xu === 'chờ giải trình') {
+                          return <span className="inline-block rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">Waiting</span>;
+                        }
+                        if (row.score !== null || xu === 'đã hoàn thành') {
+                          return <span className="inline-block rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-semibold text-gray-700">Done</span>;
+                        }
+                        return <span className="inline-block rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700">Pending</span>;
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))}
