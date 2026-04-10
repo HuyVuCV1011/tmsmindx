@@ -118,7 +118,7 @@ export default function Page5() {
     setConfirmDialog({
       isOpen: true,
       title: "Xóa video vĩnh viễn",
-      message: `Bạn có chắc chắn muốn XÓA VĨNH VIỄN video "${videoTitle}"?\n\n⚠️ CẢNH BÁO: Hành động này KHÔNG THỂ HOÀN TÁC!\n\n- Video sẽ bị xóa khỏi database\n- Tất cả câu hỏi liên quan sẽ bị xóa\n- Dữ liệu xem của giáo viên sẽ bị xóa`,
+      message: `Bạn có chắc chắn muốn XÓA VĨNH VIỄN video "${videoTitle}"?\n\n⚠️ CẢNH BÁO: Hành động này KHÔNG THỂ HOÀN TÁC!\n\n- Video sẽ bị xóa khỏi database và Cloudinary\n- Nếu video có nhiều phần (cùng group), tất cả sẽ bị xóa\n- Tất cả câu hỏi liên quan sẽ bị xóa\n- Dữ liệu xem của giáo viên sẽ bị xóa`,
       type: "danger",
       icon: "delete",
       requireTextConfirm: true,
@@ -132,12 +132,50 @@ export default function Page5() {
           });
 
           const data = await response.json();
-          if (data.success) {
-            toast.success('Xóa video thành công!');
-            fetchVideos();
-          } else {
+          if (!data.success) {
             toast.error('Lỗi: ' + data.error);
+            return;
           }
+
+          // Xóa trên Cloudinary cho tất cả video đã bị xóa (kể cả cùng group)
+          const extractPublicId = (url: string): string | null => {
+            if (!url) return null;
+            try {
+              const match = url.match(/\/(?:video|image|raw)\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/);
+              return match ? match[1] : null;
+            } catch { return null; }
+          };
+
+          const deletedVideos: Array<{ video_link: string; thumbnail_url: string }> = data.deleted_videos || [];
+          const cloudinaryDeletes: Promise<void>[] = [];
+
+          for (const v of deletedVideos) {
+            const videoPublicId = extractPublicId(v.video_link);
+            if (videoPublicId && v.video_link?.includes('cloudinary.com')) {
+              cloudinaryDeletes.push(
+                fetch('/api/admin/cloudinary', {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ public_id: videoPublicId, resource_type: 'video' })
+                }).then(() => {}).catch(e => console.warn('Cloudinary video delete warn:', e))
+              );
+            }
+            const thumbPublicId = extractPublicId(v.thumbnail_url);
+            if (thumbPublicId && v.thumbnail_url?.includes('cloudinary.com')) {
+              cloudinaryDeletes.push(
+                fetch('/api/admin/cloudinary', {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ public_id: thumbPublicId, resource_type: 'image' })
+                }).then(() => {}).catch(e => console.warn('Cloudinary thumb delete warn:', e))
+              );
+            }
+          }
+
+          await Promise.allSettled(cloudinaryDeletes);
+
+          toast.success('Xóa video thành công!');
+          fetchVideos();
         } catch (error) {
           console.error('Error deleting video:', error);
           toast.error('Lỗi khi xóa video!');

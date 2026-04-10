@@ -22,6 +22,7 @@ interface VideoScore {
   score: number | null;
   completion_status: string | null;
   time_spent_seconds: number;
+  max_assignment_score: number | null;
 }
 
 interface TeacherStats {
@@ -546,12 +547,12 @@ export default function TrainingDashboardPage() {
     }
   }, [tab, videoStatsLoaded]);
 
-  // ── Video stats columns (from activeVideos, same list)
+  // ── Video stats columns: already collapsed by group at API; just passthrough
   const videoColumns = useMemo(() => activeVideos, [activeVideos]);
 
   // ── Export handlers ───────────────────────────────────────────────────────
   const handleExportTeacher = async (fmt: ExportFormat) => {
-    const headers = ['Họ tên', 'Mã GV', 'Cơ sở', 'Khối', 'Điểm TK', ...videoColumns.map(v => v.title)];
+    const headers = ['Họ tên', 'Mã GV', 'Cơ sở', 'Khối', 'Điểm đánh giá', ...videoColumns.map(v => v.title)];
     const rows = filteredTeachers.map(t => [
       t.full_name,
       t.teacher_code,
@@ -640,11 +641,11 @@ export default function TrainingDashboardPage() {
                       <TableHead>Cơ sở</TableHead>
                       <TableHead>Khối</TableHead>
                       <TableHead className="text-center">Điểm TK</TableHead>
-                      {/* Dynamic video columns */}
+                      {/* Single column per active (group-representative) video */}
                       {videoColumns.map(v => (
-                        <TableHead key={v.id} className="text-center min-w-[100px]">
+                        <TableHead key={v.id} className="text-center min-w-[110px]">
                           <span className="block text-xs font-medium leading-tight line-clamp-2" title={v.title}>
-                            {v.title.length > 20 ? v.title.slice(0, 18) + '…' : v.title}
+                            {v.title.length > 22 ? v.title.slice(0, 20) + '…' : v.title}
                           </span>
                         </TableHead>
                       ))}
@@ -658,7 +659,7 @@ export default function TrainingDashboardPage() {
                       const summaryAverage = calculateAverageScoreFromColumns(row, videoColumns);
 
                       return (
-                        <TableRow key={row.teacher_code}>
+                        <TableRow key={row.teacher_code} className="group">
                           <TableCell className="text-xs text-slate-400">{idx + 1}</TableCell>
                           <TableCell className="font-medium whitespace-nowrap">{row.full_name}</TableCell>
                           <TableCell className="font-mono text-xs">{row.teacher_code}</TableCell>
@@ -667,7 +668,7 @@ export default function TrainingDashboardPage() {
                           <TableCell className="text-center font-bold">
                             {summaryAverage.toFixed(2)}
                           </TableCell>
-                          {/* Per-video score cells */}
+                          {/* Per-video score cells (single column) */}
                           {videoColumns.map(v => {
                             const vs = scoreMap.get(v.id);
                             return (

@@ -117,7 +117,7 @@ export default function SubmissionDetailPage() {
     if (!html) return null;
     return (
       <div 
-        className="prose prose-sm max-w-none prose-p:my-0 prose-slate"
+        className="prose prose-xs sm:prose-sm max-w-none prose-p:my-0 prose-slate"
         dangerouslySetInnerHTML={{ __html: html }} 
       />
     );

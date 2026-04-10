@@ -572,9 +572,10 @@ function LessonContent() {
         isPlayingRef.current = true;
       }
 
-      // If we are at segment 0 and total is basically unknown or relies on default 30 mins
+      // For single-segment videos, always use the real duration from the browser.
+      // overrideDurationSeconds (from DB) is only a fallback when browser can't determine duration.
       if (startTimes.length === 1) {
-        setDuration(overrideDurationSeconds > 0 ? overrideDurationSeconds : video.duration);
+        setDuration(video.duration > 0 ? video.duration : overrideDurationSeconds);
       } else {
         setDuration(totalDurationMap);
       }

@@ -403,29 +403,22 @@ function VideoDetailContent() {
   const handleDeleteVideo = async () => {
     if (!video) return;
 
-    // Dùng ConfirmDialog thay vì confirm() native
     setConfirmDialog({
       isOpen: true,
       title: 'Xóa video vĩnh viễn',
-      message: `Bạn có chắc chắn muốn xóa video "${video.title}"?\n\nVideo sẽ bị xóa khỏi hệ thống và Cloudinary. Hành động này không thể hoàn tác.`,
+      message: `Bạn có chắc chắn muốn XÓA VĨNH VIỄN video "${video.title}"?\n\n⚠️ CẢNH BÁO: Hành động này KHÔNG THỂ HOÀN TÁC!\n\n- Video sẽ bị xóa khỏi database và Cloudinary\n- Nếu video có nhiều phần (cùng group), tất cả sẽ bị xóa\n- Tất cả câu hỏi liên quan sẽ bị xóa\n- Dữ liệu xem của giáo viên sẽ bị xóa`,
       confirmText: 'Xác nhận',
       cancelText: 'Hủy',
       type: 'danger',
       icon: 'delete',
+      requireTextConfirm: true,
       onConfirm: async () => {
         setConfirmDialog((prev: any) => ({ ...prev, isOpen: false }));
         setDeletingVideo(true);
         setMsg(null);
 
         try {
-          // Bước 1: Lấy thông tin video (video_link, thumbnail_url) trước khi xóa DB
-          const videoRes = await fetch(`/api/training-videos?id=${video.id}`);
-          const videoData = await videoRes.json();
-          const videosToDelete: Array<{ video_link: string; thumbnail_url: string }> = videoData.success
-            ? videoData.data
-            : [{ video_link: video.video_link, thumbnail_url: video.thumbnail_url }];
-
-          // Bước 2: Xóa trong database
+          // Xóa trong database — API trả về tất cả video đã xóa (kể cả cùng group)
           const response = await fetch('/api/training-videos', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
@@ -439,20 +432,19 @@ function VideoDetailContent() {
             return;
           }
 
-          // Bước 3: Xóa trên Cloudinary (không block nếu lỗi)
+          // Xóa trên Cloudinary cho tất cả video đã bị xóa (không block nếu lỗi)
           const extractPublicId = (url: string): string | null => {
             if (!url) return null;
             try {
-              // Cloudinary URL dạng: https://res.cloudinary.com/{cloud}/video/upload/v{ver}/{public_id}.{ext}
-              const match = url.match(/\/(?:video|image|raw)\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/)
+              const match = url.match(/\/(?:video|image|raw)\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/);
               return match ? match[1] : null;
             } catch { return null; }
           };
 
+          const deletedVideos: Array<{ video_link: string; thumbnail_url: string }> = data.deleted_videos || [];
           const cloudinaryDeletes: Promise<void>[] = [];
 
-          for (const v of videosToDelete) {
-            // Xóa video file
+          for (const v of deletedVideos) {
             const videoPublicId = extractPublicId(v.video_link);
             if (videoPublicId && v.video_link?.includes('cloudinary.com')) {
               cloudinaryDeletes.push(
@@ -463,8 +455,6 @@ function VideoDetailContent() {
                 }).then(() => {}).catch(e => console.warn('Cloudinary video delete warn:', e))
               );
             }
-
-            // Xóa thumbnail
             const thumbPublicId = extractPublicId(v.thumbnail_url);
             if (thumbPublicId && v.thumbnail_url?.includes('cloudinary.com')) {
               cloudinaryDeletes.push(
@@ -477,7 +467,6 @@ function VideoDetailContent() {
             }
           }
 
-          // Chờ tất cả Cloudinary deletes (không throw nếu lỗi)
           await Promise.allSettled(cloudinaryDeletes);
 
           toast.success('Đã xóa video thành công!');
@@ -1498,6 +1487,8 @@ function VideoDetailContent() {
         title={confirmDialog.title}
         message={confirmDialog.message}
         type={confirmDialog.type}
+        requireTextConfirm={confirmDialog.requireTextConfirm}
+        icon={confirmDialog.icon}
       />
     </div>
   );

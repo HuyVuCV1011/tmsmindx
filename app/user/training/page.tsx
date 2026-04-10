@@ -21,6 +21,7 @@ interface TrainingLesson {
   thumbnail_url?: string;
   description?: string;
   duration_minutes?: number;
+  duration_seconds?: number | null;
   lesson_number?: number;
   completion_status?: string;
   completed_at?: string;
@@ -508,12 +509,25 @@ export default function TrainingPage() {
                                 </div>
                               )}
                             </div>
-                            {/* Duration badge - Hide default 30 min placeholder */}
-                            {lesson.duration_minutes && lesson.duration_minutes !== 30 && (
-                              <div className="absolute bottom-1 right-1 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
-                                {lesson.duration_minutes} phút
-                              </div>
-                            )}
+                            {/* Duration badge — prefer duration_seconds for accuracy */}
+                            {(() => {
+                              // Sum duration_seconds across all segments if available
+                              const totalSeconds = lesson.segments
+                                ? lesson.segments.reduce((sum, s) => sum + (s.duration_seconds != null ? Number(s.duration_seconds) : (s.duration_minutes || 0) * 60), 0)
+                                : 0;
+                              const displaySeconds = totalSeconds > 0 ? totalSeconds : (lesson.duration_minutes && lesson.duration_minutes !== 30 ? lesson.duration_minutes * 60 : 0);
+                              if (!displaySeconds) return null;
+                              const mins = Math.floor(displaySeconds / 60);
+                              const secs = Math.round(displaySeconds % 60);
+                              const label = mins > 0
+                                ? (secs > 0 ? `${mins}p ${secs}s` : `${mins} phút`)
+                                : `${secs}s`;
+                              return (
+                                <div className="absolute bottom-1 right-1 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
+                                  {label}
+                                </div>
+                              );
+                            })()}
                             {/* Completion badge */}
                             {isCompleted && (
                               <div className="absolute top-1 left-1 bg-green-500 text-white rounded-full p-1">

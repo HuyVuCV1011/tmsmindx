@@ -1057,8 +1057,9 @@ function VideoSetupContent() {
             <Button
               variant="success"
               onClick={() => handleSaveVideo('active')}
-              disabled={saving}
-              className="flex-1 md:flex-none shadow-md hover:shadow-lg transition-all"
+              disabled={saving || !currentAssignment}
+              title={!currentAssignment ? 'Vui lòng liên kết Assignment trước khi Giao bài' : undefined}
+              className="flex-1 md:flex-none shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? 'Đang lưu...' : 'Giao bài (Active)'}
             </Button>

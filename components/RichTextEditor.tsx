@@ -12,6 +12,7 @@ import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle } from '@tiptap/extension-text-style'
 import Underline from '@tiptap/extension-underline'
 import { NodeSelection } from '@tiptap/pm/state'
+import { Extension } from '@tiptap/core'
 import {
   EditorContent,
   NodeViewWrapper,
@@ -45,6 +46,9 @@ import {
   Underline as UnderlineIcon,
   Undo,
   X,
+  Columns,
+  Rows,
+  TableProperties,
 } from 'lucide-react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
@@ -154,18 +158,20 @@ function ResizableImageNodeView(props: NodeViewProps) {
 
   // ── Drag-to-move bằng native pointer events ──
   const onPointerDownWrapper = useCallback((e: React.PointerEvent) => {
+    // Chỉ xử lý chuột trái
     if (e.button !== 0) return
     const target = e.target as HTMLElement
+    // Không xử lý nếu click vào resize handle hoặc float controls
     if (target.closest('.resize-handle') || target.closest('.img-float-controls')) return
+
+    // Chọn node ngay khi nhấn (onMouseDown) để người dùng thấy phản hồi nhanh
+    selectNode()
 
     const startX = e.clientX
     const startY = e.clientY
-    const THRESHOLD = 5
+    const THRESHOLD = 8 // Ngưỡng để phân biệt click và drag
     let dragging = false
     let overlay: HTMLDivElement | null = null
-
-    // Capture pointer để nhận events kể cả khi ra ngoài element
-    ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
 
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX
@@ -173,18 +179,17 @@ function ResizableImageNodeView(props: NodeViewProps) {
 
       if (!dragging && Math.hypot(dx, dy) > THRESHOLD) {
         dragging = true
-        // Tạo ghost overlay
         const img = wrapperRef.current?.querySelector('img') as HTMLImageElement | null
         overlay = document.createElement('div')
         overlay.style.cssText = [
           'position:fixed', 'pointer-events:none', 'z-index:9999',
           'opacity:0.8', 'border:2px solid #3b82f6', 'border-radius:6px',
           'overflow:hidden', 'box-shadow:0 8px 24px rgba(0,0,0,0.3)',
-          'transition:none',
         ].join(';')
         if (img) {
           const clone = img.cloneNode() as HTMLImageElement
-          const w = Math.min(img.getBoundingClientRect().width, 180)
+          const rect = img.getBoundingClientRect()
+          const w = Math.min(rect.width, 240)
           clone.style.cssText = `width:${w}px;height:auto;display:block;`
           overlay.appendChild(clone)
         }
@@ -206,10 +211,7 @@ function ResizableImageNodeView(props: NodeViewProps) {
       document.body.style.userSelect = ''
       if (overlay) { overlay.remove(); overlay = null }
 
-      if (!dragging) {
-        selectNode()
-        return
-      }
+      if (!dragging) return
 
       if (!editor) return
       const fromPos = getNodePos()
@@ -220,16 +222,12 @@ function ResizableImageNodeView(props: NodeViewProps) {
       if (!imgNode || imgNode.type.name !== 'image') return
 
       const view = editor.view
-
-      // Tìm vị trí ProseMirror tại điểm thả
-      // Tạm thời hiện wrapper để posAtCoords hoạt động
       let toPos: number | null = null
-      const coordResult = view.posAtCoords({ left: ev.clientX, top: ev.clientY })
-      if (coordResult != null) {
-        toPos = coordResult.pos
-      }
 
-      // Fallback: tìm DOM element tại điểm thả
+      // Tìm vị trí drop
+      const coordResult = view.posAtCoords({ left: ev.clientX, top: ev.clientY })
+      if (coordResult != null) toPos = coordResult.pos
+
       if (toPos === null) {
         const el = document.elementFromPoint(ev.clientX, ev.clientY)
         if (el) {
@@ -241,7 +239,6 @@ function ResizableImageNodeView(props: NodeViewProps) {
               toPos = ev.clientX < rect.left + rect.width / 2 ? p : p + 1
             } catch { /* ignore */ }
           } else {
-            // Thả vào vùng text/paragraph
             try {
               const p = view.posAtDOM(el, 0)
               if (p > 0) toPos = p
@@ -250,42 +247,26 @@ function ResizableImageNodeView(props: NodeViewProps) {
         }
       }
 
-      // Fallback cuối: tìm wrapper gần nhất theo khoảng cách
-      if (toPos === null) {
-        const allWrappers = Array.from(view.dom.querySelectorAll('.image-wrapper'))
-        let minDist = Infinity
-        for (const w of allWrappers) {
-          if (w === wrapperRef.current) continue
-          const r = w.getBoundingClientRect()
-          const cx = r.left + r.width / 2
-          const cy = r.top + r.height / 2
-          const d = Math.hypot(ev.clientX - cx, ev.clientY - cy)
-          if (d < minDist) {
-            minDist = d
-            try {
-              const p = view.posAtDOM(w, 0)
-              toPos = ev.clientX < cx ? p : p + 1
-            } catch { /* ignore */ }
-          }
-        }
-      }
-
       if (toPos === null) return
 
-      // Atomic transaction: xóa node cũ + insert node mới
       const { tr, schema } = state
       const imageType = schema.nodes.image
       if (!imageType) return
 
       const nodeSize = imgNode.nodeSize
       const attrs = { ...imgNode.attrs }
-
+      
+      // Thực hiện di chuyển
       tr.delete(fromPos, fromPos + nodeSize)
-      const insertAt = toPos > fromPos
-        ? Math.max(0, toPos - nodeSize)
-        : Math.max(0, toPos)
+      const insertAt = toPos > fromPos ? Math.max(0, toPos - nodeSize) : Math.max(0, toPos)
       tr.insert(insertAt, imageType.create(attrs))
+      
+      // Chọn ảnh sau khi di chuyển
+      const newPos = insertAt
+      tr.setSelection(NodeSelection.create(tr.doc, newPos))
+      
       view.dispatch(tr)
+      view.focus()
     }
 
     window.addEventListener('pointermove', onMove, { passive: true })
@@ -428,6 +409,39 @@ const InlineIcon = Image.extend({
   parseHTML() { return [{ tag: 'img[data-icon="true"]' }] },
   renderHTML({ HTMLAttributes }) {
     return ['img', mergeAttributes(HTMLAttributes, { 'data-icon': 'true', style: HTMLAttributes.style || 'display:inline;vertical-align:text-bottom;' })]
+  },
+})
+
+// ─── FontSize Extension ──────────────────────────────────────────────────────
+
+const FontSize = Extension.create({
+  name: 'fontSize',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['textStyle'],
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: element => element.style.fontSize?.replace(/['"]+/g, ''),
+            renderHTML: attributes => {
+              if (!attributes.fontSize) return {}
+              return { style: `font-size: ${attributes.fontSize}` }
+            },
+          },
+        },
+      },
+    ]
+  },
+  addCommands() {
+    return {
+      setFontSize: (fontSize: string) => ({ chain }) => {
+        return chain().setMark('textStyle', { fontSize }).run()
+      },
+      unsetFontSize: () => ({ chain }) => {
+        return chain().setMark('textStyle', { fontSize: null }).removeEmptyTextStyle().run()
+      },
+    }
   },
 })
 
@@ -649,7 +663,7 @@ function sanitizePastedHTML(html: string): string {
   const doc = parser.parseFromString(html, 'text/html')
   const body = doc.body
 
-  // 1. Icon/emoji
+  // 1. Xử lý icon/emoji: chỉ các <img> nhỏ từ mạng xã hội
   body.querySelectorAll('img').forEach((img) => {
     const src = img.getAttribute('src') || ''
     const w = parseInt(img.getAttribute('width') || img.style.width || '0', 10)
@@ -677,58 +691,45 @@ function sanitizePastedHTML(html: string): string {
     }
   })
 
-  // 1.5. Clean Google Docs/Form metadata and unwanted spans/styles
-  // Triệt để loại bỏ style và các thẻ span rác
-  body.querySelectorAll('span, b, i, em, strong, div, p').forEach((el) => {
-    const element = el as HTMLElement;
-    
-    // Luôn xóa style rác từ Google
-    element.removeAttribute('style');
-    element.removeAttribute('id');
-    element.removeAttribute('class');
-    element.removeAttribute('dir');
-    
-    // Nếu là span rác (không có ý nghĩa cấu trúc), thay bằng text
-    if (element.tagName === 'SPAN') {
-      const text = element.textContent || '';
-      element.parentNode?.replaceChild(doc.createTextNode(text), element);
+  // 2. Normalize table — giữ nguyên cấu trúc, chỉ fix style
+  body.querySelectorAll('table').forEach((table) => {
+    table.removeAttribute('width')
+    table.style.width = '100%'
+    table.style.maxWidth = '100%'
+    table.style.tableLayout = 'auto' // Chuyển sang auto để bảng có thể co lại linh hoạt hơn
+    table.style.borderCollapse = 'collapse'
+    table.style.fontSize = '0.85em' // Giảm nhẹ font size mặc định của bảng để dễ hiển thị toàn bộ
+    table.removeAttribute('cellpadding')
+    table.removeAttribute('cellspacing')
+    table.removeAttribute('border')
+
+    const firstRow = table.querySelector('tr')
+    if (firstRow && firstRow.querySelectorAll('th').length > 0 && !table.querySelector('thead')) {
+      const thead = doc.createElement('thead')
+      firstRow.parentNode?.insertBefore(thead, firstRow)
+      thead.appendChild(firstRow)
     }
-  });
 
-  // 2. Normalize table
-  const tables = body.querySelectorAll('table')
-  if (tables.length > 0) {
-    tables.forEach((table) => {
-      table.removeAttribute('width')
-      table.removeAttribute('cellpadding')
-      table.removeAttribute('cellspacing')
-      table.removeAttribute('border')
-      table.style.borderCollapse = 'collapse'
-      table.style.width = 'auto'
-      table.style.maxWidth = '100%'
-      table.style.tableLayout = 'auto'
-
-      const firstRow = table.querySelector('tr')
-      if (firstRow && firstRow.querySelectorAll('th').length > 0 && !table.querySelector('thead')) {
-        const thead = doc.createElement('thead')
-        firstRow.parentNode?.insertBefore(thead, firstRow)
-        thead.appendChild(firstRow)
-      }
-
-      table.querySelectorAll('td, th').forEach((cell) => {
-        const el = cell as HTMLElement
-        el.removeAttribute('width')
-        el.style.border = '1px solid #d1d5db'
-        el.style.padding = '8px 12px'
-        el.style.wordBreak = 'break-word'
-        el.style.verticalAlign = 'top'
-        el.removeAttribute('bgcolor')
-        el.removeAttribute('valign')
-      })
-
-      table.querySelectorAll('tr').forEach((row) => { row.removeAttribute('bgcolor'); row.removeAttribute('height') })
+    table.querySelectorAll('td, th').forEach((cell) => {
+      const el = cell as HTMLElement
+      el.removeAttribute('width')
+      el.style.width = 'auto' 
+      el.style.border = '1px solid #d1d5db'
+      el.style.padding = '4px 8px' // Giảm padding để tiết kiệm diện tích
+      el.style.wordBreak = 'normal' // Ưu tiên giữ chữ trên cùng hàng nếu có thể
+      el.style.verticalAlign = 'top'
+      el.removeAttribute('bgcolor')
+      el.removeAttribute('valign')
     })
-  }
+
+    table.querySelectorAll('tr').forEach((row) => {
+      row.removeAttribute('bgcolor')
+      row.removeAttribute('height')
+    })
+  })
+
+  // KHÔNG xóa style/class của p, span, div — giữ nguyên cấu trúc để
+  // Tiptap parse đúng paragraph, xuống dòng, bold, italic...
 
   return body.innerHTML
 }
@@ -776,16 +777,51 @@ export default function RichTextEditor({
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       TextStyle,
+      FontSize,
       Color,
     ],
     content: content || '',
     editorProps: {
       attributes: {
-        class: `prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none ${minHeight} px-4 py-3 ${error ? 'border-red-500' : ''}`,
+        class: `prose prose-xs sm:prose-sm max-w-none focus:outline-none ${minHeight} px-4 py-3 ${error ? 'border-red-500' : ''}`,
       },
       handlePaste: (_view, event) => {
         const typeList = event.clipboardData?.types ? Array.from(event.clipboardData.types) : []
+        const items = event.clipboardData?.items
 
+        // Ưu tiên xử lý ảnh trước — kể cả khi clipboard có cả text/html lẫn image
+        // (copy ảnh từ web thường có cả 2 loại)
+        if (items?.length) {
+          for (const item of Array.from(items)) {
+            if (!item.type.startsWith('image/')) continue
+            const file = item.getAsFile()
+            if (!file) continue
+            event.preventDefault()
+            ;(async () => {
+              try {
+                toast.loading('Đang xử lý ảnh...', { id: 'img-upload' })
+                const url = await uploadImageFile(file)
+                
+                // Chèn ảnh và chọn nó ngay lập tức
+                const { tr } = editor!.state
+                const node = editor!.state.schema.nodes.image.create({ src: url, alt: file.name || 'image' })
+                const insertPos = editor!.state.selection.from
+                tr.replaceSelectionWith(node)
+                // Đặt selection lên node vừa chèn
+                tr.setSelection(NodeSelection.create(tr.doc, insertPos))
+                editor!.view.dispatch(tr)
+                editor!.view.focus()
+                
+                toast.success('Đã chèn ảnh', { id: 'img-upload' })
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Không thể xử lý ảnh', { id: 'img-upload' })
+              }
+            })()
+            return true
+          }
+        }
+
+        // Xử lý HTML (text, bảng, định dạng...)
         if (typeList.includes('text/html')) {
           const html = event.clipboardData?.getData('text/html') || ''
           const sanitized = sanitizePastedHTML(html)
@@ -797,25 +833,6 @@ export default function RichTextEditor({
           return false
         }
 
-        const items = event.clipboardData?.items
-        if (!items?.length) return false
-        for (const item of Array.from(items)) {
-          if (!item.type.startsWith('image/')) continue
-          const file = item.getAsFile()
-          if (!file) continue
-          event.preventDefault()
-          ;(async () => {
-            try {
-              toast.loading('Đang xử lý ảnh...', { id: 'img-upload' })
-              const url = await uploadImageFile(file)
-              editor?.chain().focus().setImage({ src: url, alt: file.name || 'image' }).run()
-              toast.success('Đã chèn ảnh', { id: 'img-upload' })
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : 'Không thể xử lý ảnh', { id: 'img-upload' })
-            }
-          })()
-          return true
-        }
         return false
       },
       handleDrop: (view, event, _slice, moved) => {
@@ -827,16 +844,19 @@ export default function RichTextEditor({
         const imageFile = files.find(f => f.type.startsWith('image/'))
         if (imageFile) {
           event.preventDefault()
-          const insertPos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? null
+          const insertPos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? editor!.state.selection.from
           ;(async () => {
             try {
               toast.loading('Đang xử lý ảnh...', { id: 'img-upload' })
               const url = await uploadImageFile(imageFile)
-              if (insertPos !== null) {
-                editor?.chain().focus().insertContentAt(insertPos, { type: 'image', attrs: { src: url, alt: imageFile.name || 'image' } }).run()
-              } else {
-                editor?.chain().focus().setImage({ src: url, alt: imageFile.name || 'image' }).run()
-              }
+              
+              const { tr } = editor!.state
+              const node = editor!.state.schema.nodes.image.create({ src: url, alt: imageFile.name || 'image' })
+              tr.insert(insertPos, node)
+              tr.setSelection(NodeSelection.create(tr.doc, insertPos))
+              editor!.view.dispatch(tr)
+              editor!.view.focus()
+              
               toast.success('Đã chèn ảnh', { id: 'img-upload' })
             } catch (err) {
               toast.error(err instanceof Error ? err.message : 'Không thể xử lý ảnh', { id: 'img-upload' })
@@ -927,7 +947,15 @@ export default function RichTextEditor({
       try {
         toast.loading('Đang xử lý ảnh...', { id: 'img-upload' })
         const url = await uploadImageFile(file)
-        editor.chain().focus().setImage({ src: url, alt: file.name || 'image' }).run()
+        
+        const { tr } = editor.state
+        const node = editor.state.schema.nodes.image.create({ src: url, alt: file.name || 'image' })
+        const insertPos = editor.state.selection.from
+        tr.replaceSelectionWith(node)
+        tr.setSelection(NodeSelection.create(tr.doc, insertPos))
+        editor.view.dispatch(tr)
+        editor.view.focus()
+        
         toast.success('Đã chèn ảnh', { id: 'img-upload' })
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Không thể xử lý ảnh', { id: 'img-upload' })
@@ -1142,10 +1170,10 @@ export default function RichTextEditor({
                   className="h-7 px-2 text-[10px] text-blue-700 hover:bg-blue-100 cursor-pointer">+Dòng</Button>
                 <Button type="button" size="sm" variant="ghost"
                   onClick={() => editor.chain().focus().deleteColumn().run()}
-                  className="h-7 px-2 text-[10px] text-orange-600 hover:bg-orange-100 cursor-pointer">-Cột</Button>
+                  className="h-7 px-2 text-[10px] text-orange-600 hover:bg-orange-100 cursor-pointer" title="Xóa các cột đang chọn">-Cột</Button>
                 <Button type="button" size="sm" variant="ghost"
                   onClick={() => editor.chain().focus().deleteRow().run()}
-                  className="h-7 px-2 text-[10px] text-orange-600 hover:bg-orange-100 cursor-pointer">-Dòng</Button>
+                  className="h-7 px-2 text-[10px] text-orange-600 hover:bg-orange-100 cursor-pointer" title="Xóa các hàng đang chọn">-Dòng</Button>
                 <Button type="button" size="sm" variant="ghost"
                   onClick={() => editor.chain().focus().deleteTable().run()}
                   className="h-7 px-2 text-[10px] text-red-600 hover:bg-red-100 cursor-pointer">Xóa</Button>
@@ -1157,10 +1185,33 @@ export default function RichTextEditor({
           <div className="flex gap-1 pr-2 border-r">
             <div className="flex items-center gap-1">
               <span className="text-xs text-muted-foreground px-1">Màu:</span>
-              <input type="color" value={textColor}
+              <input type="color" value={editor.getAttributes('textStyle').color || textColor}
                 onChange={e => editor?.chain().focus().setColor(e.target.value).run()}
                 className="h-8 w-10 rounded cursor-pointer border border-border" title="Text Color" />
             </div>
+          </div>
+
+          {/* Font Size */}
+          <div className="flex items-center gap-1 pr-2 border-r">
+            <span className="text-xs text-muted-foreground px-1 whitespace-nowrap">Cỡ chữ:</span>
+            <select
+              className="h-8 px-1.5 py-0 text-xs border border-input rounded bg-background hover:bg-accent transition-colors focus:outline-none focus:ring-1 focus:ring-ring min-w-[70px] cursor-pointer"
+              value={editor.getAttributes('textStyle').fontSize || ''}
+              onChange={(e) => {
+                const size = e.target.value
+                if (!editor) return
+                if (size === '') {
+                  editor.chain().focus().unsetFontSize().run()
+                } else {
+                  editor.chain().focus().setFontSize(size).run()
+                }
+              }}
+            >
+              <option value="">Mặc định</option>
+              {['10px', '11px', '12px', '13px', '14px', '15px', '16px', '18px', '20px', '24px', '28px', '32px', '36px'].map(size => (
+                <option key={size} value={size}>{size.replace('px', '')}</option>
+              ))}
+            </select>
           </div>
 
           {/* Undo/Redo */}

@@ -673,17 +673,25 @@
   cursor: crosshair;
 }
 
-/* Consistent pointer cursor for semantic interactive controls */
+/* Consistent pointer cursor for interactive elements (excluding text inputs) */
 button:not(:disabled),
 a[href],
 [role="button"]:not([aria-disabled="true"]),
 summary,
-label[for],
-input[type="button"]:not(:disabled),
-input[type="submit"]:not(:disabled),
-input[type="reset"]:not(:disabled),
-input[type="checkbox"]:not(:disabled),
-input[type="radio"]:not(:disabled) {
+label[for] {
+  cursor: pointer;
+}
+
+/* Standard cursor for inputs to ensure better UX */
+input:not([type="button"]):not([type="submit"]):not([type="reset"]),
+textarea,
+select {
+  cursor: auto;
+}
+
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
   cursor: pointer;
 }
 
@@ -1305,6 +1313,46 @@ input[type="radio"]:not(:disabled) {
   .il-slot { grid-area: unset !important; }
 }
 
+/* ─── Table Responsive ────────────────────────────────────────────────────────── */
+
+/* Đảm bảo bảng trong Editor và Renderer không bị tràn khung */
+.ProseMirror table,
+.post-content-renderer table {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: auto !important; /* Để trình duyệt tự tính toán co giãn cột */
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.9em; /* Giảm nhẹ font size tổng thể của bảng */
+}
+
+.ProseMirror table td,
+.ProseMirror table th,
+.post-content-renderer table td,
+.post-content-renderer table th {
+  min-width: 20px; /* Cho phép co lại rất nhỏ */
+  padding: 4px 6px !important; /* Thu hẹp padding */
+  word-break: break-word;
+}
+
+/* Container bọc bảng để scroll nếu vẫn quá to trên mobile */
+.post-content-renderer .table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Tinh chỉnh thanh cuộn cho bảng */
+.ProseMirror table::-webkit-scrollbar,
+.post-content-renderer table::-webkit-scrollbar {
+  height: 6px;
+}
+.ProseMirror table::-webkit-scrollbar-thumb,
+.post-content-renderer table::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 3px;
+}
+
 /* ─── Smart Image Layout (Facebook-style) ──────────────────────────────────── */
 
 /* ─── Smart Image Layout (Facebook-style) — CSS only ───────────────────────── */
@@ -1332,11 +1380,19 @@ input[type="radio"]:not(:disabled) {
 }
 
 /* Ảnh trong smart row: fill wrapper, object-fit cover */
-.ProseMirror p:has(> .image-wrapper + .image-wrapper) > .image-wrapper > img {
+.ProseMirror p:has(> .image-wrapper + .image-wrapper) > .image-wrapper:not(.image-wrapper-selected) > img {
   width: 100% !important;
   height: 200px !important;
   object-fit: cover !important;
   border-radius: 6px !important;
+}
+
+/* Ảnh đang được selected: giữ nguyên kích thước tự nhiên để resize hoạt động */
+.ProseMirror p:has(> .image-wrapper + .image-wrapper) > .image-wrapper-selected > img {
+  width: auto !important;
+  height: auto !important;
+  object-fit: unset !important;
+  max-width: 100%;
 }
 
 /* Khi ảnh được selected trong smart row — không bị constrain */

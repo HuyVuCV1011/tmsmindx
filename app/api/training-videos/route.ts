@@ -260,15 +260,23 @@ export async function DELETE(request: Request) {
     let result;
 
     if (groupId) {
-      result = await pool.query('DELETE FROM training_videos WHERE video_group_id = $1 RETURNING *', [groupId]);
+      // Fetch all videos in the group (with Cloudinary URLs) before deleting
+      result = await pool.query(
+        'DELETE FROM training_videos WHERE video_group_id = $1 RETURNING id, video_link, thumbnail_url',
+        [groupId]
+      );
     } else {
-      result = await pool.query('DELETE FROM training_videos WHERE id = $1 RETURNING *', [id]);
+      result = await pool.query(
+        'DELETE FROM training_videos WHERE id = $1 RETURNING id, video_link, thumbnail_url',
+        [id]
+      );
     }
 
     return NextResponse.json({
       success: true,
       message: 'Video deleted successfully',
-      data: result.rows[0]
+      // Return all deleted rows so client can clean up Cloudinary
+      deleted_videos: result.rows,
     });
   } catch (error: any) {
     console.error('Error deleting training video:', error);

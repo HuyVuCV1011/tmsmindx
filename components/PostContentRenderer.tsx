@@ -93,34 +93,33 @@ function SmartImageGroup({ images, globalOffset, onOpenLightbox }: SmartImageGro
   const hidden = total - MAX_VISIBLE // số ảnh bị ẩn
 
   // ── Layout grid dựa trên số ảnh hiển thị ──
-  // Dùng CSS grid với template areas để đạt layout như Facebook
   const n = visible.length
 
   const getGridStyle = (): React.CSSProperties => {
-    if (n === 1) return { display: 'grid', gridTemplateColumns: '1fr', gap: '3px' }
-    if (n === 2) return { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }
-    if (n === 3) return { display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: 'auto auto', gap: '3px' }
+    if (n === 1) return { display: 'block' }
+    if (n === 2) return { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }
+    if (n === 3) return { display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: '4px' }
     // 4 ảnh: 2x2
-    return { display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: '3px' }
+    return { display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: '4px' }
   }
 
   const getItemStyle = (idx: number): React.CSSProperties => {
-    // 3 ảnh: ảnh đầu span 2 rows bên trái
+    // 3 ảnh: ảnh đầu chiếm hết cột trái (2 hàng)
     if (n === 3 && idx === 0) return { gridRow: '1 / 3', gridColumn: '1 / 2' }
     return {}
   }
 
   const getImgHeight = (idx: number): string => {
     if (n === 1) return 'auto'
-    if (n === 2) return '300px'
-    if (n === 3) return idx === 0 ? '100%' : '148px'
-    return '220px'
+    if (n === 2) return '400px'
+    if (n === 3) return idx === 0 ? '404px' : '200px'
+    return '200px'
   }
 
   return (
     <div
       className="smart-img-group"
-      style={{ ...getGridStyle(), margin: '8px 0', borderRadius: '10px', overflow: 'hidden' }}
+      style={{ ...getGridStyle(), margin: '12px 0', borderRadius: '8px', overflow: 'hidden' }}
     >
       {visible.map((img, idx) => {
         const isLast = idx === MAX_VISIBLE - 1
@@ -136,7 +135,6 @@ function SmartImageGroup({ images, globalOffset, onOpenLightbox }: SmartImageGro
               overflow: 'hidden',
               cursor: 'pointer',
               lineHeight: 0,
-              minHeight: n === 1 ? undefined : '100px',
             }}
             onClick={() => onOpenLightbox(globalOffset + idx)}
           >
@@ -209,7 +207,7 @@ export default function PostContentRenderer({ html, className = '' }: PostConten
 
   return (
     <>
-      <div className={`post-content-renderer ProseMirror prose prose-sm md:prose-base max-w-none text-gray-900 ${className}`}>
+      <div className={`post-content-renderer ProseMirror prose prose-xs sm:prose-sm max-w-none text-gray-900 ${className}`}>
         {segments.map((seg, i) => {
           if (seg.type === 'images') {
             const groupOffset = offset
