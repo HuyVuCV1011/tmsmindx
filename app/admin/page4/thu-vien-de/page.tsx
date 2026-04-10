@@ -2364,8 +2364,8 @@ export default function ProfessionalAssignmentLibraryPage() {
           </div>
         ) : (
         <form onSubmit={handleAutoCreateEvents} className="flex flex-col h-[82vh]">
-          <div className="flex flex-1 gap-6 overflow-hidden">
-            <div ref={leftPanelRef} className="w-[360px] h-full min-h-0 flex flex-col border-r border-gray-200 pr-4">
+          <div className="flex flex-1 flex-col gap-6 overflow-hidden lg:flex-row">
+            <div ref={leftPanelRef} className="w-full lg:w-90 h-full min-h-0 flex flex-col border-b border-gray-200 pb-4 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
               <div className="flex items-center justify-between mb-2">
                  <h3 className="font-bold text-gray-800 text-sm">Danh sách chờ lên lịch</h3>
                  <button
@@ -2588,7 +2588,7 @@ export default function ProfessionalAssignmentLibraryPage() {
                       )}
                     >
                       <div className="flex items-center gap-2">
-                        <GripVertical className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                        <GripVertical className="h-4 w-4 text-gray-400 shrink-0" />
                         <span className="font-semibold text-sm text-gray-900 truncate" title={evt.label}>{evt.label}</span>
                         {evt.isGeneratedSupplement && (
                           <button
@@ -2786,7 +2786,7 @@ export default function ProfessionalAssignmentLibraryPage() {
                             onDrop={(e) => handleCalendarDrop(e, cellKey)}
                             onClick={() => setSelectedCalendarEventIds([])}
                             className={cn(
-                              "border-r border-b border-gray-200 p-1 flex flex-col gap-1 min-h-[50px] transition-colors duration-150",
+                              "border-r border-b border-gray-200 p-1 flex flex-col gap-1 min-h-12.5 transition-colors duration-150",
                               !cell.inCurrentMonth ? "bg-gray-50/50 text-gray-400" : "bg-white",
                               "hover:bg-blue-50/30",
                               draggedId && dragOverDateKey === cellKey && "ring-2 ring-blue-400 ring-inset border-blue-300 bg-blue-50/40"

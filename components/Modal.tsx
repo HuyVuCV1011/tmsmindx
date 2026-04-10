@@ -63,6 +63,10 @@ export default function Modal({
     '7xl': 'max-w-7xl'
   };
 
+  const headerClassName = headerColor.includes('from-') || headerColor.includes('to-')
+    ? `bg-linear-to-r ${headerColor}`
+    : headerColor;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
       {/* Backdrop with minimal opacity */}
@@ -77,7 +81,7 @@ export default function Modal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className={`sticky top-0 bg-gradient-to-r ${headerColor} px-4 sm:px-6 py-4 rounded-t-xl z-10`}>
+        <div className={`sticky top-0 ${headerClassName} px-4 sm:px-6 py-4 rounded-t-xl z-10`}>
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0 pr-4">
               <h2 className="text-lg sm:text-xl font-semibold text-white truncate">{title}</h2>
@@ -85,7 +89,7 @@ export default function Modal({
             </div>
             <button
               onClick={onClose}
-              className="flex-shrink-0 text-white hover:text-gray-200 transition-colors p-1"
+              className="shrink-0 text-white hover:text-gray-200 transition-colors p-1"
               aria-label="Close modal"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

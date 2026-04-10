@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PageContainer } from '@/components/PageContainer';
 import { useAuth } from "@/lib/auth-context";
 import { setVideo } from "@/lib/redux/features/trainingSlice";
 import { useAppDispatch } from "@/lib/redux/hooks";
@@ -283,21 +284,10 @@ export default function TrainingPage() {
   }
 
   return (
-    <div className="bg-white">
-      <div className="w-full">
-        {/* Header */}
-
-        <div className="bg-linear-to-r from-[#a1001f] to-[#c41230] text-white rounded-lg p-6 mb-6">
-          <div className="flex items-center gap-3">
-            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z" />
-            </svg>
-            <div>
-              <h1 className="text-2xl font-bold">Đào tạo nâng cao</h1>
-              <p className="text-sm opacity-90 mt-1">Điểm học trực tuyến - {trainingData?.lessons?.length || 0} bài học</p>
-            </div>
-          </div>
-        </div>
+    <PageContainer
+      title="Đào tạo nâng cao"
+      description={`Điểm học trực tuyến - ${trainingData?.lessons?.length || 0} bài học`}
+    >
 
         {/* Always show content structure with skeleton when loading */}
         <div className="flex gap-6 border-b mb-6">
@@ -355,16 +345,16 @@ export default function TrainingPage() {
             {/* Tab: Bài học nâng cao */}
             {tab === 'lessons' && (
               <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex items-center justify-between mb-4">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className="text-xl font-bold text-[#a1001f]">Danh sách bài học</h2>
                   
                   {/* Progress Bar */}
                   <div className="flex items-center gap-4">
-                    <div className="flex flex-col items-end">
+                    <div className="flex flex-col sm:items-end">
                       <div className="text-sm text-gray-600 mb-1">
                         Tiến độ: <span className="font-bold text-[#a1001f]">{completedLessons}/{trainingData.lessons.length}</span>
                       </div>
-                      <div className="w-48 h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-3 w-full max-w-48 bg-gray-200 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-linear-to-r from-[#a1001f] to-[#c41230] transition-all duration-500 ease-out"
                           style={{ 
@@ -393,7 +383,7 @@ export default function TrainingPage() {
                       return (
                         <div 
                           key={lesson.id || idx}
-                          className={`flex gap-4 p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer ${
+                          className={`flex flex-col gap-3 p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer sm:flex-row sm:items-start sm:gap-4 ${
                             isCompleted 
                               ? 'border-green-300 bg-green-50/30' 
                               : 'border-gray-200'
@@ -401,8 +391,8 @@ export default function TrainingPage() {
                           onClick={() => handleLessonClick(lesson, idx)}
                         >
                           {/* Thumbnail */}
-                          <div className="shrink-0 relative">
-                            <div className="w-40 h-24 bg-gray-200 rounded-lg overflow-hidden">
+                          <div className="relative w-full shrink-0 sm:w-40">
+                            <div className="w-full h-40 bg-gray-200 rounded-lg overflow-hidden sm:w-40 sm:h-24">
                               {lesson.thumbnail_url ? (
                                 <img 
                                   src={lesson.thumbnail_url} 
@@ -438,9 +428,9 @@ export default function TrainingPage() {
                           </div>
 
                           {/* Video Info */}
-                          <div className="grow min-w-0">
-                            <div className="flex items-start justify-between gap-2 mb-2">
-                              <div className="grow">
+                          <div className="w-full min-w-0">
+                            <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0 grow">
                                 <h3 className="font-semibold text-gray-900 line-clamp-2 mb-1">
                                   {lesson.name}
                                 </h3>
@@ -450,7 +440,7 @@ export default function TrainingPage() {
                                   </span>
                                 )}
                               </div>
-                              <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                              <span className={`self-start px-3 py-1 rounded-full text-xs font-medium sm:self-auto sm:whitespace-nowrap ${
                                 isCompleted
                                   ? 'bg-green-100 text-green-800'
                                   : notStarted 
@@ -744,7 +734,6 @@ export default function TrainingPage() {
             </p>
           </div>
         )}
-      </div>
-    </div>
+    </PageContainer>
   );
 }

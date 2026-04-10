@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import { cn } from "@/lib/utils";
 import { BookOpen, CalendarDays, ChevronDown, DollarSign, FileText, GraduationCap, Home, LogOut, Megaphone, Menu, Settings, Sparkles, Users, X } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -14,6 +15,29 @@ export function Sidebar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const closeSidebarOnMobile = useCallback(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setIsOpen(false);
+    }
+  }, [setIsOpen]);
+
+  const normalizeRoleToken = (value?: string) =>
+    (value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+  const toTitleCase = (value?: string) => {
+    if (!value) return '';
+
+    return value
+      .trim()
+      .split(/\s+/)
+      .map((word) => {
+        if (!word) return word;
+        if (/^[A-Z0-9&()+/.-]+$/.test(word)) return word;
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      })
+      .join(' ');
+  };
 
   const isNavLinkActive = useCallback((href?: string) => {
     if (!href) return false;
@@ -55,7 +79,7 @@ export function Sidebar() {
 
   const adminMenuItems = [
     { href: "/admin/dashboard", label: "Bảng Điều Khiển", icon: Home },
-    { href: "/admin/truyenthong", label: "Quản lý truyền thông", icon: Megaphone },
+    { href: "/admin/truyenthong", label: "Quản Lý Truyền Thông", icon: Megaphone },
     {
       href: "/admin/hr-candidates",
       label: "Đào tạo đầu vào",
@@ -71,17 +95,18 @@ export function Sidebar() {
       submenu: [
         { href: "/admin/page1", label: "Hồ sơ Giáo viên" },
         { href: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện" },
+        { href: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi" },
         {
           label: "Quản lý điều phối",
           submenu: [
-            { href: "/admin/xin-nghi-mot-buoi", label: "Danh sách yêu cầu xin nghỉ 1 buổi"},
+            { href: "/admin/xin-nghi-mot-buoi", label: "Danh sách yêu cầu xin nghỉ 1 buổi" },
           ]
         },
         {
           label: "Quản lý Nâng/Hạ Lương",
           icon: DollarSign,
           submenu: [
-            { href: "/admin/deal-luong?type=salary_deal", label: "Thỏa thuận lương " },
+            { href: "/admin/deal-luong?type=salary_deal", label: "Thỏa thuận lương" },
             { href: "/admin/deal-luong?type=salary_reduction", label: "Hạ lương" },
             { href: "/admin/deal-luong?type=bonus", label: "Nâng lương" },
           ]
@@ -111,6 +136,14 @@ export function Sidebar() {
             { href: "/admin/thu-vien-de", label: "Thư viện đề chuyên môn" },
           ]
         },
+        {
+          label: "Quy Trình, Quy Định K12 Teaching",
+          icon: BookOpen,
+          submenu: [
+            { href: "/admin/page2", label: "Xem Tài Liệu" },
+            { href: "/admin/page2/manage", label: "Quản Lý Tài Liệu" },
+          ]
+        },
       ]
     },
     {
@@ -125,13 +158,13 @@ export function Sidebar() {
   ];
 
   const userMenuItems = [
-    { href: "/user/truyenthong", label: "Truyền Thông Nội Bộ", icon: Megaphone },
-    { href: "/user/thongtingv", label: "Thông Tin Của Tôi", icon: Home },
+    { href: "/user/truyenthong", label: "Truyền thông nội bộ", icon: Megaphone },
+    { href: "/user/thongtingv", label: "Thông tin của tôi", icon: Home },
     {
       label: "Lịch & Hoạt động",
       icon: CalendarDays,
       submenu: [
-        { href: "/user/hoat-dong-hang-thang", label: "Hoạt Động Hàng Tháng"},
+        { href: "/user/hoat-dong-hang-thang", label: "Hoạt động hàng tháng" },
         { href: "/user/xin-nghi-mot-buoi", label: "Tạo yêu cầu xin nghỉ" },
         { href: "/user/nhan-lop-1-buoi", label: "Danh sách nhận lớp 1 buổi" },
       ]
@@ -141,13 +174,8 @@ export function Sidebar() {
       icon: GraduationCap,
       submenu: [
         { href: "/user/training", label: "Đào tạo nâng cao" },
-        {
-          label: "Kiểm tra chuyên môn/Trải nghiệm",
-          submenu: [
-            { href: "/user/assignments", label: "Kiểm tra chuyên môn/trải nghiệm" },
-            { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
-          ]
-        },
+        { href: "/user/assignments", label: "Kiểm tra chuyên môn" },
+        { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
       ]
     },
     { href: "/user/page2", label: "Quy trình & Quy định", icon: BookOpen },
@@ -159,7 +187,9 @@ export function Sidebar() {
       const [hrefPath, hrefSearch] = href.split('?');
       return pathname === hrefPath && searchParams.toString() === hrefSearch;
     }
-    return pathname === href || pathname.startsWith(`${href}/`);
+    // Sibling routes in submenu: only exact match, not startsWith
+    // So /admin/page2 only matches /admin/page2, NOT /admin/page2/manage
+    return pathname === href;
   };
 
   const getRoutePermissionAliases = (path: string) => {
@@ -183,30 +213,61 @@ export function Sidebar() {
   const getFilteredAdminMenuItems = () => {
     if (!user) return [];
 
-    if (user.role === 'super_admin') return adminMenuItems;
+    const normalizedRole = normalizeRoleToken(user.role);
+    const isSuperAdmin =
+      normalizedRole === 'super_admin' ||
+      (user.userRoles || []).some((code) => normalizeRoleToken(code) === 'super_admin');
+
+    if (isSuperAdmin) return adminMenuItems;
 
     // manager và admin luôn có quyền truy cập deal-luong
     const DEAL_LUONG_ROUTES = ['/admin/deal-luong', '/admin/tao-deal-luong'];
     const basePermissions = user.permissions || [];
-    const permissions = ['manager', 'admin'].includes(user.role)
+    const permissions = ['manager', 'admin'].includes(normalizedRole)
       ? Array.from(new Set([...basePermissions, ...DEAL_LUONG_ROUTES]))
       : basePermissions;
 
-    const roleCodes = (user.userRoles || []).map((code) => code.toUpperCase());
-    const hasTrainingInputRole = roleCodes.some((code) => code === 'HR' || code === 'TE' || code === 'TF');
-    if (permissions.length === 0 && !hasTrainingInputRole) return [];
+    const hasAnyK12Access = permissions.some((p) => {
+      const normalizedPath = p.split('?')[0];
+      return normalizedPath === '/admin/page2' || normalizedPath.startsWith('/admin/page2/');
+    });
+
+    const effectivePermissions = hasAnyK12Access
+      ? Array.from(new Set([...permissions, '/admin/page2', '/admin/page2/manage']))
+      : permissions;
+
+    const roleCodes = (user.userRoles || []).map((code) => normalizeRoleToken(code));
+    const hasTrainingInputRole = roleCodes.some((code) => code === 'hr' || code === 'te' || code === 'tf');
+    if (effectivePermissions.length === 0 && !hasTrainingInputRole) return [];
 
     const hasPermissionForHref = (href: string) => {
       const targetPath = href.split('?')[0];
       const candidatePaths = getRoutePermissionAliases(targetPath);
-      return permissions.some((p) =>
-        candidatePaths.some((candidate) => candidate === p || candidate.startsWith(`${p}/`))
-      );
+      return effectivePermissions.some((p) => {
+        const normalizedPermission = p.split('?')[0];
+        return candidatePaths.some(
+          (candidate) =>
+            candidate === normalizedPermission ||
+            candidate.startsWith(`${normalizedPermission}/`)
+        );
+      });
     };
 
     const filterMenuItemsByPermissions = (items: any[]): any[] => {
       return items
         .map((item) => {
+          const isK12PolicyGroup = item?.label === 'Quy Trình, Quy Định K12 Teaching';
+          if (isK12PolicyGroup && item?.submenu && Array.isArray(item.submenu)) {
+            const canOpenK12Group =
+              hasPermissionForHref('/admin/page2') ||
+              hasPermissionForHref('/admin/page2/manage') ||
+              pathname.startsWith('/admin/page2');
+
+            if (canOpenK12Group) {
+              return item;
+            }
+          }
+
           const isTrainingInputMenu = item?.href === '/admin/hr-candidates';
           if (isTrainingInputMenu && hasTrainingInputRole) {
             return item;
@@ -233,14 +294,23 @@ export function Sidebar() {
 
   const menuItems = isUserArea ? userMenuItems : getFilteredAdminMenuItems();
 
-  // Auto-expand submenu if current page is in it
+  const hasActiveDescendant = useCallback((menuItem: any): boolean => {
+    if (menuItem?.href && isNavLinkActive(menuItem.href)) {
+      return true;
+    }
+
+    if (menuItem?.submenu && Array.isArray(menuItem.submenu)) {
+      return menuItem.submenu.some((child: any) => hasActiveDescendant(child));
+    }
+
+    return false;
+  }, [isNavLinkActive]);
+
+  // Auto-expand submenu if current page is in it (including nested submenu items)
   useEffect(() => {
     menuItems.forEach((item) => {
       if ('submenu' in item && item.submenu) {
-        const isInSubmenu = item.submenu.some((sub: any) => {
-          if (!('href' in sub) || !sub.href) return false;
-          return isNavLinkActive(sub.href);
-        });
+        const isInSubmenu = hasActiveDescendant(item);
         if (isInSubmenu && !expandedMenus.includes(item.label)) {
           setExpandedMenus(prev => {
             const updated = [...prev, item.label];
@@ -250,7 +320,12 @@ export function Sidebar() {
         }
       }
     });
-  }, [menuItems, pathname, searchParams, expandedMenus, isNavLinkActive]);
+  }, [menuItems, pathname, searchParams, expandedMenus, hasActiveDescendant]);
+
+  useEffect(() => {
+    closeSidebarOnMobile();
+  }, [pathname, closeSidebarOnMobile]);
+
   const toggleSubmenu = (label: string) => {
     setExpandedMenus(prev => {
       const updated = prev.includes(label)
@@ -295,7 +370,7 @@ export function Sidebar() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed top-3 left-3 z-sidebar-toggle p-2 rounded-lg bg-white shadow-md border border-gray-200 hover:shadow-lg hover:scale-105 hover:bg-linear-to-br hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:border-[#a1001f] transition-all duration-300 group animate-in fade-in-0 slide-in-from-left-2"
+          className="fixed top-3 left-3 z-sidebar-toggle rounded-lg border border-gray-200 bg-white p-2 shadow-md transition-all duration-300 group animate-in fade-in-0 slide-in-from-left-2 hover:scale-105 hover:border-[#a1001f] hover:bg-[#a1001f] hover:text-white hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2"
         >
           <Menu className="h-4 w-4 transition-transform group-hover:rotate-180 duration-300" />
         </button>
@@ -304,34 +379,34 @@ export function Sidebar() {
       {/* Sidebar - Modern glass-morphism design */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-sidebar-custom h-screen backdrop-blur-xl bg-white/95 border-r border-gray-200 shadow-xl w-56",
+          "fixed inset-y-0 left-0 z-sidebar-custom h-dvh max-h-dvh overflow-hidden backdrop-blur-xl bg-white/95 border-r border-gray-200 shadow-xl w-56",
           "transition-all duration-500 ease-in-out will-change-transform",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
         style={{ transform: `translate3d(${isOpen ? '0' : '-100%'}, 0, 0)` }}
       >
-        <div className="flex h-full flex-col">
-          {/* Header - Gradient brand header */}
-          <div className="relative h-14 flex items-center justify-between px-4 bg-linear-to-r from-[#a1001f] to-[#c41230] text-white shadow-md">
+        <div className="flex h-full min-h-0 flex-col">
+          {/* Header - Solid brand header */}
+          <div className="relative flex h-14 items-center justify-between bg-[#a1001f] px-4 text-white shadow-md">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
-                <Sparkles className="h-4 w-4" />
+                <Image src="/x_white.svg" alt="X White" width={16} height={16} className="h-4 w-4" priority />
               </div>
               <div>
-                <h2 className="text-sm font-bold tracking-wide">Teaching MS</h2>
-                <p className="text-xs text-white/80">Quản lý giảng dạy</p>
+                <h2 className="text-sm font-bold tracking-wide">TPS</h2>
+                <p className="text-xs text-white/80">Quản Lý Giảng Dạy</p>
               </div>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1.5 rounded-lg hover:bg-white/20 transition-all duration-300 hover:rotate-90"
+              className="rounded-lg p-1.5 transition-all duration-300 hover:rotate-90 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#a1001f]"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
           {/* Navigation - Modern cards with smooth hover effects */}
-          <nav className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
+          <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1 pb-4 custom-scrollbar">
             {menuItems.map((item) => {
               const Icon = item.icon;
               const hasSubmenu = 'submenu' in item;
@@ -344,36 +419,61 @@ export function Sidebar() {
                   {hasSubmenu ? (
                     <div className="space-y-1">
                       <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleSubmenu(item.label)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleSubmenu(item.label);
+                          }
+                        }}
+                        aria-expanded={isExpanded}
                         className={cn(
-                          "w-full flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-300 group/item",
-                          isSubmenuActive || isExpanded
-                            ? "bg-linear-to-r from-[#a1001f] to-[#c41230] text-white shadow-md shadow-[#a1001f]/20 scale-[1.01]"
-                            : "text-gray-700 hover:bg-linear-to-r hover:from-gray-100 hover:to-gray-50 hover:shadow-sm hover:scale-[1.01]"
+                          "w-full flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold tracking-wide transition-all duration-300 group/item focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2",
+                          isSubmenuActive
+                            ? "bg-[#a1001f] text-white shadow-md shadow-[#a1001f]/20 scale-[1.01]"
+                            : isExpanded
+                              ? "bg-gray-100 text-gray-800 shadow-sm scale-[1.01]"
+                              : "text-gray-700 hover:bg-gray-100 hover:shadow-sm hover:scale-[1.01]"
                         )}
                       >
                         <div className={cn(
                           "p-1.5 rounded-md transition-all duration-300",
-                          isSubmenuActive || isExpanded
+                          isSubmenuActive
                             ? "bg-white/20"
-                            : "bg-gray-100 group-hover/item:bg-white group-hover/item:shadow-sm"
+                            : isExpanded
+                              ? "bg-gray-100"
+                              : "bg-gray-100 group-hover/item:bg-white group-hover/item:shadow-sm"
                         )}>
                           <Icon className="h-3.5 w-3.5" />
                         </div>
                         {item.href ? (
-                          <Link href={item.href} className="flex-1 text-left">
-                            {item.label}
+                          <Link
+                            href={item.href}
+                            onClick={() => {
+                              toggleSubmenu(item.label);
+                              closeSidebarOnMobile();
+                            }}
+                            className="flex-1 text-left"
+                          >
+                            {toTitleCase(item.label)}
                           </Link>
                         ) : (
-                          <span className="flex-1 text-left">{item.label}</span>
+                          <span className="flex-1 text-left">{toTitleCase(item.label)}</span>
                         )}
                         <button
                           type="button"
-                          onClick={() => toggleSubmenu(item.label)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSubmenu(item.label);
+                          }}
                           className={cn(
-                            "rounded-md p-1 transition-transform duration-300 hover:bg-white/20",
+                            "rounded-md p-1 transition-transform duration-300",
+                            isSubmenuActive ? "hover:bg-white/20" : "hover:bg-gray-300/60",
                             isExpanded ? "rotate-180" : ""
                           )}
-                          aria-label={`Mở submenu ${item.label}`}
+                          aria-label={`Mở submenu ${toTitleCase(item.label)}`}
                         >
                           <ChevronDown className="h-3.5 w-3.5" />
                         </button>
@@ -381,8 +481,10 @@ export function Sidebar() {
                       
                       {/* Submenu with slide animation */}
                       <div className={cn(
-                        "overflow-hidden transition-all duration-300 ease-in-out",
-                        isExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+                        "transition-all duration-300 ease-in-out",
+                        isExpanded
+                          ? "max-h-[70vh] overflow-y-auto opacity-100 pr-1 custom-scrollbar"
+                          : "max-h-0 overflow-hidden opacity-0"
                       )}>
                         <div className="ml-3 mt-1 space-y-0.5 border-l-2 border-gray-200 pl-2">
                           {item.submenu?.map((subItem: any) => {
@@ -390,13 +492,25 @@ export function Sidebar() {
                             const isSubActive = isMenuItemActive(subItem);
 
                             if (subHasSubmenu) {
+                              const isK12PolicyGroup = subItem.label === 'Quy Trình, Quy Định K12 Teaching';
+                              const nestedItems = isK12PolicyGroup
+                                ? (() => {
+                                    const current = Array.isArray(subItem.submenu) ? [...subItem.submenu] : [];
+                                    const hasManageItem = current.some((entry: any) => entry?.href === '/admin/page2/manage');
+                                    if (!hasManageItem) {
+                                      current.push({ href: '/admin/page2/manage', label: 'Quản Lý Tài Liệu' });
+                                    }
+                                    return current;
+                                  })()
+                                : subItem.submenu;
+
                               return (
                                 <div key={subItem.label} className="space-y-1 py-1">
-                                  <div className="px-2 py-1 text-[11px] font-semibold tracking-wide text-gray-500">
-                                    {subItem.label}
+                                  <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                    {toTitleCase(subItem.label)}
                                   </div>
                                   <div className="ml-2 space-y-0.5 border-l border-gray-200 pl-2">
-                                    {subItem.submenu?.map((nestedItem: any) => {
+                                    {nestedItems?.map((nestedItem: any) => {
                                       const isNestedActive = isPathMatch(nestedItem.href);
                                       if (!nestedItem.href) return null;
 
@@ -404,14 +518,15 @@ export function Sidebar() {
                                         <Link
                                           key={nestedItem.href}
                                           href={nestedItem.href}
+                                          onClick={closeSidebarOnMobile}
                                           className={cn(
-                                            "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all duration-300 hover:scale-[1.01]",
+                                            "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium tracking-wide transition-all duration-300 hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-1",
                                             isNestedActive
-                                              ? "bg-linear-to-r from-[#a1001f]/10 to-[#c41230]/10 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm"
+                                              ? "bg-[#a1001f]/10 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm"
                                               : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-3 hover:border-gray-300"
                                           )}
                                         >
-                                          <span>{nestedItem.label}</span>
+                                          <span>{toTitleCase(nestedItem.label)}</span>
                                         </Link>
                                       );
                                     })}
@@ -427,14 +542,15 @@ export function Sidebar() {
                               <Link
                                 key={subItem.href}
                                 href={subItem.href}
+                                onClick={closeSidebarOnMobile}
                                 className={cn(
-                                  "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all duration-300 hover:scale-[1.01]",
+                                  "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium tracking-wide transition-all duration-300 hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-1",
                                   isSubActive
-                                    ? "bg-linear-to-r from-[#a1001f]/15 to-[#c41230]/15 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm ring-1 ring-[#a1001f]/20"
+                                    ? "bg-[#a1001f]/15 text-[#a1001f] border-l-3 border-[#a1001f] shadow-sm ring-1 ring-[#a1001f]/20"
                                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-3 hover:border-gray-300"
                                 )}
                               >
-                                <span>{subItem.label}</span>
+                                <span>{toTitleCase(subItem.label)}</span>
                               </Link>
                             );
                           })}
@@ -444,12 +560,15 @@ export function Sidebar() {
                   ) : (
                     <Link
                       href={item.href}
-                      onClick={handleTopLevelTabNavigation}
+                      onClick={() => {
+                        handleTopLevelTabNavigation();
+                        closeSidebarOnMobile();
+                      }}
                       className={cn(
-                        "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-300 group/item",
+                        "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold tracking-wide transition-all duration-300 group/item focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2",
                         isActive
-                          ? "bg-linear-to-r from-[#a1001f] to-[#c41230] text-white shadow-md shadow-[#a1001f]/20 scale-[1.01]"
-                          : "text-gray-700 hover:bg-linear-to-r hover:from-gray-100 hover:to-gray-50 hover:shadow-sm hover:scale-[1.01]"
+                          ? "bg-[#a1001f] text-white shadow-md shadow-[#a1001f]/20 scale-[1.01]"
+                          : "text-gray-700 hover:bg-gray-100 hover:shadow-sm hover:scale-[1.01]"
                       )}
                     >
                       <div className={cn(
@@ -460,7 +579,7 @@ export function Sidebar() {
                       )}>
                         <Icon className="h-3.5 w-3.5" />
                       </div>
-                      <span>{item.label}</span>
+                      <span>{toTitleCase(item.label)}</span>
                     </Link>
                   )}
                 </div>
@@ -470,18 +589,19 @@ export function Sidebar() {
 
           {/* User Info and Logout - Modern card design */}
           {user && (
-            <div className="border-t border-gray-200 p-3 bg-linear-to-br from-gray-50 to-white">
+            <div className="shrink-0 border-t border-gray-200 bg-gray-50 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
               <Link 
                 href={user.isAdmin ? '/admin/profile' : '/user/profile'}
+                onClick={closeSidebarOnMobile}
                 className={cn(
-                  "block mb-2 p-2 rounded-lg shadow-sm border transition-all duration-300 hover:shadow-md hover:scale-[1.01] cursor-pointer",
+                  "mb-2 block cursor-pointer rounded-lg border p-2 shadow-sm transition-all duration-300 hover:scale-[1.01] hover:border-[#a1001f]/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2",
                   pathname === "/user/profile" || pathname === "/admin/profile"
-                    ? "bg-linear-to-br from-[#a1001f]/5 to-[#c41230]/5 border-[#a1001f]"
+                    ? "bg-[#a1001f]/5 border-[#a1001f]"
                     : "bg-white border-gray-100 hover:border-[#a1001f]/30"
                 )}
               >
                 <div className="flex items-center gap-2 mb-1.5">
-                  <div className="h-8 w-8 rounded-full bg-linear-to-br from-[#a1001f] to-[#c41230] flex items-center justify-center text-white font-bold text-xs shadow-md">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#a1001f] text-xs font-bold text-white shadow-md">
                     {user.displayName ? user.displayName.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : '')}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -489,18 +609,21 @@ export function Sidebar() {
                     <p className="text-xs text-gray-500 truncate">{user.email}</p>
                   </div>
                 </div>
-                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-linear-to-r from-[#a1001f] to-[#c41230] text-white text-xs rounded-full font-semibold shadow-sm">
+                <div className="inline-flex items-center gap-1 rounded-full bg-[#a1001f] px-2 py-0.5 text-xs font-semibold text-white shadow-sm">
                   <Sparkles className="h-2.5 w-2.5" />
                   <span>{getRoleDisplay()}</span>
                 </div>
               </Link>
               
               <button
-                className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold bg-white border-2 border-gray-200 text-gray-700 hover:border-[#a1001f] hover:bg-linear-to-r hover:from-[#a1001f] hover:to-[#c41230] hover:text-white hover:shadow-md transition-all duration-300 group"
-                onClick={logout}
+                className="group flex w-full items-center justify-center gap-2 rounded-lg border-2 border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all duration-300 hover:border-[#a1001f] hover:bg-[#a1001f] hover:text-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2"
+                onClick={() => {
+                  closeSidebarOnMobile();
+                  logout();
+                }}
               >
                 <LogOut className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
-                <span>Đăng xuất</span>
+                <span>Đăng Xuất</span>
               </button>
             </div>
           )}

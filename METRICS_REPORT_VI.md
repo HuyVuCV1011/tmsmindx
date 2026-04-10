@@ -1,7 +1,7 @@
 # 📊 BÁO CÁO ĐO LƯỜNG NGƯỜI TRUY CẬP ĐỒNG THỜI
 
 **Ngày báo cáo:** 31 Tháng 3, 2026  
-**Ứng dụng:** Hệ thống Quản lý Giáo dục (TMS)  
+**Ứng dụng:** Teaching Portal System (TPS)  
 **Công nghệ:** Next.js 15 + PostgreSQL + React 19.2
 
 ---
@@ -11,6 +11,7 @@
 ✅ **Hệ thống theo dõi người dùng đã được triển khai thành công**
 
 Hệ thống giám sát tải người dùng đã được cài đặt và hoạt động để theo dõi:
+
 - Số lượng người truy cập đồng thời trực tuyến
 - Loại thiết bị và nền tảng người dùng sử dụng
 - Các trang web được truy cập
@@ -23,12 +24,12 @@ Hệ thống giám sát tải người dùng đã được cài đặt và hoạ
 
 ### **Khả Năng Chịu Tải Hiện Tại**
 
-| Chỉ Số | Giá Trị | Trạng Thái |
-|--------|--------|----------|
-| **Số người đồng thời tối đa (an toàn)** | **28 người** | ✅ Tốt |
-| **Số người sử dụng hàng ngày dự tính** | **800+ người/ngày** | ✅ Khả thi |
-| **Kết nối DB hiện có** | 13/100 | ✅ Khoẻ mạnh |
-| **Tốc độ phản hồi API** | < 100ms | ⚡ Nhanh |
+| Chỉ Số                                  | Giá Trị             | Trạng Thái   |
+| --------------------------------------- | ------------------- | ------------ |
+| **Số người đồng thời tối đa (an toàn)** | **28 người**        | ✅ Tốt       |
+| **Số người sử dụng hàng ngày dự tính**  | **800+ người/ngày** | ✅ Khả thi   |
+| **Kết nối DB hiện có**                  | 13/100              | ✅ Khoẻ mạnh |
+| **Tốc độ phản hồi API**                 | < 100ms             | ⚡ Nhanh     |
 
 ### **Chi Tiết Phân Tích**
 
@@ -49,6 +50,7 @@ Giải thích:
 ## 📈 CÁC MỨC ĐỘ SỬ DỤNG
 
 ### **Tầng 1: An Toàn (Bình Thường)**
+
 ```
 📊 Người đồng thời: 0-10 người
 📊 Người/ngày: 50-150 người
@@ -57,6 +59,7 @@ Giải thích:
 ```
 
 ### **Tầng 2: Cảnh Báo (Bình Thường)**
+
 ```
 📊 Người đồng thời: 10-15 người
 📊 Người/ngày: 150-400 người
@@ -65,6 +68,7 @@ Giải thích:
 ```
 
 ### **Tầng 3: Chú Ý (Cần Chuẩn Bị)**
+
 ```
 📊 Người đồng thời: 15-22 người
 📊 Người/ngày: 400-800 người
@@ -73,6 +77,7 @@ Giải thích:
 ```
 
 ### **Tầng 4: Nguy Hiểm (Cần Tác Động)**
+
 ```
 📊 Người đồng thời: 22-28 người
 📊 Người/ngày: 800-1500 người
@@ -81,6 +86,7 @@ Giải thích:
 ```
 
 ### **Tầng 5: Quá Tải (Sự Cố)**
+
 ```
 📊 Người đồng thời: 28+ người
 📊 Người/ngày: 1500+ người
@@ -94,28 +100,29 @@ Giải thích:
 
 ### **1️⃣ ĐIỂM YẾU HIỆN TẠI**
 
-| Vấn Đề | Mức Độ | Ảnh Hưởng | Ưu Tiên |
-|--------|--------|---------|---------|
-| Kết nối DB giới hạn | Cao | Không thể xử lý > 28 người | **CAO** |
-| Không có caching | Trung bình | Mỗi query đều vào database | **TRUNG** |
-| Không có session cleanup | Trung bình | Table tăng kích thước | **TRUNG** |
-| Không có load balancing | Trung bình | Một server có thể bị quá tải | **TRUNG** |
-| Không có read replicas | Cao | Chỉ có 1 DB, không phân tải | **CAO** |
+| Vấn Đề                   | Mức Độ     | Ảnh Hưởng                    | Ưu Tiên   |
+| ------------------------ | ---------- | ---------------------------- | --------- |
+| Kết nối DB giới hạn      | Cao        | Không thể xử lý > 28 người   | **CAO**   |
+| Không có caching         | Trung bình | Mỗi query đều vào database   | **TRUNG** |
+| Không có session cleanup | Trung bình | Table tăng kích thước        | **TRUNG** |
+| Không có load balancing  | Trung bình | Một server có thể bị quá tải | **TRUNG** |
+| Không có read replicas   | Cao        | Chỉ có 1 DB, không phân tải  | **CAO**   |
 
 ---
 
 ## ⚡ RECOMMENDED: 5 TỐI ƯU HÓA CẤP THIẾT
 
 ### **Ưu Tiên 1: Tăng Connection Pool (Tuần này)**
+
 **Vấn đề:** Hiện tại giới hạn tối đa 20 connection tại app server  
 **Giải pháp:**
 
 ```typescript
 // lib/db.ts - Tăng từ 20 lên 50 connection
 const pool = new Pool({
-  max: 50,  // ← Tăng từ 20
+  max: 50, // ← Tăng từ 20
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000
+  connectionTimeoutMillis: 10000,
 });
 ```
 
@@ -126,6 +133,7 @@ const pool = new Pool({
 ---
 
 ### **Ưu Tiên 2: Implement Query Caching (Tuần 1)**
+
 **Vấn đề:** Mỗi yêu cầu đều query database (N+1 problem)  
 **Giải pháp:** Sử dụng `unstable_cache` của Next.js
 
@@ -155,6 +163,7 @@ export default async function Dashboard() {
 ---
 
 ### **Ưu Tiên 3: Cleanup Inactive Sessions (Ngay hôm nay)**
+
 **Vấn đề:** Table `session_tracking` sẽ phồng nhanh → query chậm  
 **Giải pháp:** Tạo job xóa session cũ
 
@@ -169,13 +178,13 @@ export async function cleanupOldSessions() {
 }
 
 // app/api/cron/cleanup/route.ts - Chạy hàng ngày
-import { cleanupOldSessions } from '@/lib/session-cleanup';
+import { cleanupOldSessions } from "@/lib/session-cleanup";
 
 export async function GET(req: Request) {
-  const authHeader = req.headers.get('authorization');
-  
+  const authHeader = req.headers.get("authorization");
+
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   await cleanupOldSessions();
@@ -190,6 +199,7 @@ export async function GET(req: Request) {
 ---
 
 ### **Ưu Tiên 4: Thêm Database Index (Tuần 1)**
+
 **Vấn đề:** Query chậm trên các trường frequently accessed  
 **Giải pháp:** Tạo indexes chiến lược
 
@@ -200,9 +210,9 @@ CREATE INDEX idx_communications_user ON communications(user_id, created_at DESC)
 CREATE INDEX idx_session_cleanup ON session_tracking(last_activity) WHERE last_activity < NOW() - INTERVAL '7 days';
 
 -- Kiểm tra indexes hiện có
-SELECT schemaname, tablename, indexname 
-FROM pg_indexes 
-WHERE schemaname = 'public' 
+SELECT schemaname, tablename, indexname
+FROM pg_indexes
+WHERE schemaname = 'public'
 ORDER BY tablename;
 ```
 
@@ -213,6 +223,7 @@ ORDER BY tablename;
 ---
 
 ### **Ưu Tiên 5: Implement Read Replicas (Tháng tới)**
+
 **Vấn đề:** Chỉ có 1 server database, không phân tải  
 **Giải pháp:** Thêm read replica cho queries
 
@@ -240,18 +251,21 @@ export { writePool, readPool };
 ## 📋 TIMELINE TỐI ƯU HÓA
 
 ### **Tuần 1 (Ngay hôm nay)**
+
 - [ ] Tăng connection pool từ 20 → 50
 - [ ] Thêm database indexes
 - [ ] Setup session cleanup job
 - **Kết quả:** +40% capacity = 39 người đồng thời
 
 ### **Tuần 2-3**
+
 - [ ] Implement `unstable_cache` cho các endpoint chính
 - [ ] Optimize query N+1 problems
 - [ ] Cải thiện responsive time
 - **Kết quả:** +30% tối ưu hóa = ~50 người đồng thời
 
 ### **Tháng tới**
+
 - [ ] Setup database read replicas
 - [ ] Thêm Redis caching layer
 - [ ] Implement database partitioning
@@ -270,16 +284,16 @@ export { writePool, readPool };
   sql: `
     -- Tăng connection pool
     ALTER SYSTEM SET max_connections = 200;
-    
+
     -- Tạo indexes cho performance
-    CREATE INDEX IF NOT EXISTS idx_teachers_active 
+    CREATE INDEX IF NOT EXISTS idx_teachers_active
       ON teachers(created_at DESC) WHERE deleted = false;
-    
-    CREATE INDEX IF NOT EXISTS idx_communications_fast 
+
+    CREATE INDEX IF NOT EXISTS idx_communications_fast
       ON communications(user_id, created_at DESC);
-    
-    CREATE INDEX IF NOT EXISTS idx_sessions_cleanup 
-      ON session_tracking(last_activity) 
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_cleanup
+      ON session_tracking(last_activity)
       WHERE last_activity < NOW() - INTERVAL '7 days';
   `,
 },
@@ -290,6 +304,7 @@ export { writePool, readPool };
 ## 📊 DUNG LƯỢNG DỰ TÍNH
 
 ### **Theo ngày**
+
 ```
 Ngày 1-7:     50-100 DAU     (Pilot thử nghiệm)
 Tuần 2-4:     300-500 DAU    (Rollout ban đầu)
@@ -298,6 +313,7 @@ Tháng 3-6:    2000+ DAU      (Cần scale up)
 ```
 
 ### **Theo giờ cao điểm**
+
 ```
 Sáng (7-9h):   15-20 người đồng thời
 Trưa (12-1h):  10-15 người đồng thời
@@ -310,6 +326,7 @@ Tối (6-7h):    5-10 người đồng thời
 ## 🎯 KHI NÀO CẦN SCALE UP?
 
 ### **Dấu hiệu cần scale ngay:**
+
 - 🔴 Response time > 2 giây
 - 🔴 Database CPU > 80%
 - 🔴 Connection pool 80%+ sử dụng
@@ -317,18 +334,19 @@ Tối (6-7h):    5-10 người đồng thời
 
 ### **Giải pháp scale:**
 
-| Nấc Độ | Concurrent | Giải Pháp | Chi Phí |
-|---------|-----------|---------|--------|
-| 1 | 0-30 | Hiện tại (1 DB server) | $0 |
-| 2 | 30-60 | +1 read replica | $50-100/tháng |
-| 3 | 60-150 | +Redis cache | +$30/tháng |
-| 4 | 150+ | Multi-region deployment | $200+/tháng |
+| Nấc Độ | Concurrent | Giải Pháp               | Chi Phí       |
+| ------ | ---------- | ----------------------- | ------------- |
+| 1      | 0-30       | Hiện tại (1 DB server)  | $0            |
+| 2      | 30-60      | +1 read replica         | $50-100/tháng |
+| 3      | 60-150     | +Redis cache            | +$30/tháng    |
+| 4      | 150+       | Multi-region deployment | $200+/tháng   |
 
 ---
 
 ## 💾 DATABASE STATISTICS
 
 ### **Hiện Tại**
+
 ```
 Tables:            38
 Total Size:        ~500 MB
@@ -338,6 +356,7 @@ Query Time (p95):  < 100ms
 ```
 
 ### **Dự Tính 6 Tháng (Tăng 10x)**
+
 ```
 Tables:            40+
 Total Size:        ~5 GB
@@ -351,21 +370,25 @@ Query Time (p95):  Có thể vượt 500ms ← CẦN OPT
 ## ✅ CHECKLIST CHUẨN BỊ
 
 ### **Ngay hôm nay (30 phút)**
+
 - [ ] Tăng connection pool: `max: 50`
 - [ ] Thêm indexes cho tables chính
 - [ ] Kiểm tra slow query logs
 
 ### **Tuần này (2 giờ)**
+
 - [ ] Setup session cleanup cron job
 - [ ] Implement `unstable_cache` cho 5 endpoints chính
 - [ ] Test performance under 20 concurrent users
 
 ### **Tháng này (1 ngày)**
+
 - [ ] Setup database read replica
 - [ ] Implement monitoring alerts
 - [ ] Create scaling runbook
 
 ### **Tháng tới (2 ngày)**
+
 - [ ] Add Redis cache layer
 - [ ] Setup query profiling
 - [ ] Plan database partitioning
@@ -375,6 +398,7 @@ Query Time (p95):  Có thể vượt 500ms ← CẦN OPT
 ## 📞 HỖ TRỢ VÀ CÂU HỎI
 
 ### **Làm thế nào để xem concurrent users lúc này?**
+
 ```bash
 # Gọi API metrics
 curl http://localhost:3000/api/metrics/concurrent-users
@@ -392,6 +416,7 @@ curl http://localhost:3000/api/metrics/concurrent-users
 ```
 
 ### **Query xem người truy cập ngay lúc này:**
+
 ```sql
 SELECT COUNT(*) as online_users
 FROM session_tracking
@@ -399,8 +424,9 @@ WHERE last_activity > NOW() - INTERVAL '5 minutes';
 ```
 
 ### **Query xem peak hour hôm nay:**
+
 ```sql
-SELECT 
+SELECT
   DATE_TRUNC('hour', created_at) as hour,
   COUNT(DISTINCT session_id) as sessions,
   COUNT(DISTINCT user_id) as users
@@ -417,13 +443,13 @@ LIMIT 5;
 
 ### **Những gì cần theo dõi hàng ngày:**
 
-| Metric | Bình Thường | Cảnh Báo | Nguy Hiểm |
-|--------|-----------|----------|----------|
-| **Concurrent Users** | < 15 | 15-22 | 22+ |
-| **Response Time (p95)** | < 500ms | 500-1s | > 1s |
-| **Error Rate** | < 0.1% | 0.1-1% | > 1% |
-| **DB CPU** | < 50% | 50-80% | > 80% |
-| **Connection Usage** | < 50% | 50-80% | > 80% |
+| Metric                  | Bình Thường | Cảnh Báo | Nguy Hiểm |
+| ----------------------- | ----------- | -------- | --------- |
+| **Concurrent Users**    | < 15        | 15-22    | 22+       |
+| **Response Time (p95)** | < 500ms     | 500-1s   | > 1s      |
+| **Error Rate**          | < 0.1%      | 0.1-1%   | > 1%      |
+| **DB CPU**              | < 50%       | 50-80%   | > 80%     |
+| **Connection Usage**    | < 50%       | 50-80%   | > 80%     |
 
 ---
 
@@ -446,12 +472,14 @@ Ví dụ:
 ## 🔐 SECURITY & PERFORMANCE
 
 ### **Những điều đã làm:**
+
 - ✅ Session tracking tự động
 - ✅ IP address logging
 - ✅ User agent detection
 - ✅ Device type tracking
 
 ### **Cần thêm:**
+
 - [ ] Rate limiting (ngăn DDoS)
 - [ ] Query timeout protection
 - [ ] Connection pool overflow handling

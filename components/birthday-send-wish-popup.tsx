@@ -183,16 +183,24 @@ export function BirthdaySendWishPopup({
         }
     }
 
+    const messageLength = message.length
+    const counterTone = messageLength > 450 ? 'text-amber-200' : 'text-white/75'
+
     const popupContent = (
-        <div className="fixed inset-0 z-130">
+        <div className="fixed inset-0 z-9999">
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative z-10 flex h-full w-full items-center justify-center p-4">
-                <div className="w-full max-w-lg rounded-2xl border border-white/20 bg-[#980f24] shadow-2xl overflow-hidden">
-                    <div className="flex items-center justify-between border-b border-white/15 px-4 py-3">
-                        <h3 className="text-white font-bold">Gửi lời chúc sinh nhật</h3>
+            <div className="relative z-10 flex h-full w-full items-start justify-center overflow-y-auto p-3 sm:items-center sm:p-4">
+                <div className="relative w-full max-w-xl max-h-[92dvh] overflow-y-auto rounded-3xl border border-white/20 bg-[#8f1428] shadow-[0_28px_80px_rgba(0,0,0,0.45)]">
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.22)_0,rgba(255,255,255,0)_40%),linear-gradient(145deg,#7b1122_0%,#9f1630_45%,#7d1022_100%)]" />
+
+                    <div className="relative flex items-start justify-between border-b border-white/15 px-5 py-4">
+                        <div>
+                            <h3 className="text-lg font-extrabold tracking-tight text-white">Gửi lời chúc sinh nhật</h3>
+                            <p className="mt-1 text-xs text-rose-100/90">Một lời chúc ngắn gọn, ấm áp sẽ được gửi tới giáo viên bạn chọn.</p>
+                        </div>
                         <button
                             type="button"
-                            className="rounded-lg p-1.5 text-white/85 hover:text-white hover:bg-white/10"
+                            className="rounded-xl p-1.5 text-white/85 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                             onClick={onClose}
                             aria-label="Đóng"
                         >
@@ -200,30 +208,14 @@ export function BirthdaySendWishPopup({
                         </button>
                     </div>
 
-                    <form onSubmit={handleSubmitWish} className="p-4 space-y-3">
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <label className="text-white text-xs font-semibold">
-                                Người gửi
-                                <select
-                                    value={senderName}
-                                    onChange={(e) => setSenderName(e.target.value)}
-                                    className="mt-1 w-full rounded-lg border border-white/20 bg-white/10 px-2.5 py-2 text-sm text-white outline-none focus:border-white/40"
-                                >
-                                    {senderOptions.length === 0 && <option value="">Chưa có dữ liệu</option>}
-                                    {senderOptions.map((option) => (
-                                        <option key={option.name} value={option.name} className="text-gray-900">
-                                            {option.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-
-                            <label className="text-white text-xs font-semibold">
+                    <form onSubmit={handleSubmitWish} className="relative space-y-4 px-5 pb-5 pt-4">
+                        <div className="grid grid-cols-1 gap-3">
+                            <label className="text-xs font-semibold text-white">
                                 Gửi tới
                                 <select
                                     value={receiverName}
                                     onChange={(e) => setReceiverName(e.target.value)}
-                                    className="mt-1 w-full rounded-lg border border-white/20 bg-white/10 px-2.5 py-2 text-sm text-white outline-none focus:border-white/40"
+                                    className="mt-1 h-11 w-full rounded-xl border border-white/35 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition focus:border-rose-200 focus:ring-2 focus:ring-rose-200"
                                 >
                                     {receiverOptions.length === 0 && <option value="">Không có giáo viên phù hợp</option>}
                                     {receiverOptions.map((person) => (
@@ -235,24 +227,31 @@ export function BirthdaySendWishPopup({
                             </label>
                         </div>
 
-                        <label className="block text-white text-xs font-semibold">
+                        <label className="block text-xs font-semibold text-white">
                             Nội dung lời chúc
                             <textarea
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                                 maxLength={500}
-                                rows={4}
+                                rows={5}
                                 placeholder="Nhập lời chúc sinh nhật"
-                                className="mt-1 w-full rounded-lg border border-white/20 bg-white/10 px-2.5 py-2 text-sm text-white placeholder:text-white/60 outline-none focus:border-white/40 resize-none"
+                                className="mt-1 w-full resize-none rounded-2xl border border-white/35 bg-white px-3 py-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-rose-200 focus:ring-2 focus:ring-rose-200"
                             />
                         </label>
 
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/20" aria-hidden>
+                            <div
+                                className="h-full rounded-full bg-linear-to-r from-rose-200 via-orange-200 to-amber-200 transition-all"
+                                style={{ width: `${Math.min((messageLength / 500) * 100, 100)}%` }}
+                            />
+                        </div>
+
                         <div className="flex items-center justify-between gap-2">
-                            <p className="text-[11px] text-white/70">{message.trim().length}/500 ký tự</p>
+                            <p className={`text-[11px] font-semibold ${counterTone}`}>{messageLength}/500 ký tự</p>
                             <button
                                 type="submit"
                                 disabled={isSubmitting || !senderName || !receiverName}
-                                className="rounded-lg bg-white px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="rounded-xl bg-linear-to-r from-white to-rose-50 px-4 py-2.5 text-sm font-bold text-[#8d1425] shadow-md transition hover:from-rose-50 hover:to-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/75 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <span className="inline-flex items-center gap-2">
                                     {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -262,7 +261,7 @@ export function BirthdaySendWishPopup({
                         </div>
 
                         {error && (
-                            <p className="text-sm text-red-100 bg-red-500/35 border border-red-200/40 rounded-lg px-3 py-2">{error}</p>
+                            <p className="rounded-xl border border-red-200/40 bg-red-400/30 px-3 py-2 text-sm text-red-50">{error}</p>
                         )}
                     </form>
                 </div>

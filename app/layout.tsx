@@ -16,8 +16,13 @@ const exo = Exo({
 });
 
 export const metadata: Metadata = {
-  title: "Teaching Management System",
+  title: "Teaching Portal System (TPS)",
   description: "Hệ thống quản lý giảng dạy",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -27,6 +32,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Kaushan+Script&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className={`${exo.variable} font-exo bg-white text-gray-900`}>
         <ErrorBoundary>
           <StoreProvider>
