@@ -1513,15 +1513,13 @@ export default function TeacherAssignmentPage() {
             </div>
 
             {/* Feedback Message */}
-            <div className={`rounded-xl p-6 mb-6 ${isPassed ? 'bg-green-50 border-2 border-green-200' : 'bg-amber-50 border-2 border-amber-200'
-              }`}>
-              <p className="text-center text-gray-700">
-                {isPassed
-                  ? `Xuất sắc! Bạn đã hoàn thành bài tập với ${submission.score}/${currentAssignment?.passing_score} điểm đạt!`
-                  : `Bạn cần đạt tối thiểu ${currentAssignment?.passing_score} điểm để hoàn thành bài tập. Hãy thử lại nhé!`
-                }
-              </p>
-            </div>
+            {isPassed && (
+              <div className="rounded-xl p-6 mb-6 bg-green-50 border-2 border-green-200">
+                <p className="text-center text-gray-700">
+                  Xuất sắc! Bạn đã hoàn thành bài tập với {submission.score} điểm!
+                </p>
+              </div>
+            )}
 
             {/* Action Button */}
             <Button

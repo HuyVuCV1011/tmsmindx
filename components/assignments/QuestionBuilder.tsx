@@ -221,9 +221,36 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
   };
 
   const handleSave = async () => {
-    if (savingQuestion) return;
+    // Helper để làm sạch HTML trước khi lưu, giữ lại các thẻ format cơ bản (b, strong, i, em, u)
+    const cleanForDb = (html: string) => {
+      if (!html) return '';
+      if (typeof window === 'undefined') return html;
+      
+      const temp = document.createElement('div');
+      temp.innerHTML = html;
+      
+      // 1. Loại bỏ tất cả style, class, id rác (đặc biệt từ Google Docs/Form)
+      temp.querySelectorAll('*').forEach(el => {
+        const element = el as HTMLElement;
+        element.removeAttribute('style');
+        element.removeAttribute('class');
+        element.removeAttribute('id');
+      });
+      
+      // 2. Loại bỏ các thẻ span rác nhưng giữ lại text bên trong
+      temp.querySelectorAll('span').forEach(span => {
+        const text = span.textContent || '';
+        span.parentNode?.replaceChild(document.createTextNode(text), span);
+      });
 
-    if (!hasMeaningfulRichContent(questionText)) {
+      // Trả về HTML đã được dọn dẹp các thuộc tính rác nhưng vẫn giữ được thẻ b, strong, p...
+      return temp.innerHTML.trim();
+    };
+
+    // Strip HTML tags for validation
+    const plainText = questionText.replace(/<[^>]*>/g, '').trim();
+    
+    if (!plainText) {
       toast.error('Vui lòng nhập câu hỏi');
       return;
     }
