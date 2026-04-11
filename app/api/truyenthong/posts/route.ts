@@ -111,7 +111,8 @@ export async function POST(request: Request) {
             post_type,
             audience,
             status,
-            published_at
+            published_at,
+            thumbnail_position,
         } = body;
 
         let processedContent = content;
@@ -152,11 +153,12 @@ export async function POST(request: Request) {
             const result = await client.query(
                 `INSERT INTO communications (
           title, slug, description, content, featured_image, banner_image, 
-          post_type, audience, status, published_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+          post_type, audience, status, published_at, thumbnail_position
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
                 [
                     title, slug, description, processedContent, featured_image, banner_image,
-                    post_type, audience, status, published_at || new Date()
+                    post_type, audience, status, published_at || new Date(),
+                    thumbnail_position || '50% 50%'
                 ]
             );
             return NextResponse.json(result.rows[0], { status: 201, headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } });

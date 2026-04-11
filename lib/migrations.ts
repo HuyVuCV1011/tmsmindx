@@ -1055,6 +1055,18 @@ const migrations: Migration[] = [
         DROP COLUMN IF EXISTS status;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V46: Add thumbnail_position to communications
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V46_communications_thumbnail_position',
+    version: 46,
+    sql: `
+      ALTER TABLE communications
+        ADD COLUMN IF NOT EXISTS thumbnail_position VARCHAR(20) DEFAULT '50% 50%';
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

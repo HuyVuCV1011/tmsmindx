@@ -851,7 +851,7 @@ function LessonContent() {
         {/* Header - compact */}
         <div className="bg-gradient-to-r from-purple-900 to-indigo-900 px-4 py-2 flex items-center gap-3 z-50">
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push('/user/training')}
             className="p-1.5 hover:bg-white/10 rounded-full transition"
           >
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -3,9 +3,10 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import ThumbnailCropper from '@/components/ThumbnailCropper'
+import CroppedImage from '@/components/CroppedImage'
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import React, { useEffect, useState } from "react"
@@ -56,6 +57,8 @@ export default function EditPostPage() {
     const [thumbnailPreview, setThumbnailPreview] = useState<string>('')
     const [previousThumbnail, setPreviousThumbnail] = useState<string>('')
     const [previousThumbnailFile, setPreviousThumbnailFile] = useState<File | null>(null)
+    const [thumbnailPosition, setThumbnailPosition] = useState<string>('')
+    const [showCropper, setShowCropper] = useState(false)
 
     // Populate form data when postData is loaded
     useEffect(() => {
@@ -74,6 +77,9 @@ export default function EditPostPage() {
             // Set preview images from existing data
             if (postData.featured_image) {
                 setThumbnailPreview(postData.featured_image)
+            }
+            if (postData.thumbnail_position) {
+                setThumbnailPosition(postData.thumbnail_position)
             }
         }
     }, [postData])
@@ -197,7 +203,8 @@ export default function EditPostPage() {
                 audience: formData.audience,
                 published_at: formData.publishDate ? new Date(formData.publishDate).toISOString() : new Date().toISOString(),
                 featured_image,
-                banner_image: featured_image // Maintain backwards compatibility
+                banner_image: featured_image, // Maintain backwards compatibility
+                thumbnail_position: thumbnailPosition,
             }
 
             const res = await fetch(`/api/truyenthong/posts/${slug}`, {
@@ -241,6 +248,18 @@ export default function EditPostPage() {
 
     return (
         <div className="space-y-5">
+            {/* Crop Modal */}
+            {showCropper && thumbnailPreview && (
+                <ThumbnailCropper
+                    src={thumbnailPreview}
+                    initialCrop={thumbnailPosition}
+                    onSave={(cropJson) => {
+                        setThumbnailPosition(cropJson)
+                        setShowCropper(false)
+                    }}
+                    onCancel={() => setShowCropper(false)}
+                />
+            )}
             {/* Header */}
             <div className="flex items-center gap-3 pb-4 border-b border-gray-200">
                 <Link href="/admin/truyenthong">
@@ -346,33 +365,46 @@ export default function EditPostPage() {
                                         className="group focus:outline-none focus-within:ring-2 focus-within:ring-blue-500/50 rounded-xl transition-all"
                                     >
                                         {thumbnailPreview ? (
-                                            <div className="relative">
-                                                <div className="relative overflow-hidden rounded-xl border-2 border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 p-3 flex justify-center">
-                                                    <Image 
-                                                        src={thumbnailPreview} 
-                                                        alt="Thumbnail preview" 
-                                                        width={600} 
-                                                        height={350} 
-                                                        className="rounded-lg max-h-[300px] w-auto object-contain shadow-md" 
-                                                    />
+                                            <div className="space-y-3">
+                                                <div className="relative">
+                                                    {/* Preview thumbnail — click để mở crop modal */}
+                                                    <div
+                                                        className="rounded-xl border-2 border-gray-200 bg-gray-100 cursor-pointer group overflow-hidden"
+                                                        style={{ aspectRatio: '16/9', position: 'relative' }}
+                                                        onClick={() => setShowCropper(true)}
+                                                        title="Nhấn để chỉnh vùng hiển thị"
+                                                    >
+                                                        <CroppedImage
+                                                            src={thumbnailPreview}
+                                                            alt="Thumbnail preview"
+                                                            cropData={thumbnailPosition}
+                                                            style={{ position: 'absolute', inset: 0 }}
+                                                        />
+                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 z-10">
+                                                            <span className="bg-black/60 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5 backdrop-blur-sm font-semibold">
+                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 16H9v-3z" /></svg>
+                                                                Chỉnh vùng hiển thị
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {/* Nút xóa */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setPreviousThumbnail(thumbnailPreview)
+                                                            setPreviousThumbnailFile(files.thumbnail)
+                                                            setThumbnailPreview('')
+                                                            setFiles(prev => ({ ...prev, thumbnail: null }))
+                                                            setThumbnailPosition('50% 50%')
+                                                            toast.success('Đã xóa ảnh thumbnail. Nhấn Ctrl+Z để khôi phục')
+                                                        }}
+                                                        className="absolute -top-2 -right-2 z-10 p-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full hover:from-red-600 hover:to-red-700 transition-all shadow-lg hover:shadow-xl hover:scale-110 cursor-pointer"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        // Save current state for undo
-                                                        setPreviousThumbnail(thumbnailPreview)
-                                                        setPreviousThumbnailFile(files.thumbnail)
-                                                        
-                                                        setThumbnailPreview('')
-                                                        setFiles(prev => ({ ...prev, thumbnail: null }))
-                                                        toast.success('Đã xóa ảnh thumbnail. Nhấn Ctrl+Z để khôi phục')
-                                                    }}
-                                                    className="absolute -top-2 -right-2 p-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full hover:from-red-600 hover:to-red-700 transition-all shadow-lg hover:shadow-xl hover:scale-110 cursor-pointer"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
-                                                </button>
                                             </div>
                                         ) : (
                                             <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 hover:from-blue-50 hover:to-indigo-50 transition-all">

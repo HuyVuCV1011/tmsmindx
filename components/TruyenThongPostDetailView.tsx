@@ -1,17 +1,16 @@
 'use client'
 
 import Comments from '@/components/Comments'
+import CroppedImage from '@/components/CroppedImage'
 import PostCard from '@/components/post-card'
 import PostContentRenderer from '@/components/PostContentRenderer'
 import { PostDetailSkeleton } from '@/components/skeletons'
 import { Button } from '@/components/ui/button'
 import { Angry, ArrowLeft, Calendar, Check, Eye, FileText, Frown, Heart, Laugh, Share2, ThumbsUp } from 'lucide-react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useParams, usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-
 import { useAuth } from '@/lib/auth-context'
 
 export type TruyenThongPostDetailMode = 'user' | 'admin'
@@ -24,6 +23,7 @@ interface Post {
     content: string
     featured_image: string
     banner_image: string
+    thumbnail_position?: string
     post_type: string
     published_at: string
     view_count: number
@@ -287,14 +287,11 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
 
             <main className="max-w-7xl mx-auto">
                 <div className="relative w-full h-72 md:h-96 rounded-xl overflow-hidden mb-5 shadow-lg">
-                    <Image
-                        src={post.featured_image || "/placeholder.svg"}
+                    <CroppedImage
+                        src={post.featured_image || '/placeholder.svg'}
                         alt={post.title}
-                        fill
-                        className="object-cover"
-                        priority
-                        placeholder="blur"
-                        blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzAwIiBoZWlnaHQ9IjQ3NSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2ZXJzaW9uPSIxLjEiLz4="
+                        cropData={post.thumbnail_position}
+                        style={{ position: 'absolute', inset: 0 }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-5">
