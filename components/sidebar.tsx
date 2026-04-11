@@ -336,6 +336,28 @@ export function Sidebar() {
 
   return (
     <>
+      {/* Mobile header: visible on pages, hidden while sidebar is open */}
+      {!isOpen && (
+        <div className="fixed left-0 right-0 top-0 z-sidebar-toggle lg:hidden">
+          <div className="flex items-center justify-between border border-gray-200 bg-white px-3 py-2 shadow-sm">
+            <div className="flex items-center gap-2">
+              <Image src="/logo.svg" alt="MindX Technology School" width={92} height={40} className="h-7 w-auto" priority />
+              <div className="leading-tight">
+                <p className="text-sm font-bold tracking-wide text-[#2c2b2b]">TPS</p>
+                <p className="text-[11px] font-medium text-[#6a6a6a]">Quản Lý Giảng Dạy</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsOpen(true)}
+              aria-label="Mở sidebar"
+              className="rounded-md p-1.5 text-[#1f1f1f] transition-all duration-200 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2"
+            >
+              <Menu className="h-3 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Mobile Overlay */}
       {isOpen && (
         <div
@@ -344,11 +366,12 @@ export function Sidebar() {
         />
       )}
 
-      {/* Toggle Button - Modern floating design */}
+      {/* Desktop toggle button when sidebar is collapsed */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed top-3 left-3 z-sidebar-toggle rounded-lg border border-gray-200 bg-white p-2 shadow-md transition-all duration-300 group animate-in fade-in-0 slide-in-from-left-2 hover:scale-105 hover:border-[#a1001f] hover:bg-[#a1001f] hover:text-white hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2"
+          className="fixed top-3 left-3 z-sidebar-toggle hidden rounded-lg border border-gray-200 bg-white p-2 shadow-md transition-all duration-300 group animate-in fade-in-0 slide-in-from-left-2 hover:scale-105 hover:border-[#a1001f] hover:bg-[#a1001f] hover:text-white hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2 lg:block"
+          aria-label="Mở sidebar"
         >
           <Menu className="h-4 w-4 transition-transform group-hover:rotate-180 duration-300" />
         </button>
