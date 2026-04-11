@@ -319,6 +319,10 @@ function isPastDate(date: Date) {
   return startOfDay(date).getTime() < startOfDay(new Date()).getTime();
 }
 
+function isFutureDate(date: Date) {
+  return startOfDay(date).getTime() > startOfDay(new Date()).getTime();
+}
+
 function normalizeSearchString(value: string) {
   return value
     .normalize("NFD")
@@ -1040,6 +1044,10 @@ export default function MonthlyActivitiesPage() {
       (event) => event.eventType === "registration" && !isPastEvent(event)
     );
     if (registrationEvent && dateEvents.length === 1) {
+      if (isFutureDate(date)) {
+        toast(`Chưa tới ngày đăng ký. Vui lòng quay lại vào ngày ${date.toLocaleDateString("vi-VN")}.`);
+        return;
+      }
       setSelectedDate(date);
       openRegisterModalForEvent(registrationEvent);
       return;
@@ -1057,6 +1065,10 @@ export default function MonthlyActivitiesPage() {
     setSelectedDate(date);
 
     if (event.eventType === "registration") {
+      if (isFutureDate(date)) {
+        toast(`Chưa tới ngày đăng ký. Vui lòng quay lại vào ngày ${date.toLocaleDateString("vi-VN")}.`);
+        return;
+      }
       openRegisterModalForEvent(event);
       return;
     }
@@ -1066,6 +1078,11 @@ export default function MonthlyActivitiesPage() {
 
   const openRegisterModalFromDay = () => {
     if (!selectedDate) {
+      return;
+    }
+
+    if (isFutureDate(selectedDate)) {
+      toast(`Chưa tới ngày đăng ký. Vui lòng quay lại vào ngày ${selectedDate.toLocaleDateString("vi-VN")}.`);
       return;
     }
 
@@ -1450,7 +1467,7 @@ export default function MonthlyActivitiesPage() {
                     </span>
                   )}
 
-                  {hasActiveRegistration && !isPastCalendarDate && (
+                  {hasActiveRegistration && !isPastCalendarDate && !isFutureDate(date) && (
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
                       Đăng ký
                     </span>
@@ -1542,7 +1559,8 @@ export default function MonthlyActivitiesPage() {
               ) : (
                 selectedDayEvents.map((event) => {
                   const eventIsPast = isPastEvent(event);
-                  const canRegister = event.eventType === "registration" && !eventIsPast;
+                  const isRegistrationDateFuture = !!selectedDate && isFutureDate(selectedDate);
+                  const canRegister = event.eventType === "registration" && !eventIsPast && !isRegistrationDateFuture;
                   const supportsParticipantList = event.eventType === "exam" || !event.eventType;
                   const registeredCount = (registeredParticipantsByEvent[event.id] || []).length;
                   const matchedExamAssignment = examAssignmentByEventId[event.id] || null;
@@ -1587,6 +1605,14 @@ export default function MonthlyActivitiesPage() {
                         <p className="text-xs font-semibold text-gray-500">Sự kiện đã qua</p>
                       )}
                     </div>
+
+                    {event.eventType === "registration" && !eventIsPast && isRegistrationDateFuture && (
+                      <div className="mt-3 border-t border-gray-200 pt-3">
+                        <p className="text-xs font-semibold text-amber-700">
+                          ⏰ Chưa tới ngày đăng ký. Vui lòng quay lại vào ngày {selectedDate?.toLocaleDateString("vi-VN")}.
+                        </p>
+                      </div>
+                    )}
 
                     {canRegister && (
                       <div className="mt-3 border-t border-gray-200 pt-3">

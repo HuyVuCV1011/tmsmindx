@@ -111,11 +111,11 @@ export default function TeacherAssignmentPage() {
   const [examLoading, setExamLoading] = useState(true);
   const [error, setError] = useState('');
   const [teacherCode, setTeacherCode] = useState('');
-  const [activeMainTab, setActiveMainTab] = useState<'exam' | 'scores' | 'explanations' | 'training'>('exam');
+  const [activeMainTab, setActiveMainTab] = useState<'available' | 'list' | 'training'>('available');
 
   const [selectedExamMonth, setSelectedExamMonth] = useState('6months');
   const [scoreTypeFilter, setScoreTypeFilter] = useState<'all' | 'expertise' | 'experience'>('all');
-  const [scoreResultFilter, setScoreResultFilter] = useState<'all' | 'passed' | 'failed' | 'missing' | 'needs_explanation' | 'has_explanation'>('all');
+  const [scoreResultFilter, setScoreResultFilter] = useState<'all' | 'done' | 'waiting' | 'pending' | 'accepted' | 'rejected'>('all');
   const [scoreSubjectKeyword, setScoreSubjectKeyword] = useState('');
 
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
@@ -169,12 +169,6 @@ export default function TeacherAssignmentPage() {
   const searchParams = useSearchParams();
   const startId = searchParams.get('start_assignment_id');
   const tabParam = searchParams.get('tab');
-
-  useEffect(() => {
-    if (tabParam === 'explanations' && activeMainTab !== 'explanations') {
-      setActiveMainTab('explanations');
-    }
-  }, [tabParam, activeMainTab]);
 
   // Auto-start assignment logic
   useEffect(() => {
@@ -1010,17 +1004,25 @@ export default function TeacherAssignmentPage() {
       }
 
       if (scoreResultFilter !== 'all') {
-        const { score, isMissedCurrentMonth } = getEffectiveExamScore(item);
-        if (scoreResultFilter === 'passed') {
-          if (!isExamPassed(item, score)) return false;
-        } else if (scoreResultFilter === 'failed') {
-          if (score === null || isExamPassed(item, score)) return false;
-        } else if (scoreResultFilter === 'missing') {
-          if (!isMissedCurrentMonth) return false;
-        } else if (scoreResultFilter === 'needs_explanation') {
-          if (!isMissedCurrentMonth || item.explanation_status) return false;
-        } else if (scoreResultFilter === 'has_explanation') {
-          if (!item.explanation_status) return false;
+        // Mirror admin "Thao tác HO" badge logic using score_handling_note (= xu_ly_diem)
+        const xuLower = (item.score_handling_note || '').trim().toLowerCase();
+        const isAccepted = xuLower === 'đã duyệt';
+        const isRejected = xuLower === 'từ chối';
+        const isWaiting  = xuLower === 'chờ giải trình';
+        const isDone     = item.score !== null || xuLower === 'đã hoàn thành' || xuLower === 'da thi';
+        // Pending = not yet done/waiting/accepted/rejected
+        const isPending  = !isDone && !isWaiting && !isAccepted && !isRejected;
+
+        if (scoreResultFilter === 'done') {
+          if (!isDone) return false;
+        } else if (scoreResultFilter === 'waiting') {
+          if (!isWaiting) return false;
+        } else if (scoreResultFilter === 'pending') {
+          if (!isPending) return false;
+        } else if (scoreResultFilter === 'accepted') {
+          if (!isAccepted) return false;
+        } else if (scoreResultFilter === 'rejected') {
+          if (!isRejected) return false;
         }
       }
 
@@ -1637,9 +1639,8 @@ export default function TeacherAssignmentPage() {
   };
 
   const mainTabs = [
-    { id: 'exam', label: 'Kiểm tra chuyên môn & Quy trình - kỹ năng trải nghiệm' },
-    { id: 'scores', label: 'Điểm kiểm tra', count: examAssignments.length },
-    { id: 'explanations', label: 'Giải trình điểm kiểm tra' },
+    { id: 'available', label: 'Bài kiểm tra khả dụng' },
+    { id: 'list', label: 'Danh sách bài kiểm tra', count: examAssignments.length },
   ];
 
   return (
@@ -1664,14 +1665,14 @@ export default function TeacherAssignmentPage() {
           }
         `}</style>
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Bài tập của tôi</h1>
-          <p className="text-gray-600">Danh sách các bài tập được giao cho bạn</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Bài kiểm tra của tôi</h1>
+          <p className="text-gray-600">Danh sách các bài kiểm tra đã được đăng ký.</p>
         </div>
 
         <Tabs
           tabs={mainTabs}
           activeTab={activeMainTab}
-          onChange={(tabId) => setActiveMainTab(tabId as 'exam' | 'scores' | 'explanations' | 'training')}
+          onChange={(tabId) => setActiveMainTab(tabId as 'available' | 'list' | 'training')}
         />
 
         {error ? (
@@ -1679,83 +1680,67 @@ export default function TeacherAssignmentPage() {
             <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
             <p className="text-red-700 font-medium">{error}</p>
           </div>
-        ) : activeMainTab === 'exam' ? (
-          <div key="exam" className="mt-6 animate-tab-enter">
+        ) : activeMainTab === 'available' ? (
+          <div key="available" className="mt-6 animate-tab-enter">
             {examLoading ? (
               <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500 shadow-sm">
-                Đang tải bài thi tháng này...
+                Đang tải bài kiểm tra...
               </div>
-            ) : currentMonthExams.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
-                <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
-                <p className="text-sm text-gray-500">Tháng này chưa có bộ môn/bài thi nào được giao.</p>
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {currentMonthExams.map((item) => {
-                  const now = new Date();
-                  const countdown = getExamCountdownInfo(item);
-                  return (
-                    <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:shadow-md transition-all flex flex-col">
-                      <div className="mb-3 flex items-start justify-between gap-2">
-                        <h4 className="line-clamp-2 text-base font-bold text-gray-900">{item.subject_code}</h4>
-                        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getExamStatusClass(item)}`}>
-                          {getExamStatusLabel(item)}
-                        </span>
-                      </div>
-
-                      <div className="mb-4 space-y-2 text-sm text-gray-600 flex-1">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Mở:</span>
-                          <span>{new Date(item.open_at).toLocaleDateString('vi-VN')} {new Date(item.open_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+            ) : (() => {
+              const availableNow = examAssignments.filter(item => item.can_take === true);
+              return availableNow.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
+                  <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
+                  <p className="text-sm font-semibold text-gray-700 mb-1">Hiện tại không có bài kiểm tra nào đang mở.</p>
+                  <p className="text-xs text-gray-500">Những môn bạn đã đăng ký sẽ xuất hiện ở đây khi đến giờ làm bài.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {availableNow.map((item) => {
+                    const countdown = getExamCountdownInfo(item);
+                    return (
+                      <div key={item.id} className="rounded-lg border-2 border-blue-200 bg-white p-5 shadow-sm hover:shadow-md transition-all flex flex-col">
+                        <div className="mb-3 flex items-start justify-between gap-2">
+                          <h4 className="line-clamp-2 text-base font-bold text-gray-900">{item.subject_code}</h4>
+                          <span className="shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold bg-green-100 text-green-700 border-green-300">
+                            Đang mở
+                          </span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Đóng:</span>
-                          <span>{new Date(item.close_at).toLocaleDateString('vi-VN')} {new Date(item.close_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <div className="mb-4 space-y-2 text-sm text-gray-600 flex-1">
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Loại:</span>
+                            <span className="font-medium text-gray-900">{item.exam_type === 'expertise' ? 'Chuyên môn' : 'Quy trình - KN trải nghiệm'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Mở:</span>
+                            <span>{new Date(item.open_at).toLocaleDateString('vi-VN')} {new Date(item.open_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Đóng:</span>
+                            <span>{new Date(item.close_at).toLocaleDateString('vi-VN')} {new Date(item.close_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <div className={`mt-3 flex items-center justify-between rounded-md border px-3 py-2 ${countdown.className}`}>
+                            <span className="text-xs font-semibold">{countdown.label}</span>
+                            <span className="font-mono text-sm font-bold">{countdown.value}</span>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Loại:</span>
-                          <span className="font-medium text-gray-900">{item.exam_type === 'expertise' ? 'Chuyên môn' : 'Quy trình - KN trải nghiệm'}</span>
-                        </div>
-                        <div className={`mt-3 flex items-center justify-between rounded-md border px-3 py-2 ${countdown.className}`}>
-                          <span className="text-xs font-semibold">{countdown.label}</span>
-                          <span className="font-mono text-sm font-bold">{countdown.value}</span>
-                        </div>
-                      </div>
-
-                      <div className="pt-3 border-t border-gray-100">
-                        {item.can_take && nowTs >= new Date(item.open_at).getTime() ? (
+                        <div className="pt-3 border-t border-gray-100">
                           <Link
                             href={`/user/assignments/exam/${item.id}`}
                             className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
                           >
-                            {'Bắt đầu làm bài'}
+                            {item.score !== null || item.assignment_status === 'submitted' ? 'Làm bài' : 'Bắt đầu làm bài'}
                           </Link>
-                        ) : shouldShowExplanationCTA(item) ? (
-                          <Link
-                            href={buildExplanationHref(item)}
-                            className="inline-flex w-full items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition cursor-pointer"
-                          >
-                            Giải trình
-                          </Link>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedExamInfo(item)}
-                            className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 border border-blue-100 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
-                          >
-                            {nowTs < new Date(item.open_at).getTime() ? 'Chưa tới giờ mở' : 'Chi tiết bài thi'}
-                          </button>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
-        ) : activeMainTab === 'scores' ? (
-          <div key="scores" className="mt-6 space-y-6 animate-tab-enter">
+        ) : activeMainTab === 'list' ? (
+          <div key="list" className="mt-6 space-y-6 animate-tab-enter">
             {/* 1. General Overview Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <button
@@ -1986,11 +1971,11 @@ export default function TeacherAssignmentPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="all">Tất cả / Bất kỳ</option>
-                    <option value="passed">Đã đạt</option>
-                    <option value="failed">Chưa đạt</option>
-                    <option value="missing">Bỏ lỡ thi</option>
-                    <option value="needs_explanation">Cần giải trình</option>
-                    <option value="has_explanation">Đã giải trình</option>
+                    <option value="done">Done</option>
+                    <option value="waiting">Waiting</option>
+                    <option value="pending">Pending</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="rejected">Rejected</option>
                   </select>
 
                   {(scoreSubjectKeyword || selectedExamMonth !== '6months' || scoreTypeFilter !== 'all' || scoreResultFilter !== 'all') && (
@@ -2103,7 +2088,7 @@ export default function TeacherAssignmentPage() {
                                         href={`/user/assignments/exam/${item.id}`}
                                         className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
                                       >
-                                        {item.score !== null || item.assignment_status === 'submitted' ? 'Làm lại bài' : 'Bắt đầu làm bài'}
+                                        {item.score !== null || item.assignment_status === 'submitted' ? 'Làm bài' : 'Bắt đầu làm bài'}
                                       </Link>
                                     ) : shouldShowExplanationCTA(item) ? (
                                       <Link
@@ -2157,10 +2142,6 @@ export default function TeacherAssignmentPage() {
                 })}
               </div>
             )}
-          </div>
-        ) : activeMainTab === 'explanations' ? (
-          <div key="explanations" className="mt-6 animate-tab-enter">
-            <ExplanationSection compact />
           </div>
         ) : assignments.length === 0 ? (
           <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">

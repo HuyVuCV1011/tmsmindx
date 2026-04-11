@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withApiProtection } from "@/lib/api-protection";
-
-const CSV_URL = process.env.NEXT_PUBLIC_RAWDATA_EXPERTISE_CSV_URL || "";
+import pool from "@/lib/db";
 
 interface TestRecord {
   area: string;
@@ -39,83 +38,71 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     return NextResponse.json({ error: "Mã giáo viên là bắt buộc" }, { status: 400 });
   }
 
-  // Token verification not needed for rawdata - only teacher info API needs it
-
+  const client = await pool.connect();
   try {
-    const response = await fetch(CSV_URL);
-    const csvText = await response.text();
+    // Lấy kết quả thi từ DB, kèm thông tin môn học và trạng thái giải trình
+    const result = await client.query(
+      `SELECT
+         r.khu_vuc            AS area,
+         r.ho_ten             AS name,
+         r.dia_chi_email      AS email,
+         COALESCE(mh.ten_mon, mh.ma_mon, r.id_mon::text, '') AS subject,
+         r.co_so_lam_viec     AS branch,
+         r.ma_giao_vien       AS code,
+         r.hinh_thuc          AS type,
+         r.thang_dk           AS month,
+         r.nam_dk             AS year,
+         r.dot                AS batch,
+         r.thoi_gian_kiem_tra AS time,
+         r.cau_dung           AS correct,
+         r.diem               AS score,
+         r.email_giai_trinh   AS email_explanation,
+         r.xu_ly_diem         AS processing,
+         EXISTS (
+           SELECT 1 FROM chuyen_sau_giaitrinh g
+           WHERE g.id_ket_qua = r.id
+             AND g.xu_ly_giai_trinh = 'đã duyệt'
+           LIMIT 1
+         ) AS has_accepted_explanation
+       FROM chuyen_sau_results r
+       LEFT JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
+       WHERE LOWER(TRIM(COALESCE(r.ma_giao_vien, ''))) = LOWER(TRIM($1))
+         AND r.thang_dk IS NOT NULL
+         AND r.nam_dk   IS NOT NULL
+       ORDER BY r.nam_dk DESC, r.thang_dk DESC`,
+      [code]
+    );
 
-    const lines = csvText.split("\n");
-    const records: TestRecord[] = [];
+    const records: TestRecord[] = result.rows.map((row) => {
+      const score = parseFloat(String(row.score ?? "0")) || 0;
+      const didNotSubmit = row.processing !== "đã hoàn thành";
+      // Loại trừ khỏi trung bình: user không nộp bài VÀ có giải trình được duyệt
+      const isCountedInAverage = !(didNotSubmit && row.has_accepted_explanation);
+      const dateStr = `${row.month}/${row.year}`;
 
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-
-      const columns: string[] = [];
-      let currentColumn = "";
-      let insideQuotes = false;
-
-      for (let j = 0; j < line.length; j++) {
-        const char = line[j];
-        if (char === '"') {
-          insideQuotes = !insideQuotes;
-        } else if (char === "," && !insideQuotes) {
-          columns.push(currentColumn);
-          currentColumn = "";
-        } else {
-          currentColumn += char;
-        }
-      }
-      columns.push(currentColumn);
-
-      const teacherCode = columns[5]?.trim().toLowerCase();
-      if (teacherCode !== code.toLowerCase()) continue;
-
-      const score = parseFloat(columns[13]?.replace(",", ".") || "0");
-      const emailExplanation = columns[14]?.trim() || "";
-      
-      let dateStr = columns[16]?.trim();
-      if (!dateStr && columns[7] && columns[8]) {
-        dateStr = `${columns[7]}/${columns[8]}`;
-      }
-
-      const isCountedInAverage = !(score === 0 && emailExplanation === "Đã email giải trình");
-
-      const record: TestRecord = {
-        area: columns[0]?.trim() || "",
-        name: columns[1]?.trim() || "",
-        email: columns[2]?.trim() || "",
-        subject: columns[3]?.trim() || "",
-        branch: columns[4]?.trim() || "",
-        code: columns[5]?.trim() || "",
-        type: columns[6]?.trim() || "",
-        month: columns[7]?.trim() || "",
-        year: columns[8]?.trim() || "",
-        batch: columns[9]?.trim() || "",
-        time: columns[10]?.trim() || "",
-        exam: columns[11]?.trim() || "",
-        correct: columns[12]?.trim() || "",
-        score: columns[13]?.trim() || "0",
-        emailExplanation: emailExplanation,
-        processing: columns[15]?.trim() || "",
-        date: dateStr || "",
-        isCountedInAverage: isCountedInAverage,
+      return {
+        area:             row.area || "",
+        name:             row.name || "",
+        email:            row.email || "",
+        subject:          row.subject || "",
+        branch:           row.branch || "",
+        code:             row.code || "",
+        type:             row.type || "",
+        month:            String(row.month || ""),
+        year:             String(row.year || ""),
+        batch:            row.batch || "",
+        time:             row.time || "",
+        exam:             "",
+        correct:          String(row.correct ?? "0"),
+        score:            String(score),
+        emailExplanation: row.email_explanation || "",
+        processing:       row.processing || "",
+        date:             dateStr,
+        isCountedInAverage,
       };
-
-      records.push(record);
-    }
-
-    records.sort((a, b) => {
-      const yearA = parseInt(a.year) || 0;
-      const yearB = parseInt(b.year) || 0;
-      if (yearA !== yearB) return yearB - yearA;
-      
-      const monthA = parseInt(a.month) || 0;
-      const monthB = parseInt(b.month) || 0;
-      return monthB - monthA;
     });
 
+    // Nhóm theo tháng/năm và tính trung bình
     const monthlyMap = new Map<string, TestRecord[]>();
     records.forEach((record) => {
       if (!monthlyMap.has(record.date)) {
@@ -128,23 +115,11 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     monthlyMap.forEach((monthRecords, month) => {
       const countedRecords = monthRecords.filter((r) => r.isCountedInAverage);
       if (countedRecords.length > 0) {
-        const sum = countedRecords.reduce((acc, r) => {
-          return acc + parseFloat(r.score.replace(",", "."));
-        }, 0);
+        const sum = countedRecords.reduce((acc, r) => acc + parseFloat(r.score), 0);
         const average = sum / countedRecords.length;
-        monthlyData.push({
-          month: month,
-          average: average,
-          count: countedRecords.length,
-          records: monthRecords,
-        });
+        monthlyData.push({ month, average, count: countedRecords.length, records: monthRecords });
       } else {
-        monthlyData.push({
-          month: month,
-          average: 0,
-          count: 0,
-          records: monthRecords,
-        });
+        monthlyData.push({ month, average: 0, count: 0, records: monthRecords });
       }
     });
 
@@ -156,16 +131,18 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     });
 
     return NextResponse.json({
-      records: records,
-      monthlyData: monthlyData,
+      records,
+      monthlyData,
       totalRecords: records.length,
       teacherCode: code,
     });
   } catch (error) {
-    console.error("Error fetching raw data:", error);
+    console.error("Error fetching rawdata from DB:", error);
     return NextResponse.json(
-      { error: "Lỗi khi lấy dữ liệu từ Google Sheets" },
+      { error: "Lỗi khi lấy dữ liệu" },
       { status: 500 }
     );
+  } finally {
+    client.release();
   }
 });

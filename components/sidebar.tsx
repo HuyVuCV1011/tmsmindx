@@ -174,8 +174,13 @@ export function Sidebar() {
       icon: GraduationCap,
       submenu: [
         { href: "/user/training", label: "Đào tạo nâng cao" },
-        { href: "/user/assignments", label: "Kiểm tra chuyên môn" },
-        { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
+        {
+          label: "Kiểm tra chuyên môn/Trải nghiệm",
+          submenu: [
+            { href: "/user/assignments", label: "Quản lý kiểm tra" },
+            { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
+          ]
+        },
       ]
     },
     { href: "/user/page2", label: "Quy trình & Quy định", icon: BookOpen },
