@@ -97,11 +97,18 @@ export function Sidebar() {
         { href: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện" },
         { href: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi" },
         {
-          label: "Quản lý Deal Lương",
+          label: "Quản lý điều phối",
           submenu: [
-            { href: "/admin/deal-luong?type=salary_deal", label: "Thỏa thuận lương " },
+            { href: "/admin/xin-nghi-mot-buoi", label: "Danh sách yêu cầu xin nghỉ 1 buổi" },
+          ]
+        },
+        {
+          label: "Quản lý Nâng/Hạ Lương",
+          icon: DollarSign,
+          submenu: [
+            { href: "/admin/deal-luong?type=salary_deal", label: "Thỏa thuận lương" },
             { href: "/admin/deal-luong?type=salary_reduction", label: "Hạ lương" },
-            { href: "/admin/deal-luong?type=bonus", label: "Nâng Lương" },
+            { href: "/admin/deal-luong?type=bonus", label: "Nâng lương" },
           ]
         },
       ]
@@ -114,19 +121,19 @@ export function Sidebar() {
           label: "Đào Tạo Nâng Cao",
           icon: FileText,
           submenu: [
-            { href: "/admin/page5", label: "Quản lý đào tạo nâng cao" },
-            { href: "/admin/assignments", label: "Cấu hình bài kiểm tra" },
+            { href: "/admin/page5", label: "Thư viện video nâng cao" },
+            { href: "/admin/assignments", label: "Thư viện đề nâng cao" },
             { href: "/admin/training-dashboard", label: "Thống kê" },
           ]
         },
         {
-          label: "Đánh giá năng lực Giáo Viên",
+          label: "Kiểm Tra Chuyên Môn/Trải Nghiệm",
           icon: Settings,
           submenu: [
             // { href: "/admin/page4/form-dang-ky", label: "Form đăng ký kiểm tra" }, 
             { href: "/admin/page4/danh-sach-dang-ky", label: "Danh sách Giáo viên đăng ký" },
             { href: "/admin/giaitrinh", label: "Quản lý Giải trình"},
-            { href: "/admin/page4/thu-vien-de", label: "Thư viện đề chuyên môn" },
+            { href: "/admin/thu-vien-de", label: "Thư viện đề chuyên môn" },
           ]
         },
         {
@@ -167,8 +174,13 @@ export function Sidebar() {
       icon: GraduationCap,
       submenu: [
         { href: "/user/training", label: "Đào tạo nâng cao" },
-        { href: "/user/assignments", label: "Kiểm tra chuyên môn" },
-        { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
+        {
+          label: "Kiểm tra chuyên môn/Trải nghiệm",
+          submenu: [
+            { href: "/user/assignments", label: "Quản lý kiểm tra" },
+            { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
+          ]
+        },
       ]
     },
     { href: "/user/page2", label: "Quy trình & Quy định", icon: BookOpen },
@@ -183,6 +195,16 @@ export function Sidebar() {
     // Sibling routes in submenu: only exact match, not startsWith
     // So /admin/page2 only matches /admin/page2, NOT /admin/page2/manage
     return pathname === href;
+  };
+
+  const getRoutePermissionAliases = (path: string) => {
+    if (path === '/admin/thu-vien-de') {
+      return ['/admin/thu-vien-de', '/admin/page4/thu-vien-de'];
+    }
+    if (path === '/admin/page4/thu-vien-de') {
+      return ['/admin/page4/thu-vien-de', '/admin/thu-vien-de'];
+    }
+    return [path];
   };
 
   const isMenuItemActive = (item: any): boolean => {
@@ -225,10 +247,9 @@ export function Sidebar() {
 
     const hasPermissionForHref = (href: string) => {
       const targetPath = href.split('?')[0];
-      return effectivePermissions.some((p) => {
-        const normalizedPermission = p.split('?')[0];
-        return targetPath === normalizedPermission || targetPath.startsWith(`${normalizedPermission}/`);
-      });
+      return permissions.some(
+        (p) => targetPath === p || targetPath.startsWith(`${p}/`) || p.startsWith(`${targetPath}/`)
+      );
     };
 
     const filterMenuItemsByPermissions = (items: any[]): any[] => {

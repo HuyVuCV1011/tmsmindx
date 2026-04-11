@@ -91,7 +91,7 @@ export function ConfirmDialog({
             </div>
             <div>
               <h3 className="text-lg font-bold text-gray-900 leading-tight">{title}</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Vui long xac nhan hanh dong nay</p>
+              <p className="text-xs text-gray-500 mt-0.5">Vui lòng xác nhận hành động này</p>
             </div>
           </div>
           <button

@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     const maxOrderResult = await pool.query(
-      'SELECT COALESCE(MAX(order_number), 0) as max_order FROM exam_set_questions WHERE set_id = $1',
+      'SELECT COALESCE(MAX(display_order), 0) as max_order FROM chuyen_sau_bode_cauhoi WHERE set_id = $1',
       [setId]
     );
     let currentOrder = Number(maxOrderResult.rows[0]?.max_order || 0);
@@ -77,10 +77,7 @@ export async function POST(request: NextRequest) {
           row[header] = values[index] || '';
         });
 
-        if (!row.question_text?.trim()) {
-          errors.push(`Dòng ${i + 1}: Thiếu nội dung câu hỏi`);
-          continue;
-        }
+        const normalizedQuestionText = row.question_text?.trim() || '[Tam] Chua dan noi dung tu doc';
 
         if (!row.question_type?.trim()) {
           errors.push(`Dòng ${i + 1}: Thiếu loại câu hỏi`);
@@ -123,26 +120,34 @@ export async function POST(request: NextRequest) {
         }
 
         currentOrder++;
-        const result = await pool.query(
-          `INSERT INTO exam_set_questions
-          (set_id, question_text, question_type, correct_answer, options, points, explanation, order_number, created_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        const insertQuestion = await pool.query(
+          `INSERT INTO chuyen_sau_cauhoi
+          (question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, explanation, points, difficulty, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
           RETURNING id`,
           [
-            setId,
-            row.question_text.trim(),
-            row.question_type,
-            row.correct_answer?.trim() || null,
-            optionsArray ? JSON.stringify(optionsArray) : null,
-            points,
+            normalizedQuestionText,
+            row.question_type === 'essay' ? 'short_answer' : row.question_type,
+            optionsArray?.[0] || null,
+            optionsArray?.[1] || null,
+            optionsArray?.[2] || null,
+            optionsArray?.[3] || null,
+            row.correct_answer?.trim() || '',
             row.explanation?.trim() || null,
-            currentOrder,
+            points,
+            ['easy', 'medium', 'hard'].includes((row.difficulty || '').trim()) ? row.difficulty.trim() : 'medium',
           ]
         );
 
+        await pool.query(
+          `INSERT INTO chuyen_sau_bode_cauhoi (set_id, question_id, display_order, created_at)
+           VALUES ($1, $2, $3, NOW())`,
+          [setId, insertQuestion.rows[0].id, currentOrder]
+        );
+
         imported.push({
-          id: result.rows[0].id,
-          question_text: row.question_text.trim(),
+          id: insertQuestion.rows[0].id,
+          question_text: normalizedQuestionText,
           line: i + 1,
         });
       } catch (error: any) {

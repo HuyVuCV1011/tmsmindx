@@ -189,7 +189,7 @@ export default function DatabaseMigrationPage() {
                                 </p>
                                 <Button 
                                     className="mt-4" 
-                                    onClick={() => window.location.href = '/admin/truyenthong/posts'}
+                                    onClick={() => window.location.href = '/admin/truyenthong'}
                                 >
                                     Đi tới Quản lý Bài viết
                                 </Button>

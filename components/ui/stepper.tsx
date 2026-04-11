@@ -57,7 +57,7 @@ export function Stepper({ steps, compact = false }: { steps: StepItem[], compact
                   {step.label}
                 </p>
                 {step.description && (
-                  <p className={`${descSize} mt-0.5 ${
+                  <p className={`${descSize} mt-0.5 whitespace-pre-line ${
                     isCurrent ? 'text-slate-600' : 'text-slate-400'
                   }`}>
                     {step.description}

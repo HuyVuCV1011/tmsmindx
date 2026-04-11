@@ -15,16 +15,21 @@ export async function GET(request: NextRequest) {
 
     const questions = await pool.query(
       `SELECT
-        question_text,
-        question_type,
-        correct_answer,
-        options,
-        points,
-        explanation,
-        order_number
-      FROM exam_set_questions
-      WHERE set_id = $1
-      ORDER BY order_number ASC`,
+        q.question_text,
+        q.question_type,
+        q.correct_answer,
+        CASE
+          WHEN q.option_a IS NULL AND q.option_b IS NULL AND q.option_c IS NULL AND q.option_d IS NULL THEN NULL
+          ELSE jsonb_build_array(q.option_a, q.option_b, q.option_c, q.option_d)
+        END AS options,
+        COALESCE(sq.points_override, q.points) AS points,
+        q.difficulty,
+        q.explanation,
+        sq.display_order AS order_number
+      FROM chuyen_sau_bode_cauhoi sq
+      JOIN chuyen_sau_cauhoi q ON q.id = sq.question_id
+      WHERE sq.set_id = $1
+      ORDER BY sq.display_order ASC`,
       [setId]
     );
 
@@ -57,7 +62,7 @@ export async function GET(request: NextRequest) {
         escapeCsvValue(q.correct_answer || ''),
         escapeCsvValue(optionsStr),
         q.points || 1,
-        'medium',
+        q.difficulty || 'medium',
         escapeCsvValue(q.explanation || ''),
         '',
       ].join(',');

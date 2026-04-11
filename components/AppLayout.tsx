@@ -24,6 +24,16 @@ export default function AppLayout({
   const hasRedirected = useRef(false);
   const [noPermission, setNoPermission] = useState(false);
 
+  const getRoutePermissionAliases = (path: string) => {
+    if (path === '/admin/thu-vien-de') {
+      return ['/admin/thu-vien-de', '/admin/page4/thu-vien-de'];
+    }
+    if (path === '/admin/page4/thu-vien-de') {
+      return ['/admin/page4/thu-vien-de', '/admin/thu-vien-de'];
+    }
+    return [path];
+  };
+
   // Auto-refresh permissions when navigating admin routes
   useEffect(() => {
     if (user && pathname.startsWith('/admin')) {
@@ -84,8 +94,10 @@ export default function AppLayout({
         // Check if user has permission for current route
         // Allow bypass for universal admin routes like /admin/profile
         if (pathname.startsWith('/admin') && pathname !== '/admin' && !pathname.startsWith('/admin/profile')) {
-          const hasPermission = (hasTrainingInputRole && isTrainingInputRoute) || effectivePermissions.some(p =>
-            pathname === p || pathname.startsWith(p + '/')
+          const hasPermission = (hasTrainingInputRole && isTrainingInputRoute) || effectivePermissions.some((p) =>
+            pathname === p ||
+            pathname.startsWith(`${p}/`) ||
+            p.startsWith(`${pathname}/`)
           );
 
           if (!hasPermission) {

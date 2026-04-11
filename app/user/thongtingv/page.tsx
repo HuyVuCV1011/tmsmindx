@@ -2,10 +2,17 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from "@/lib/auth-context";
-import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck } from "lucide-react";
+import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck, LayoutDashboard, Database } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from 'react-hot-toast';
 import useSWR, { mutate } from "swr";
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Premium Components
+import ProfileHero from './components/ProfileHero';
+import StatsBento from './components/StatsBento';
+import AvailabilityGrid from './components/AvailabilityGrid';
+import EducationSection from './components/EducationSection';
 
 // Cache for processed data
 const dataCache = new Map();
@@ -365,22 +372,44 @@ export default function Page1() {
     }
   );
 
-  // Load training data in parallel
-  const { data: trainingData, isLoading: isLoadingTraining } = useSWR(
-    teacher && user ? `/api/training?code=${submitCode}` : null,
-    secureFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 300000,
-      shouldRetryOnError: false,
-      revalidateIfStale: false
-    }
+  // Load certificates data
+  const { data: certificatesRes } = useSWR(
+    teacher && user ? `/api/teacher-certificates?email=${encodeURIComponent(teacher.emailMindx)}` : null,
+    secureFetcher
   );
+
+  // Load detailed training stats
+  const { data: trainingStatsRes, isLoading: isLoadingTraining } = useSWR(
+    teacher && user ? `/api/training-teacher-stats?teacher_code=${submitCode}` : null,
+    secureFetcher
+  );
+
+  const certificates = certificatesRes?.data || [];
+  const trainingStat = trainingStatsRes?.data?.[0] || null;
+  const trainingData = trainingStat as TrainingData | null;
 
   const expertiseData = expertiseDataRes?.monthlyData || [];
   const experienceData = experienceDataRes?.monthlyData || [];
   const scoresLoaded = !isLoadingExpertise && !isLoadingExperience;
+
+  // Process scores for StatsBento
+  const expertiseMap = useMemo(() => {
+    const res: Record<string, string> = {};
+    (expertiseData as MonthlyAverage[]).forEach(m => {
+      res[m.month] = m.average.toString();
+    });
+    return res;
+  }, [expertiseData]);
+
+  const experienceMap = useMemo(() => {
+    const res: Record<string, string> = {};
+    (experienceData as MonthlyAverage[]).forEach(m => {
+      res[m.month] = m.average.toString();
+    });
+    return res;
+  }, [experienceData]);
+
+  const [viewMode, setViewMode] = useState<"premium" | "classic">("premium");
 
   // Show feedback modal 30 seconds after successful teacher search
   useEffect(() => {
@@ -725,56 +754,62 @@ export default function Page1() {
     }
   };
 
-  // Memoize tính toán điểm để tránh re-calculate
-  const expertiseScore = useMemo(() => {
-    const currentMonth = parseInt(selectedMonth);
-    const currentYear = parseInt(selectedYear);
-    const scores: number[] = [];
+  // Tính điểm theo chu kỳ 4 tháng:
+  // - Khi có điểm tháng X → áp dụng cho tháng X, X+1, X+2, X+3
+  // - Nếu trong chu kỳ có điểm MỚI CAO HƠN → reset chu kỳ từ tháng đó
+  // - Sau khi hết chu kỳ mà không có điểm mới → trả về "N/A"
+  const computeCycleScore = useCallback((data: MonthlyAverage[], viewMonth: number, viewYear: number): string => {
+    const currentIdx = viewYear * 12 + viewMonth;
 
-    for (let i = 0; i < 6; i++) {
-      let month = currentMonth - i;
-      let year = currentYear;
+    // Lấy các tháng có điểm thực tế, sắp xếp tăng dần theo thời gian
+    const scoredMonths = data
+      .filter(d => d.count > 0)
+      .map(d => {
+        const [mStr, yStr] = d.month.split('/');
+        return { idx: parseInt(yStr) * 12 + parseInt(mStr), score: d.average };
+      })
+      .sort((a, b) => a.idx - b.idx);
 
-      if (month <= 0) {
-        month += 12;
-        year -= 1;
-      }
+    if (scoredMonths.length === 0) return "N/A";
 
-      const monthKey = `${month}/${year}`;
-      const score = getScoreForMonth(expertiseData, monthKey);
+    // Duyệt qua từng tháng có điểm, áp dụng logic chu kỳ
+    let hasCycle = false;
+    let cycleScore = 0;
+    let cycleEnd = 0;
 
-      if (score !== "N/A") {
-        scores.push(parseFloat(score));
+    for (const entry of scoredMonths) {
+      if (!hasCycle) {
+        hasCycle = true;
+        cycleScore = entry.score;
+        cycleEnd = entry.idx + 5;
+      } else if (entry.idx <= cycleEnd) {
+        // Trong chu kỳ: chỉ reset nếu điểm CAO HƠN
+        if (entry.score > cycleScore) {
+          cycleScore = entry.score;
+          cycleEnd = entry.idx + 5;
+        }
+      } else {
+        // Đã qua chu kỳ: bắt đầu chu kỳ mới
+        cycleScore = entry.score;
+        cycleEnd = entry.idx + 5;
       }
     }
 
-    return scores.length > 0 ? Math.max(...scores).toFixed(1) : "N/A";
-  }, [selectedMonth, selectedYear, expertiseData, getScoreForMonth]);
+    // Kiểm tra tháng hiện tại có nằm trong chu kỳ active không
+    const cycleStart = cycleEnd - 5;
+    if (hasCycle && currentIdx >= cycleStart && currentIdx <= cycleEnd) {
+      return cycleScore.toFixed(1);
+    }
+    return "N/A";
+  }, []);
+
+  const expertiseScore = useMemo(() => {
+    return computeCycleScore(expertiseData as MonthlyAverage[], parseInt(selectedMonth), parseInt(selectedYear));
+  }, [selectedMonth, selectedYear, expertiseData, computeCycleScore]);
 
   const experienceScore = useMemo(() => {
-    const currentMonth = parseInt(selectedMonth);
-    const currentYear = parseInt(selectedYear);
-    const scores: number[] = [];
-
-    for (let i = 0; i < 6; i++) {
-      let month = currentMonth - i;
-      let year = currentYear;
-
-      if (month <= 0) {
-        month += 12;
-        year -= 1;
-      }
-
-      const monthKey = `${month}/${year}`;
-      const score = getScoreForMonth(experienceData, monthKey);
-
-      if (score !== "N/A") {
-        scores.push(parseFloat(score));
-      }
-    }
-
-    return scores.length > 0 ? Math.max(...scores).toFixed(1) : "N/A";
-  }, [selectedMonth, selectedYear, experienceData, getScoreForMonth]);
+    return computeCycleScore(experienceData as MonthlyAverage[], parseInt(selectedMonth), parseInt(selectedYear));
+  }, [selectedMonth, selectedYear, experienceData, computeCycleScore]);
 
   // Memoize highlighted months
   const highlightedMonths = useMemo(() => {
@@ -1249,31 +1284,40 @@ export default function Page1() {
                                 CM Chuyên sâu
                               </TableCell>
                               {months.map((month) => {
-                                const score = getScoreForMonth(expertiseData, month);
-                                const scoreValue = score === "N/A" ? 0 : parseFloat(score);
+                                const [mStr, yStr] = month.split('/');
+                                const actualScore = getScoreForMonth(expertiseData, month);
+                                const isActual = actualScore !== "N/A";
+                                const displayScore = isActual
+                                  ? actualScore
+                                  : computeCycleScore(expertiseData as MonthlyAverage[], parseInt(mStr), parseInt(yStr));
+                                const scoreValue = displayScore === "N/A" ? 0 : parseFloat(displayScore);
                                 const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
-                                const isCurrentMonthCell = isCurrentMonth && score === "N/A";
-                                
+                                const isCurrentMonthCell = isCurrentMonth && displayScore === "N/A";
+
                                 return (
                                   <TableCell key={month} className={`text-center ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
                                     }`}>
                                     <span
                                       onClick={() => {
-                                        if (score === "N/A" && isCurrentMonth) {
+                                        if (displayScore === "N/A" && isCurrentMonth) {
                                           setRegistrationCheckModalOpen(true);
-                                        } else if (score !== "N/A") {
+                                        } else if (isActual) {
                                           openModal(month, "expertise");
                                         }
                                       }}
-                                      className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${score === "N/A"
+                                      className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${displayScore === "N/A"
                                           ? isCurrentMonth
                                             ? "bg-yellow-200 text-yellow-900 cursor-pointer hover:bg-yellow-300 animate-pulse font-bold shadow-lg border-2 border-yellow-400"
                                             : "bg-gray-200 text-gray-700"
-                                          : scoreValue >= 8
-                                            ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
-                                            : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
+                                          : !isActual
+                                            ? scoreValue >= 8
+                                              ? "bg-green-50 text-green-700 border border-dashed border-green-400"
+                                              : "bg-orange-50 text-orange-700 border border-dashed border-orange-300"
+                                            : scoreValue >= 8
+                                              ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
+                                              : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
                                         }`}>
-                                      {isCurrentMonthCell ? "📝 Đăng ký" : score}
+                                      {isCurrentMonthCell ? "📝 Đăng ký" : displayScore}
                                     </span>
                                   </TableCell>
                                 );
@@ -1284,31 +1328,40 @@ export default function Page1() {
                                 KN - QT Trải nghiệm
                               </TableCell>
                               {months.map((month) => {
-                                const score = getScoreForMonth(experienceData, month);
-                                const scoreValue = score === "N/A" ? 0 : parseFloat(score);
+                                const [mStr, yStr] = month.split('/');
+                                const actualScore = getScoreForMonth(experienceData, month);
+                                const isActual = actualScore !== "N/A";
+                                const displayScore = isActual
+                                  ? actualScore
+                                  : computeCycleScore(experienceData as MonthlyAverage[], parseInt(mStr), parseInt(yStr));
+                                const scoreValue = displayScore === "N/A" ? 0 : parseFloat(displayScore);
                                 const isCurrentMonth = month === `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
-                                const isCurrentMonthCell = isCurrentMonth && score === "N/A";
+                                const isCurrentMonthCell = isCurrentMonth && displayScore === "N/A";
 
                                 return (
                                   <TableCell key={month} className={`text-center ${highlightedMonths.includes(month) ? "bg-blue-50" : ""
                                     }`}>
                                     <span
                                       onClick={() => {
-                                        if (score === "N/A" && isCurrentMonth) {
+                                        if (displayScore === "N/A" && isCurrentMonth) {
                                           setRegistrationCheckModalOpen(true);
-                                        } else if (score !== "N/A") {
+                                        } else if (isActual) {
                                           openModal(month, "experience");
                                         }
                                       }}
-                                      className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${score === "N/A"
+                                      className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${displayScore === "N/A"
                                           ? isCurrentMonth
                                             ? "bg-yellow-200 text-yellow-900 cursor-pointer hover:bg-yellow-300 animate-pulse font-bold shadow-lg border-2 border-yellow-400"
                                             : "bg-gray-200 text-gray-700"
-                                          : scoreValue >= 8
-                                            ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
-                                            : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
+                                          : !isActual
+                                            ? scoreValue >= 8
+                                              ? "bg-green-50 text-green-700 border border-dashed border-green-400"
+                                              : "bg-orange-50 text-orange-700 border border-dashed border-orange-300"
+                                            : scoreValue >= 8
+                                              ? "bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
+                                              : "bg-red-100 text-red-800 cursor-pointer hover:bg-red-200"
                                         }`}>
-                                      {isCurrentMonthCell ? "📝 Đăng ký" : score}
+                                      {isCurrentMonthCell ? "📝 Đăng ký" : displayScore}
                                     </span>
                                   </TableCell>
                                 );
@@ -1328,6 +1381,10 @@ export default function Page1() {
                       <div className="flex items-center gap-1">
                         <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-red-100 border border-red-200 rounded shrink-0"></span>
                         <span>&lt; 7.0 điểm</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-orange-50 border border-dashed border-orange-300 rounded shrink-0"></span>
+                        <span>Điểm kế thừa chu kỳ (6 tháng)</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <span className="inline-block w-3 h-3 sm:w-4 sm:h-4 bg-gray-200 border border-gray-300 rounded shrink-0"></span>

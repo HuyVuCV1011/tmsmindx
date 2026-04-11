@@ -1,6 +1,7 @@
 "use client";
 
 import AppLayout from "@/components/AppLayout";
+import { UploadVideoProvider } from "@/components/UploadVideoContext";
 
 export default function AdminLayout({
   children,
@@ -8,8 +9,10 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <AppLayout requireAuth={true} requireAdmin={true} redirectPath="/login">
-      {children}
-    </AppLayout>
+    <UploadVideoProvider>
+      <AppLayout requireAuth={true} requireAdmin={true} redirectPath="/login">
+        {children}
+      </AppLayout>
+    </UploadVideoProvider>
   );
 }

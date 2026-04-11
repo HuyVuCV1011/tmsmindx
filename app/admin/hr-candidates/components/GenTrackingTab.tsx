@@ -34,6 +34,9 @@ type DraftMap = Record<string, CandidateRecord>;
 interface GenTrackingTabProps {
   genEntries: GenEntry[];
   regionFilter: 'all' | 'south' | 'north';
+  activeGenKey: string;
+  activeGenInfo: { genCode: string; regionCode: string } | null;
+  onSelectGen: (entry: GenEntry) => void;
 }
 
 // ─── Sort (identical to planner) ─────────────────────────────────────────────
@@ -63,14 +66,14 @@ function initRecord(): SessionRecord {
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
-export default function GenTrackingTab({ genEntries, regionFilter }: GenTrackingTabProps) {
+export default function GenTrackingTab({ 
+  genEntries, 
+  regionFilter,
+  activeGenKey,
+  activeGenInfo,
+  onSelectGen
+}: GenTrackingTabProps) {
   const { user } = useAuth();
-
-  // GEN list state – identical to planner
-  const [genSearch, setGenSearch] = useState('');
-  const [genSortOrder, setGenSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [activeGenKey, setActiveGenKey] = useState(''); // Unique key: regionCode::genCode
-  const [activeGenInfo, setActiveGenInfo] = useState<{ genCode: string; regionCode: string } | null>(null);
 
   // Candidate list
   const [candidates, setCandidates] = useState<HrCandidateRow[]>([]);
@@ -89,8 +92,6 @@ export default function GenTrackingTab({ genEntries, regionFilter }: GenTracking
 
   // ── Reset when region changes ───────────────────────────────────────────
   useEffect(() => {
-    setActiveGenKey('');
-    setActiveGenInfo(null);
     setCandidates([]);
     setDrafts({});
     setOriginalData({});
@@ -262,30 +263,6 @@ export default function GenTrackingTab({ genEntries, regionFilter }: GenTracking
     }
   };
 
-  // ── Toggle GEN select ──────────────────────────────────────────────────
-  const handleClickGen = (entry: GenEntry) => {
-    if (activeGenKey === entry.key) {
-      setActiveGenKey('');
-      setActiveGenInfo(null);
-      setCandidates([]);
-      setDrafts({});
-      setDirtyKeys(new Set());
-    } else {
-      setActiveGenKey(entry.key);
-      setActiveGenInfo({ genCode: entry.genCode, regionCode: entry.regionCode });
-      setCandidates([]);
-      setCandidateSearch('');
-    }
-  };
-
-  // ── Filtered GEN list (identical sort + filter to planner) ─────────────
-  const filteredGens = useMemo(() => {
-    const q = genSearch.trim().toLowerCase();
-    const filtered = q
-      ? genEntries.filter((e) => `${e.genCode} ${e.regionLabel}`.toLowerCase().includes(q))
-      : genEntries;
-    return [...filtered].sort((a, b) => sortGenEntries(a, b, genSortOrder));
-  }, [genEntries, genSearch, genSortOrder]);
 
   // ── Filtered candidates ────────────────────────────────────────────────
   const filteredCandidates = useMemo(() => {
@@ -318,95 +295,9 @@ export default function GenTrackingTab({ genEntries, regionFilter }: GenTracking
 
   // ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-
-      {/* ══ LEFT: GEN List – 100% clone of planner UI ════════════════════ */}
-      <aside className="xl:col-span-4 space-y-4">
-        <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          {/* Header */}
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-bold text-gray-900">GEN đích</p>
-            <span className="text-xs font-medium text-gray-500">{genEntries.length} GEN</span>
-          </div>
-
-          {/* Search + Sort buttons – identical to planner */}
-          <div className="mb-2 flex items-center gap-2">
-            <input
-              value={genSearch}
-              onChange={(e) => setGenSearch(e.target.value)}
-              placeholder="Tìm GEN..."
-              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#a1001f] focus:ring-4 focus:ring-[#a1001f]/10"
-            />
-            <button
-              type="button"
-              onClick={() => setGenSortOrder('asc')}
-              className={`inline-flex h-10 shrink-0 items-center rounded-xl border px-3 text-xs font-bold transition-colors ${
-                genSortOrder === 'asc'
-                  ? 'border-[#a1001f] bg-[#a1001f] text-white'
-                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-              title="Sắp xếp tăng dần theo mã GEN"
-            >
-              Tăng dần
-            </button>
-            <button
-              type="button"
-              onClick={() => setGenSortOrder('desc')}
-              className={`inline-flex h-10 shrink-0 items-center rounded-xl border px-3 text-xs font-bold transition-colors ${
-                genSortOrder === 'desc'
-                  ? 'border-[#a1001f] bg-[#a1001f] text-white'
-                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-              title="Sắp xếp giảm dần theo mã GEN"
-            >
-              Giảm dần
-            </button>
-          </div>
-
-          {/* GEN Items – identical styling to planner */}
-          <div className="max-h-[calc(100vh-320px)] space-y-1 overflow-y-auto pr-1 text-inherit">
-            {filteredGens.map((entry) => {
-              const isActive = activeGenKey === entry.key;
-              return (
-                <button
-                  key={entry.key}
-                  type="button"
-                  onClick={() => handleClickGen(entry)}
-                  className={`flex w-full min-w-0 items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-semibold transition-colors ${
-                    isActive
-                      ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
-                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                  title={`Xem ứng viên thuộc GEN ${entry.genCode} - ${entry.regionLabel}`}
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate font-semibold">{entry.genCode}</span>
-                      {entry.isTeacher4Plus && (
-                        <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-700">
-                          T4+
-                        </span>
-                      )}
-                    </div>
-                    <p className="truncate text-[11px] text-gray-500">{entry.regionLabel}</p>
-                  </div>
-                  <span className="ml-2 shrink-0 text-xs text-gray-500">
-                    Số lượng ứng viên: {entry.count}
-                  </span>
-                </button>
-              );
-            })}
-            {filteredGens.length === 0 && (
-              <p className="rounded-xl bg-gray-50 px-3 py-4 text-center text-xs text-gray-500">
-                Chưa có danh mục GEN.
-              </p>
-            )}
-          </div>
-        </section>
-      </aside>
-
+    <div className="w-full">
       {/* ══ RIGHT: Candidate Table ════════════════════════════════════════ */}
-      <section className="xl:col-span-8 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
+      <section className="w-full rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
 
         {/* Empty state */}
         {!activeGenKey ? (

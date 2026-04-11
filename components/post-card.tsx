@@ -26,7 +26,14 @@ const typeMap: Record<string, { label: string, color: string }> = {
     'thông-báo': { label: 'Thông báo', color: 'text-gray-600 bg-gray-50' },
 }
 
-export default function PostCard({ post }: { post: Post }) {
+export default function PostCard({
+    post,
+    detailBasePath = '/user/truyenthong',
+}: {
+    post: Post
+    /** Ví dụ `/admin/truyenthong/posts` để xem bài trong admin */
+    detailBasePath?: string
+}) {
     const [isHovered, setIsHovered] = useState(false)
 
     const publishDate = new Date(post.published_at).toLocaleDateString('vi-VN', {
@@ -39,7 +46,7 @@ export default function PostCard({ post }: { post: Post }) {
 
     return (
         <Link
-            href={`/user/truyenthong/${post.slug}`}
+            href={`${detailBasePath}/${post.slug}`}
             className="group block h-full"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}

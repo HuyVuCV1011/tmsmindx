@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 
 interface Explanation {
   id: number;
+  assignment_id?: number;
   teacher_name: string;
   lms_code: string;
   email: string;
@@ -42,6 +43,12 @@ const SUBJECT_LIST = [
 
 const STORAGE_KEY = 'teacher_auto_fill_data';
 
+interface RegisteredExam {
+  result_id: number;
+  subject_name: string;
+  open_at: string | null;
+}
+
 export default function GiaiTrinhPage() {
   const { user } = useAuth();
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
@@ -55,8 +62,12 @@ export default function GiaiTrinhPage() {
   const [showCampusList, setShowCampusList] = useState(false);
   const [showSubjectList, setShowSubjectList] = useState(false);
   const [selectedExplanation, setSelectedExplanation] = useState<Explanation | null>(null);
+  const [registeredExams, setRegisteredExams] = useState<RegisteredExam[]>([]);
+  const [loadingExams, setLoadingExams] = useState(false);
+  const [selectedExamId, setSelectedExamId] = useState('');
 
   const [formData, setFormData] = useState({
+    assignment_id: '',
     teacher_name: '',
     lms_code: '',
     email: user?.email || '',
@@ -150,6 +161,43 @@ export default function GiaiTrinhPage() {
     return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
+  // Fetch danh sách bài kiểm tra đã đăng ký
+  const fetchRegisteredExams = async (lmsCode: string) => {
+    if (!lmsCode) return;
+    setLoadingExams(true);
+    try {
+      const res = await fetch(`/api/exam-assignments?teacher_code=${encodeURIComponent(lmsCode)}`);
+      const data = await res.json();
+      if (data.success) {
+        setRegisteredExams(data.data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching registered exams:', err);
+    } finally {
+      setLoadingExams(false);
+    }
+  };
+
+  const handleExamSelect = (examId: string) => {
+    setSelectedExamId(examId);
+    if (!examId) {
+      setFormData(prev => ({ ...prev, subject: '', test_date: '', assignment_id: '' }));
+      setSubjectSearch('');
+      return;
+    }
+    const exam = registeredExams.find(e => String(e.result_id) === examId);
+    if (exam) {
+      const dateStr = exam.open_at ? new Date(exam.open_at).toISOString().slice(0, 10) : '';
+      setFormData(prev => ({
+        ...prev,
+        subject: exam.subject_name || '',
+        test_date: dateStr,
+        assignment_id: examId
+      }));
+      setSubjectSearch(exam.subject_name || '');
+    }
+  };
+
   // Fetch danh sách giải trình của user
   const fetchExplanations = async () => {
     try {
@@ -180,6 +228,7 @@ export default function GiaiTrinhPage() {
 
     setFormData((prev) => ({
       ...prev,
+      assignment_id: prefillAssignmentId || prev.assignment_id,
       campus: prefillCampus || prev.campus,
       subject: prefillSubject || prev.subject,
       test_date: normalizedDate || prev.test_date,
@@ -189,6 +238,18 @@ export default function GiaiTrinhPage() {
     setSubjectSearch(prefillSubject || '');
     setShowModal(true);
   }, [user, prefillAssignmentId, prefillSubject, prefillCampus, prefillTestDate]);
+
+  // Fetch registered exams when modal opens
+  useEffect(() => {
+    const lmsCode = formData.lms_code || teacherProfile?.code || '';
+    if (showModal && lmsCode) {
+      fetchRegisteredExams(lmsCode);
+    }
+    if (!showModal) {
+      setSelectedExamId('');
+      setRegisteredExams([]);
+    }
+  }, [showModal]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -367,7 +428,7 @@ export default function GiaiTrinhPage() {
                   />
                 </div>
                 
-                {/* Row 5: Reason */}
+                {/* Lý do */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Lý do không tham gia <span className="text-red-500">*</span>
@@ -404,10 +465,20 @@ export default function GiaiTrinhPage() {
         <div className="bg-white rounded-xl shadow-md overflow-hidden">
           <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-gray-50">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Danh Sách Giải Trình</h2>
-              <p className="text-sm text-gray-600">
-                <span className="font-medium text-gray-900">{explanations.length}</span> giải trình
-              </p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Danh Sách Giải Trình</h2>
+                <span className="text-xs text-gray-500 font-normal">({explanations.length} giải trình)</span>
+              </div>
+              <Button
+                onClick={() => setShowModal(true)}
+                size="sm"
+                className="whitespace-nowrap shadow-sm bg-gradient-to-r from-[#a1001f] to-[#c41230] hover:from-[#8a001a] hover:to-[#a8102a] text-white border-0"
+              >
+                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Tạo Giải Trình Mới
+              </Button>
             </div>
           </div>
           
@@ -435,7 +506,7 @@ export default function GiaiTrinhPage() {
                 <Table>
                   <TableHeader className="bg-gray-50">
                     <TableRow>
-                      <TableHead className="uppercase tracking-wider">Created Date</TableHead>
+                      <TableHead className="uppercase tracking-wider pl-6">Created Date</TableHead>
                       <TableHead className="uppercase tracking-wider">Test Date</TableHead>
                       <TableHead className="uppercase tracking-wider">Campus</TableHead>
                       <TableHead className="uppercase tracking-wider">Subject</TableHead>
@@ -449,7 +520,7 @@ export default function GiaiTrinhPage() {
                         className="group cursor-pointer transition-all duration-200 hover:bg-blue-50/80 hover:shadow-md relative z-0 hover:z-10"
                         onClick={() => setSelectedExplanation(explanation)}
                       >
-                        <TableCell className="whitespace-nowrap text-gray-900">
+                        <TableCell className="whitespace-nowrap text-gray-900 pl-6">
                           {new Date(explanation.created_at).toLocaleDateString('vi-VN')}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-gray-900">

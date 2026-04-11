@@ -1,7 +1,7 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { PageContainer } from '@/components/PageContainer';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
 import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send } from 'lucide-react';
 import Link from 'next/link';
@@ -31,6 +31,7 @@ interface ExamAssignment {
   passing_score: number;
   assignment_status: string;
   score: number | null;
+  time_limit_minutes: number;
 }
 
 export default function ExamAssignmentTakingPage() {
@@ -48,9 +49,13 @@ export default function ExamAssignmentTakingPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [examStartedAt, setExamStartedAt] = useState<number | null>(null); // ms timestamp
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [percentage, setPercentage] = useState<number>(0);
+
+  const getDraftStorageKey = (assignmentIdValue: number | string, teacherCodeValue: string) =>
+    `exam_draft_v1:${String(assignmentIdValue)}:${String(teacherCodeValue || 'unknown').trim().toLowerCase()}`;
 
   const decodeEscapedHtml = (value: string) => {
     if (!value) return '';
@@ -229,6 +234,33 @@ export default function ExamAssignmentTakingPage() {
           return;
         }
 
+        // Restore saved draft answers for this teacher + assignment when reopening/reloading.
+        try {
+          const draftKey = getDraftStorageKey(assignmentData.id, resolvedTeacherCode);
+          const savedDraftRaw = window.localStorage.getItem(draftKey);
+          if (savedDraftRaw) {
+            const parsed = JSON.parse(savedDraftRaw) as { answers?: Record<string, string> };
+            const validQuestionIds = new Set(questionData.map((q) => q.id));
+            const restoredAnswers: Record<number, string> = {};
+
+            Object.entries(parsed?.answers || {}).forEach(([qid, answer]) => {
+              const numericQuestionId = Number(qid);
+              if (!Number.isFinite(numericQuestionId) || !validQuestionIds.has(numericQuestionId)) return;
+              restoredAnswers[numericQuestionId] = String(answer || '');
+            });
+
+            if (Object.keys(restoredAnswers).length > 0) {
+              setAnswers(restoredAnswers);
+            }
+          }
+        } catch {
+        }
+
+        // Ghi nhớ thời điểm bắt đầu để đếm ngược chính xác
+        const rawStartedAt = startData.data?.started_at;
+        const startedAtMs = rawStartedAt ? new Date(rawStartedAt).getTime() : Date.now();
+        setExamStartedAt(startedAtMs);
+
         setAssignment(assignmentData);
         setQuestions(questionData);
       } catch (error) {
@@ -242,10 +274,16 @@ export default function ExamAssignmentTakingPage() {
   }, [teacherCode, assignmentIdParam, assignmentId, router, user?.email]);
 
   useEffect(() => {
-    if (!assignment || submitted) return;
+    if (!assignment || submitted || examStartedAt === null) return;
+
+    const durationMs = (assignment.time_limit_minutes || 90) * 60_000;
+    // Deadline = started_at + duration; also cap at close_at to respect exam window
+    const durationDeadline = examStartedAt + durationMs;
+    const closeDeadline = new Date(assignment.close_at).getTime();
+    const deadline = Math.min(durationDeadline, closeDeadline);
 
     const tick = () => {
-      const remain = Math.max(0, Math.floor((new Date(assignment.close_at).getTime() - Date.now()) / 1000));
+      const remain = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
       setTimeRemaining(remain);
       if (remain === 0 && !submitted) {
         handleSubmit(true);
@@ -255,7 +293,7 @@ export default function ExamAssignmentTakingPage() {
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [assignment, submitted]);
+  }, [assignment, submitted, examStartedAt]);
 
   const unansweredCount = useMemo(
     () => questions.length - Object.keys(answers).length,
@@ -267,10 +305,46 @@ export default function ExamAssignmentTakingPage() {
     return Math.round(((questions.length - unansweredCount) / questions.length) * 100);
   }, [questions.length, unansweredCount]);
 
+  useEffect(() => {
+    if (!assignment?.id) return;
+
+    const activeTeacherCode =
+      (teacherCode || '').trim() ||
+      String(assignment.teacher_code || '').trim() ||
+      (user?.email?.split('@')[0] || '').trim();
+
+    if (!activeTeacherCode) return;
+
+    const draftKey = getDraftStorageKey(assignment.id, activeTeacherCode);
+
+    if (submitted) {
+      window.localStorage.removeItem(draftKey);
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          assignment_id: assignment.id,
+          teacher_code: activeTeacherCode,
+          updated_at: new Date().toISOString(),
+          answers,
+        })
+      );
+    } catch {
+    }
+  }, [assignment?.id, assignment?.teacher_code, teacherCode, user?.email, answers, submitted]);
+
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    const safe = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(safe / 3600);
+    const mins = Math.floor((safe % 3600) / 60);
+    const secs = safe % 60;
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleAnswerChange = (questionId: number, value: string) => {
@@ -303,19 +377,12 @@ export default function ExamAssignmentTakingPage() {
 
     try {
       setSubmitting(true);
-
-      let totalScore = 0;
-      questions.forEach((question) => {
-        const expected = normalizeAnswerForCompare(question.correct_answer || '');
-        const actual = normalizeAnswerForCompare(answers[question.id] || '');
-        if (expected && actual === expected) {
-          totalScore += Number(question.points || 0);
-        }
-      });
-
-      const totalPoints = Number(assignment.total_points || 0);
-      const pct = totalPoints > 0 ? (totalScore / totalPoints) * 100 : 0;
-      const isPassed = totalScore >= Number(assignment.passing_score || 0);
+      const answerPayload = Object.entries(answers)
+        .map(([questionId, answerText]) => ({
+          question_id: Number(questionId),
+          answer_text: String(answerText || ''),
+        }))
+        .filter((item) => Number.isFinite(item.question_id) && item.question_id > 0);
 
       const response = await fetch('/api/exam-submissions', {
         method: 'PUT',
@@ -323,10 +390,7 @@ export default function ExamAssignmentTakingPage() {
         body: JSON.stringify({
           assignment_id: assignment.id,
           teacher_code: resolvedTeacherCode,
-          score: totalScore,
-          total_points: totalPoints,
-          percentage: pct,
-          is_passed: isPassed,
+          answers: answerPayload,
         }),
       });
 
@@ -336,8 +400,23 @@ export default function ExamAssignmentTakingPage() {
         return;
       }
 
-      setScore(totalScore);
-      setPercentage(pct);
+      const serverScore = Number(data?.data?.calculated_score ?? data?.data?.raw_score ?? 0);
+      const serverPercentage = Number(data?.data?.percentage ?? 0);
+
+      setScore(Number.isFinite(serverScore) ? serverScore : 0);
+      setPercentage(Number.isFinite(serverPercentage) ? serverPercentage : 0);
+
+      try {
+        const submittedTeacherCode =
+          (resolvedTeacherCode || '').trim() ||
+          String(assignment.teacher_code || '').trim() ||
+          (user?.email?.split('@')[0] || '').trim();
+        if (submittedTeacherCode) {
+          window.localStorage.removeItem(getDraftStorageKey(assignment.id, submittedTeacherCode));
+        }
+      } catch {
+      }
+
       setSubmitted(true);
       toast.success(auto ? 'Hết giờ, hệ thống đã nộp bài tự động' : 'Nộp bài thành công');
     } catch (error) {

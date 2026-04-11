@@ -10,9 +10,9 @@ interface SubmissionDetail {
   assignment_type: string;
   teacher_name: string;
   center: string;
-  score: number;
+  score: number | null;
   total_points: number;
-  percentage: number;
+  percentage: number | null;
   status: string;
   submitted_at: string;
   attempt_number: number;
@@ -113,6 +113,16 @@ export default function SubmissionDetailPage() {
      return opt ? opt.label : value;
   };
 
+  const FormattedText = ({ html }: { html: string }) => {
+    if (!html) return null;
+    return (
+      <div 
+        className="prose prose-xs sm:prose-sm max-w-none prose-p:my-0 prose-slate"
+        dangerouslySetInnerHTML={{ __html: html }} 
+      />
+    );
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -134,25 +144,34 @@ export default function SubmissionDetailPage() {
           </div>
           
           <div className="p-6">
+            {submission.status === 'in_progress' ? (
+              <div className="flex items-center justify-center gap-3 py-6 rounded-xl bg-amber-50 border border-amber-200 text-amber-700">
+                <Clock className="w-6 h-6 shrink-0" />
+                <div>
+                  <p className="font-semibold text-base">Bài làm đang trong tiến trình</p>
+                  <p className="text-sm text-amber-600 mt-0.5">Giáo viên chưa nộp bài, điểm số chưa được tính.</p>
+                </div>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                <div className="bg-slate-50 rounded-lg p-4 border border-slate-100 text-center">
                  <div className="text-sm text-slate-500 mb-1">Điểm số</div>
                  <div className="text-3xl font-bold text-slate-800">
-                   {submission.score} <span className="text-lg text-slate-400 font-normal">/ {submission.total_points}</span>
+                   {submission.score ?? '—'} <span className="text-lg text-slate-400 font-normal">/ {submission.total_points}</span>
                  </div>
                </div>
                
                <div className="bg-slate-50 rounded-lg p-4 border border-slate-100 text-center">
                  <div className="text-sm text-slate-500 mb-1">Kết quả</div>
-                 <div className={`text-3xl font-bold ${submission.percentage >= 70 ? 'text-emerald-600' : 'text-red-600'}`}>
-                   {submission.percentage}%
+                 <div className={`text-3xl font-bold ${(submission.percentage ?? 0) >= 70 ? 'text-emerald-600' : 'text-red-600'}`}>
+                   {submission.percentage != null ? `${submission.percentage}%` : '—'}
                  </div>
                </div>
 
                <div className="bg-slate-50 rounded-lg p-4 border border-slate-100 text-center">
                  <div className="text-sm text-slate-500 mb-1">Trạng thái</div>
                  <div className="flex justify-center items-center h-full pt-1">
-                   {submission.percentage >= 70 ? (
+                   {(submission.percentage ?? 0) >= 70 ? (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full font-medium text-sm">
                         <CheckCircle className="w-4 h-4" /> Đạt
                       </span>
@@ -164,6 +183,7 @@ export default function SubmissionDetailPage() {
                  </div>
                </div>
             </div>
+            )}
           </div>
         </div>
 
@@ -177,10 +197,12 @@ export default function SubmissionDetailPage() {
             }`}>
               <div className="flex justify-between items-start gap-4 mb-3">
                 <h3 className="font-medium text-slate-800 flex-1">
-                  <span className="inline-block bg-slate-100 text-slate-600 rounded px-2 py-0.5 text-xs mr-2 font-bold min-w-[24px] text-center">
-                    {idx + 1}
-                  </span>
-                  {ans.question_text}
+                  <div className="flex items-start gap-2">
+                    <span className="inline-block bg-slate-100 text-slate-600 rounded px-2 py-0.5 text-xs font-bold min-w-[24px] text-center mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <FormattedText html={ans.question_text} />
+                  </div>
                 </h3>
                 <div className="shrink-0">
                   {ans.is_correct ? (
@@ -210,7 +232,8 @@ export default function SubmissionDetailPage() {
                     Câu trả lời của bạn
                   </div>
                   <div className={`font-medium ${ans.is_correct ? 'text-emerald-700' : 'text-red-700'}`}>
-                    {getOptionLabel(ans.options, ans.answer_text) || <span className="text-slate-400 italic">Chưa trả lời</span>}
+                    <FormattedText html={getOptionLabel(ans.options, ans.answer_text)} />
+                    {!ans.answer_text && <span className="text-slate-400 italic">Chưa trả lời</span>}
                   </div>
                 </div>
 
@@ -221,14 +244,15 @@ export default function SubmissionDetailPage() {
                         Đáp án đúng
                      </div>
                      <div className="font-medium text-emerald-800">
-                        {getOptionLabel(ans.options, ans.correct_answer)}
+                        <FormattedText html={getOptionLabel(ans.options, ans.correct_answer)} />
                      </div>
                   </div>
                 )}
                 
                 {ans.explanation && (
                   <div className="mt-2 text-sm text-slate-600 bg-blue-50/50 p-3 rounded-md border border-blue-100">
-                    <span className="font-semibold text-blue-700">💡 Giải thích:</span> {ans.explanation}
+                    <div className="font-semibold text-blue-700 mb-1">💡 Giải thích:</div>
+                    <FormattedText html={ans.explanation} />
                   </div>
                 )}
               </div>

@@ -81,7 +81,12 @@ interface ExamAssignment {
   set_name: string;
   total_points: number;
   passing_score: number;
+  duration_minutes: number;
+  correct_answers?: number;
+  total_questions?: number;
+  score_handling_note?: string;
   explanation_status?: 'pending' | 'accepted' | 'rejected';
+  explanation_id?: number | null;
   admin_note?: string;
   is_open?: boolean;
   can_take?: boolean;
@@ -106,11 +111,11 @@ export default function TeacherAssignmentPage() {
   const [examLoading, setExamLoading] = useState(true);
   const [error, setError] = useState('');
   const [teacherCode, setTeacherCode] = useState('');
-  const [activeMainTab, setActiveMainTab] = useState<'exam' | 'scores' | 'explanations' | 'training'>('exam');
+  const [activeMainTab, setActiveMainTab] = useState<'available' | 'list' | 'training'>('available');
 
   const [selectedExamMonth, setSelectedExamMonth] = useState('6months');
   const [scoreTypeFilter, setScoreTypeFilter] = useState<'all' | 'expertise' | 'experience'>('all');
-  const [scoreResultFilter, setScoreResultFilter] = useState<'all' | 'passed' | 'failed' | 'missing' | 'needs_explanation' | 'has_explanation'>('all');
+  const [scoreResultFilter, setScoreResultFilter] = useState<'all' | 'done' | 'waiting' | 'pending' | 'accepted' | 'rejected'>('all');
   const [scoreSubjectKeyword, setScoreSubjectKeyword] = useState('');
 
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
@@ -157,17 +162,13 @@ export default function TeacherAssignmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
   const isSubmittingRef = useRef(false);
+  // Track previous nowTs to detect crossing of open_at boundaries
+  const lastNowTsRef = useRef(Date.now());
   const [selectedExamInfo, setSelectedExamInfo] = useState<ExamAssignment | null>(null);
 
   const searchParams = useSearchParams();
   const startId = searchParams.get('start_assignment_id');
   const tabParam = searchParams.get('tab');
-
-  useEffect(() => {
-    if (tabParam === 'explanations' && activeMainTab !== 'explanations') {
-      setActiveMainTab('explanations');
-    }
-  }, [tabParam, activeMainTab]);
 
   // Auto-start assignment logic
   useEffect(() => {
@@ -262,6 +263,23 @@ export default function TeacherAssignmentPage() {
     };
   }, []);
 
+  // Auto-refetch exam assignments when any exam's open_at boundary is crossed
+  useEffect(() => {
+    const prev = lastNowTsRef.current;
+    lastNowTsRef.current = nowTs;
+
+    const anyJustOpened = examAssignments.some((item) => {
+      if (item.can_take) return false;
+      if (!['assigned', 'in_progress'].includes(item.assignment_status)) return false;
+      const openMs = new Date(item.open_at).getTime();
+      return prev < openMs && nowTs >= openMs;
+    });
+
+    if (anyJustOpened) {
+      fetchExamAssignments(true);
+    }
+  }, [nowTs, examAssignments]);
+
   const fetchAvailableAssignments = async (isBackgroundUpdate = false) => {
     try {
       setTrainingLoading(true);
@@ -325,12 +343,32 @@ export default function TeacherAssignmentPage() {
     try {
       if (!isBackgroundUpdate) setExamLoading(true);
 
+      let canonicalTeacherCode = '';
+      if (user?.email) {
+        try {
+          const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
+          const data = await res.json();
+          canonicalTeacherCode = (data?.teacher?.code || '').toString().trim();
+          if (canonicalTeacherCode && canonicalTeacherCode !== teacherCode) {
+            setTeacherCode(canonicalTeacherCode);
+          }
+        } catch {
+          // Keep fallback behavior below when teacher lookup is unavailable.
+        }
+      }
+
       const candidates = new Set<string>();
       const normalizedTeacherCode = teacherCode?.trim();
       if (normalizedTeacherCode) {
         candidates.add(normalizedTeacherCode);
         candidates.add(normalizedTeacherCode.toLowerCase());
         candidates.add(normalizedTeacherCode.toUpperCase());
+      }
+
+      if (canonicalTeacherCode) {
+        candidates.add(canonicalTeacherCode);
+        candidates.add(canonicalTeacherCode.toLowerCase());
+        candidates.add(canonicalTeacherCode.toUpperCase());
       }
 
       if (user?.email) {
@@ -343,15 +381,12 @@ export default function TeacherAssignmentPage() {
       }
 
       const teacherCodesParam = encodeURIComponent(Array.from(candidates).join(','));
-      const baseParams = `teacher_code=${encodeURIComponent(teacherCode)}&teacher_codes=${teacherCodesParam}`;
-
-      // ── Phase 1: fetch last 6 months immediately ──────────────────────────
-      const now = new Date();
-      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      const sinceStr = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2, '0')}-01`;
-
+      const effectiveTeacherCode = canonicalTeacherCode || teacherCode;
+      const baseParams = `teacher_code=${encodeURIComponent(effectiveTeacherCode)}&teacher_codes=${teacherCodesParam}`;
+      // Fetch full assignment history so score tab filters (6 months/all/custom month)
+      // operate on complete data instead of only current month.
       const recentRes = await fetch(
-        `/api/exam-assignments?${baseParams}&since=${sinceStr}`,
+        `/api/exam-assignments?${baseParams}`,
         { cache: 'no-store' }
       );
       const recentData = await recentRes.json();
@@ -360,31 +395,6 @@ export default function TeacherAssignmentPage() {
       }
 
       if (!isBackgroundUpdate) setExamLoading(false);
-
-      // ── Phase 2: fetch older data in background and merge ─────────────────
-      // Skip older fetch on background polling (10s interval) — those only
-      // need to refresh recent data for live updates.
-      if (!isBackgroundUpdate) {
-        (async () => {
-          try {
-            const olderRes = await fetch(
-              `/api/exam-assignments?${baseParams}&before=${sinceStr}`,
-              { cache: 'no-store' }
-            );
-            const olderData = await olderRes.json();
-            if (olderData.success && olderData.data?.length > 0) {
-              setExamAssignments(prev => {
-                // Merge: keep recent items, append older ones (no duplicates)
-                const existingIds = new Set(prev.map((item: ExamAssignment) => item.id));
-                const newOlder = olderData.data.filter((item: ExamAssignment) => !existingIds.has(item.id));
-                return [...prev, ...newOlder];
-              });
-            }
-          } catch (err) {
-            console.warn('Background fetch of older exam assignments failed:', err);
-          }
-        })();
-      }
     } catch (err) {
       console.error('Error fetching exam assignments:', err);
       setError('Failed to load exam assignments');
@@ -746,6 +756,52 @@ export default function TeacherAssignmentPage() {
     };
   }
 
+  function shouldShowExplanationCTA(item: ExamAssignment): boolean {
+    const closeAt = new Date(item.close_at);
+    const expired = item.assignment_status === 'expired' || closeAt < new Date();
+    const note = (item.score_handling_note || '').toLowerCase();
+    const requiresExplanation = note.includes('mac dinh 0') || note.includes('mặc định 0') ||
+      note.includes('chờ giải trình') || note.includes('cho giai trinh');
+    const explanationId = Number(item.explanation_id || 0);
+    const hasLinkedExplanation = Number.isFinite(explanationId) && explanationId > 0;
+    const isPendingWithoutLinkedExplanation = item.explanation_status === 'pending' && !hasLinkedExplanation;
+
+    if (item.explanation_status === 'accepted') {
+      return false;
+    }
+
+    if (isPendingWithoutLinkedExplanation) {
+      return true;
+    }
+
+    return expired && requiresExplanation;
+  }
+
+  function buildExplanationHref(item: ExamAssignment): string {
+    return `/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`;
+  }
+
+  function getPassingScore(item: ExamAssignment): number | null {
+    const parsed = Number(item.passing_score);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+  }
+
+  function isExamPassed(item: ExamAssignment, score: number | null): boolean {
+    const passingScore = getPassingScore(item);
+    return score !== null && passingScore !== null && score >= passingScore;
+  }
+
+  function formatScoreSummary(item: ExamAssignment, score: number | null): string {
+    if (score === null) return 'Chưa có';
+    const correctAnswers = Number(item.correct_answers ?? 0);
+    const totalQuestions = Number(item.total_questions ?? 0);
+    if (Number.isFinite(totalQuestions) && totalQuestions > 0) {
+      return `${correctAnswers}/${totalQuestions} câu • ${score} điểm`;
+    }
+    return `${score} điểm`;
+  }
+
   const formatExplanationStatus = (status?: ExamAssignment['explanation_status']) => {
     if (status === 'pending') return 'Đang chờ duyệt';
     if (status === 'accepted') return 'Đã duyệt';
@@ -799,7 +855,7 @@ export default function TeacherAssignmentPage() {
         const isExcluded = item.explanation_status === 'accepted';
         if (!isExcluded && score !== null) {
           totalAssigned++;
-          if (score >= item.passing_score) totalPassed++;
+          if (isExamPassed(item, score)) totalPassed++;
         }
       }
 
@@ -948,17 +1004,25 @@ export default function TeacherAssignmentPage() {
       }
 
       if (scoreResultFilter !== 'all') {
-        const { score, isMissedCurrentMonth } = getEffectiveExamScore(item);
-        if (scoreResultFilter === 'passed') {
-          if (score === null || score < item.passing_score) return false;
-        } else if (scoreResultFilter === 'failed') {
-          if (score === null || score >= item.passing_score) return false;
-        } else if (scoreResultFilter === 'missing') {
-          if (!isMissedCurrentMonth) return false;
-        } else if (scoreResultFilter === 'needs_explanation') {
-          if (!isMissedCurrentMonth || item.explanation_status) return false;
-        } else if (scoreResultFilter === 'has_explanation') {
-          if (!item.explanation_status) return false;
+        // Mirror admin "Thao tác HO" badge logic using score_handling_note (= xu_ly_diem)
+        const xuLower = (item.score_handling_note || '').trim().toLowerCase();
+        const isAccepted = xuLower === 'đã duyệt';
+        const isRejected = xuLower === 'từ chối';
+        const isWaiting  = xuLower === 'chờ giải trình';
+        const isDone     = item.score !== null || xuLower === 'đã hoàn thành' || xuLower === 'da thi';
+        // Pending = not yet done/waiting/accepted/rejected
+        const isPending  = !isDone && !isWaiting && !isAccepted && !isRejected;
+
+        if (scoreResultFilter === 'done') {
+          if (!isDone) return false;
+        } else if (scoreResultFilter === 'waiting') {
+          if (!isWaiting) return false;
+        } else if (scoreResultFilter === 'pending') {
+          if (!isPending) return false;
+        } else if (scoreResultFilter === 'accepted') {
+          if (!isAccepted) return false;
+        } else if (scoreResultFilter === 'rejected') {
+          if (!isRejected) return false;
         }
       }
 
@@ -1451,15 +1515,13 @@ export default function TeacherAssignmentPage() {
             </div>
 
             {/* Feedback Message */}
-            <div className={`rounded-xl p-6 mb-6 ${isPassed ? 'bg-green-50 border-2 border-green-200' : 'bg-amber-50 border-2 border-amber-200'
-              }`}>
-              <p className="text-center text-gray-700">
-                {isPassed
-                  ? `Xuất sắc! Bạn đã hoàn thành bài tập với ${submission.score}/${currentAssignment?.passing_score} điểm đạt!`
-                  : `Bạn cần đạt tối thiểu ${currentAssignment?.passing_score} điểm để hoàn thành bài tập. Hãy thử lại nhé!`
-                }
-              </p>
-            </div>
+            {isPassed && (
+              <div className="rounded-xl p-6 mb-6 bg-green-50 border-2 border-green-200">
+                <p className="text-center text-gray-700">
+                  Xuất sắc! Bạn đã hoàn thành bài tập với {submission.score} điểm!
+                </p>
+              </div>
+            )}
 
             {/* Action Button */}
             <Button
@@ -1548,6 +1610,7 @@ export default function TeacherAssignmentPage() {
   const getExamCountdownInfo = (item: ExamAssignment) => {
     const openMs = new Date(item.open_at).getTime();
     const closeMs = new Date(item.close_at).getTime();
+    const durationMins = item.duration_minutes || 90;
 
     if (nowTs < openMs) {
       return {
@@ -1565,17 +1628,17 @@ export default function TeacherAssignmentPage() {
       };
     }
 
+    // Cửa sổ đang mở → đếm ngược đến close_at theo giây
     return {
-      label: 'Còn lại',
+      label: 'Đóng sau',
       value: formatCountdown((closeMs - nowTs) / 1000),
       className: 'text-blue-700 bg-blue-50 border-blue-200',
     };
   };
 
   const mainTabs = [
-    { id: 'exam', label: 'Kiểm tra chuyên môn & Quy trình - kỹ năng trải nghiệm' },
-    { id: 'scores', label: 'Điểm kiểm tra', count: examAssignments.length },
-    { id: 'explanations', label: 'Giải trình điểm kiểm tra' },
+    { id: 'available', label: 'Bài kiểm tra khả dụng' },
+    { id: 'list', label: 'Danh sách bài kiểm tra', count: examAssignments.length },
   ];
 
   return (
@@ -1600,14 +1663,14 @@ export default function TeacherAssignmentPage() {
           }
         `}</style>
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Bài tập của tôi</h1>
-          <p className="text-gray-600">Danh sách các bài tập được giao cho bạn</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Bài kiểm tra của tôi</h1>
+          <p className="text-gray-600">Danh sách các bài kiểm tra đã được đăng ký.</p>
         </div>
 
         <Tabs
           tabs={mainTabs}
           activeTab={activeMainTab}
-          onChange={(tabId) => setActiveMainTab(tabId as 'exam' | 'scores' | 'explanations' | 'training')}
+          onChange={(tabId) => setActiveMainTab(tabId as 'available' | 'list' | 'training')}
         />
 
         {error ? (
@@ -1615,76 +1678,67 @@ export default function TeacherAssignmentPage() {
             <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
             <p className="text-red-700 font-medium">{error}</p>
           </div>
-        ) : activeMainTab === 'exam' ? (
-          <div key="exam" className="mt-6 animate-tab-enter">
+        ) : activeMainTab === 'available' ? (
+          <div key="available" className="mt-6 animate-tab-enter">
             {examLoading ? (
               <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500 shadow-sm">
-                Đang tải bài thi tháng này...
+                Đang tải bài kiểm tra...
               </div>
-            ) : currentMonthExams.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
-                <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
-                <p className="text-sm text-gray-500">Tháng này chưa có bộ môn/bài thi nào được giao.</p>
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {currentMonthExams.map((item) => {
-                  const now = new Date();
-                  const countdown = getExamCountdownInfo(item);
-                  return (
-                    <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:shadow-md transition-all flex flex-col">
-                      <div className="mb-3 flex items-start justify-between gap-2">
-                        <h4 className="line-clamp-2 text-base font-bold text-gray-900">{item.subject_code}</h4>
-                        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getExamStatusClass(item)}`}>
-                          {getExamStatusLabel(item)}
-                        </span>
-                      </div>
-
-                      <div className="mb-4 space-y-2 text-sm text-gray-600 flex-1">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Mở:</span>
-                          <span>{new Date(item.open_at).toLocaleDateString('vi-VN')} {new Date(item.open_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+            ) : (() => {
+              const availableNow = examAssignments.filter(item => item.can_take === true);
+              return availableNow.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
+                  <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
+                  <p className="text-sm font-semibold text-gray-700 mb-1">Hiện tại không có bài kiểm tra nào đang mở.</p>
+                  <p className="text-xs text-gray-500">Những môn bạn đã đăng ký sẽ xuất hiện ở đây khi đến giờ làm bài.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {availableNow.map((item) => {
+                    const countdown = getExamCountdownInfo(item);
+                    return (
+                      <div key={item.id} className="rounded-lg border-2 border-blue-200 bg-white p-5 shadow-sm hover:shadow-md transition-all flex flex-col">
+                        <div className="mb-3 flex items-start justify-between gap-2">
+                          <h4 className="line-clamp-2 text-base font-bold text-gray-900">{item.subject_code}</h4>
+                          <span className="shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold bg-green-100 text-green-700 border-green-300">
+                            Đang mở
+                          </span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Đóng:</span>
-                          <span>{new Date(item.close_at).toLocaleDateString('vi-VN')} {new Date(item.close_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <div className="mb-4 space-y-2 text-sm text-gray-600 flex-1">
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Loại:</span>
+                            <span className="font-medium text-gray-900">{item.exam_type === 'expertise' ? 'Chuyên môn' : 'Quy trình - KN trải nghiệm'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Mở:</span>
+                            <span>{new Date(item.open_at).toLocaleDateString('vi-VN')} {new Date(item.open_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Đóng:</span>
+                            <span>{new Date(item.close_at).toLocaleDateString('vi-VN')} {new Date(item.close_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <div className={`mt-3 flex items-center justify-between rounded-md border px-3 py-2 ${countdown.className}`}>
+                            <span className="text-xs font-semibold">{countdown.label}</span>
+                            <span className="font-mono text-sm font-bold">{countdown.value}</span>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Loại:</span>
-                          <span className="font-medium text-gray-900">{item.exam_type === 'expertise' ? 'Chuyên môn' : 'Quy trình - KN trải nghiệm'}</span>
-                        </div>
-                        <div className={`mt-3 flex items-center justify-between rounded-md border px-3 py-2 ${countdown.className}`}>
-                          <span className="text-xs font-semibold">{countdown.label}</span>
-                          <span className="font-mono text-sm font-bold">{countdown.value}</span>
-                        </div>
-                      </div>
-
-                      <div className="pt-3 border-t border-gray-100">
-                        {item.can_take ? (
+                        <div className="pt-3 border-t border-gray-100">
                           <Link
                             href={`/user/assignments/exam/${item.id}`}
                             className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
                           >
-                            {item.score !== null || item.assignment_status === 'submitted' ? 'Làm lại bài' : 'Bắt đầu làm bài'}
+                            {item.score !== null || item.assignment_status === 'submitted' ? 'Làm bài' : 'Bắt đầu làm bài'}
                           </Link>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedExamInfo(item)}
-                            className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 border border-blue-100 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
-                          >
-                            {new Date(item.open_at) > now ? 'Chưa tới giờ mở' : 'Chi tiết bài thi'}
-                          </button>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
-        ) : activeMainTab === 'scores' ? (
-          <div key="scores" className="mt-6 space-y-6 animate-tab-enter">
+        ) : activeMainTab === 'list' ? (
+          <div key="list" className="mt-6 space-y-6 animate-tab-enter">
             {/* 1. General Overview Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <button
@@ -1915,11 +1969,11 @@ export default function TeacherAssignmentPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="all">Tất cả / Bất kỳ</option>
-                    <option value="passed">Đã đạt</option>
-                    <option value="failed">Chưa đạt</option>
-                    <option value="missing">Bỏ lỡ thi</option>
-                    <option value="needs_explanation">Cần giải trình</option>
-                    <option value="has_explanation">Đã giải trình</option>
+                    <option value="done">Done</option>
+                    <option value="waiting">Waiting</option>
+                    <option value="pending">Pending</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="rejected">Rejected</option>
                   </select>
 
                   {(scoreSubjectKeyword || selectedExamMonth !== '6months' || scoreTypeFilter !== 'all' || scoreResultFilter !== 'all') && (
@@ -1977,6 +2031,7 @@ export default function TeacherAssignmentPage() {
                               const now = new Date();
                               const closeAt = new Date(item.close_at);
                               const { score: effectiveScore, isMissedCurrentMonth } = getEffectiveExamScore(item);
+                              const hasPassingScore = getPassingScore(item) !== null;
 
                               return (
                                 <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:shadow-lg transition-all flex flex-col h-full">
@@ -2000,17 +2055,25 @@ export default function TeacherAssignmentPage() {
                                       <span className="text-gray-500">Đóng:</span>
                                       <span>{new Date(item.close_at).toLocaleDateString('vi-VN')} {new Date(item.close_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
                                     </div>
+                                    {nowTs < new Date(item.open_at).getTime() && (
+                                      <div className="mt-3 flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700">
+                                        <span className="text-xs font-semibold">Mở sau</span>
+                                        <span className="font-mono text-sm font-bold">{formatCountdown((new Date(item.open_at).getTime() - nowTs) / 1000)}</span>
+                                      </div>
+                                    )}
                                     <div className="flex justify-between items-center bg-gray-50 border border-gray-100 p-2.5 rounded-lg mt-3">
                                       <span className="font-semibold text-gray-700">Điểm số:</span>
                                       {item.explanation_status === 'accepted' ? (
                                         <span className="text-blue-600 italic text-sm font-medium">Miễn thi (Đã duyệt GT)</span>
                                       ) : effectiveScore === null ? (
                                         <span className="text-gray-400 italic text-sm">Chưa có</span>
+                                      ) : !hasPassingScore ? (
+                                        <span className="font-bold text-sm text-amber-700">{formatScoreSummary(item, effectiveScore)}</span>
                                       ) : (
-                                        <span className={`font-bold text-base flex items-center gap-2 ${effectiveScore >= item.passing_score ? 'text-green-600' : 'text-red-600'}`}>
-                                          {effectiveScore} <span className="text-xs font-normal text-gray-400">/ {item.total_points}</span>
-                                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${effectiveScore >= item.passing_score ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                            {effectiveScore >= item.passing_score ? 'ĐẠT' : 'KHÔNG ĐẠT'}
+                                        <span className={`font-bold text-base flex items-center gap-2 ${isExamPassed(item, effectiveScore) ? 'text-green-600' : 'text-red-600'}`}>
+                                          {formatScoreSummary(item, effectiveScore)}
+                                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isExamPassed(item, effectiveScore) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                            {isExamPassed(item, effectiveScore) ? 'ĐẠT' : 'KHÔNG ĐẠT'}
                                           </span>
                                         </span>
                                       )}
@@ -2018,16 +2081,23 @@ export default function TeacherAssignmentPage() {
                                   </div>
 
                                   <div className="mt-auto pt-4 border-t border-gray-100">
-                                    {item.can_take ? (
+                                    {item.can_take && nowTs >= new Date(item.open_at).getTime() ? (
                                       <Link
                                         href={`/user/assignments/exam/${item.id}`}
                                         className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
                                       >
-                                        {item.score !== null || item.assignment_status === 'submitted' ? 'Làm lại bài' : 'Bắt đầu làm bài'}
+                                        {item.score !== null || item.assignment_status === 'submitted' ? 'Làm bài' : 'Bắt đầu làm bài'}
+                                      </Link>
+                                    ) : shouldShowExplanationCTA(item) ? (
+                                      <Link
+                                        href={buildExplanationHref(item)}
+                                        className="inline-flex w-full items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition cursor-pointer"
+                                      >
+                                        Giải trình
                                       </Link>
                                     ) : isMissedCurrentMonth && !item.explanation_status ? (
                                       <Link
-                                        href={`/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`}
+                                        href={buildExplanationHref(item)}
                                         className="inline-flex w-full items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition cursor-pointer"
                                       >
                                         Giải trình (Lỡ bài)
@@ -2054,7 +2124,7 @@ export default function TeacherAssignmentPage() {
                                         onClick={() => setSelectedExamInfo(item)}
                                         className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 border border-blue-100 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
                                       >
-                                        {new Date(item.open_at) > now ? 'Chưa tới giờ mở' : 'Chi tiết bài thi'}
+                                        {nowTs < new Date(item.open_at).getTime() ? 'Chưa tới giờ mở' : 'Chi tiết bài thi'}
                                       </button>
                                     )}
                                   </div>
@@ -2070,10 +2140,6 @@ export default function TeacherAssignmentPage() {
                 })}
               </div>
             )}
-          </div>
-        ) : activeMainTab === 'explanations' ? (
-          <div key="explanations" className="mt-6 animate-tab-enter">
-            <ExplanationSection compact />
           </div>
         ) : assignments.length === 0 ? (
           <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
@@ -2175,7 +2241,7 @@ export default function TeacherAssignmentPage() {
 
           const passed = passRateItems.filter(item => {
             const { score } = getEffectiveExamScore(item);
-            return score !== null && score >= item.passing_score;
+            return isExamPassed(item, score);
           }).length;
 
           return (
@@ -2200,7 +2266,7 @@ export default function TeacherAssignmentPage() {
                 <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
                   {passRateItems.map(item => {
                     const { score: effectiveScore } = getEffectiveExamScore(item);
-                    const isPassed = effectiveScore !== null && effectiveScore >= item.passing_score;
+                    const isPassed = isExamPassed(item, effectiveScore);
                     const date = new Date(item.open_at);
                     const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     return (
@@ -2299,8 +2365,7 @@ export default function TeacherAssignmentPage() {
                 <p className="text-base font-bold text-blue-900">
                   {(() => {
                     const { score } = getEffectiveExamScore(selectedExamInfo);
-                    if (score === null) return 'Chưa có điểm';
-                    return `${score} / ${selectedExamInfo.total_points}`;
+                    return formatScoreSummary(selectedExamInfo, score);
                   })()}
                 </p>
               </div>

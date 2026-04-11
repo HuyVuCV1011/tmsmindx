@@ -28,16 +28,17 @@ AS $$
 DECLARE
   v_subject_id BIGINT;
   v_set_id BIGINT;
+  v_set_duration_minutes INTEGER;
+  v_subject_duration_minutes INTEGER;
+  v_effective_duration_minutes INTEGER;
+  v_selection_mode VARCHAR;
+  v_default_set_id BIGINT;
   v_registration_id BIGINT;
   v_assignment_id BIGINT;
 BEGIN
   -- Validate input
   IF p_teacher_code IS NULL OR TRIM(p_teacher_code) = '' THEN
     RAISE EXCEPTION 'teacher_code is required';
-  END IF;
-
-  IF p_close_at <= p_open_at THEN
-    RAISE EXCEPTION 'close_at must be greater than open_at';
   END IF;
 
   IF p_source_form NOT IN ('main_form', 'additional_form', 'system') THEN
@@ -54,45 +55,92 @@ BEGIN
   END IF;
 
   -- Find active subject catalog row
-  SELECT esc.id
-    INTO v_subject_id
-  FROM exam_subject_catalog esc
-  WHERE esc.exam_type = p_exam_type
-    AND esc.block_code = p_block_code
-    AND esc.subject_code = p_subject_code
-    AND esc.is_active = TRUE
+  -- Find active subject config row (subject-driven model)
+  SELECT csm.id,
+         csm.set_selection_mode,
+         csm.default_set_id,
+         csm.exam_duration_minutes
+    INTO v_subject_id, v_selection_mode, v_default_set_id, v_subject_duration_minutes
+  FROM chuyen_sau_monhoc csm
+  WHERE csm.exam_type = p_exam_type::TEXT
+    AND csm.block_code = p_block_code
+    AND csm.subject_code = p_subject_code
+    AND csm.is_active = TRUE
   LIMIT 1;
 
   IF v_subject_id IS NULL THEN
-    RAISE EXCEPTION 'No active subject catalog found for exam_type=%, block_code=%, subject_code=%',
+    RAISE EXCEPTION 'No active subject config found for exam_type=%, block_code=%, subject_code=%',
       p_exam_type, p_block_code, p_subject_code;
   END IF;
 
-  -- Pick random set from currently active and valid sets
-  IF p_random_seed IS NULL OR TRIM(p_random_seed) = '' THEN
-    SELECT es.id
-      INTO v_set_id
-    FROM exam_sets es
-    WHERE es.subject_id = v_subject_id
+  -- Default mode: try subject default set first (must be eligible and have questions)
+  IF COALESCE(v_selection_mode, 'default') = 'default' AND v_default_set_id IS NOT NULL THEN
+    SELECT es.id, es.duration_minutes
+      INTO v_set_id, v_set_duration_minutes
+    FROM chuyen_sau_bode es
+    WHERE es.id = v_default_set_id
+      AND es.subject_id = v_subject_id
       AND es.status = 'active'
       AND (es.valid_from IS NULL OR p_scheduled_at >= es.valid_from)
       AND (es.valid_to IS NULL OR p_scheduled_at <= es.valid_to)
-    ORDER BY RANDOM()
-    LIMIT 1;
-  ELSE
-    SELECT es.id
-      INTO v_set_id
-    FROM exam_sets es
-    WHERE es.subject_id = v_subject_id
-      AND es.status = 'active'
-      AND (es.valid_from IS NULL OR p_scheduled_at >= es.valid_from)
-      AND (es.valid_to IS NULL OR p_scheduled_at <= es.valid_to)
-    ORDER BY md5(es.id::text || p_random_seed)
+      AND EXISTS (
+        SELECT 1
+        FROM chuyen_sau_bode_cauhoi map
+        WHERE map.set_id = es.id
+      )
     LIMIT 1;
   END IF;
 
+  -- Random mode OR fallback when default set is not eligible.
   IF v_set_id IS NULL THEN
-    RAISE EXCEPTION 'No active/valid exam set available for subject_id=% at scheduled_at=%',
+    IF p_random_seed IS NULL OR TRIM(p_random_seed) = '' THEN
+      SELECT es.id, es.duration_minutes
+        INTO v_set_id, v_set_duration_minutes
+      FROM chuyen_sau_bode es
+      WHERE es.subject_id = v_subject_id
+        AND es.status = 'active'
+        AND (es.valid_from IS NULL OR p_scheduled_at >= es.valid_from)
+        AND (es.valid_to IS NULL OR p_scheduled_at <= es.valid_to)
+        AND EXISTS (
+          SELECT 1
+          FROM chuyen_sau_bode_cauhoi map
+          WHERE map.set_id = es.id
+        )
+      ORDER BY RANDOM()
+      LIMIT 1;
+    ELSE
+      SELECT es.id, es.duration_minutes
+        INTO v_set_id, v_set_duration_minutes
+      FROM chuyen_sau_bode es
+      WHERE es.subject_id = v_subject_id
+        AND es.status = 'active'
+        AND (es.valid_from IS NULL OR p_scheduled_at >= es.valid_from)
+        AND (es.valid_to IS NULL OR p_scheduled_at <= es.valid_to)
+        AND EXISTS (
+          SELECT 1
+          FROM chuyen_sau_bode_cauhoi map
+          WHERE map.set_id = es.id
+        )
+      ORDER BY md5(es.id::text || p_random_seed)
+      LIMIT 1;
+    END IF;
+  END IF;
+
+  v_effective_duration_minutes := GREATEST(1, COALESCE(v_subject_duration_minutes, v_set_duration_minutes, 45));
+
+  IF p_open_at IS NULL THEN
+    p_open_at := p_scheduled_at;
+  END IF;
+
+  -- Always persist close_at from configured duration to keep timeline consistent.
+  p_close_at := p_open_at + make_interval(mins => v_effective_duration_minutes);
+
+  IF p_close_at <= p_open_at THEN
+    RAISE EXCEPTION 'close_at must be greater than open_at';
+  END IF;
+
+  IF v_set_id IS NULL THEN
+    RAISE EXCEPTION 'No active/valid exam set with questions available for subject_id=% at scheduled_at=%',
       v_subject_id, p_scheduled_at;
   END IF;
 
