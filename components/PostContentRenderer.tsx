@@ -26,6 +26,16 @@ function processHTML(html: string): Segment[] {
 
   const doc = new DOMParser().parseFromString(`<div id="r">${html}</div>`, 'text/html')
   const root = doc.getElementById('r')!
+
+  // Wrap tất cả <table> trong div.table-scroll-wrapper để scroll ngang trên mobile
+  root.querySelectorAll('table').forEach(table => {
+    if (table.parentElement?.classList.contains('table-scroll-wrapper')) return
+    const wrapper = doc.createElement('div')
+    wrapper.className = 'table-scroll-wrapper'
+    table.parentNode!.insertBefore(wrapper, table)
+    wrapper.appendChild(table)
+  })
+
   const segments: Segment[] = []
   let pendingImages: ImageInfo[] = []
   let pendingHtml = ''

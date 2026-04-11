@@ -122,7 +122,8 @@ export async function PUT(
             post_type,
             audience,
             status,
-            published_at
+            published_at,
+            thumbnail_position,
         } = body;
 
         let processedContent = content;
@@ -175,11 +176,13 @@ export async function PUT(
                 `UPDATE communications SET 
           title = $1, slug = $2, description = $3, content = $4, 
           featured_image = $5, banner_image = $6, post_type = $7, 
-          audience = $8, status = $9, published_at = $10, updated_at = NOW()
-        WHERE id = $11 RETURNING *`,
+          audience = $8, status = $9, published_at = $10,
+          thumbnail_position = $11, updated_at = NOW()
+        WHERE id = $12 RETURNING *`,
                 [
                     title, newSlug, description, processedContent, featured_image, banner_image,
-                    post_type, audience, status, published_at, currentPost.id
+                    post_type, audience, status, published_at,
+                    thumbnail_position || '50% 50%', currentPost.id
                 ]
             );
 
