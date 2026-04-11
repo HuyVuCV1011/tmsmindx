@@ -1,6 +1,6 @@
 'use client'
 
-import { mergeAttributes, type Editor as TiptapEditor } from '@tiptap/core'
+import { mergeAttributes, Node, type Editor as TiptapEditor } from '@tiptap/core'
 import Color from '@tiptap/extension-color'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
@@ -12,7 +12,14 @@ import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle } from '@tiptap/extension-text-style'
 import Underline from '@tiptap/extension-underline'
 import { NodeSelection } from '@tiptap/pm/state'
-import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type NodeViewProps } from '@tiptap/react'
+import { Extension } from '@tiptap/core'
+import {
+  EditorContent,
+  NodeViewWrapper,
+  ReactNodeViewRenderer,
+  useEditor,
+  type NodeViewProps,
+} from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import {
   AlignCenter,
@@ -21,6 +28,7 @@ import {
   AlignRight,
   Bold,
   Code,
+  GripVertical,
   Heading1,
   Heading2,
   Heading3,
@@ -30,14 +38,19 @@ import {
   List,
   ListOrdered,
   Minus,
+  Plus,
   Quote,
   Redo,
   Table as TableIcon,
   Trash2,
   Underline as UnderlineIcon,
-  Undo
+  Undo,
+  X,
+  Columns,
+  Rows,
+  TableProperties,
 } from 'lucide-react'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Button } from './ui/button'
 
@@ -50,116 +63,249 @@ interface RichTextEditorProps {
   minHeight?: string
 }
 
-interface SlashCommandItem {
-  id: string
-  title: string
-  description: string
-  keywords: string[]
-  action: () => void
+// ─── ResizableImage ──────────────────────────────────────────────────────────
+
+function ImageFloatControls({ float, onFloat, onDelete }: {
+  float: string
+  onFloat: (f: string) => void
+  onDelete: () => void
+}) {
+  return (
+    <div className="img-float-controls" contentEditable={false}>
+      <button className={`ifc-btn${float === 'left' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onFloat(float === 'left' ? 'none' : 'left') }} title="Float trái">◧</button>
+      <button className={`ifc-btn${(!float || float === 'none') ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onFloat('none') }} title="Block (không float)">▣</button>
+      <button className={`ifc-btn${float === 'right' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onFloat(float === 'right' ? 'none' : 'right') }} title="Float phải">◨</button>
+      <div className="ifc-sep" />
+      <button className="ifc-btn ifc-del" onMouseDown={e => { e.preventDefault(); onDelete() }} title="Xóa ảnh">✕</button>
+    </div>
+  )
 }
 
 function ResizableImageNodeView(props: NodeViewProps) {
   const { node, selected, updateAttributes, editor, getPos } = props
-
   const currentWidth = typeof node.attrs.width === 'number' ? node.attrs.width : null
+  const float: string = node.attrs.float || 'none'
+  const verticalAlign = typeof node.attrs.verticalAlign === 'string' ? node.attrs.verticalAlign : 'text-bottom'
+  const wrapperRef = useRef<HTMLSpanElement>(null)
 
-  const onClick = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const getNodePos = useCallback(() => {
     try {
       const pos = typeof getPos === 'function' ? getPos() : null
-      if (typeof pos === 'number') {
-        editor?.commands?.setNodeSelection?.(pos)
-      }
-    } catch {
-      // ignore
+      return typeof pos === 'number' ? pos : null
+    } catch { return null }
+  }, [getPos])
+
+  const selectNode = useCallback(() => {
+    const pos = getNodePos()
+    if (pos !== null) editor?.commands?.setNodeSelection?.(pos)
+  }, [editor, getNodePos])
+
+  // ── Disable Tiptap's native drag trên parent element ──
+  useEffect(() => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return
+    // Tiptap set draggable="true" trên span.react-renderer (parent của NodeViewWrapper)
+    const tiptapParent = wrapper.closest('.react-renderer') as HTMLElement | null
+    if (tiptapParent) {
+      tiptapParent.draggable = false
+      tiptapParent.setAttribute('draggable', 'false')
     }
-  }
+    // Cũng disable trên chính wrapper
+    wrapper.draggable = false
+  }, [])
 
+  // ── Resize bằng pointer events ──
   const onPointerDownHandle = (corner: 'nw' | 'ne' | 'sw' | 'se') => (e: React.PointerEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    const img = (e.currentTarget.parentElement?.querySelector('img') as HTMLImageElement | null)
+    e.preventDefault(); e.stopPropagation()
+    const img = wrapperRef.current?.querySelector('img') as HTMLImageElement | null
     if (!img) return
-
     const rect = img.getBoundingClientRect()
     const startX = e.clientX
+    const startY = e.clientY
     const startWidth = rect.width
     const startHeight = rect.height || 1
     const aspectRatio = startWidth / startHeight
-
     let rafId: number | null = null
     let pendingWidth: number | null = null
 
-    const commitWidth = (width: number) => {
-      const clamped = Math.max(60, Math.min(1400, Math.round(width)))
-      updateAttributes({ width: clamped })
-    }
-
+    const commit = (w: number) => updateAttributes({ width: Math.max(60, Math.min(1400, Math.round(w))) })
     const onMove = (ev: PointerEvent) => {
       const deltaX = ev.clientX - startX
-      let nextWidth = startWidth
-
-      if (corner === 'se' || corner === 'ne') nextWidth = startWidth + deltaX
-      else nextWidth = startWidth - deltaX
-
-      // keep aspect ratio
-      const width = nextWidth
-      const height = width / aspectRatio
-      if (width < 60 || width > 1400 || height < 30) return
-
-      pendingWidth = width
+      const deltaY = ev.clientY - startY
+      const nextX = (corner === 'se' || corner === 'ne') ? startWidth + deltaX : startWidth - deltaX
+      const nextY = ((corner === 'se' || corner === 'sw') ? startHeight + deltaY : startHeight - deltaY) * aspectRatio
+      const next = Math.abs(deltaX) > Math.abs(deltaY) ? nextX : nextY
+      if (next < 60 || next > 1400) return
+      pendingWidth = next
       if (rafId != null) return
-
-      rafId = window.requestAnimationFrame(() => {
-        rafId = null
-        if (pendingWidth != null) commitWidth(pendingWidth)
-      })
+      rafId = window.requestAnimationFrame(() => { rafId = null; if (pendingWidth != null) commit(pendingWidth) })
     }
-
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      document.body.style.cursor = ''
       if (rafId != null) window.cancelAnimationFrame(rafId)
-      rafId = null
-      if (pendingWidth != null) commitWidth(pendingWidth)
+      if (pendingWidth != null) commit(pendingWidth)
     }
-
-    // Ensure the node is selected before resizing
-    try {
-      const pos = typeof getPos === 'function' ? getPos() : null
-      if (typeof pos === 'number') editor?.commands?.setNodeSelection?.(pos)
-    } catch {
-      // ignore
-    }
-
+    selectNode()
+    document.body.style.cursor = (corner === 'nw' || corner === 'se') ? 'nwse-resize' : 'nesw-resize'
     window.addEventListener('pointermove', onMove, { passive: false })
     window.addEventListener('pointerup', onUp, { passive: true })
   }
 
-  const verticalAlign = typeof node.attrs.verticalAlign === 'string' ? node.attrs.verticalAlign : 'top'
+  // ── Drag-to-move bằng native pointer events ──
+  const onPointerDownWrapper = useCallback((e: React.PointerEvent) => {
+    // Chỉ xử lý chuột trái
+    if (e.button !== 0) return
+    const target = e.target as HTMLElement
+    // Không xử lý nếu click vào resize handle hoặc float controls
+    if (target.closest('.resize-handle') || target.closest('.img-float-controls')) return
+
+    // Chọn node ngay khi nhấn (onMouseDown) để người dùng thấy phản hồi nhanh
+    selectNode()
+
+    const startX = e.clientX
+    const startY = e.clientY
+    const THRESHOLD = 8 // Ngưỡng để phân biệt click và drag
+    let dragging = false
+    let overlay: HTMLDivElement | null = null
+
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX
+      const dy = ev.clientY - startY
+
+      if (!dragging && Math.hypot(dx, dy) > THRESHOLD) {
+        dragging = true
+        const img = wrapperRef.current?.querySelector('img') as HTMLImageElement | null
+        overlay = document.createElement('div')
+        overlay.style.cssText = [
+          'position:fixed', 'pointer-events:none', 'z-index:9999',
+          'opacity:0.8', 'border:2px solid #3b82f6', 'border-radius:6px',
+          'overflow:hidden', 'box-shadow:0 8px 24px rgba(0,0,0,0.3)',
+        ].join(';')
+        if (img) {
+          const clone = img.cloneNode() as HTMLImageElement
+          const rect = img.getBoundingClientRect()
+          const w = Math.min(rect.width, 240)
+          clone.style.cssText = `width:${w}px;height:auto;display:block;`
+          overlay.appendChild(clone)
+        }
+        document.body.appendChild(overlay)
+        document.body.style.cursor = 'grabbing'
+        document.body.style.userSelect = 'none'
+      }
+
+      if (dragging && overlay) {
+        overlay.style.left = `${ev.clientX - 30}px`
+        overlay.style.top = `${ev.clientY - 20}px`
+      }
+    }
+
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      if (overlay) { overlay.remove(); overlay = null }
+
+      if (!dragging) return
+
+      if (!editor) return
+      const fromPos = getNodePos()
+      if (fromPos === null) return
+
+      const state = editor.state
+      const imgNode = state.doc.nodeAt(fromPos)
+      if (!imgNode || imgNode.type.name !== 'image') return
+
+      const view = editor.view
+      let toPos: number | null = null
+
+      // Tìm vị trí drop
+      const coordResult = view.posAtCoords({ left: ev.clientX, top: ev.clientY })
+      if (coordResult != null) toPos = coordResult.pos
+
+      if (toPos === null) {
+        const el = document.elementFromPoint(ev.clientX, ev.clientY)
+        if (el) {
+          const nearestWrapper = el.closest('.image-wrapper') || el.querySelector('.image-wrapper')
+          if (nearestWrapper && nearestWrapper !== wrapperRef.current) {
+            try {
+              const p = view.posAtDOM(nearestWrapper, 0)
+              const rect = nearestWrapper.getBoundingClientRect()
+              toPos = ev.clientX < rect.left + rect.width / 2 ? p : p + 1
+            } catch { /* ignore */ }
+          } else {
+            try {
+              const p = view.posAtDOM(el, 0)
+              if (p > 0) toPos = p
+            } catch { /* ignore */ }
+          }
+        }
+      }
+
+      if (toPos === null) return
+
+      const { tr, schema } = state
+      const imageType = schema.nodes.image
+      if (!imageType) return
+
+      const nodeSize = imgNode.nodeSize
+      const attrs = { ...imgNode.attrs }
+      
+      // Thực hiện di chuyển
+      tr.delete(fromPos, fromPos + nodeSize)
+      const insertAt = toPos > fromPos ? Math.max(0, toPos - nodeSize) : Math.max(0, toPos)
+      tr.insert(insertAt, imageType.create(attrs))
+      
+      // Chọn ảnh sau khi di chuyển
+      const newPos = insertAt
+      tr.setSelection(NodeSelection.create(tr.doc, newPos))
+      
+      view.dispatch(tr)
+      view.focus()
+    }
+
+    window.addEventListener('pointermove', onMove, { passive: true })
+    window.addEventListener('pointerup', onUp, { passive: true })
+  }, [editor, getNodePos, selectNode])
+
+  const handleFloat = (f: string) => updateAttributes({ float: f })
+  const handleDelete = () => {
+    const pos = getNodePos()
+    if (pos !== null) editor?.chain().focus().deleteRange({ from: pos, to: pos + node.nodeSize }).run()
+  }
+
+  const isFloating = float === 'left' || float === 'right'
+  const wrapperStyle: React.CSSProperties = {
+    position: 'relative',
+    display: isFloating ? 'block' : 'inline-block',
+    maxWidth: isFloating ? '50%' : '100%',
+    float: isFloating ? (float as 'left' | 'right') : undefined,
+    margin: float === 'left' ? '2px 14px 8px 0' : float === 'right' ? '2px 0 8px 14px' : '4px 0',
+    verticalAlign: !isFloating ? verticalAlign : undefined,
+    cursor: 'grab',
+    zIndex: selected ? 10 : undefined,
+  }
 
   return (
     <NodeViewWrapper
-      className={`image-wrapper ${selected ? 'image-wrapper-selected' : ''}`}
-      style={{ display: 'inline-block', position: 'relative', maxWidth: '100%', verticalAlign }}
-      onClick={onClick}
+      ref={wrapperRef}
+      as="span"
+      className={`image-wrapper${selected ? ' image-wrapper-selected' : ''}${isFloating ? ` img-float-${float}` : ''}`}
+      style={wrapperStyle}
+      onPointerDown={onPointerDownWrapper}
     >
+      {selected && <ImageFloatControls float={float} onFloat={handleFloat} onDelete={handleDelete} />}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={node.attrs.src}
-        alt={node.attrs.alt || ''}
-        title={node.attrs.title || ''}
-        className="tiptap-image"
-        draggable={false}
-        style={{
-          width: currentWidth ? `${currentWidth}px` : undefined,
-          height: 'auto',
-          maxWidth: '100%'
-        }}
+        src={node.attrs.src} alt={node.attrs.alt || ''} title={node.attrs.title || ''}
+        className="tiptap-image" draggable={false}
+        style={{ width: currentWidth ? `${currentWidth}px` : undefined, height: 'auto', maxWidth: '100%', display: 'block', pointerEvents: 'none', userSelect: 'none' }}
       />
-
       {selected && (
         <>
           <div className="resize-handle resize-nw" onPointerDown={onPointerDownHandle('nw')} />
@@ -176,56 +322,419 @@ const ResizableImage = Image.extend({
   addAttributes() {
     return {
       ...(this.parent?.() ?? {}),
-      verticalAlign: {
-        default: 'top',
-        parseHTML: (element) => {
-          const data = element.getAttribute('data-vertical-align')
-          return data || 'top'
+      float: {
+        default: 'none',
+        parseHTML: (el) => el.getAttribute('data-float') || el.style.float || 'none',
+        renderHTML: (attrs) => {
+          const f = attrs.float
+          if (!f || f === 'none') return {}
+          return { 'data-float': f, style: `float:${f};margin:${f === 'left' ? '2px 14px 8px 0' : '2px 0 8px 14px'};` }
         },
-        renderHTML: (attributes) => {
-          if (!attributes.verticalAlign) return {}
-          return {
-            'data-vertical-align': attributes.verticalAlign,
-            style: `vertical-align: ${attributes.verticalAlign};`
-          }
-        }
+      },
+      verticalAlign: {
+        default: 'text-bottom',
+        parseHTML: (el) => el.getAttribute('data-vertical-align') || 'top',
+        renderHTML: (attrs) => attrs.verticalAlign
+          ? { 'data-vertical-align': attrs.verticalAlign, style: `vertical-align:${attrs.verticalAlign};` }
+          : {},
       },
       width: {
         default: null,
-        parseHTML: (element) => {
-          const data = element.getAttribute('data-width')
-          if (data) {
-            const n = Number(data)
-            return Number.isFinite(n) ? n : null
-          }
-          const styleWidth = (element as HTMLElement).style?.width
-          if (styleWidth?.endsWith('px')) {
-            const n = Number(styleWidth.replace('px', ''))
-            return Number.isFinite(n) ? n : null
-          }
+        parseHTML: (el) => {
+          const d = el.getAttribute('data-width')
+          if (d) { const n = Number(d); return Number.isFinite(n) ? n : null }
+          const sw = (el as HTMLElement).style?.width
+          if (sw?.endsWith('px')) { const n = Number(sw.replace('px', '')); return Number.isFinite(n) ? n : null }
           return null
         },
-        renderHTML: (attributes) => {
-          if (!attributes.width) return {}
-          const width = Number(attributes.width)
-          if (!Number.isFinite(width)) return {}
-          return {
-            'data-width': String(Math.round(width)),
-            style: `width: ${Math.round(width)}px; height: auto;`
-          }
+        renderHTML: (attrs) => {
+          if (!attrs.width) return {}
+          const w = Number(attrs.width)
+          if (!Number.isFinite(w)) return {}
+          return { 'data-width': String(Math.round(w)), style: `width:${Math.round(w)}px;height:auto;` }
+        },
+      },
+    }
+  },
+  addNodeView() { return ReactNodeViewRenderer(ResizableImageNodeView) },
+  renderHTML({ HTMLAttributes }) {
+    // Render wrapper span + img để user view hiển thị đúng như trong editor
+    const float = HTMLAttributes['data-float'] || ''
+    const width = HTMLAttributes['data-width'] || ''
+    const verticalAlign = HTMLAttributes['data-vertical-align'] || 'top'
+
+    const isFloating = float === 'left' || float === 'right'
+
+    const wrapperStyle = [
+      'display:inline-block',
+      'position:relative',
+      'max-width:' + (isFloating ? '50%' : '100%'),
+      isFloating ? `float:${float}` : '',
+      float === 'left' ? 'margin:2px 14px 8px 0' : float === 'right' ? 'margin:2px 0 8px 14px' : 'margin:0 5px 5px 5px',
+      !isFloating ? `vertical-align:${verticalAlign}` : '',
+    ].filter(Boolean).join(';')
+
+    const imgStyle = [
+      width ? `width:${width}px` : '',
+      'height:auto',
+      'max-width:100%',
+      'display:block',
+      'border-radius:0.375rem',
+    ].filter(Boolean).join(';')
+
+    return [
+      'span',
+      { class: `image-wrapper${isFloating ? ` img-float-${float}` : ''}`, style: wrapperStyle },
+      ['img', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { style: imgStyle })],
+    ]
+  },
+})
+
+// ─── InlineIcon ──────────────────────────────────────────────────────────────
+
+const ICON_SIZE_THRESHOLD = 36
+const SOCIAL_ICON_DOMAINS = ['fbcdn.net','facebook.com','fbsbx.com','twimg.com','twitter.com','zaloapp.com','zadn.vn','emoji.slack-edge.com']
+
+function isSocialIconSrc(src: string): boolean {
+  try { return SOCIAL_ICON_DOMAINS.some(d => new URL(src).hostname.includes(d)) } catch { return false }
+}
+
+const InlineIcon = Image.extend({
+  name: 'inlineIcon',
+  inline: true,
+  group: 'inline',
+  addAttributes() {
+    return { src: { default: null }, alt: { default: null }, title: { default: null }, style: { default: null }, width: { default: null }, height: { default: null } }
+  },
+  parseHTML() { return [{ tag: 'img[data-icon="true"]' }] },
+  renderHTML({ HTMLAttributes }) {
+    return ['img', mergeAttributes(HTMLAttributes, { 'data-icon': 'true', style: HTMLAttributes.style || 'display:inline;vertical-align:text-bottom;' })]
+  },
+})
+
+// ─── FontSize Extension ──────────────────────────────────────────────────────
+
+const FontSize = Extension.create({
+  name: 'fontSize',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['textStyle'],
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: element => element.style.fontSize?.replace(/['"]+/g, ''),
+            renderHTML: attributes => {
+              if (!attributes.fontSize) return {}
+              return { style: `font-size: ${attributes.fontSize}` }
+            },
+          },
+        },
+      },
+    ]
+  },
+  addCommands() {
+    return {
+      setFontSize: (fontSize: string) => ({ chain }) => {
+        return chain().setMark('textStyle', { fontSize }).run()
+      },
+      unsetFontSize: () => ({ chain }) => {
+        return chain().setMark('textStyle', { fontSize: null }).removeEmptyTextStyle().run()
+      },
+    }
+  },
+})
+
+// ─── ImageGallery Node ───────────────────────────────────────────────────────
+
+interface GalleryImage { src: string; alt: string }
+
+function ImageGalleryNodeView(props: NodeViewProps) {
+  const { node, updateAttributes, editor, getPos, selected } = props
+  const cols: number = node.attrs.cols || 3
+  const images: GalleryImage[] = node.attrs.images || []
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const setCols = (c: number) => updateAttributes({ cols: c })
+
+  const removeImage = (idx: number) => {
+    const next = images.filter((_, i) => i !== idx)
+    if (next.length === 0) {
+      // Xóa toàn bộ gallery node
+      try {
+        const pos = typeof getPos === 'function' ? getPos() : null
+        if (typeof pos === 'number') {
+          editor?.chain().focus().deleteRange({ from: pos, to: pos + node.nodeSize }).run()
         }
+      } catch { /* ignore */ }
+      return
+    }
+    updateAttributes({ images: next })
+  }
+
+  const addImages = async (files: FileList | null) => {
+    if (!files?.length) return
+    const newImgs: GalleryImage[] = []
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) continue
+      const src = await new Promise<string>((res, rej) => {
+        const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(file)
+      })
+      newImgs.push({ src, alt: file.name })
+    }
+    updateAttributes({ images: [...images, ...newImgs] })
+  }
+
+  // Drag-drop reorder trong gallery
+  const onDragStartItem = (e: React.DragEvent, idx: number) => {
+    e.stopPropagation()
+    setDraggingIdx(idx)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(idx))
+  }
+  const onDragOverItem = (e: React.DragEvent, idx: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverIdx(idx)
+  }
+  const onDropItem = (e: React.DragEvent, toIdx: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const fromIdx = draggingIdx
+    setDragOverIdx(null)
+    setDraggingIdx(null)
+    if (fromIdx === null || fromIdx === toIdx) return
+    const next = [...images]
+    const [moved] = next.splice(fromIdx, 1)
+    next.splice(toIdx, 0, moved)
+    updateAttributes({ images: next })
+  }
+  const onDragEnd = () => { setDragOverIdx(null); setDraggingIdx(null) }
+
+  // Drop ảnh từ ngoài vào gallery
+  const onDropExternal = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverIdx(null)
+    const files = e.dataTransfer.files
+    if (files?.length) { addImages(files); return }
+    // Drop ảnh từ editor (ResizableImage)
+    const imgPos = e.dataTransfer.getData('application/x-tiptap-image-pos')
+    if (imgPos && editor) {
+      const pos = parseInt(imgPos, 10)
+      if (!Number.isFinite(pos)) return
+      const node2 = editor.state.doc.nodeAt(pos)
+      if (node2?.type.name === 'image') {
+        updateAttributes({ images: [...images, { src: node2.attrs.src || '', alt: node2.attrs.alt || '' }] })
+        editor.chain().deleteRange({ from: pos, to: pos + node2.nodeSize }).run()
       }
+    }
+  }
+
+  const gridStyle: React.CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${cols}, 1fr)`,
+    gap: '6px',
+  }
+
+  return (
+    <NodeViewWrapper
+      className={`image-gallery-node${selected ? ' image-gallery-selected' : ''}`}
+      contentEditable={false}
+      onDragOver={(e: React.DragEvent) => { e.preventDefault(); e.stopPropagation() }}
+      onDrop={onDropExternal}
+    >
+      {/* Toolbar nổi */}
+      <div className="image-gallery-toolbar">
+        <span className="text-xs text-gray-500 font-medium">🖼 Gallery</span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-gray-400">Cột:</span>
+          {[2, 3, 4].map(c => (
+            <button
+              key={c}
+              onClick={() => setCols(c)}
+              className={`gallery-col-btn${cols === c ? ' active' : ''}`}
+            >{c}</button>
+          ))}
+        </div>
+        <button
+          className="gallery-add-btn"
+          title="Thêm ảnh"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Plus className="h-3 w-3" /> Thêm ảnh
+        </button>
+        <button
+          className="gallery-delete-btn"
+          title="Xóa gallery"
+          onClick={() => {
+            try {
+              const pos = typeof getPos === 'function' ? getPos() : null
+              if (typeof pos === 'number') editor?.chain().focus().deleteRange({ from: pos, to: pos + node.nodeSize }).run()
+            } catch { /* ignore */ }
+          }}
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => addImages(e.target.files)} />
+      </div>
+
+      {/* Grid ảnh */}
+      <div style={gridStyle} className="image-gallery-grid">
+        {images.map((img, idx) => (
+          <div
+            key={idx}
+            className={`image-gallery-item${dragOverIdx === idx ? ' drag-over' : ''}${draggingIdx === idx ? ' dragging' : ''}`}
+            draggable
+            onDragStart={e => onDragStartItem(e, idx)}
+            onDragOver={e => onDragOverItem(e, idx)}
+            onDrop={e => onDropItem(e, idx)}
+            onDragEnd={onDragEnd}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={img.src} alt={img.alt} className="gallery-img" draggable={false} />
+            <div className="gallery-item-overlay">
+              <GripVertical className="h-4 w-4 text-white opacity-70" />
+              <button className="gallery-remove-btn" onClick={() => removeImage(idx)} title="Xóa ảnh">
+                <X className="h-3 w-3" />
+              </button>
+            </div>``
+          </div>
+        ))}
+        {/* Drop zone thêm ảnh */}
+        <div
+          className="image-gallery-dropzone"
+          onDragOver={e => { e.preventDefault(); e.stopPropagation() }}
+          onDrop={e => { e.preventDefault(); e.stopPropagation(); addImages(e.dataTransfer.files) }}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Plus className="h-5 w-5 text-gray-400" />
+          <span className="text-xs text-gray-400">Thêm / kéo ảnh</span>
+        </div>
+      </div>
+    </NodeViewWrapper>
+  )
+}
+
+const ImageGalleryExtension = Node.create({
+  name: 'imageGallery',
+  group: 'block',
+  atom: true,
+  draggable: true,
+
+  addAttributes() {
+    return {
+      cols: { default: 3 },
+      images: { default: [] },
     }
   },
 
-  addNodeView() {
-    return ReactNodeViewRenderer(ResizableImageNodeView)
+  parseHTML() {
+    return [{ tag: 'div[data-type="image-gallery"]' }]
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['img', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)]
-  }
+    const cols = HTMLAttributes.cols || 3
+    const images: GalleryImage[] = HTMLAttributes.images || []
+    const children: [string, Record<string, string>][] = images.map(img => [
+      'img',
+      { src: img.src, alt: img.alt || '', style: 'width:100%;height:160px;object-fit:cover;border-radius:4px;' },
+    ])
+    return [
+      'div',
+      mergeAttributes({ 'data-type': 'image-gallery', 'data-cols': String(cols), style: `display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px;padding:8px;` }),
+      ...children,
+    ]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(ImageGalleryNodeView)
+  },
 })
+
+// ─── sanitizePastedHTML ──────────────────────────────────────────────────────
+
+function sanitizePastedHTML(html: string): string {
+  if (typeof window === 'undefined') return html
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const body = doc.body
+
+  // 1. Xử lý icon/emoji: chỉ các <img> nhỏ từ mạng xã hội
+  body.querySelectorAll('img').forEach((img) => {
+    const src = img.getAttribute('src') || ''
+    const w = parseInt(img.getAttribute('width') || img.style.width || '0', 10)
+    const h = parseInt(img.getAttribute('height') || img.style.height || '0', 10)
+    const alt = img.getAttribute('alt') || ''
+    const isEmojiClass = img.classList.contains('img') || img.classList.contains('emoji') || img.classList.contains('emoticon') || img.getAttribute('role') === 'img'
+    const isSmallIcon = (w > 0 && w <= ICON_SIZE_THRESHOLD) || (h > 0 && h <= ICON_SIZE_THRESHOLD)
+    const hasEmojiAlt = alt.length > 0 && /\p{Emoji}/u.test(alt)
+    const isEmojiSrc = /emoji|sticker|emoticon/i.test(src)
+    const isIcon = isEmojiClass || isSmallIcon || (isSocialIconSrc(src) && isSmallIcon) || isEmojiSrc
+
+    if (isIcon || hasEmojiAlt) {
+      if (hasEmojiAlt && alt) {
+        img.parentNode?.replaceChild(doc.createTextNode(alt), img)
+        return
+      }
+      img.style.display = 'inline'
+      img.style.verticalAlign = 'text-bottom'
+      img.style.width = w > 0 ? `${w}px` : '1.2em'
+      img.style.height = h > 0 ? `${h}px` : '1.2em'
+      img.style.margin = '0 1px'
+      img.style.borderRadius = '0'
+      img.removeAttribute('class')
+      img.setAttribute('data-icon', 'true')
+    }
+  })
+
+  // 2. Normalize table — giữ nguyên cấu trúc, chỉ fix style
+  body.querySelectorAll('table').forEach((table) => {
+    table.removeAttribute('width')
+    table.style.width = '100%'
+    table.style.maxWidth = '100%'
+    table.style.tableLayout = 'auto' // Chuyển sang auto để bảng có thể co lại linh hoạt hơn
+    table.style.borderCollapse = 'collapse'
+    table.style.fontSize = '0.85em' // Giảm nhẹ font size mặc định của bảng để dễ hiển thị toàn bộ
+    table.removeAttribute('cellpadding')
+    table.removeAttribute('cellspacing')
+    table.removeAttribute('border')
+
+    const firstRow = table.querySelector('tr')
+    if (firstRow && firstRow.querySelectorAll('th').length > 0 && !table.querySelector('thead')) {
+      const thead = doc.createElement('thead')
+      firstRow.parentNode?.insertBefore(thead, firstRow)
+      thead.appendChild(firstRow)
+    }
+
+    table.querySelectorAll('td, th').forEach((cell) => {
+      const el = cell as HTMLElement
+      el.removeAttribute('width')
+      el.style.width = 'auto' 
+      el.style.border = '1px solid #d1d5db'
+      el.style.padding = '4px 8px' // Giảm padding để tiết kiệm diện tích
+      el.style.wordBreak = 'normal' // Ưu tiên giữ chữ trên cùng hàng nếu có thể
+      el.style.verticalAlign = 'top'
+      el.removeAttribute('bgcolor')
+      el.removeAttribute('valign')
+    })
+
+    table.querySelectorAll('tr').forEach((row) => {
+      row.removeAttribute('bgcolor')
+      row.removeAttribute('height')
+    })
+  })
+
+  // KHÔNG xóa style/class của p, span, div — giữ nguyên cấu trúc để
+  // Tiptap parse đúng paragraph, xuống dòng, bold, italic...
+
+  return body.innerHTML
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function RichTextEditor({
   content,
@@ -233,354 +742,245 @@ export default function RichTextEditor({
   error,
   textColor = '#000000',
   showToolbar = true,
-  minHeight = 'min-h-[300px]'
+  minHeight = 'min-h-[300px]',
 }: RichTextEditorProps) {
-  const editorContainerRef = useRef<HTMLDivElement | null>(null)
-  const lastEmittedContentRef = useRef<string>(content || '')
-  const [selectedImageWidth, setSelectedImageWidth] = useState<string>('100%')
-  const [selectedImageAlign, setSelectedImageAlign] = useState<string>('top')
+  const [selectedImageWidth, setSelectedImageWidth] = useState<string>('auto')
+  const [selectedImageAlign, setSelectedImageAlign] = useState<string>('text-bottom')
+  const [selectedImageFloat, setSelectedImageFloat] = useState<string>('none')
   const [showImageControls, setShowImageControls] = useState(false)
-  const [showSlashMenu, setShowSlashMenu] = useState(false)
-  const [slashQuery, setSlashQuery] = useState('')
-  const [showEmbedDialog, setShowEmbedDialog] = useState(false)
-  const [embedUrlValue, setEmbedUrlValue] = useState('')
-  const [showLinkDialog, setShowLinkDialog] = useState(false)
-  const [linkUrlValue, setLinkUrlValue] = useState('')
+  // Track HTML vừa emit từ editor để tránh setContent lại gây loop
+  const lastEmittedHtmlRef = useRef<string>('')
 
-  const syncSlashMenuFromSelection = useCallback((editorInstance: TiptapEditor) => {
-    const { $from } = editorInstance.state.selection
-    const textBefore = $from.parent.textBetween(0, $from.parentOffset, '\\0', '\\0')
-    const lastSlash = textBefore.lastIndexOf('/')
-
-    if (lastSlash === -1) {
-      setShowSlashMenu((prev) => (prev ? false : prev))
-      setSlashQuery((prev) => (prev ? '' : prev))
-      return
-    }
-
-    const query = textBefore.slice(lastSlash + 1)
-    const invalidQuery = query.includes(' ') || query.includes('\\n')
-
-    if (invalidQuery) {
-      setShowSlashMenu((prev) => (prev ? false : prev))
-      setSlashQuery((prev) => (prev ? '' : prev))
-      return
-    }
-
-    setSlashQuery((prev) => (prev === query ? prev : query))
-    setShowSlashMenu((prev) => (prev ? prev : true))
-  }, [])
-
-  const dataUrlToFile = useCallback(async (dataUrl: string, fallbackName: string) => {
-    const response = await fetch(dataUrl)
-    const blob = await response.blob()
-    const ext = blob.type.split('/')[1] || 'png'
-    return new File([blob], `${fallbackName}.${ext}`, { type: blob.type || 'image/png' })
-  }, [])
-
-  const uploadImageFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      throw new Error('Chi ho tro dinh dang anh')
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      throw new Error('Kich thuoc anh toi da 5MB')
-    }
-
-    const formData = new FormData()
-    formData.append('image', file)
-
-    const res = await fetch('/api/upload-question-image', {
-      method: 'POST',
-      body: formData
+  const uploadImageFile = useCallback(async (file: File): Promise<string> => {
+    if (!file.type.startsWith('image/')) throw new Error('Chỉ hỗ trợ định dạng ảnh')
+    if (file.size > 5 * 1024 * 1024) throw new Error('Kích thước ảnh tối đa 5MB')
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
     })
-
-    const data = await res.json()
-    if (!res.ok || !data?.success || !data?.url) {
-      throw new Error(data?.error || 'Upload failed')
-    }
-
-    return String(data.url)
   }, [])
-  
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({
-        heading: {
-          levels: [1, 2, 3]
-        }
-      }),
-      ResizableImage.configure({
-        inline: true,
-        allowBase64: false,
-        HTMLAttributes: {
-          class: 'tiptap-image'
-        }
-      }),
-      Table.configure({
-        resizable: true,
-        HTMLAttributes: {
-          class: 'border-collapse border border-gray-300 w-full min-w-full my-4 overflow-x-auto block tiptap-table',
-        },
-      }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      ResizableImage.configure({ inline: true, allowBase64: true, HTMLAttributes: { class: 'tiptap-image' } }),
+      InlineIcon.configure({ inline: true, allowBase64: false }),
+      ImageGalleryExtension,
+      Table.configure({ resizable: true, HTMLAttributes: { class: 'tiptap-table' } }),
       TableRow,
-      TableHeader.configure({
-        HTMLAttributes: {
-          class: 'border border-gray-300 bg-gray-100 p-2 font-bold text-left min-w-[100px]',
-        },
-      }),
-      TableCell.configure({
-        HTMLAttributes: {
-          class: 'border border-gray-300 p-2 min-w-[100px]',
-        },
-      }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: 'text-blue-500 underline hover:text-blue-700'
-        }
-      }),
+      TableHeader.configure({ HTMLAttributes: { class: 'tiptap-th' } }),
+      TableCell.configure({ HTMLAttributes: { class: 'tiptap-td' } }),
+      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-blue-500 underline hover:text-blue-700' } }),
       Underline,
-      TextAlign.configure({
-        types: ['heading', 'paragraph']
-      }),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
       TextStyle,
-      Color
+      FontSize,
+      Color,
     ],
     content: content || '',
     editorProps: {
       attributes: {
-        class: `prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none ${minHeight} px-4 py-3 ${
-          error ? 'border-red-500' : ''
-        }`
+        class: `prose prose-xs sm:prose-sm max-w-none focus:outline-none ${minHeight} px-4 py-3 ${error ? 'border-red-500' : ''}`,
       },
       handlePaste: (_view, event) => {
-        const clipboard = event.clipboardData
-        const items = clipboard?.items
-        if (!items?.length) return false
+        const typeList = event.clipboardData?.types ? Array.from(event.clipboardData.types) : []
+        const items = event.clipboardData?.items
 
-        const html = clipboard?.getData('text/html') || ''
-        const hasHtml = Boolean(html && html.trim())
-        const hasDataImageInHtml = /<img[^>]+src=["']data:image/i.test(html)
-
-        if (hasHtml && hasDataImageInHtml) {
-          event.preventDefault()
-          ;(async () => {
-            try {
-              toast.loading('Dang xu ly anh tu noi dung paste...', { id: 'richtext-image-upload' })
-
-              const parser = new DOMParser()
-              const doc = parser.parseFromString(html, 'text/html')
-              const images = Array.from(doc.querySelectorAll('img'))
-              let uploadedCount = 0
-
-              for (let i = 0; i < images.length; i += 1) {
-                const img = images[i]
-                const src = img.getAttribute('src') || ''
-                if (!src.startsWith('data:image')) continue
-
-                try {
-                  const file = await dataUrlToFile(src, `pasted-image-${Date.now()}-${i}`)
-                  const imageUrl = await uploadImageFile(file)
-                  img.setAttribute('src', imageUrl)
-                  uploadedCount += 1
-                } catch {
-                  // Cloud-only mode: remove image if upload fails.
-                  img.remove()
-                }
+        // Ưu tiên xử lý ảnh trước — kể cả khi clipboard có cả text/html lẫn image
+        // (copy ảnh từ web thường có cả 2 loại)
+        if (items?.length) {
+          for (const item of Array.from(items)) {
+            if (!item.type.startsWith('image/')) continue
+            const file = item.getAsFile()
+            if (!file) continue
+            event.preventDefault()
+            ;(async () => {
+              try {
+                toast.loading('Đang xử lý ảnh...', { id: 'img-upload' })
+                const url = await uploadImageFile(file)
+                
+                // Chèn ảnh và chọn nó ngay lập tức
+                const { tr } = editor!.state
+                const node = editor!.state.schema.nodes.image.create({ src: url, alt: file.name || 'image' })
+                const insertPos = editor!.state.selection.from
+                tr.replaceSelectionWith(node)
+                // Đặt selection lên node vừa chèn
+                tr.setSelection(NodeSelection.create(tr.doc, insertPos))
+                editor!.view.dispatch(tr)
+                editor!.view.focus()
+                
+                toast.success('Đã chèn ảnh', { id: 'img-upload' })
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Không thể xử lý ảnh', { id: 'img-upload' })
               }
-
-              const finalHtml = doc.body.innerHTML
-              if (finalHtml.trim()) {
-                editor?.chain().focus().insertContent(finalHtml).run()
-              }
-
-              if (uploadedCount > 0) {
-                toast.success(`Da paste noi dung va tai ${uploadedCount} anh len cloud`, {
-                  id: 'richtext-image-upload'
-                })
-              } else {
-                toast.error('Khong tai duoc anh tu noi dung paste. Da chen phan text.', {
-                  id: 'richtext-image-upload'
-                })
-              }
-            } catch (error) {
-              console.error('Rich HTML paste processing error:', error)
-              toast.error('Khong the xu ly noi dung paste tu doc', { id: 'richtext-image-upload' })
-            }
-          })()
-
-          return true
+            })()
+            return true
+          }
         }
 
-        for (const item of Array.from(items)) {
-          if (!item.type.startsWith('image/')) continue
-
-          if (hasHtml) {
-            // If rich HTML is present, keep default paste flow for full text content.
-            return false
+        // Xử lý HTML (text, bảng, định dạng...)
+        if (typeList.includes('text/html')) {
+          const html = event.clipboardData?.getData('text/html') || ''
+          const sanitized = sanitizePastedHTML(html)
+          if (sanitized) {
+            event.preventDefault()
+            editor?.commands.insertContent(sanitized, { parseOptions: { preserveWhitespace: 'full' } })
+            return true
           }
-
-          const file = item.getAsFile()
-          if (!file) continue
-
-          event.preventDefault()
-          ;(async () => {
-            try {
-              toast.loading('Dang tai anh len cloud...', { id: 'richtext-image-upload' })
-              const imageUrl = await uploadImageFile(file)
-              editor?.chain().focus().setImage({ src: imageUrl, alt: file.name || 'image' }).run()
-              toast.success('Da chen anh thanh cong', { id: 'richtext-image-upload' })
-            } catch (error) {
-              console.error('Paste image upload error:', error)
-              toast.error(error instanceof Error ? error.message : 'Khong the tai anh len cloud', {
-                id: 'richtext-image-upload'
-              })
-            }
-          })()
-
-          return true
+          return false
         }
 
         return false
       },
-      handleDrop: (_view, event) => {
+      handleDrop: (view, event, _slice, moved) => {
+        // Nếu Tiptap đã xử lý move nội bộ thì bỏ qua
+        if (moved) return false
+
+        // Drop file ảnh từ máy tính (từ file manager)
         const files = Array.from(event.dataTransfer?.files || [])
-        const imageFile = files.find((file) => file.type.startsWith('image/'))
-        if (!imageFile) return false
-
-        event.preventDefault()
-        ;(async () => {
-          try {
-            toast.loading('Dang tai anh len cloud...', { id: 'richtext-image-upload' })
-            const imageUrl = await uploadImageFile(imageFile)
-            editor?.chain().focus().setImage({ src: imageUrl, alt: imageFile.name || 'image' }).run()
-            toast.success('Da chen anh thanh cong', { id: 'richtext-image-upload' })
-          } catch (error) {
-            console.error('Drop image upload error:', error)
-            toast.error(error instanceof Error ? error.message : 'Khong the tai anh len cloud', {
-              id: 'richtext-image-upload'
-            })
-          }
-        })()
-
-        return true
-      }
-    },
-    onUpdate: ({ editor }) => {
-      const html = editor.getHTML()
-
-      // Blob/Data URLs are temporary and should not be persisted.
-      const hasUnstableSource = /<img[^>]+src=["'](?:blob:|data:image)/i.test(html)
-      if (hasUnstableSource) {
-        const sanitized = html.replace(/<img[^>]+src=["'](?:blob:[^"']*|data:image[^"']*)["'][^>]*>/gi, '')
-        if (sanitized !== html) {
-          editor.commands.setContent(sanitized, { emitUpdate: false })
-          lastEmittedContentRef.current = sanitized
-          onChange(sanitized)
-          toast.error('Anh tam (blob/base64) da bi loai bo. Vui long upload Cloudinary truoc khi luu.')
-          return
+        const imageFile = files.find(f => f.type.startsWith('image/'))
+        if (imageFile) {
+          event.preventDefault()
+          const insertPos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? editor!.state.selection.from
+          ;(async () => {
+            try {
+              toast.loading('Đang xử lý ảnh...', { id: 'img-upload' })
+              const url = await uploadImageFile(imageFile)
+              
+              const { tr } = editor!.state
+              const node = editor!.state.schema.nodes.image.create({ src: url, alt: imageFile.name || 'image' })
+              tr.insert(insertPos, node)
+              tr.setSelection(NodeSelection.create(tr.doc, insertPos))
+              editor!.view.dispatch(tr)
+              editor!.view.focus()
+              
+              toast.success('Đã chèn ảnh', { id: 'img-upload' })
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : 'Không thể xử lý ảnh', { id: 'img-upload' })
+            }
+          })()
+          return true
         }
-      }
 
-      lastEmittedContentRef.current = html
-      onChange(html)
-      syncSlashMenuFromSelection(editor)
+        // Drag ảnh nội bộ được xử lý bởi pointer events trong NodeView
+        // Trả về false để Tiptap không xử lý thêm
+        return false
+      },
     },
-    onSelectionUpdate: ({ editor }: { editor: TiptapEditor }) => {
-      const selection = editor.state.selection
-      if (selection instanceof NodeSelection && selection.node.type.name === 'image') {
-        setShowImageControls(true)
-        const w = selection.node.attrs.width
-        if (typeof w === 'number' && Number.isFinite(w)) setSelectedImageWidth(`${Math.round(w)}px`)
-        else setSelectedImageWidth('auto')
-        const align = selection.node.attrs.verticalAlign
-        setSelectedImageAlign(typeof align === 'string' && align ? align : 'top')
-      } else {
-        setShowImageControls(false)
-      }
-
-      syncSlashMenuFromSelection(editor)
-    }
+    // Chuyển onUpdate và onSelectionUpdate vào useEffect để tránh lỗi render cycle trong React 18/19
   })
 
-  // Update editor content when content prop changes
+  // Đăng ký các event editor trong useEffect sau khi editor đã được khởi tạo
   useEffect(() => {
-    if (editor && content !== undefined && content !== null) {
-      if (editor.isFocused) return
-      if (content === lastEmittedContentRef.current) return
+    if (!editor) return
 
-      // Only update if content actually changed to avoid unnecessary updates
-      const currentContent = editor.getHTML()
-      if (currentContent !== content) {
-        editor.commands.setContent(content, { emitUpdate: false })
-      }
-      lastEmittedContentRef.current = content
+    const handleUpdate = () => {
+      if (editor.isDestroyed) return
+      const html = editor.getHTML()
+      lastEmittedHtmlRef.current = html
+      // Sử dụng setTimeout(0) thay vì queueMicrotask để đẩy việc callback ra khỏi render cycle hiện tại
+      setTimeout(() => {
+        if (!editor.isDestroyed) {
+          onChange(html)
+        }
+      }, 0)
     }
+
+    const handleSelectionUpdate = () => {
+      if (editor.isDestroyed) return
+      const sel = editor.state.selection
+      setTimeout(() => {
+        if (editor.isDestroyed) return
+        if (sel instanceof NodeSelection && sel.node.type.name === 'image') {
+          setShowImageControls(true)
+          const w = sel.node.attrs.width
+          setSelectedImageWidth(typeof w === 'number' && Number.isFinite(w) ? `${Math.round(w)}px` : 'auto')
+          const align = sel.node.attrs.verticalAlign
+          setSelectedImageAlign(typeof align === 'string' && align ? align : 'top')
+          const f = sel.node.attrs.float
+          setSelectedImageFloat(typeof f === 'string' && f ? f : 'none')
+        } else {
+          setShowImageControls(false)
+        }
+      }, 0)
+    }
+
+    editor.on('update', handleUpdate)
+    editor.on('selectionUpdate', handleSelectionUpdate)
+
+    return () => {
+      editor.off('update', handleUpdate)
+      editor.off('selectionUpdate', handleSelectionUpdate)
+    }
+  }, [editor, onChange])
+
+  // Chỉ setContent khi content đến từ bên ngoài (không phải từ chính editor emit ra)
+  useEffect(() => {
+    if (!editor || content === undefined || content === null) return
+    // Nếu content này chính là thứ editor vừa emit → bỏ qua, tránh loop
+    if (content === lastEmittedHtmlRef.current) return
+    
+    const timeoutId = setTimeout(() => {
+      if (!editor.isDestroyed && editor.getHTML() !== content) {
+        editor.commands.setContent(content)
+      }
+    }, 0)
+    
+    return () => clearTimeout(timeoutId)
   }, [content, editor])
 
-  // When the HTML content is set from outside, selection state should reset.
-  useEffect(() => {
-    setShowImageControls(false)
-  }, [content])
+  useEffect(() => { setShowImageControls(false) }, [content])
+
+  // Smart image layout: CSS-only approach, không touch DOM trực tiếp
+  // Layout được xử lý hoàn toàn qua CSS class trên paragraph
 
   const uploadImage = useCallback(async () => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
-    
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file || !editor) return
-
       try {
-        toast.loading('Dang tai anh len cloud...', { id: 'richtext-image-upload' })
-        const imageUrl = await uploadImageFile(file)
-        editor.chain().focus().setImage({ src: imageUrl, alt: file.name || 'image' }).run()
-        toast.success('Da chen anh thanh cong', { id: 'richtext-image-upload' })
-      } catch (error) {
-        console.error('Image upload error:', error)
-        toast.error(error instanceof Error ? error.message : 'Khong the tai len hinh anh', {
-          id: 'richtext-image-upload'
-        })
+        toast.loading('Đang xử lý ảnh...', { id: 'img-upload' })
+        const url = await uploadImageFile(file)
+        
+        const { tr } = editor.state
+        const node = editor.state.schema.nodes.image.create({ src: url, alt: file.name || 'image' })
+        const insertPos = editor.state.selection.from
+        tr.replaceSelectionWith(node)
+        tr.setSelection(NodeSelection.create(tr.doc, insertPos))
+        editor.view.dispatch(tr)
+        editor.view.focus()
+        
+        toast.success('Đã chèn ảnh', { id: 'img-upload' })
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Không thể xử lý ảnh', { id: 'img-upload' })
       }
     }
-
     input.click()
   }, [editor, uploadImageFile])
 
-  const setLink = useCallback(() => {
+  const insertGallery = useCallback(() => {
     if (!editor) return
-
-    const previousUrl = editor.getAttributes('link').href
-    setLinkUrlValue(typeof previousUrl === 'string' ? previousUrl : '')
-    setShowLinkDialog(true)
+    editor.chain().focus().insertContent({
+      type: 'imageGallery',
+      attrs: { cols: 3, images: [] },
+    }).run()
+    toast('Đã tạo gallery — kéo ảnh vào hoặc nhấn "+ Thêm ảnh"', { id: 'gallery' })
   }, [editor])
 
-  const closeLinkDialog = useCallback(() => {
-    setShowLinkDialog(false)
-    setLinkUrlValue('')
-  }, [])
-
-  const submitLinkDialog = useCallback(() => {
+  const setLink = useCallback(() => {
     if (!editor) return
-
-    const safeUrl = linkUrlValue.trim()
-    if (!safeUrl) {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run()
-      closeLinkDialog()
-      return
-    }
-
-    try {
-      const normalizedUrl = new URL(safeUrl).toString()
-      editor.chain().focus().extendMarkRange('link').setLink({ href: normalizedUrl }).run()
-      closeLinkDialog()
-    } catch {
-      toast.error('URL khong hop le. Vi du: https://example.com')
-    }
-  }, [closeLinkDialog, editor, linkUrlValue])
+    const prev = editor.getAttributes('link').href
+    const url = window.prompt('Nhập URL:', prev)
+    if (url === null) return
+    if (url === '') { editor.chain().focus().extendMarkRange('link').unsetLink().run(); return }
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+  }, [editor])
 
   const deleteImage = useCallback(() => {
     if (!editor) return
@@ -594,482 +994,245 @@ export default function RichTextEditor({
     setSelectedImageAlign(align)
   }, [editor])
 
-  const insertHintBlock = useCallback(() => {
-    if (!editor) return
-    editor.chain().focus().insertContent('<blockquote><p><strong>HINT:</strong> Nội dung gợi ý...</p></blockquote>').run()
+  const applyAlignToAllSelectedImages = useCallback((align: string) => {
+    if (!editor || !align) return
+    const { state } = editor
+    const { from, to } = state.selection
+    const { tr, doc, schema } = state
+    const imageType = schema.nodes.image
+    if (!imageType) return
+    let changed = false
+    doc.nodesBetween(from, to, (node, pos) => {
+      if (node.type === imageType) { tr.setNodeMarkup(pos, undefined, { ...node.attrs, verticalAlign: align }); changed = true }
+    })
+    if (changed) { editor.view.dispatch(tr); toast.success(`Đã căn ${align}`, { id: 'bulk-align' }) }
+    else toast('Không tìm thấy ảnh nào trong vùng bôi đen', { id: 'bulk-align' })
   }, [editor])
 
-  const insertTaskListTemplate = useCallback(() => {
-    if (!editor) return
-    editor.chain().focus().insertContent('<p>[ ] Việc cần làm 1</p><p>[ ] Việc cần làm 2</p>').run()
-  }, [editor])
-
-  const insertEmbedUrl = useCallback(() => {
-    if (!editor) return
-    setEmbedUrlValue('')
-    setShowEmbedDialog(true)
-  }, [editor])
-
-  const closeEmbedDialog = useCallback(() => {
-    setShowEmbedDialog(false)
-    setEmbedUrlValue('')
-  }, [])
-
-  const submitEmbedUrl = useCallback(() => {
-    if (!editor) return
-
-    const safeUrl = embedUrlValue.trim()
-    if (!safeUrl) {
-      toast.error('Vui long nhap URL can nhung')
-      return
-    }
-
-    try {
-      const normalizedUrl = new URL(safeUrl).toString()
-      editor
-        .chain()
-        .focus()
-        .insertContent(`<p><a href="${normalizedUrl}" target="_blank" rel="noreferrer">${normalizedUrl}</a></p>`)
-        .run()
-      closeEmbedDialog()
-    } catch {
-      toast.error('URL khong hop le. Vi du: https://example.com')
-    }
-  }, [closeEmbedDialog, editor, embedUrlValue])
-
-  const insertTabsTemplate = useCallback(() => {
-    if (!editor) return
-    editor.chain().focus().insertContent('<h3>Tab 1</h3><p>Nội dung tab 1...</p><hr><h3>Tab 2</h3><p>Nội dung tab 2...</p>').run()
-  }, [editor])
-
-  const insertDrawingPlaceholder = useCallback(() => {
-    if (!editor) return
-    editor.chain().focus().insertContent('<blockquote><p><strong>Drawing:</strong> Dán link Figma/Miro hoặc ảnh sơ đồ tại đây.</p></blockquote>').run()
-  }, [editor])
-
-  const insertTwoColumnsTemplate = useCallback(() => {
-    if (!editor) return
-    editor.chain().focus().insertTable({ rows: 1, cols: 2, withHeaderRow: false }).run()
-  }, [editor])
-
-
-  const insertStepperStep = useCallback(() => {
-    if (!editor) return
-
-    if (editor.isActive('orderedList')) {
-      editor
-        .chain()
-        .focus()
-        .splitListItem('listItem')
-        .insertContent('<p><strong>Step title</strong></p><p>Step content</p>')
-        .run()
-      return
-    }
-
-    editor
-      .chain()
-      .focus()
-      .insertContent('<ol><li><p><strong>Step title</strong></p><p>Step content</p></li></ol>')
-      .run()
-  }, [editor])
-
-  const slashCommands = useMemo<SlashCommandItem[]>(() => {
-    if (!editor) return []
-
-    return [
-      { id: 'paragraph', title: 'Paragraph', description: 'Đoạn văn bản thường', keywords: ['paragraph', 'text', 'p'], action: () => editor.chain().focus().setParagraph().run() },
-      { id: 'h1', title: 'Heading 1', description: 'Tiêu đề cấp 1', keywords: ['h1', 'heading'], action: () => editor.chain().focus().setHeading({ level: 1 }).run() },
-      { id: 'h2', title: 'Heading 2', description: 'Tiêu đề cấp 2', keywords: ['h2', 'heading'], action: () => editor.chain().focus().setHeading({ level: 2 }).run() },
-      { id: 'h3', title: 'Heading 3', description: 'Tiêu đề cấp 3', keywords: ['h3', 'heading'], action: () => editor.chain().focus().setHeading({ level: 3 }).run() },
-      { id: 'unordered-list', title: 'Unordered list', description: 'Danh sách dấu chấm', keywords: ['unordered', 'bullet', 'list'], action: () => editor.chain().focus().toggleBulletList().run() },
-      { id: 'ordered-list', title: 'Ordered list', description: 'Danh sách đánh số', keywords: ['ordered', 'number', 'list'], action: () => editor.chain().focus().toggleOrderedList().run() },
-      { id: 'task-list', title: 'Task list', description: 'Checklist công việc', keywords: ['task', 'todo', 'checklist'], action: insertTaskListTemplate },
-      { id: 'add-step', title: 'Add Step', description: 'Chèn nhanh một bước mới', keywords: ['step', 'stepper', 'quick'], action: insertStepperStep },
-      { id: 'divider', title: 'Divider', description: 'Đường phân cách', keywords: ['divider', 'line', 'hr'], action: () => editor.chain().focus().setHorizontalRule().run() },
-      { id: 'hint', title: 'Hint', description: 'Khối gợi ý', keywords: ['hint', 'tip', 'note'], action: insertHintBlock },
-      { id: 'quote', title: 'Quote', description: 'Khối trích dẫn', keywords: ['quote', 'blockquote'], action: () => editor.chain().focus().toggleBlockquote().run() },
-      { id: 'codeblock', title: 'Code block', description: 'Khối code', keywords: ['code', 'snippet'], action: () => editor.chain().focus().toggleCodeBlock().run() },
-      { id: 'image', title: 'Insert Image', description: 'Chèn ảnh từ máy tính', keywords: ['image', 'photo', 'upload'], action: uploadImage },
-      { id: 'table', title: 'Table', description: 'Bảng dữ liệu', keywords: ['table', 'grid'], action: () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-      { id: 'tabs', title: 'Tab', description: 'Mẫu nội dung dạng tab', keywords: ['tab', 'tabs'], action: insertTabsTemplate },
-      { id: 'drawing', title: 'Drawing', description: 'Khối đính kèm sơ đồ', keywords: ['drawing', 'diagram', 'figma', 'miro'], action: insertDrawingPlaceholder },
-      { id: 'column', title: 'Column', description: 'Bố cục 2 cột', keywords: ['column', 'columns'], action: insertTwoColumnsTemplate },
-      { id: 'embed', title: 'Embed a URL', description: 'Nhúng liên kết', keywords: ['embed', 'url', 'link'], action: insertEmbedUrl },
-    ]
-  }, [editor, insertDrawingPlaceholder, insertEmbedUrl, insertHintBlock, insertStepperStep, insertTabsTemplate, insertTaskListTemplate, insertTwoColumnsTemplate, uploadImage])
-
-  const filteredSlashCommands = useMemo(() => {
-    const q = slashQuery.trim().toLowerCase()
-    if (!q) return slashCommands
-    return slashCommands.filter((item) => `${item.title} ${item.description} ${item.keywords.join(' ')}`.toLowerCase().includes(q))
-  }, [slashCommands, slashQuery])
-
-  const closeSlashMenu = useCallback(() => {
-    setShowSlashMenu(false)
-    setSlashQuery('')
-  }, [])
-
-  const executeSlashCommand = useCallback((command: SlashCommandItem) => {
-    if (!editor) return
-    const { $from } = editor.state.selection
-    const textBefore = $from.parent.textBetween(0, $from.parentOffset, '\0', '\0')
-    const lastSlash = textBefore.lastIndexOf('/')
-
-    if (lastSlash >= 0) {
-      const start = $from.start() + lastSlash
-      const end = $from.start() + $from.parentOffset
-      editor.chain().focus().deleteRange({ from: start, to: end }).run()
-    }
-
-    command.action()
-    closeSlashMenu()
-  }, [closeSlashMenu, editor])
-
-  if (!editor) {
-    return null
-  }
+  if (!editor) return null
 
   return (
-    <div ref={editorContainerRef} className={`relative overflow-hidden rounded-xl border border-gray-200 bg-white ${error ? 'border-red-500 shadow-sm shadow-red-100' : ''}`}>
-      <div className="border-b border-gray-100 bg-[#fcfcfd] px-4 py-3">
-        <p className="text-xs font-medium text-gray-500">Gõ "/" để mở block menu</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <button type="button" onClick={() => editor.chain().focus().setHeading({ level: 1 }).run()} className="rounded-full border border-gray-200 bg-white px-3 py-1 text-sm text-gray-600 hover:border-[#a1001f]/40 hover:text-[#a1001f]">Heading 1</button>
-          <button type="button" onClick={uploadImage} className="rounded-full border border-gray-200 bg-white px-3 py-1 text-sm text-gray-600 hover:border-[#a1001f]/40 hover:text-[#a1001f]">Image</button>
-          <button type="button" onClick={insertHintBlock} className="rounded-full border border-gray-200 bg-white px-3 py-1 text-sm text-gray-600 hover:border-[#a1001f]/40 hover:text-[#a1001f]">Hint</button>
-          <button type="button" onClick={insertStepperStep} className="rounded-full border border-gray-200 bg-white px-3 py-1 text-sm text-gray-600 hover:border-[#a1001f]/40 hover:text-[#a1001f]">Add Step</button>
-          <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()} className="rounded-full border border-gray-200 bg-white px-3 py-1 text-sm text-gray-600 hover:border-[#a1001f]/40 hover:text-[#a1001f]">Code</button>
-        </div>
-      </div>
+    <div className={`overflow-hidden ${error ? 'border-red-500 shadow-sm shadow-red-100' : ''}`}>
+
       {/* Image Controls */}
       {showImageControls && (
-        <div className="image-controls-panel bg-blue-50 border-b border-blue-200 p-3 flex items-center gap-3">
-          <span className="text-sm font-medium text-blue-900">
-            📐 Kéo 4 góc ảnh để thay đổi kích thước
-          </span>
-          <span className="text-xs text-blue-700 ml-2">
-            ({selectedImageWidth})
-          </span>
-          <div className="flex items-center gap-2 ml-2">
-            <span className="text-xs text-blue-700">Căn dọc:</span>
-            <select
-              value={selectedImageAlign}
-              onChange={(e) => setImageVerticalAlign(e.target.value)}
-              className="h-8 rounded-md border border-blue-200 bg-white/90 px-2 text-xs text-blue-900"
-            >
-              <option value="top">Trên</option>
-              <option value="middle">Giữa</option>
-              <option value="bottom">Dưới</option>
-              <option value="baseline">Baseline</option>
-            </select>
+        <div className="image-controls-panel bg-blue-50 border-b border-blue-200 p-2 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-blue-900">📐 Resize góc · Kéo để di chuyển</span>
+          <span className="text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">{selectedImageWidth}</span>
+
+          {/* Float layout */}
+          <div className="flex items-center gap-1 border-l border-blue-200 pl-2">
+            <span className="text-xs text-blue-700">Layout:</span>
+            {[
+              { val: 'left',  label: '◧', title: 'Float trái — text wrap phải' },
+              { val: 'none',  label: '▣', title: 'Block — chiếm toàn bộ chiều rộng' },
+              { val: 'right', label: '◨', title: 'Float phải — text wrap trái' },
+            ].map(({ val, label, title }) => (
+              <button key={val} title={title}
+                className={`ifc-btn-toolbar${selectedImageFloat === val ? ' active' : ''}`}
+                onClick={() => {
+                  editor.chain().focus().updateAttributes('image', { float: val }).run()
+                  setSelectedImageFloat(val)
+                }}
+              >{label}</button>
+            ))}
           </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={deleteImage}
-            className="h-8 w-8 p-0 cursor-pointer hover:bg-red-100 hover:text-red-600"
-            title="Xóa ảnh"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-          <button
-            onClick={() => {
-              setShowImageControls(false)
-            }}
-            className="text-xs text-blue-600 hover:text-blue-800 ml-auto"
-          >
-            ✕ Đóng
-          </button>
-        </div>
-      )}
-      
-      {/* Toolbar */}
-      {showToolbar && (
-        <div className="bg-gray-50 border-b border-gray-200 p-2 flex flex-wrap gap-1">{/* Text Formatting */}
-        <div className="flex gap-1 pr-2 border-r border-gray-300">
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('bold') ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().toggleBold().run()}
-            className="h-8 w-8 p-0 cursor-pointer hover:bg-blue-100"
-            title="Bold (Ctrl+B)"
-          >
-            <Bold className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('italic') ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-            className="h-8 w-8 p-0 cursor-pointer hover:bg-blue-100"
-            title="Italic (Ctrl+I)"
-          >
-            <Italic className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('underline') ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().toggleUnderline().run()}
-            className="h-8 w-8 p-0 cursor-pointer hover:bg-blue-100"
-            title="Underline (Ctrl+U)"
-          >
-            <UnderlineIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('code') ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().toggleCode().run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Code"
-          >
-            <Code className="h-4 w-4" />
-          </Button>
-        </div>
 
-        {/* Headings */}
-        <div className="flex gap-1 pr-2 border-r">
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('heading', { level: 1 }) ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().setHeading({ level: 1 }).run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Heading 1"
-          >
-            <Heading1 className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('heading', { level: 2 }) ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().setHeading({ level: 2 }).run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Heading 2"
-          >
-            <Heading2 className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('heading', { level: 3 }) ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().setHeading({ level: 3 }).run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Heading 3"
-          >
-            <Heading3 className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Lists */}
-        <div className="flex gap-1 pr-2 border-r">
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('bulletList') ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Bullet List"
-          >
-            <List className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('orderedList') ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Ordered List"
-          >
-            <ListOrdered className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Alignment */}
-        <div className="flex gap-1 pr-2 border-r">
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive({ textAlign: 'left' }) ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().setTextAlign('left').run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Align Left"
-          >
-            <AlignLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive({ textAlign: 'center' }) ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().setTextAlign('center').run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Align Center"
-          >
-            <AlignCenter className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive({ textAlign: 'right' }) ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().setTextAlign('right').run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Align Right"
-          >
-            <AlignRight className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive({ textAlign: 'justify' }) ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().setTextAlign('justify').run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Justify"
-          >
-            <AlignJustify className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Insert */}
-        <div className="flex gap-1 pr-2 border-r">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={uploadImage}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Upload Image"
-          >
-            <ImageIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('link') ? 'default' : 'ghost'}
-            onClick={setLink}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Add Link"
-          >
-            <LinkIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('blockquote') ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().toggleBlockquote().run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Quote"
-          >
-            <Quote className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => editor.chain().focus().setHorizontalRule().run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Horizontal Line"
-          >
-            <Minus className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Table Operations */}
-        <div className="flex gap-1 pr-2 border-r">
-          <Button
-            type="button"
-            size="sm"
-            variant={editor.isActive('table') ? 'default' : 'ghost'}
-            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Thêm Bảng"
-          >
-            <TableIcon className="h-4 w-4" />
-          </Button>
-          {editor.isActive('table') && (
-            <div className="flex items-center bg-blue-50/50 rounded-md border border-blue-100 p-0.5 gap-0.5 ml-1">
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => editor.chain().focus().addColumnAfter().run()}
-                    className="h-7 px-2 text-[10px] text-blue-700 hover:bg-blue-100 cursor-pointer"
-                    title="Thêm cột"
-                >
-                    +Cột
-                </Button>
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => editor.chain().focus().addRowAfter().run()}
-                    className="h-7 px-2 text-[10px] text-blue-700 hover:bg-blue-100 cursor-pointer"
-                    title="Thêm dòng"
-                >
-                    +Dòng
-                </Button>
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => editor.chain().focus().deleteTable().run()}
-                    className="h-7 px-2 text-[10px] text-red-600 hover:bg-red-100 cursor-pointer"
-                    title="Xóa Bảng"
-                >
-                    Xóa
-                </Button>
+          {/* Vertical align — chỉ khi không float */}
+          {selectedImageFloat === 'none' && (
+            <div className="flex items-center gap-1 border-l border-blue-200 pl-2">
+              <span className="text-xs text-blue-700">Căn dọc:</span>
+              <select value={selectedImageAlign}
+                onChange={e => { editor.chain().focus().updateAttributes('image', { verticalAlign: e.target.value }).run(); setSelectedImageAlign(e.target.value) }}
+                className="h-7 rounded border border-blue-200 bg-white/90 px-1.5 text-xs text-blue-900">
+                <option value="top">Trên</option>
+                <option value="middle">Giữa</option>
+                <option value="bottom">Dưới</option>
+                <option value="text-bottom">Chân chữ</option>
+              </select>
             </div>
           )}
-        </div>
 
-        {/* Text Color */}
-        <div className="flex gap-1 pr-2 border-r">
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground px-2">Màu:</span>
-            <input
-              type="color"
-              value={textColor}
-              onChange={e => editor?.chain().focus().setColor(e.target.value).run()}
-              className="h-8 w-10 rounded cursor-pointer border border-border"
-              title="Text Color"
-            />
+          <Button type="button" size="sm" variant="ghost"
+            onClick={() => { editor.chain().focus().deleteSelection().run(); setShowImageControls(false) }}
+            className="h-7 w-7 p-0 cursor-pointer hover:bg-red-100 hover:text-red-600 ml-auto" title="Xóa ảnh">
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+          <button onClick={() => setShowImageControls(false)} className="text-xs text-blue-500 hover:text-blue-700">✕</button>
+        </div>
+      )}
+
+      {/* Toolbar */}
+      {showToolbar && (
+        <div className="bg-gray-50 border-b border-gray-200 p-2 flex flex-wrap gap-1">
+
+          {/* Text Formatting */}
+          <div className="flex gap-1 pr-2 border-r border-gray-300">
+            <Button type="button" size="sm" variant={editor.isActive('bold') ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().toggleBold().run()} className="h-8 w-8 p-0 cursor-pointer" title="Bold">
+              <Bold className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant={editor.isActive('italic') ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().toggleItalic().run()} className="h-8 w-8 p-0 cursor-pointer" title="Italic">
+              <Italic className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant={editor.isActive('underline') ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().toggleUnderline().run()} className="h-8 w-8 p-0 cursor-pointer" title="Underline">
+              <UnderlineIcon className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant={editor.isActive('code') ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().toggleCode().run()} className="h-8 w-8 p-0 cursor-pointer" title="Code">
+              <Code className="h-4 w-4" />
+            </Button>
           </div>
-        </div>
 
-        {/* Undo/Redo */}
-        <div className="flex gap-1">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => editor.chain().focus().undo().run()}
-            disabled={!editor.can().undo()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Undo"
-          >
-            <Undo className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => editor.chain().focus().redo().run()}
-            disabled={!editor.can().redo()}
-            className=" h-8 w-8 p-0 cursor-pointer"
-            title="Redo"
-          >
-            <Redo className="h-4 w-4" />
-          </Button>
+          {/* Headings */}
+          <div className="flex gap-1 pr-2 border-r">
+            <Button type="button" size="sm" variant={editor.isActive('heading', { level: 1 }) ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className="h-8 w-8 p-0 cursor-pointer" title="H1">
+              <Heading1 className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant={editor.isActive('heading', { level: 2 }) ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className="h-8 w-8 p-0 cursor-pointer" title="H2">
+              <Heading2 className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant={editor.isActive('heading', { level: 3 }) ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className="h-8 w-8 p-0 cursor-pointer" title="H3">
+              <Heading3 className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Lists */}
+          <div className="flex gap-1 pr-2 border-r">
+            <Button type="button" size="sm" variant={editor.isActive('bulletList') ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().toggleBulletList().run()} className="h-8 w-8 p-0 cursor-pointer" title="Bullet List">
+              <List className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant={editor.isActive('orderedList') ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().toggleOrderedList().run()} className="h-8 w-8 p-0 cursor-pointer" title="Ordered List">
+              <ListOrdered className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Alignment */}
+          <div className="flex gap-1 pr-2 border-r">
+            <Button type="button" size="sm" variant={editor.isActive({ textAlign: 'left' }) ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().setTextAlign('left').run()} className="h-8 w-8 p-0 cursor-pointer" title="Align Left">
+              <AlignLeft className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant={editor.isActive({ textAlign: 'center' }) ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().setTextAlign('center').run()} className="h-8 w-8 p-0 cursor-pointer" title="Align Center">
+              <AlignCenter className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant={editor.isActive({ textAlign: 'right' }) ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().setTextAlign('right').run()} className="h-8 w-8 p-0 cursor-pointer" title="Align Right">
+              <AlignRight className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant={editor.isActive({ textAlign: 'justify' }) ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().setTextAlign('justify').run()} className="h-8 w-8 p-0 cursor-pointer" title="Justify">
+              <AlignJustify className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Insert: Image, Link, Quote, HR */}
+          <div className="flex gap-1 pr-2 border-r">
+            <Button type="button" size="sm" variant="ghost" onClick={uploadImage} className="h-8 w-8 p-0 cursor-pointer" title="Chèn ảnh đơn">
+              <ImageIcon className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant={editor.isActive('link') ? 'default' : 'ghost'}
+              onClick={setLink} className="h-8 w-8 p-0 cursor-pointer" title="Link">
+              <LinkIcon className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant={editor.isActive('blockquote') ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().toggleBlockquote().run()} className="h-8 w-8 p-0 cursor-pointer" title="Quote">
+              <Quote className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant="ghost"
+              onClick={() => editor.chain().focus().setHorizontalRule().run()} className="h-8 w-8 p-0 cursor-pointer" title="Horizontal Line">
+              <Minus className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Table */}
+          <div className="flex gap-1 pr-2 border-r">
+            <Button type="button" size="sm" variant={editor.isActive('table') ? 'default' : 'ghost'}
+              onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+              className="h-8 w-8 p-0 cursor-pointer" title="Thêm Bảng">
+              <TableIcon className="h-4 w-4" />
+            </Button>
+            {editor.isActive('table') && (
+              <div className="flex items-center bg-blue-50/50 rounded-md border border-blue-100 p-0.5 gap-0.5 ml-1">
+                <Button type="button" size="sm" variant="ghost"
+                  onClick={() => editor.chain().focus().addColumnAfter().run()}
+                  className="h-7 px-2 text-[10px] text-blue-700 hover:bg-blue-100 cursor-pointer">+Cột</Button>
+                <Button type="button" size="sm" variant="ghost"
+                  onClick={() => editor.chain().focus().addRowAfter().run()}
+                  className="h-7 px-2 text-[10px] text-blue-700 hover:bg-blue-100 cursor-pointer">+Dòng</Button>
+                <Button type="button" size="sm" variant="ghost"
+                  onClick={() => editor.chain().focus().deleteColumn().run()}
+                  className="h-7 px-2 text-[10px] text-orange-600 hover:bg-orange-100 cursor-pointer" title="Xóa các cột đang chọn">-Cột</Button>
+                <Button type="button" size="sm" variant="ghost"
+                  onClick={() => editor.chain().focus().deleteRow().run()}
+                  className="h-7 px-2 text-[10px] text-orange-600 hover:bg-orange-100 cursor-pointer" title="Xóa các hàng đang chọn">-Dòng</Button>
+                <Button type="button" size="sm" variant="ghost"
+                  onClick={() => editor.chain().focus().deleteTable().run()}
+                  className="h-7 px-2 text-[10px] text-red-600 hover:bg-red-100 cursor-pointer">Xóa</Button>
+              </div>
+            )}
+          </div>
+
+          {/* Text Color */}
+          <div className="flex gap-1 pr-2 border-r">
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground px-1">Màu:</span>
+              <input type="color" value={editor.getAttributes('textStyle').color || textColor}
+                onChange={e => editor?.chain().focus().setColor(e.target.value).run()}
+                className="h-8 w-10 rounded cursor-pointer border border-border" title="Text Color" />
+            </div>
+          </div>
+
+          {/* Font Size */}
+          <div className="flex items-center gap-1 pr-2 border-r">
+            <span className="text-xs text-muted-foreground px-1 whitespace-nowrap">Cỡ chữ:</span>
+            <select
+              className="h-8 px-1.5 py-0 text-xs border border-input rounded bg-background hover:bg-accent transition-colors focus:outline-none focus:ring-1 focus:ring-ring min-w-[70px] cursor-pointer"
+              value={editor.getAttributes('textStyle').fontSize || ''}
+              onChange={(e) => {
+                const size = e.target.value
+                if (!editor) return
+                if (size === '') {
+                  editor.chain().focus().unsetFontSize().run()
+                } else {
+                  editor.chain().focus().setFontSize(size).run()
+                }
+              }}
+            >
+              <option value="">Mặc định</option>
+              {['10px', '11px', '12px', '13px', '14px', '15px', '16px', '18px', '20px', '24px', '28px', '32px', '36px'].map(size => (
+                <option key={size} value={size}>{size.replace('px', '')}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Undo/Redo */}
+          <div className="flex gap-1">
+            <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().undo().run()}
+              disabled={!editor.can().undo()} className="h-8 w-8 p-0 cursor-pointer" title="Undo">
+              <Undo className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => editor.chain().focus().redo().run()}
+              disabled={!editor.can().redo()} className="h-8 w-8 p-0 cursor-pointer" title="Redo">
+              <Redo className="h-4 w-4" />
+            </Button>
+          </div>
+
         </div>
-      </div>
       )}
 
       {/* Editor */}
       <EditorContent editor={editor} className="bg-background" />
 
-      {showSlashMenu && (
+      {/* {showSlashMenu && (
         <div className="absolute left-4 top-16 z-40 w-90 max-h-80 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2 shadow-2xl">
           <div className="mb-2 px-2 text-sm font-semibold text-gray-700">Insert block...</div>
           <div className="space-y-1">
@@ -1200,7 +1363,7 @@ export default function RichTextEditor({
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   )
 }

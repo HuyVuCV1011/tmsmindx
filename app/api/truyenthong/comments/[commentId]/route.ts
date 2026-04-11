@@ -1,24 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import pool from '@/lib/db'
-
-// Helper function to check if user is admin
-async function isAdmin(email?: string): Promise<boolean> {
-    if (!email) return false
-    
-    const ADMIN_CHECK_URL = process.env.NEXT_PUBLIC_ADMIN_CHECK_URL
-    if (!ADMIN_CHECK_URL) return false
-    
-    try {
-        const response = await fetch(`${ADMIN_CHECK_URL}?email=${encodeURIComponent(email)}`)
-        if (response.ok) {
-            const data = await response.json()
-            return data.isAdmin || false
-        }
-    } catch (error) {
-        console.error('Admin check failed:', error)
-    }
-    return false
-}
+import { isAppAdminByEmail } from '@/lib/is-app-admin'
 
 // Edit comment
 export async function PUT(
@@ -77,7 +59,7 @@ export async function DELETE(
         }
 
         // Check if user is admin
-        const adminStatus = await isAdmin(userEmail || undefined)
+        const adminStatus = await isAppAdminByEmail(userEmail || undefined)
         
         let result
         if (adminStatus) {
@@ -115,25 +97,27 @@ export async function PATCH(
 ) {
     try {
         const { commentId } = await params
-        const { userEmail, hidden } = await request.json()
+        const body = await request.json()
+        const userEmail = body?.userEmail as string | undefined
+        const hiddenRaw = body?.hidden
 
-        if (!userEmail) {
+        if (!userEmail?.trim()) {
             return NextResponse.json({ error: 'Missing userEmail' }, { status: 400 })
         }
 
-        // Check if user is admin
-        const adminStatus = await isAdmin(userEmail)
+        const adminStatus = await isAppAdminByEmail(userEmail)
         if (!adminStatus) {
             return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 403 })
         }
 
-        // Update hidden status
+        const hiddenFlag = hiddenRaw === true || hiddenRaw === 'true'
+
         const result = await pool.query(
             `UPDATE truyenthong_comments 
              SET hidden = $1 
              WHERE id = $2
              RETURNING id, hidden`,
-            [hidden, commentId]
+            [hiddenFlag, commentId]
         )
 
         if (result.rows.length === 0) {

@@ -76,6 +76,10 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
     const [isHiding, setIsHiding] = useState(false)
     const [optimisticHidden, setOptimisticHidden] = useState(comment.hidden)
 
+    useEffect(() => {
+        setOptimisticHidden(!!comment.hidden)
+    }, [comment.hidden])
+
     // Handle click outside to close reactions popup
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -196,14 +200,14 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
             onConfirm: async () => {
                 setIsHiding(true)
                 setConfirmDialog(prev => ({ ...prev, open: false }))
-
-                // Optimistic update
-                setOptimisticHidden(!isCurrentlyHidden)
-
-                if (onToggleHide) {
-                    await onToggleHide(comment.id, !isCurrentlyHidden)
+                try {
+                    if (onToggleHide) {
+                        await onToggleHide(comment.id, !isCurrentlyHidden)
+                        setOptimisticHidden(!isCurrentlyHidden)
+                    }
+                } finally {
+                    setIsHiding(false)
                 }
-                setIsHiding(false)
             },
             variant: isCurrentlyHidden ? 'unhide' : 'hide'
         })
@@ -854,7 +858,9 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
     }
 
     const handleToggleHide = async (commentId: number, hidden: boolean) => {
-        if (!isAdmin || !currentUserEmail) return
+        if (!isAdmin || !currentUserEmail) {
+            throw new Error('Thiếu quyền hoặc email')
+        }
 
         try {
             const res = await fetch(`/api/truyenthong/comments/${commentId}`, {
@@ -866,15 +872,19 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                 })
             })
 
-            if (res.ok) {
-                await loadComments()
-            } else {
-                const error = await res.json()
-                toast.error(error.error || 'Không thể ẩn bình luận')
+            if (!res.ok) {
+                const errBody = await res.json().catch(() => ({})) as { error?: string; details?: string }
+                const msg = errBody.details || errBody.error || 'Không thể ẩn/hiện bình luận'
+                toast.error(msg)
+                throw new Error(msg)
             }
-        } catch (error) {
-            console.error('Error toggling hide comment:', error)
-            toast.error('Có lỗi xảy ra khi ẩn bình luận')
+
+            await loadComments()
+        } catch (e) {
+            if (e instanceof TypeError) {
+                toast.error('Không kết nối được máy chủ')
+            }
+            throw e
         }
     }
 

@@ -1,27 +1,6 @@
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import ffprobe from 'ffprobe-static';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-
-const execFileAsync = promisify(execFile);
-
-async function getVideoDurationInSeconds(url: string, ffprobePath: string): Promise<number> {
-  try {
-    const { stdout } = await execFileAsync(ffprobePath, [
-      '-v', 'error',
-      '-show_entries', 'format=duration',
-      '-of', 'default=noprint_wrappers=1:nokey=1',
-      url
-    ]);
-    const duration = parseFloat(stdout.trim());
-    return isNaN(duration) ? 0 : duration;
-  } catch (error) {
-    console.error('Failed to get video duration:', error);
-    return 0;
-  }
-}
 
 export const GET = withApiProtection(async (request: NextRequest) => {
   try {
@@ -81,9 +60,13 @@ export const GET = withApiProtection(async (request: NextRequest) => {
         id,
         title,
         video_link,
+        video_group_id,
+        chunk_index,
+        chunk_total,
         thumbnail_url,
         description,
         duration_minutes,
+        duration_seconds,
         lesson_number,
         status
       FROM training_videos
@@ -96,20 +79,8 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     const durationUpdates = videosResult.rows
       .filter(video => (!video.duration_minutes || video.duration_minutes === 30) && video.video_link)
       .map(async (video) => {
-        try {
-          // Use ffprobe to get actual duration
-          console.log(`[Training DB API] Fetching duration for video ${video.id}...`);
-          const durationSec = await getVideoDurationInSeconds(video.video_link, ffprobe.path);
-          const minutes = Math.max(1, Math.ceil(durationSec / 60));
-          
-          if (minutes > 0 && minutes !== 30) {
-            await pool.query('UPDATE training_videos SET duration_minutes = $1 WHERE id = $2', [minutes, video.id]);
-            video.duration_minutes = minutes; // Update local object for response
-            console.log(`[Training DB API] Updated video ${video.id} duration to ${minutes} mins`);
-          }
-        } catch (err) {
-          console.error(`[Training DB API] Failed to update duration for video ${video.id}:`, err);
-        }
+          // Duration calculate logic has been removed to avoid memory crashes on Vercel
+          console.log(`[Training DB API] Keeping default 30 duration for video ${video.id}...`);
       });
     
     // Process updates in parallel (await to ensure response has correct data)
@@ -141,14 +112,81 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       });
     });
 
-    // Build lessons array with scores
-    const lessons = videosResult.rows.map((video, index) => {
-      const scoreData = scoresMap.get(video.id);
+    // Group split videos into one representative lesson per group.
+    const groupedVideoMap = new Map<string, any[]>();
+    videosResult.rows.forEach((video) => {
+      const groupKey = video.video_group_id ? `group:${video.video_group_id}` : `single:${video.id}`;
+      if (!groupedVideoMap.has(groupKey)) groupedVideoMap.set(groupKey, []);
+      groupedVideoMap.get(groupKey)!.push(video);
+    });
+
+    const groupedVideos = Array.from(groupedVideoMap.values()).map((videosInGroup) => {
+      const sorted = [...videosInGroup].sort((a, b) => {
+        const left = a.chunk_index ?? 0;
+        const right = b.chunk_index ?? 0;
+        if (left !== right) return left - right;
+        return a.id - b.id;
+      });
+
+      const representative = sorted[0];
+      const totalDuration = sorted.reduce((sum, item) => sum + (Number(item.duration_minutes) || 0), 0);
+      const normalizedTitle = representative.title
+        ? representative.title.replace(/\s*[-–—]?\s*(\[?P\d+(\/\d+)?\]?|part-\d+)\s*$/i, '').replace(/\s*\(Phần \d+\)$/i, '').trim()
+        : representative.title;
+
+      // Extract segments out to a dedicated array instead of Cloudinary concatenation.
+      const segments = sorted.map((vid) => ({
+         id: vid.id,
+         url: vid.video_link,
+         // We pass chunk duration for the specialized player later (fallback if duration is faulty)
+         duration_minutes: Number(vid.duration_minutes) || 0,
+         duration_seconds: vid.duration_seconds != null ? Number(vid.duration_seconds) : null
+      }));
+
+      return {
+        ...representative,
+        title: normalizedTitle || representative.title,
+        duration_minutes: totalDuration > 0 ? totalDuration : representative.duration_minutes,
+        video_link: representative.video_link, // Representative cover
+        segments: segments, // Push array of links to frontend
+        source_video_ids: sorted.map((item) => item.id),
+      };
+    });
+
+    // Build lessons with score merged from all source parts in each group.
+    const lessons = groupedVideos.map((video, index) => {
+      const sourceIds: number[] = Array.isArray(video.source_video_ids) ? video.source_video_ids : [video.id];
+      const scoreCandidates = sourceIds
+        .map((id) => scoresMap.get(id))
+        .filter(Boolean);
+
+      const scoreData = scoreCandidates.length > 0
+        ? scoreCandidates.reduce((best: any, current: any) => {
+            const statusPriority = (status: string | null | undefined) => {
+              if (status === 'completed') return 2;
+              if (status === 'in_progress') return 1;
+              return 0;
+            };
+
+            const bestPriority = statusPriority(best?.completion_status);
+            const currentPriority = statusPriority(current?.completion_status);
+            if (currentPriority > bestPriority) return current;
+            if (currentPriority < bestPriority) return best;
+
+            const bestTime = Number(best?.time_spent_seconds || 0);
+            const currentTime = Number(current?.time_spent_seconds || 0);
+            if (currentTime > bestTime) return current;
+
+            return best;
+          }, scoreCandidates[0])
+        : null;
+
       return {
         id: video.id,
-        name: video.title,
+        name: video.title || `Video ${video.id}`,
         score: scoreData ? scoreData.score : 0,
         link: video.video_link,
+        segments: video.segments, // Included chunks 
         thumbnail_url: video.thumbnail_url,
         description: video.description,
         duration_minutes: video.duration_minutes,
