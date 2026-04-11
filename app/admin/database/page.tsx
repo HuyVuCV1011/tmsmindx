@@ -691,7 +691,7 @@ export default function DatabasePage() {
                             <h3 className="font-bold text-sm text-gray-900">Insert into {selectedTable}</h3>
                             <button onClick={() => setShowInsertModal(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-4 h-4" /></button>
                         </div>
-                        <div className="p-4 space-y-2.5">
+                        <div className=" space-y-2.5">
                             {columns.filter(c => !c.column_default?.includes('nextval') && c.column_name !== 'created_at' && c.column_name !== 'updated_at').map(col => (
                                 <div key={col.column_name}>
                                     <label className="block text-xs font-medium text-gray-700 mb-0.5">
