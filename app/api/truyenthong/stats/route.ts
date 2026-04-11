@@ -26,11 +26,25 @@ export async function GET() {
       `);
             const recentPosts = recentPostsResult.rows;
 
+            const commentsAggResult = await client.query(`
+        SELECT
+          COUNT(*)::int AS total_comments,
+          COUNT(*) FILTER (WHERE hidden IS TRUE)::int AS hidden_comments
+        FROM truyenthong_comments
+      `);
+            const totalComments = parseInt(commentsAggResult.rows[0]?.total_comments || '0', 10);
+            const totalCommentsHidden = parseInt(commentsAggResult.rows[0]?.hidden_comments || '0', 10);
+            const totalCommentsShown = Math.max(0, totalComments - totalCommentsHidden);
+
             return NextResponse.json({
                 totalPosts,
                 totalViews,
                 totalLikes,
-                recentPosts
+                totalComments,
+                totalCommentsShown,
+                totalCommentsHidden,
+                recentPosts,
+                growth: 0,
             });
         } finally {
             client.release();

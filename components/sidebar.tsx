@@ -174,8 +174,13 @@ export function Sidebar() {
       icon: GraduationCap,
       submenu: [
         { href: "/user/training", label: "Đào tạo nâng cao" },
-        { href: "/user/assignments", label: "Kiểm tra chuyên môn" },
-        { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
+        {
+          label: "Kiểm tra chuyên môn/Trải nghiệm",
+          submenu: [
+            { href: "/user/assignments", label: "Quản lý kiểm tra" },
+            { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
+          ]
+        },
       ]
     },
     { href: "/user/page2", label: "Quy trình & Quy định", icon: BookOpen },
@@ -242,15 +247,9 @@ export function Sidebar() {
 
     const hasPermissionForHref = (href: string) => {
       const targetPath = href.split('?')[0];
-      const candidatePaths = getRoutePermissionAliases(targetPath);
-      return effectivePermissions.some((p) => {
-        const normalizedPermission = p.split('?')[0];
-        return candidatePaths.some(
-          (candidate) =>
-            candidate === normalizedPermission ||
-            candidate.startsWith(`${normalizedPermission}/`)
-        );
-      });
+      return permissions.some(
+        (p) => targetPath === p || targetPath.startsWith(`${p}/`) || p.startsWith(`${targetPath}/`)
+      );
     };
 
     const filterMenuItemsByPermissions = (items: any[]): any[] => {

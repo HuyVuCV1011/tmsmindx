@@ -40,6 +40,16 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const query = `
+      WITH max_assignment_scores AS (
+        SELECT 
+          tas.teacher_code, 
+          tva.video_id, 
+          MAX(tas.score) as max_score
+        FROM training_assignment_submissions tas
+        JOIN training_video_assignments tva ON tas.assignment_id = tva.id
+        WHERE tas.status = 'graded'
+        GROUP BY tas.teacher_code, tva.video_id
+      )
       SELECT 
         ts.teacher_code,
         COALESCE(t.full_name, ts.full_name) as full_name,
@@ -61,7 +71,8 @@ export const GET = withApiProtection(async (request: NextRequest) => {
               'video_id', tvs.video_id,
               'score', tvs.score,
               'completion_status', tvs.completion_status,
-              'time_spent_seconds', tvs.time_spent_seconds
+              'time_spent_seconds', tvs.time_spent_seconds,
+              'max_assignment_score', mas.max_score
             )
           ) FILTER (WHERE tvs.video_id IS NOT NULL),
           '[]'
@@ -71,6 +82,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       LEFT JOIN training_teacher_video_scores tvs ON ts.teacher_code = tvs.teacher_code
       LEFT JOIN training_videos tv ON tvs.video_id = tv.id AND tv.status = 'active'
       LEFT JOIN training_assignment_submissions tas ON ts.teacher_code = tas.teacher_code
+      LEFT JOIN max_assignment_scores mas ON ts.teacher_code = mas.teacher_code AND tvs.video_id = mas.video_id
       ${whereClause}
       GROUP BY 
         ts.teacher_code, 
@@ -86,10 +98,23 @@ export const GET = withApiProtection(async (request: NextRequest) => {
 
     const result = await pool.query(query, params);
 
-    // Fetch all active videos for column metadata
+    // Fetch active videos and collapse by video_group_id (representative per group)
     const videosResult = await pool.query(
-      `SELECT id, title, created_at FROM training_videos WHERE status = 'active' ORDER BY created_at ASC`
+      `SELECT id, title, created_at, video_group_id, chunk_index
+       FROM training_videos
+       WHERE status = 'active'
+       ORDER BY COALESCE(video_group_id, CAST(id AS TEXT)) ASC, COALESCE(chunk_index, 0) ASC, created_at ASC`
     );
+
+    // Deduplicate by video_group_id: pick the first row (lowest chunk_index or earliest created) as representative
+    const groupMap = new Map<string, { id: number; title: string; created_at: string }>();
+    for (const v of videosResult.rows as Array<{ id: number; title: string; created_at: string; video_group_id: string | null }>) {
+      const key = v.video_group_id ?? `single-${v.id}`;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, { id: v.id, title: v.title, created_at: v.created_at });
+      }
+    }
+    const activeVideosCollapsed = Array.from(groupMap.values());
 
     const stats = result.rows.map(row => ({
       teacher_code: row.teacher_code,
@@ -115,7 +140,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       success: true,
       data: stats,
       count: stats.length,
-      active_videos: videosResult.rows,
+      active_videos: activeVideosCollapsed,
     });
   } catch (error) {
     console.error('[Teacher Stats API] Error:', error);

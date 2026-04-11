@@ -9,6 +9,20 @@ cloudinary.config({
 
 type AllowedResourceType = 'image' | 'video' | 'raw' | 'all';
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isTransientCloudinaryDeleteError = (error: any) => {
+  const statusCode = Number(error?.http_code || error?.statusCode || 0);
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    statusCode === 420 ||
+    statusCode === 429 ||
+    statusCode >= 500 ||
+    message.includes('timeout waiting for parallel processing') ||
+    message.includes('timeout')
+  );
+};
+
 const parsePositiveInt = (value: string | null, fallback: number) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -92,10 +106,45 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid resource_type' }, { status: 400 });
     }
 
-    const result = await cloudinary.uploader.destroy(publicId, {
-      resource_type: resourceType as 'image' | 'video' | 'raw',
-      invalidate: true,
-    });
+    const maxAttempts = 4;
+    let lastError: any;
+    let result: any = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        // First attempt keeps invalidate=true, fallback attempts disable invalidate
+        // to avoid long edge purge timeouts on large/derived videos.
+        result = await cloudinary.uploader.destroy(publicId, {
+          resource_type: resourceType as 'image' | 'video' | 'raw',
+          invalidate: attempt === 1,
+        });
+        break;
+      } catch (error: any) {
+        lastError = error;
+        if (!isTransientCloudinaryDeleteError(error) || attempt === maxAttempts) {
+          throw error;
+        }
+
+        // Exponential backoff: 250ms, 500ms, 1000ms...
+        await sleep(250 * Math.pow(2, attempt - 1));
+      }
+    }
+
+    if (!result) {
+      throw lastError || new Error('Cloudinary destroy returned no result');
+    }
+
+    const destroyStatus = String(result?.result || '').toLowerCase();
+    if (destroyStatus && destroyStatus !== 'ok' && destroyStatus !== 'not found') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Cloudinary delete failed: ${result.result}`,
+          data: result,
+        },
+        { status: 502 }
+      );
+    }
 
     return NextResponse.json({ success: true, data: result });
   } catch (error: any) {

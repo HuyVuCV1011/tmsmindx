@@ -5,7 +5,7 @@ import { PageContainer } from "@/components/PageContainer";
 import { Stepper } from "@/components/ui/stepper";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { ClipboardList, Download, Search, Trash2 } from "lucide-react";
+import { ClipboardList, Download, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
