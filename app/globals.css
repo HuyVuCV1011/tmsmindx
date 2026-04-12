@@ -1439,38 +1439,55 @@ input[type="reset"] {
 /* Đảm bảo bảng trong Editor và Renderer không bị tràn khung */
 .ProseMirror table,
 .post-content-renderer table {
-  width: 100% !important;
-  max-width: 100% !important;
-  table-layout: auto !important; /* Để trình duyệt tự tính toán co giãn cột */
+  min-width: 100%;
+  table-layout: auto !important;
   border-collapse: collapse;
   margin: 1rem 0;
-  font-size: 0.9em; /* Giảm nhẹ font size tổng thể của bảng */
+  font-size: 0.9em;
 }
 
 .ProseMirror table td,
 .ProseMirror table th,
 .post-content-renderer table td,
 .post-content-renderer table th {
-  min-width: 20px; /* Cho phép co lại rất nhỏ */
-  padding: 4px 6px !important; /* Thu hẹp padding */
+  min-width: 80px; /* Giữ cột đủ rộng để đọc được, không bị bóp quá nhỏ */
+  padding: 6px 10px !important;
   word-break: break-word;
+  white-space: nowrap; /* Giữ nội dung trên 1 dòng → buộc scroll ngang */
 }
 
-/* Container bọc bảng để scroll nếu vẫn quá to trên mobile */
-.post-content-renderer .table-wrapper {
+/* Wrap trực tiếp table trong post-content để scroll ngang trên mobile */
+.post-content-renderer div:has(> table),
+.post-content-renderer .table-wrapper,
+.post-content-renderer .table-scroll-wrapper {
   width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  border-radius: 6px;
+}
+
+/* Fallback cho trình duyệt không hỗ trợ :has() */
+@supports not selector(:has(*)) {
+  .post-content-renderer table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
 }
 
 /* Tinh chỉnh thanh cuộn cho bảng */
 .ProseMirror table::-webkit-scrollbar,
-.post-content-renderer table::-webkit-scrollbar {
+.post-content-renderer table::-webkit-scrollbar,
+.post-content-renderer div:has(> table)::-webkit-scrollbar,
+.post-content-renderer .table-scroll-wrapper::-webkit-scrollbar {
   height: 6px;
 }
 .ProseMirror table::-webkit-scrollbar-thumb,
-.post-content-renderer table::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
+.post-content-renderer table::-webkit-scrollbar-thumb,
+.post-content-renderer div:has(> table)::-webkit-scrollbar-thumb,
+.post-content-renderer .table-scroll-wrapper::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
   border-radius: 3px;
 }
 
