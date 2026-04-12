@@ -46,7 +46,7 @@ Vì tính chất của nhận xét Checkpoint và Nhận xét cuối khoá là t
   * Kỹ năng
   * Thái độ
 
-Để đánh giá khả năng học tập của học viên, giảng viên cần trả lời các câu hỏi trong tiêu chí nhận xét.&#x20;
+Để đánh giá khả năng học tập của học viên, giáo viên cần trả lời các câu hỏi trong tiêu chí nhận xét.&#x20;
 
 **Hướng dẫn xem mô tả thang điểm và tiêu chí nhận xét:**
 
@@ -74,8 +74,8 @@ Vì tính chất của nhận xét Checkpoint và Nhận xét cuối khoá là t
 
 **C. Điểm demo:**
 
-* Dựa trên kết quả chấm bài sản phẩm cuối khoá của Giảng viên chính và Ban giám khảo.
-* Kết quả trên LMS sẽ được giảng viên chính điền.
+* Dựa trên kết quả chấm bài sản phẩm cuối khoá của Giáo viên chính và Ban giám khảo.
+* Kết quả trên LMS sẽ được giáo viên chính điền.
 
 **D. Thư từ MindX:**
 

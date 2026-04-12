@@ -22,7 +22,7 @@ export default function Modal({
   children,
   maxWidth = '2xl',
   footer,
-  headerColor = 'from-blue-600 to-blue-700',
+  headerColor = 'bg-[#a1001f]',
   overflowContent = 'auto'
 }: ModalProps) {
   // Handle ESC key
@@ -68,7 +68,7 @@ export default function Modal({
     : headerColor;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-3 pt-20 sm:items-center sm:p-4 overflow-y-auto">
       {/* Backdrop with minimal opacity */}
       <div
         className="fixed inset-0 bg-opacity-60 backdrop-blur-sm transition-opacity"
@@ -77,7 +77,7 @@ export default function Modal({
 
       {/* Modal Content */}
       <div
-        className={`relative bg-white rounded-xl shadow-2xl w-full ${maxWidthClasses[maxWidth]} max-h-[95vh] my-4 animate-modal-in ${overflowContent === 'visible' ? 'overflow-visible' : 'overflow-y-auto'}`}
+        className={`relative bg-white rounded-xl shadow-2xl w-full ${maxWidthClasses[maxWidth]} max-h-[92vh] sm:max-h-[95vh] my-2 sm:my-4 animate-modal-in ${overflowContent === 'visible' ? 'overflow-visible' : 'overflow-y-auto'}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
