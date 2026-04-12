@@ -927,11 +927,7 @@ export default function ProfessionalEvaluationSchedulePage() {
   return (
     <PageContainer title="Lịch sự kiện">
       <Card className="overflow-hidden" padding="sm">
-        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 text-center">
-          <h2 className="text-2xl font-bold text-gray-900">Lịch Sự Kiện</h2>
-        </div>
-
-        <div className="px-4 py-2 border-b border-gray-200 bg-white flex flex-wrap items-center justify-between gap-3">
+        <div className="px-4 py-2 border-b flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-gray-700" />
             <select
@@ -1733,7 +1729,7 @@ export default function ProfessionalEvaluationSchedulePage() {
       )}
 
       {showParticipantsModal && selectedParticipantEvent && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
               <div>

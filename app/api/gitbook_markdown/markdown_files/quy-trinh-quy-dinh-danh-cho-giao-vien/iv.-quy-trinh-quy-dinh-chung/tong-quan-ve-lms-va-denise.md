@@ -7,7 +7,7 @@ LMS - Learning Management System được xây dựng và phát triển bởi đ
 **Hệ thống LMS là**
 
 * Công cụ hỗ trợ vận hành lớp học và các hoạt động khác ngoài lớp học (trải nghiệm/sự kiện/…)
-* Theo dõi, ghi nhận chấm công cho bộ phận Giảng viên
+* Theo dõi, ghi nhận chấm công cho bộ phận Giáo viên
 * Theo dõi chuyên cần của học viên
 * Nhận xét quá trình học tập của học viên
 

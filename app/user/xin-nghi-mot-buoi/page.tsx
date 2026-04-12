@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useAuth } from '@/lib/auth-context';
 import { findMatchingCampus } from '@/lib/campus-data';
 import { useTeacher } from '@/lib/teacher-context';
+import { FileText, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
@@ -318,8 +319,8 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
     <div className="min-h-screen bg-white p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
         <PageHeader
-          title="Xin nghỉ 1 buổi dạy"
-          description="Bấm tạo mail để gửi yêu cầu, sau đó theo dõi tiến trình 4 bước."
+          title="Yêu Cầu Xin Nghỉ 1 Buổi"
+          description="Bấm tạo yêu cầu để gửi yêu cầu, sau đó theo dõi tiến trình 4 bước."
           actions={
             <Button
               size="lg"
@@ -329,19 +330,26 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
               }}
               className="whitespace-nowrap border-2 border-[#a1001f] bg-[#a1001f] text-white shadow-md hover:bg-[#8a001a]"
             >
-              Tạo mail xin nghỉ
+              <Plus className="mr-2 h-5 w-5" />
+              Tạo yêu cầu xin nghỉ
             </Button>
           }
         />
 
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
-            <h2 className="text-lg font-semibold text-gray-900">Danh sách yêu cầu xin nghỉ</h2>
-            <p className="text-sm text-gray-600">Tổng: {leaveRequests.length} yêu cầu</p>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="min-w-0 text-lg font-semibold text-gray-900">Danh sách yêu cầu xin nghỉ</h2>
+              <p className="shrink-0 whitespace-nowrap text-sm text-gray-600">Tổng: {leaveRequests.length} yêu cầu</p>
+            </div>
           </div>
 
           {leaveRequests.length === 0 ? (
-            <div className="p-10 text-center text-sm text-gray-600">Chưa có yêu cầu xin nghỉ nào.</div>
+            <div className="p-8 sm:p-12 text-center">
+              <FileText className="mx-auto h-16 w-16 text-gray-400" strokeWidth={1.5} />
+              <h3 className="mt-4 text-lg font-medium text-gray-900">Chưa có yêu cầu xin nghỉ nào</h3>
+              <p className="mt-2 text-sm text-gray-600">Bắt đầu bằng cách tạo yêu cầu xin nghỉ mới</p>
+            </div>
           ) : (
             <>
               <div className="hidden overflow-x-auto lg:block">

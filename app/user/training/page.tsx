@@ -371,12 +371,12 @@ export default function TrainingPage() {
 
   return (
     <PageContainer
-      title="Đào tạo nâng cao"
+      title="Đào Tạo Nâng Cao"
       description={`Điểm học trực tuyến - ${trainingData?.lessons?.length || 0} bài học`}
     >
 
         {/* Always show content structure with skeleton when loading */}
-        <div className="flex gap-6 border-b mb-6">
+        <div className="mb-6 flex gap-6 border-b border-[#e7c6cb]">
           <button
             className={`pb-3 px-2 border-b-2 font-bold transition-colors ${
               tab === 'lessons' 

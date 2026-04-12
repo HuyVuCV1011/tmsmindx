@@ -89,9 +89,9 @@ export default function NhanLop1BuoiPage() {
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl space-y-5">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Danh sách nhận lớp 1 buổi</h1>
-          <p className="mt-1 text-sm text-gray-600">Step 3: Giáo viên thay thế xác nhận đã nhận thông tin.</p>
+        <div className="border-b border-gray-200 pb-4 sm:pb-5">
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Danh Sách Lớp Nhận Thay Thế</h1>
+          <p className="mt-1 text-sm text-gray-600">Hiển thị khi giáo viên thay thế đã xác nhận thông tin</p>
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-x-auto">
@@ -117,7 +117,12 @@ export default function NhanLop1BuoiPage() {
                     {item.status === 'substitute_confirmed' ? 'Đã xác nhận' : 'Chờ xác nhận'}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" variant="outline" onClick={() => setSelected(item)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSelected(item)}
+                      className="border-[#d8a1ae] text-[#a1001f] hover:border-[#a1001f] hover:bg-[#fdf2f5]"
+                    >
                       Chi tiết
                     </Button>
                   </TableCell>

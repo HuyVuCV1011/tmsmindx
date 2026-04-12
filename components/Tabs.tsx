@@ -8,11 +8,12 @@ interface TabsProps {
   }[];
   activeTab: string;
   onChange: (tabId: string) => void;
+  borderClassName?: string;
 }
 
-export function Tabs({ tabs, activeTab, onChange }: TabsProps) {
+export function Tabs({ tabs, activeTab, onChange, borderClassName = "border-gray-200" }: TabsProps) {
   return (
-    <div className="border-b border-gray-200">
+    <div className={`border-b ${borderClassName}`}>
       <div className="flex gap-2 overflow-x-auto pb-px hide-scrollbar">
         {tabs.map((tab) => (
           <button

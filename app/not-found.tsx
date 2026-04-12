@@ -96,7 +96,7 @@ export default function NotFound() {
                   {user
                     ? user.isAdmin
                       ? "Admin Dashboard"
-                      : "Thông tin giảng viên"
+                      : "Thông tin giáo viên"
                     : "Trang đăng nhập"}
                 </span>
               </p>

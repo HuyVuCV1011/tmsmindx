@@ -539,7 +539,7 @@ export default function DealLuongPage() {
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-slate-900 truncate">{deal.submitter_name}</p>
-                      <p className="text-xs text-slate-500 mt-1 truncate">Giảng viên: {deal.teacher_name}</p>
+                      <p className="text-xs text-slate-500 mt-1 truncate">Giáo viên: {deal.teacher_name}</p>
                     </div>
                     <span className="text-[11px] text-slate-400 font-medium flex-shrink-0">#{deal.id}</span>
                   </div>
@@ -885,7 +885,7 @@ export default function DealLuongPage() {
             {/* Info */}
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-slate-50 rounded-lg px-4 py-3">
-                <p className="text-[11px] text-slate-400 uppercase font-bold tracking-wider mb-1">Giảng viên</p>
+                <p className="text-[11px] text-slate-400 uppercase font-bold tracking-wider mb-1">Giáo viên</p>
                 <p className="text-sm font-semibold text-slate-800">{selectedDeal.teacher_name}</p>
                 {selectedDeal.teacher_codename && <p className="text-xs text-slate-500">{selectedDeal.teacher_codename}</p>}
               </div>

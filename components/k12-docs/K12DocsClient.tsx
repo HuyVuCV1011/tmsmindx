@@ -1,6 +1,7 @@
 "use client";
 
 import { PageContainer } from "@/components/PageContainer";
+import ImageLightbox from "@/components/ImageLightbox";
 import { cn } from "@/lib/utils";
 import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import Link from "next/link";
@@ -86,6 +87,33 @@ function normalizeGitbookMarkdown(raw: string) {
   return content;
 }
 
+function decodeHtmlEntities(input: string) {
+  return input
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+}
+
+function buildSearchPreview(content: string, maxLength = 120) {
+  const decoded = decodeHtmlEntities(content || "");
+  const noHtml = decoded
+    .replace(/<[^>]*>/g, " ")
+    .replace(/!\[[^\]]*\]\([^\)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^\)]*\)/g, "$1")
+    .replace(/^#+\s+/gm, "")
+    .replace(/[\|_*~`>#-]/g, " ")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!noHtml) return "Không có nội dung xem trước";
+  if (noHtml.length <= maxLength) return noHtml;
+  return `${noHtml.slice(0, maxLength).trim()}...`;
+}
+
 function mapGitbookHref(href: string, basePath: string) {
   const prefix = "quy-trinh-quy-dinh-danh-cho-giao-vien/";
 
@@ -152,6 +180,32 @@ function extractListItemLink(liNode: unknown): { href: string; label: string } |
   return anchor;
 }
 
+function extractImagesFromMarkdown(content: string): Array<{ src: string; alt: string }> {
+  const images: Array<{ src: string; alt: string }> = [];
+  const seen = new Set<string>();
+
+  const markdownImageRegex = /!\[([^\]]*)\]\(([^\)\s]+)(?:\s+"[^"]*")?\)/g;
+  const htmlImageRegex = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi;
+
+  let match: RegExpExecArray | null;
+  while ((match = markdownImageRegex.exec(content)) !== null) {
+    const alt = (match[1] || "").trim() || "image";
+    const src = (match[2] || "").trim();
+    if (!src || seen.has(src)) continue;
+    seen.add(src);
+    images.push({ src, alt });
+  }
+
+  while ((match = htmlImageRegex.exec(content)) !== null) {
+    const src = (match[1] || "").trim();
+    if (!src || seen.has(src)) continue;
+    seen.add(src);
+    images.push({ src, alt: "image" });
+  }
+
+  return images;
+}
+
 export default function K12DocsClient({
   basePath,
   pageTitle,
@@ -165,6 +219,7 @@ export default function K12DocsClient({
   const [expandedLevelOne, setExpandedLevelOne] = useState<Record<string, boolean>>({});
   const [isMiniToc, setIsMiniToc] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
@@ -267,6 +322,11 @@ export default function K12DocsClient({
     return normalizeGitbookMarkdown(selectedDoc.content);
   }, [selectedDoc]);
 
+  const galleryImages = useMemo(() => {
+    if (!normalizedContent) return [];
+    return extractImagesFromMarkdown(normalizedContent);
+  }, [normalizedContent]);
+
   const renderTree = (nodes: K12ClientDocNode[], depth = 0) => {
     return nodes
       .map((node) => {
@@ -364,7 +424,7 @@ export default function K12DocsClient({
   return (
     <PageContainer>
       {/* Custom Header with Title and Search */}
-      <div className="mb-6">
+      <div className="mb-6 border-b border-gray-200 pb-4 sm:pb-5">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-2">
           <div className="flex-1">
             <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
@@ -398,19 +458,14 @@ export default function K12DocsClient({
                         key={doc.slug}
                         href={`${basePath}?doc=${encodeURIComponent(doc.slug)}`}
                         onClick={() => setShowSearchResults(false)}
-                        className="flex items-start gap-3 px-3 py-2 hover:bg-gray-50 transition-colors rounded-md text-sm border-b last:border-b-0"
+                        className="flex items-start gap-3 rounded-lg border border-[#f1d1d8] bg-white px-3 py-2 text-sm transition-colors hover:border-[#e7c6cb] hover:bg-[#fff7f8]"
                       >
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-gray-900 line-clamp-2">
                             {doc.title}
                           </p>
                           <p className="text-xs text-gray-600 line-clamp-2 mt-1">
-                            {doc.content
-                              .substring(0, 100)
-                              .replace(/<[^>]+>/g, '')
-                              .replace(/^#+\s/gm, '')
-                              .replace(/[*_~`-]/g, '')
-                              .trim()}...
+                            {buildSearchPreview(doc.content)}
                           </p>
                         </div>
                       </Link>
@@ -528,12 +583,17 @@ export default function K12DocsClient({
                     },
                     img: ({ src, alt }) => {
                       if (!src) return null;
+                      const imageIndex = galleryImages.findIndex((image) => image.src === src);
                       return (
                         <img
                           src={src}
                           alt={alt || "image"}
                           loading="lazy"
-                          className="my-3 max-h-130 w-auto max-w-full rounded-lg border border-gray-200 object-contain"
+                          className="my-3 max-h-130 w-auto max-w-full cursor-zoom-in rounded-lg border border-gray-200 object-contain"
+                          onClick={() => {
+                            if (galleryImages.length === 0) return;
+                            setLightboxIndex(imageIndex >= 0 ? imageIndex : 0);
+                          }}
                         />
                       );
                     },
@@ -680,6 +740,14 @@ export default function K12DocsClient({
           )}
         </aside>
       </div>
+
+      {lightboxIndex !== null && galleryImages.length > 0 && (
+        <ImageLightbox
+          images={galleryImages}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
     </PageContainer>
   );
 }
