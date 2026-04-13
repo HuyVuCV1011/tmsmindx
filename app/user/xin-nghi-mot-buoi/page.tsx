@@ -2,13 +2,16 @@
 
 import Modal from '@/components/Modal';
 import { PageHeader } from '@/components/PageHeader';
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StepItem, Stepper } from '@/components/ui/stepper';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/lib/auth-context';
 import { findMatchingCampus } from '@/lib/campus-data';
 import { useTeacher } from '@/lib/teacher-context';
-import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, CalendarClock, CheckCircle2, CircleX, RefreshCcw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface LeaveRequest {
@@ -35,23 +38,26 @@ interface LeaveRequest {
   updated_at: string;
 }
 
+type StatusVariant = 'warning' | 'info' | 'success' | 'destructive';
+
 const STORAGE_KEY = 'teacher_leave_request_auto_fill_data';
 const NORTH_CAMPUS_KEYWORDS = ['ha noi', 'hanoi', 'bac', 'hai phong', 'quang ninh', 'thai nguyen', 'nam dinh'];
+const MIN_ADVANCE_HOURS = 72;
 
-function getStatusLabel(status: LeaveRequest['status']) {
+function getStatusMeta(status: LeaveRequest['status']): { label: string; variant: StatusVariant } {
   switch (status) {
     case 'pending_admin':
-      return 'Chờ TC/Leader duyệt';
+      return { label: 'Chờ TC/Leader duyệt', variant: 'warning' };
     case 'approved_unassigned':
-      return 'Đã duyệt - chờ phân giáo viên thay';
+      return { label: 'Đã duyệt - chờ phân GV thay', variant: 'info' };
     case 'approved_assigned':
-      return 'Đã gửi cho giáo viên thay thế';
+      return { label: 'Đã gửi cho GV thay thế', variant: 'info' };
     case 'substitute_confirmed':
-      return 'Giáo viên thay thế đã xác nhận';
+      return { label: 'GV thay đã xác nhận', variant: 'success' };
     case 'rejected':
-      return 'Từ chối';
+      return { label: 'Từ chối', variant: 'destructive' };
     default:
-      return status;
+      return { label: status, variant: 'info' };
   }
 }
 
@@ -64,12 +70,8 @@ function getWorkflowSteps(status: LeaveRequest['status']): StepItem[] {
 
   if (status === 'rejected') {
     step2Status = 'error';
-    step3Status = 'upcoming';
     step4Status = 'error';
-  } else if (status === 'approved_unassigned') {
-    step2Status = 'success';
-    step3Status = 'current';
-  } else if (status === 'approved_assigned') {
+  } else if (status === 'approved_unassigned' || status === 'approved_assigned') {
     step2Status = 'success';
     step3Status = 'current';
   } else if (status === 'substitute_confirmed') {
@@ -91,7 +93,37 @@ export default function XinNghiMotBuoiPage() {
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
 
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [campusFilter, setCampusFilter] = useState<string[]>([]);
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+  const [showCampusDropdown, setShowCampusDropdown] = useState(false);
+  const [campusSearchText, setCampusSearchText] = useState('');
+    // Danh sách campus duy nhất
+    const campusOptions = useMemo(() => {
+      const set = new Set<string>();
+      leaveRequests.forEach((item) => {
+        if (item.campus) set.add(item.campus);
+      });
+      return Array.from(set).sort();
+    }, [leaveRequests]);
+
+    const filteredCampusOptions = useMemo(() => {
+      if (!campusSearchText.trim()) return campusOptions;
+      const searchLower = campusSearchText.toLowerCase();
+      return campusOptions.filter(campus => campus.toLowerCase().includes(searchLower));
+    }, [campusOptions, campusSearchText]);
+
+    // Lọc leaveRequests theo campus và khoảng thời gian
+    const filteredRequests = useMemo(() => {
+      return leaveRequests.filter((item) => {
+        if (campusFilter.length > 0 && !campusFilter.includes(item.campus)) return false;
+        if (fromDate && new Date(item.leave_date) < new Date(fromDate)) return false;
+        if (toDate && new Date(item.leave_date) > new Date(toDate)) return false;
+        return true;
+      });
+    }, [leaveRequests, campusFilter, fromDate, toDate]);
   const [loading, setLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
@@ -157,29 +189,39 @@ export default function XinNghiMotBuoiPage() {
     });
   }, [teacherProfile, user?.email]);
 
-  const fetchLeaveRequests = async () => {
-    if (!user?.email) return;
+  const fetchLeaveRequests = useCallback(
+    async (showRefreshToast = false) => {
+      if (!user?.email) return;
 
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/leave-requests?email=${encodeURIComponent(user.email)}`);
-      const data = await response.json();
+      try {
+        setLoading(true);
+        setLoadingError(null);
 
-      if (data.success) {
-        setLeaveRequests(data.data);
+        const response = await fetch(`/api/leave-requests?email=${encodeURIComponent(user.email)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Không thể tải danh sách yêu cầu');
+        }
+
+        setLeaveRequests(data.data || []);
+        if (showRefreshToast) toast.success('Đã cập nhật danh sách mới nhất');
+      } catch (error: unknown) {
+        console.error('Error fetching leave requests:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Có lỗi khi tải dữ liệu';
+        setLoadingError(errorMessage);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching leave requests:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [user?.email]
+  );
 
   useEffect(() => {
     if (user?.email) {
       fetchLeaveRequests();
     }
-  }, [user?.email]);
+  }, [fetchLeaveRequests, user?.email]);
 
   const inferredRegion = useMemo(() => {
     const normalizedCampus = formData.campus.toLowerCase();
@@ -189,8 +231,7 @@ export default function XinNghiMotBuoiPage() {
 
   const hasSubstitute = formData.has_substitute && formData.substitute_teacher.trim().length > 0;
 
-  const toLine =
-    inferredRegion === 'mien_nam' ? 'TC/TE, CS cơ sở xin nghỉ' : 'TC/TE, TC, CS cơ sở xin nghỉ';
+  const toLine = inferredRegion === 'mien_nam' ? 'TC/TE, CS cơ sở xin nghỉ' : 'TC/TE, TC, CS cơ sở xin nghỉ';
   const ccLine = 'Leader, TEGL';
 
   const subjectLine = `[MindX - ${formData.campus || 'Tên Cơ Sở'}] V/v xin nghỉ 1 buổi dạy`;
@@ -238,6 +279,10 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
     leaveDateDisplay
   ]);
 
+  const pendingCount = useMemo(() => leaveRequests.filter((item) => item.status === 'pending_admin').length, [leaveRequests]);
+  const doneCount = useMemo(() => leaveRequests.filter((item) => item.status === 'substitute_confirmed').length, [leaveRequests]);
+  const rejectedCount = useMemo(() => leaveRequests.filter((item) => item.status === 'rejected').length, [leaveRequests]);
+
   const handleChange = (field: keyof typeof formData, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -258,8 +303,43 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
     }));
   };
 
+  const validateForm = () => {
+    if (!formData.teacher_name || !formData.lms_code || !formData.email || !formData.campus || !formData.leave_date || !formData.reason) {
+      return 'Vui lòng điền đầy đủ các trường bắt buộc.';
+    }
+
+    if (formData.reason.trim().length < 10) {
+      return 'Lý do xin nghỉ cần rõ ràng hơn (tối thiểu 10 ký tự).';
+    }
+
+    const leaveDateMs = new Date(`${formData.leave_date}T00:00:00`).getTime();
+    const diffHours = (leaveDateMs - Date.now()) / (1000 * 60 * 60);
+    if (diffHours < MIN_ADVANCE_HOURS) {
+      return `Ngày xin nghỉ cần cách thời điểm hiện tại tối thiểu ${MIN_ADVANCE_HOURS} giờ.`;
+    }
+
+    if (formData.has_substitute) {
+      if (!formData.substitute_teacher.trim() || !formData.substitute_email.trim()) {
+        return 'Nếu đã tích giáo viên thay thế, cần nhập đầy đủ tên và email giáo viên thay.';
+      }
+      const emailValid = /\S+@\S+\.\S+/.test(formData.substitute_email.trim());
+      if (!emailValid) {
+        return 'Email giáo viên thay thế chưa đúng định dạng.';
+      }
+    }
+
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const validationError = validateForm();
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -306,9 +386,15 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
     return (
       <div className="min-h-screen bg-white p-4 sm:p-6 lg:p-8">
         <div className="mx-auto max-w-7xl space-y-4">
-          <div className="h-10 w-64 animate-pulse rounded bg-gray-200" />
-          <div className="h-24 animate-pulse rounded bg-gray-100" />
-          <div className="h-96 animate-pulse rounded bg-gray-100" />
+          <div className="h-10 w-72 animate-pulse rounded bg-gray-200" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
+            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
+            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <TableSkeleton rows={6} columns={5} />
+          </div>
         </div>
       </div>
     );
@@ -316,32 +402,166 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
 
   return (
     <div className="min-h-screen bg-white p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto max-w-7xl space-y-5">
         <PageHeader
           title="Xin nghỉ 1 buổi dạy"
-          description="Bấm tạo mail để gửi yêu cầu, sau đó theo dõi tiến trình 4 bước."
+          description="Tạo mail xin nghỉ và theo dõi quy trình 4 bước xuyên suốt User - Admin - User."
           actions={
-            <Button
-              size="lg"
-              onClick={() => {
-                resetFormForNew();
-                setShowModal(true);
-              }}
-              className="whitespace-nowrap border-2 border-[#a1001f] bg-[#a1001f] text-white shadow-md hover:bg-[#8a001a]"
-            >
-              Tạo mail xin nghỉ
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => fetchLeaveRequests(true)}>
+                <RefreshCcw className="mr-1.5 h-4 w-4" />
+                Làm mới
+              </Button>
+              <Button
+                size="lg"
+                onClick={() => {
+                  resetFormForNew();
+                  setShowModal(true);
+                }}
+                className="whitespace-nowrap border-2 border-[#a1001f] bg-[#a1001f] text-white shadow-md hover:bg-[#8a001a]"
+              >
+                Tạo mail xin nghỉ
+              </Button>
+            </div>
           }
         />
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-xs font-medium text-amber-700">Chờ duyệt</p>
+            <p className="mt-1 text-2xl font-bold text-amber-900">{pendingCount}</p>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-xs font-medium text-emerald-700">Đã hoàn tất</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-900">{doneCount}</p>
+          </div>
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+            <p className="text-xs font-medium text-rose-700">Bị từ chối</p>
+            <p className="mt-1 text-2xl font-bold text-rose-900">{rejectedCount}</p>
+          </div>
+        </div>
+
+        {/* Bộ lọc nâng cao */}
+        <div className="mb-4 flex flex-wrap gap-3 items-end">
+          <div className="relative">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Cơ sở</label>
+            <button
+              type="button"
+              onClick={() => setShowCampusDropdown(!showCampusDropdown)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[180px] text-left flex items-center justify-between bg-white hover:bg-gray-50"
+            >
+              <span className="truncate">
+                {campusFilter.length === 0 ? 'Tất cả' : `${campusFilter.length} cơ sở`}
+              </span>
+              <svg className="w-4 h-4 ml-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showCampusDropdown && (
+              <div className="absolute z-10 mt-1 w-full min-w-[240px] bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-hidden flex flex-col">
+                <div className="p-2 border-b border-gray-200">
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm cơ sở..."
+                    value={campusSearchText}
+                    onChange={(e) => setCampusSearchText(e.target.value)}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+                <div className="p-2 border-b border-gray-200 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCampusFilter(filteredCampusOptions)}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Chọn tất cả
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCampusFilter([])}
+                    className="text-xs text-gray-600 hover:text-gray-800 font-medium"
+                  >
+                    Bỏ chọn
+                  </button>
+                </div>
+                <div className="overflow-y-auto flex-1">
+                {filteredCampusOptions.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-gray-500 text-center">Không tìm thấy cơ sở</div>
+                ) : (
+                  filteredCampusOptions.map((campus) => (
+                  <label
+                    key={campus}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={campusFilter.includes(campus)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setCampusFilter([...campusFilter, campus]);
+                        } else {
+                          setCampusFilter(campusFilter.filter((c) => c !== campus));
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                    />
+                    <span className="text-sm text-gray-700">{campus}</span>
+                  </label>
+                  ))
+                )}
+                </div>
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Từ ngày</label>
+            <input
+              type="date"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              value={fromDate}
+              onChange={e => setFromDate(e.target.value)}
+              max={toDate || undefined}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Đến ngày</label>
+            <input
+              type="date"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              value={toDate}
+              onChange={e => setToDate(e.target.value)}
+              min={fromDate || undefined}
+            />
+          </div>
+          {(campusFilter.length > 0 || fromDate || toDate) && (
+            <Button size="sm" variant="ghost" onClick={() => { setCampusFilter([]); setFromDate(''); setToDate(''); }}>
+              Xoá lọc
+            </Button>
+          )}
+        </div>
 
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
             <h2 className="text-lg font-semibold text-gray-900">Danh sách yêu cầu xin nghỉ</h2>
-            <p className="text-sm text-gray-600">Tổng: {leaveRequests.length} yêu cầu</p>
+            <p className="text-sm text-gray-600">Tổng: {filteredRequests.length} yêu cầu</p>
           </div>
 
-          {leaveRequests.length === 0 ? (
-            <div className="p-10 text-center text-sm text-gray-600">Chưa có yêu cầu xin nghỉ nào.</div>
+          {loadingError && (
+            <div className="mx-4 mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 sm:mx-6">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium">Không thể tải dữ liệu</p>
+                <p className="mt-0.5">{loadingError}</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => fetchLeaveRequests()}>
+                Thử lại
+              </Button>
+            </div>
+          )}
+
+          {filteredRequests.length === 0 ? (
+            <div className="p-10 text-center text-sm text-gray-600">Không có yêu cầu nào phù hợp bộ lọc.</div>
           ) : (
             <>
               <div className="hidden overflow-x-auto lg:block">
@@ -356,54 +576,67 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {leaveRequests.map((item) => (
-                      <TableRow
-                        key={item.id}
-                        className="cursor-pointer hover:bg-blue-50"
-                        onClick={() => setSelectedRequest(item)}
-                      >
-                        <TableCell>{new Date(item.created_at).toLocaleDateString('vi-VN')}</TableCell>
-                        <TableCell>{new Date(item.leave_date).toLocaleDateString('vi-VN')}</TableCell>
-                        <TableCell>{item.campus}</TableCell>
-                        <TableCell>{item.class_code || '-'}</TableCell>
-                        <TableCell>
-                          <span className="text-sm font-medium text-gray-700">{getStatusLabel(item.status)}</span>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filteredRequests.map((item) => {
+                      const statusMeta = getStatusMeta(item.status);
+                      return (
+                        <TableRow key={item.id} className="cursor-pointer hover:bg-blue-50/40" onClick={() => setSelectedRequest(item)}>
+                          <TableCell>{new Date(item.created_at).toLocaleDateString('vi-VN')}</TableCell>
+                          <TableCell>{new Date(item.leave_date).toLocaleDateString('vi-VN')}</TableCell>
+                          <TableCell>{item.campus}</TableCell>
+                          <TableCell>{item.class_code || '-'}</TableCell>
+                          <TableCell>
+                            <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
 
               <div className="divide-y divide-gray-200 lg:hidden">
-                {leaveRequests.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="w-full p-4 text-left hover:bg-gray-50"
-                    onClick={() => setSelectedRequest(item)}
-                  >
-                    <p className="text-sm font-semibold text-gray-900">{item.campus}</p>
-                    <p className="text-xs text-gray-600 mt-1">Ngày nghỉ: {new Date(item.leave_date).toLocaleDateString('vi-VN')}</p>
-                    <p className="text-xs text-[#a1001f] mt-1">{getStatusLabel(item.status)}</p>
-                  </button>
-                ))}
+                {filteredRequests.map((item) => {
+                  const statusMeta = getStatusMeta(item.status);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="w-full p-4 text-left hover:bg-gray-50"
+                      onClick={() => setSelectedRequest(item)}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-gray-900">{item.campus}</p>
+                        <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-600">Ngày nghỉ: {new Date(item.leave_date).toLocaleDateString('vi-VN')}</p>
+                      <p className="mt-1 text-xs text-gray-600">Mã lớp: {item.class_code || '-'}</p>
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}
         </div>
       </div>
 
-      <Modal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title="Tạo mail xin nghỉ 1 buổi"
-        maxWidth="4xl"
-      >
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Tạo mail xin nghỉ 1 buổi" maxWidth="4xl">
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <p className="font-semibold">Quy định nhanh</p>
-            <p className="mt-1">Giáo viên cần báo nghỉ trước ít nhất 72 giờ, tối đa 2 buổi/học phần và phải được TC/Leader xác nhận.</p>
+            <div className="mt-2 space-y-1 text-[13px]">
+              <p className="flex items-center gap-1.5">
+                <CalendarClock className="h-4 w-4" />
+                Báo nghỉ trước tối thiểu {MIN_ADVANCE_HOURS} giờ.
+              </p>
+              <p className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4" />
+                Cung cấp đủ thông tin lớp để admin phân giáo viên thay nhanh.
+              </p>
+              <p className="flex items-center gap-1.5">
+                <CircleX className="h-4 w-4" />
+                Nếu có GV thay sẵn, cần nhập đủ tên và email.
+              </p>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -519,13 +752,13 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
                   }}
                   className="h-4 w-4 rounded border-gray-300 text-blue-600"
                 />
-                Giáo viên thay thế (tích nếu có)
+                Giáo viên thay thế (tích nếu đã có)
               </label>
             </div>
             {formData.has_substitute && (
               <>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Tên giáo viên thay thế</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Tên giáo viên thay thế *</label>
                   <input
                     type="text"
                     value={formData.substitute_teacher}
@@ -534,7 +767,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Email giáo viên thay thế</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Email giáo viên thay thế *</label>
                   <input
                     type="email"
                     value={formData.substitute_email}
@@ -562,9 +795,15 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
                 Copy nội dung
               </Button>
             </div>
-            <p className="text-sm"><span className="font-medium">To:</span> {toLine}</p>
-            <p className="text-sm"><span className="font-medium">CC:</span> {ccLine}</p>
-            <p className="text-sm"><span className="font-medium">Tiêu đề:</span> {subjectLine}</p>
+            <p className="text-sm">
+              <span className="font-medium">To:</span> {toLine}
+            </p>
+            <p className="text-sm">
+              <span className="font-medium">CC:</span> {ccLine}
+            </p>
+            <p className="text-sm">
+              <span className="font-medium">Tiêu đề:</span> {subjectLine}
+            </p>
             <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded bg-gray-50 p-3 text-sm text-gray-700">{emailBody}</pre>
           </div>
 
@@ -601,17 +840,41 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
                 <p className="text-sm font-medium text-gray-900">{selectedRequest.lms_code}</p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Email</p>
+                <p className="text-sm font-medium text-gray-900 break-all">{selectedRequest.email}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-600">Ngày nghỉ</p>
                 <p className="text-sm font-medium text-gray-900">{new Date(selectedRequest.leave_date).toLocaleDateString('vi-VN')}</p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
-                <p className="text-xs text-gray-600">Trạng thái</p>
-                <p className="text-sm font-medium text-gray-900">{getStatusLabel(selectedRequest.status)}</p>
+                <p className="text-xs text-gray-600">Mã lớp</p>
+                <p className="text-sm font-medium text-gray-900">{selectedRequest.class_code || '-'}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Buổi học xin nghỉ</p>
+                <p className="text-sm font-medium text-gray-900">{selectedRequest.leave_session || '-'}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Thời gian học</p>
+                <p className="text-sm font-medium text-gray-900">{selectedRequest.class_time || '-'}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Giáo viên thay thế</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {selectedRequest.substitute_teacher || selectedRequest.substitute_email ? `${selectedRequest.substitute_teacher || '-'} (${selectedRequest.substitute_email || '-'})` : 'Chưa có'}
+                </p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3 sm:col-span-2">
                 <p className="text-xs text-gray-600">Lý do</p>
                 <p className="text-sm text-gray-900 whitespace-pre-wrap">{selectedRequest.reason}</p>
               </div>
+              {selectedRequest.class_status && (
+                <div className="rounded-lg bg-gray-50 p-3 sm:col-span-2">
+                  <p className="text-xs text-gray-600">Tình hình lớp</p>
+                  <p className="text-sm text-gray-900 whitespace-pre-wrap">{selectedRequest.class_status}</p>
+                </div>
+              )}
               {selectedRequest.admin_note && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 sm:col-span-2">
                   <p className="text-xs text-amber-800">Ghi chú từ TC/Leader</p>

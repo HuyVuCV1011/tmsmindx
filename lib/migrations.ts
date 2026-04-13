@@ -919,6 +919,57 @@ const migrations: Migration[] = [
         );
     `,
   },
+  {
+    name: 'V48_feedback_tickets',
+    version: 48,
+    sql: `
+      CREATE TABLE IF NOT EXISTS feedback_tickets (
+        id SERIAL PRIMARY KEY,
+        user_email VARCHAR(255) NOT NULL,
+        user_name VARCHAR(255),
+        user_code VARCHAR(100),
+        content TEXT NOT NULL,
+        suggestion TEXT,
+        image_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+        status VARCHAR(20) NOT NULL DEFAULT 'new'
+          CHECK (status IN ('new', 'in_progress', 'done')),
+        admin_note TEXT,
+        resolved_by_email VARCHAR(255),
+        resolved_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_feedback_tickets_status ON feedback_tickets(status);
+      CREATE INDEX IF NOT EXISTS idx_feedback_tickets_user_email ON feedback_tickets(user_email);
+      CREATE INDEX IF NOT EXISTS idx_feedback_tickets_created_at ON feedback_tickets(created_at DESC);
+
+      DROP TRIGGER IF EXISTS trg_feedback_tickets_updated_at ON feedback_tickets;
+      CREATE TRIGGER trg_feedback_tickets_updated_at
+      BEFORE UPDATE ON feedback_tickets
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
+  {
+    name: 'V49_feedback_screen_path',
+    version: 49,
+    sql: `
+      ALTER TABLE feedback_tickets
+      ADD COLUMN IF NOT EXISTS screen_path VARCHAR(500);
+
+      CREATE INDEX IF NOT EXISTS idx_feedback_tickets_screen_path ON feedback_tickets(screen_path);
+    `,
+  },
+  {
+    name: 'V50_feedback_admin_reply',
+    version: 50,
+    sql: `
+      ALTER TABLE feedback_tickets
+      ADD COLUMN IF NOT EXISTS admin_reply TEXT,
+      ADD COLUMN IF NOT EXISTS admin_image_urls JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========
