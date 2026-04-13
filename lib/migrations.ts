@@ -832,6 +832,93 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_k12_publish_snapshots_created_at ON k12_publish_snapshots(created_at DESC);
     `,
   },
+  {
+    name: 'V46_chuyen_sau_unique_indexes',
+    version: 46,
+    sql: `
+      -- Đảm bảo UNIQUE index trên chuyen_sau_bode.ma_de để ON CONFLICT (ma_de) hoạt động.
+      -- Trước khi tạo index, xoá duplicate (giữ bản ghi mới nhất theo id).
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes
+          WHERE tablename = 'chuyen_sau_bode' AND indexname = 'idx_bode_ma_de_uq'
+        ) THEN
+          DELETE FROM chuyen_sau_bode
+          WHERE id NOT IN (
+            SELECT MAX(id) FROM chuyen_sau_bode WHERE ma_de IS NOT NULL GROUP BY ma_de
+          )
+          AND ma_de IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM chuyen_sau_bode b2
+            WHERE b2.ma_de = chuyen_sau_bode.ma_de AND b2.id <> chuyen_sau_bode.id
+          );
+          CREATE UNIQUE INDEX idx_bode_ma_de_uq ON chuyen_sau_bode (ma_de)
+          WHERE ma_de IS NOT NULL;
+        END IF;
+      END $$;
+
+      -- Đảm bảo UNIQUE index trên chuyen_sau_monhoc.ma_mon để ON CONFLICT (ma_mon) hoạt động.
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes
+          WHERE tablename = 'chuyen_sau_monhoc' AND indexname = 'idx_monhoc_ma_mon_uq'
+        ) THEN
+          DELETE FROM chuyen_sau_monhoc
+          WHERE id NOT IN (
+            SELECT MAX(id) FROM chuyen_sau_monhoc WHERE ma_mon IS NOT NULL GROUP BY ma_mon
+          )
+          AND ma_mon IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM chuyen_sau_monhoc m2
+            WHERE m2.ma_mon = chuyen_sau_monhoc.ma_mon AND m2.id <> chuyen_sau_monhoc.id
+          );
+          CREATE UNIQUE INDEX idx_monhoc_ma_mon_uq ON chuyen_sau_monhoc (ma_mon)
+          WHERE ma_mon IS NOT NULL;
+        END IF;
+      END $$;
+    `,
+  },
+  {
+    name: 'V47_process_block_split',
+    version: 47,
+    sql: `
+      -- Chuẩn hóa 3 môn Quy trình & Kỹ năng trải nghiệm thành 3 block riêng để map đề theo id_mon rõ ràng.
+      UPDATE chuyen_sau_monhoc
+      SET ma_khoi = 'PROCESS-ART',
+          loai_ky_thi = 'experience'
+      WHERE ma_khoi = 'PROCESS'
+        AND (
+          lower(COALESCE(ma_mon, '')) LIKE '%[art]%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%[art]%'
+          OR lower(COALESCE(ma_mon, '')) LIKE '%my thuat%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%my thuat%'
+        );
+
+      UPDATE chuyen_sau_monhoc
+      SET ma_khoi = 'PROCESS-COD',
+          loai_ky_thi = 'experience'
+      WHERE ma_khoi = 'PROCESS'
+        AND (
+          lower(COALESCE(ma_mon, '')) LIKE '%[coding]%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%[coding]%'
+          OR lower(COALESCE(ma_mon, '')) LIKE '%code%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%code%'
+        );
+
+      UPDATE chuyen_sau_monhoc
+      SET ma_khoi = 'PROCESS-ROB',
+          loai_ky_thi = 'experience'
+      WHERE ma_khoi = 'PROCESS'
+        AND (
+          lower(COALESCE(ma_mon, '')) LIKE '%[robotics]%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%[robotics]%'
+          OR lower(COALESCE(ma_mon, '')) LIKE '%robot%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%robot%'
+        );
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

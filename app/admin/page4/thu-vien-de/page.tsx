@@ -268,7 +268,7 @@ const BLOCK_CONFIGS: BlockConfig[] = [
     icon: Palette,
     iconWrapClass: "bg-pink-100",
     iconClass: "text-pink-600",
-    columnsClass: "grid-cols-1",
+    columnsClass: "grid-cols-1 md:grid-cols-3",
   },
   {
     blockCode: "PROCESS",
@@ -277,9 +277,26 @@ const BLOCK_CONFIGS: BlockConfig[] = [
     icon: CheckCircle2,
     iconWrapClass: "bg-green-100",
     iconClass: "text-green-600",
-    columnsClass: "grid-cols-1",
+    columnsClass: "grid-cols-1 md:grid-cols-3",
   },
 ];
+
+const buildProcessSubjectName = (customName: string) => {
+  const clean = customName.trim();
+  return `Kiểm tra quy trình - Kỹ năng trải nghiệm [${clean || "Art"}]`;
+};
+
+const buildProcessBlockCode = (customName: string): BlockCode => {
+  const normalized = customName
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `PROCESS-${normalized || "CUSTOM"}` as BlockCode;
+};
 
 
 export default function ProfessionalAssignmentLibraryPage() {
@@ -290,6 +307,7 @@ export default function ProfessionalAssignmentLibraryPage() {
   const [isCreatingSubject, setIsCreatingSubject] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectBlockCode, setNewSubjectBlockCode] = useState<BlockCode>("CODING");
+  const [newProcessCustomName, setNewProcessCustomName] = useState("");
   const [isSubjectDropdownOpen, setIsSubjectDropdownOpen] = useState(false);
   const [newSubjectDurationMinutes, setNewSubjectDurationMinutes] = useState(120);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -861,7 +879,12 @@ export default function ProfessionalAssignmentLibraryPage() {
 
   const groupedByBlock = useMemo(() => {
     return BLOCK_CONFIGS.map((block) => {
-      const subjects = subjectConfigs.filter((subject) => subject.blockCode === block.blockCode).map((subject) => {
+      const subjects = subjectConfigs.filter((subject) => {
+        if (block.blockCode === "PROCESS") {
+          return subject.blockCode === "PROCESS" || subject.blockCode.startsWith("PROCESS-");
+        }
+        return subject.blockCode === block.blockCode;
+      }).map((subject) => {
         const subjectSets = getSetsBySubject(sets, subject);
 
         return {
@@ -1137,16 +1160,35 @@ export default function ProfessionalAssignmentLibraryPage() {
   const handleOpenCreateSubjectModal = (blockCode?: BlockCode) => {
     const nextBlock = blockCode || selectedBlockCode || "CODING";
     setNewSubjectBlockCode(nextBlock);
-    setNewSubjectName(nextBlock === "ART" ? "[ART] Chuyên Sâu" : "");
+    if (nextBlock === "PROCESS") {
+      setNewProcessCustomName("");
+      setNewSubjectName(buildProcessSubjectName(""));
+    } else {
+      setNewSubjectName(nextBlock === "ART" ? "[ART] Chuyên Sâu" : "");
+    }
     setIsSubjectDropdownOpen(false);
-    setNewSubjectDurationMinutes(nextBlock === "PROCESS" ? 60 : 120);
+    setNewSubjectDurationMinutes(nextBlock.startsWith("PROCESS") ? 60 : 120);
     setIsCreateSubjectModalOpen(true);
   };
 
   const handleCreateSubject = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!newSubjectName.trim()) {
+    const finalSubjectName = newSubjectBlockCode === "PROCESS"
+      ? buildProcessSubjectName(newProcessCustomName)
+      : newSubjectName.trim();
+    const finalBlockCode = newSubjectBlockCode === "PROCESS"
+      ? buildProcessBlockCode(newProcessCustomName)
+      : newSubjectBlockCode;
+
+    if (newSubjectBlockCode === "PROCESS") {
+      if (!newProcessCustomName.trim()) {
+        toast.error("Vui lòng nhập tên môn cho Quy trình & Kỹ năng trải nghiệm");
+        return;
+      }
+    }
+
+    if (!finalSubjectName) {
       toast.error("Vui lòng nhập tên môn");
       return;
     }
@@ -1162,8 +1204,8 @@ export default function ProfessionalAssignmentLibraryPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          block_code: newSubjectBlockCode,
-          subject_name: newSubjectName.trim(),
+          block_code: finalBlockCode,
+          subject_name: finalSubjectName,
           duration_minutes: Math.max(1, Math.floor(newSubjectDurationMinutes)),
         }),
       });
@@ -1177,8 +1219,11 @@ export default function ProfessionalAssignmentLibraryPage() {
       toast.success('Đã tạo môn học mới');
       setIsCreateSubjectModalOpen(false);
       setNewSubjectName('');
-      setNewSubjectDurationMinutes(newSubjectBlockCode === "PROCESS" ? 60 : 120);
-      setSelectedBlockCode(newSubjectBlockCode);
+      setNewProcessCustomName('');
+      setNewSubjectDurationMinutes(newSubjectBlockCode.startsWith("PROCESS") ? 60 : 120);
+      if (newSubjectBlockCode !== "PROCESS") {
+        setSelectedBlockCode(newSubjectBlockCode);
+      }
       await fetchSubjects();
     } catch (error) {
       console.error('Error creating subject:', error);
@@ -2059,7 +2104,7 @@ export default function ProfessionalAssignmentLibraryPage() {
                       href={`/admin/thu-vien-de/subjects/${subject.id}`}
                       className={cn(
                         "block rounded-lg border border-gray-200 bg-gray-50 p-3 pr-24 transition-colors",
-                        "min-h-30 hover:border-red-200 hover:bg-red-50/40"
+                        "h-45 overflow-hidden hover:border-red-200 hover:bg-red-50/40"
                       )}
                     >
                       <p className="text-sm font-semibold text-gray-900 hover:text-red-700">
@@ -2118,7 +2163,7 @@ export default function ProfessionalAssignmentLibraryPage() {
                   onClick={() => handleOpenCreateSubjectModal(group.blockCode)}
                   className={cn(
                     "block rounded-lg border border-dashed border-red-200 bg-red-50/40 p-3 text-left transition-colors",
-                    "min-h-30 hover:border-red-300 hover:bg-red-100/50"
+                    "h-30 overflow-hidden hover:border-red-300 hover:bg-red-100/50"
                   )}
                 >
                   <p className="text-sm font-semibold text-red-700">+ Thêm môn</p>
@@ -2220,6 +2265,23 @@ export default function ProfessionalAssignmentLibraryPage() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                 readOnly
               />
+            ) : newSubjectBlockCode === "PROCESS" ? (
+              <div className="space-y-2">
+                <input
+                  value={newProcessCustomName}
+                  onChange={(e) => {
+                    setNewProcessCustomName(e.target.value);
+                    setNewSubjectName(buildProcessSubjectName(e.target.value));
+                  }}
+                  placeholder="Tên môn học mới."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                  Tên môn học mới: <span className="font-semibold">{buildProcessSubjectName(newProcessCustomName)}</span>
+                  <br />
+                </div>
+              </div>
             ) : (
               <input
                 value={newSubjectName}
