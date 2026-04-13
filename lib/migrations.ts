@@ -1067,6 +1067,24 @@ const migrations: Migration[] = [
         ADD COLUMN IF NOT EXISTS thumbnail_position VARCHAR(20) DEFAULT '50% 50%';
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V47: Server-side time tracking — last_heartbeat_at
+  // Server tự tính thời gian xem thực tế, không tin client
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V47_training_progress_heartbeat',
+    version: 47,
+    sql: `
+      ALTER TABLE training_teacher_video_scores
+        ADD COLUMN IF NOT EXISTS last_heartbeat_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS server_time_seconds INTEGER DEFAULT 0;
+
+      UPDATE training_teacher_video_scores
+        SET server_time_seconds = COALESCE(time_spent_seconds, 0)
+        WHERE server_time_seconds = 0 AND time_spent_seconds > 0;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

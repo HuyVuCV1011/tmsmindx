@@ -6,8 +6,9 @@ import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks";
 import { useTeacher } from "@/lib/teacher-context";
 import { useToast } from "@/lib/use-toast";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState, useMemo } from "react";
+import { Suspense, useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Loader2 } from "lucide-react";
+import hotToast from 'react-hot-toast';
 
 interface Question {
   id: number;
@@ -134,7 +135,6 @@ function LessonContent() {
           totalDuration: time, // Send total duration to update metadata
         })
       });
-      console.log(`[Lesson] Saved completion for ${id}`);
     } catch (err) {
       console.error('[Lesson] Failed to save completion:', err);
     }
@@ -152,7 +152,6 @@ function LessonContent() {
         if (data.success && data.data && data.data.length > 0) {
           // Lấy bài tập đầu tiên (hoặc có thể thêm logic chọn bài tập phù hợp)
           setCurrentAssignment(data.data[0]);
-          console.log('[Lesson] Found assignment:', data.data[0]);
         } else {
           setCurrentAssignment(null);
         }
@@ -173,6 +172,202 @@ function LessonContent() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ANTI-CHEAT SYSTEM
+  // 1. Prototype patch: chặn rate > 1x tại nguồn (không cần reset mỗi frame)
+  // 2. setInterval 500ms: check wall-clock — nhẹ hơn rAF 60fps nhiều
+  // 3. Penalty: lùi đúng 15s từ lastSafePosition, cooldown 3s
+  // ═══════════════════════════════════════════════════════════════════════
+
+  const PENALTY_SECONDS  = 15;
+  const VIOLATION_LIMIT  = 3;
+  const PENALTY_COOLDOWN = 3000;
+  const CHECK_INTERVAL   = 500; // ms — check mỗi 500ms thay vì 60fps
+
+  const wallStartRef        = useRef<number | null>(null);
+  const videoTimeAtWallRef  = useRef<number>(0);
+  const lastSafePositionRef = useRef<number>(0);
+  const violationCountRef   = useRef(0);
+  const isLockedRef         = useRef(false);
+  const isReplayingRef      = useRef(false);
+  const lastPenaltyTimeRef  = useRef<number>(0);
+  const checkTimerRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+  const videoElRef          = useRef<HTMLVideoElement | null>(null);
+  const toastRef            = useRef(toast);
+  useEffect(() => { toastRef.current = toast; }, [toast]);
+
+  // Lấy native descriptor một lần khi mount — trước khi extension inject
+  const nativeRateDesc = useRef(
+    Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate')
+  );
+
+  // Patch prototype: chặn rate > 1x tại nguồn
+  // Extension gọi video.playbackRate = 1.5 → setter bị intercept → thực tế set 1.0
+  useEffect(() => {
+    const desc = nativeRateDesc.current;
+    if (!desc?.set || !desc?.get) return;
+    const { set: nativeSet, get: nativeGet } = desc;
+    try {
+      Object.defineProperty(HTMLMediaElement.prototype, 'playbackRate', {
+        configurable: true,
+        enumerable: true,
+        get() { return nativeGet.call(this); },
+        set(val: number) {
+          nativeSet.call(this, Math.min(1.0, Math.max(0.1, Number(val) || 1)));
+        },
+      });
+    } catch { /* Safari fallback — interval sẽ xử lý */ }
+    return () => {
+      try { Object.defineProperty(HTMLMediaElement.prototype, 'playbackRate', desc); } catch { /* ignore */ }
+    };
+  }, []);
+
+  // Apply penalty — có cooldown để tránh loop
+  const applyPenalty = useCallback((video: HTMLVideoElement, reason: string) => {
+    const now = Date.now();
+    if (now - lastPenaltyTimeRef.current < PENALTY_COOLDOWN) return;
+    if (isLockedRef.current) return;
+
+    lastPenaltyTimeRef.current = now;
+    violationCountRef.current += 1;
+    console.warn(`[AntiCheat] ${reason} — #${violationCountRef.current}`);
+
+    const { set: nativeSet } = nativeRateDesc.current ?? {};
+
+    // Reset rate về 1x
+    try { nativeSet?.call(video, 1.0); } catch { /* ignore */ }
+
+    // Reset wall-clock từ vị trí hiện tại
+    const offset = video.seekable.length > 0 ? video.seekable.start(0) : 0;
+    wallStartRef.current = Date.now();
+    videoTimeAtWallRef.current = Math.max(0, video.currentTime - offset);
+    lastSafePositionRef.current = Math.max(0, video.currentTime - offset);
+
+    if (violationCountRef.current >= VIOLATION_LIMIT) {
+      // Lần thứ 3: pause hẳn
+      video.pause();
+      isLockedRef.current = true;
+      violationCountRef.current = 0;
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      playbackAllowedRef.current = false;
+      hotToast.error('🚫 Gian lận bị phát hiện. Video đã bị tạm dừng.', {
+        duration: 6000,
+        style: {
+          background: '#fff',
+          color: '#dc2626',
+          border: '2px solid #dc2626',
+          borderRadius: '12px',
+          fontWeight: '700',
+          fontSize: '13px',
+          padding: '14px 16px',
+          boxShadow: '0 8px 32px rgba(220,38,38,0.20), 0 2px 8px rgba(0,0,0,0.10)',
+          maxWidth: '340px',
+        },
+        iconTheme: { primary: '#dc2626', secondary: '#fff' },
+      });
+    } else {
+      // Lần 1-2: chỉ reset tốc độ về 1x, cảnh báo
+      hotToast.error('⚠️ Phát hiện tốc độ bất thường! Đã đặt lại về 1x.', {
+        duration: 4000,
+        style: {
+          background: '#fff',
+          color: '#b91c1c',
+          border: '1.5px solid #f87171',
+          borderRadius: '12px',
+          fontWeight: '600',
+          fontSize: '13px',
+          padding: '14px 16px',
+          boxShadow: '0 4px 20px rgba(220,38,38,0.12), 0 2px 6px rgba(0,0,0,0.08)',
+          maxWidth: '340px',
+        },
+        iconTheme: { primary: '#ef4444', secondary: '#fff' },
+      });
+    }
+  }, [setIsPlaying]);
+
+  // Interval 500ms: nhẹ hơn rAF 60fps, đủ để detect trong ~0.5s
+  const startAntiCheatLoop = useCallback(() => {
+    if (checkTimerRef.current !== null) return;
+
+    checkTimerRef.current = setInterval(() => {
+      const video = videoElRef.current;
+      if (!video || video.paused || isLockedRef.current || isReplayingRef.current) return;
+
+      const { get: nativeGet, set: nativeSet } = nativeRateDesc.current ?? {};
+      const offset    = video.seekable.length > 0 ? video.seekable.start(0) : 0;
+      const localTime = Math.max(0, video.currentTime - offset);
+
+      // Fallback: reset rate nếu prototype patch bị bypass
+      const realRate = nativeGet?.call(video) ?? 1;
+      if (realRate > 1.01) {
+        try { nativeSet?.call(video, 1.0); } catch { /* ignore */ }
+        applyPenalty(video, `Rate=${realRate.toFixed(2)}x`);
+        return; // skip wall-clock check trong lần này
+      }
+
+      // Rate hợp lệ → cập nhật lastSafePosition và wall-clock
+      lastSafePositionRef.current = localTime;
+
+      if (wallStartRef.current === null) {
+        wallStartRef.current = Date.now();
+        videoTimeAtWallRef.current = localTime;
+        return;
+      }
+
+      // Wall-clock check: buffer 2% + 0.5s để tránh false positive từ buffering
+      const wallElapsed   = (Date.now() - wallStartRef.current) / 1000;
+      const maxAllowedPos = videoTimeAtWallRef.current + wallElapsed * 1.02 + 0.5;
+
+      if (localTime > maxAllowedPos) {
+        applyPenalty(video, `Wall-clock: ${localTime.toFixed(2)}s > ${maxAllowedPos.toFixed(2)}s`);
+      } else {
+        // Bình thường → reset baseline để tránh drift tích lũy
+        wallStartRef.current = Date.now();
+        videoTimeAtWallRef.current = localTime;
+      }
+    }, CHECK_INTERVAL);
+  }, [applyPenalty]);
+
+  const stopAntiCheatLoop = useCallback(() => {
+    if (checkTimerRef.current !== null) {
+      clearInterval(checkTimerRef.current);
+      checkTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    startAntiCheatLoop();
+    return () => stopAntiCheatLoop();
+  }, [startAntiCheatLoop, stopAntiCheatLoop]);
+
+  const lockPlaybackRate = useCallback((video: HTMLVideoElement) => {
+    videoElRef.current = video;
+    const { set: nativeSet } = nativeRateDesc.current ?? {};
+    try { nativeSet?.call(video, 1.0); } catch { /* ignore */ }
+    if (wallStartRef.current === null) {
+      const offset = video.seekable.length > 0 ? video.seekable.start(0) : 0;
+      const pos = Math.max(0, video.currentTime - offset);
+      wallStartRef.current = Date.now();
+      videoTimeAtWallRef.current = pos;
+      lastSafePositionRef.current = pos;
+    }
+  }, []);
+
+  const startRateGuard = useCallback((_v: HTMLVideoElement) => { /* prototype patch */ }, []);
+  const stopRateGuard  = useCallback(() => { /* prototype patch */ }, []);
+
+  const resetWallClock = useCallback((video: HTMLVideoElement) => {
+    const offset = video.seekable.length > 0 ? video.seekable.start(0) : 0;
+    const pos = Math.max(0, video.currentTime - offset);
+    wallStartRef.current = Date.now();
+    videoTimeAtWallRef.current = pos;
+    lastSafePositionRef.current = pos;
+    isLockedRef.current = false;
+  }, []);
+
+  const checkSpeedHack = useCallback((_v: HTMLVideoElement) => { /* handled by interval */ }, []);
 
   // Ref to track if we are in quiz mode (to prevent auto-resume)
   const isQuizActiveRef = useRef(false);
@@ -226,7 +421,6 @@ function LessonContent() {
       document.querySelectorAll('video').forEach((v) => {
         if (!v.paused) v.pause();
       });
-      console.log(`[Lesson] ⏸️ Paused: ${reason}`);
     };
 
     const handleVisibilityChange = () => {
@@ -256,12 +450,17 @@ function LessonContent() {
 
   // Load saved progress
   useEffect(() => {
+    const controller = new AbortController();
+
     const loadProgress = async () => {
       if (!lessonId || !user?.email) return;
 
       try {
         const teacherCode = user.email.split('@')[0];
-        const res = await fetch(`/api/training-progress?teacherCode=${teacherCode}&videoId=${lessonId}`);
+        const res = await fetch(
+          `/api/training-progress?teacherCode=${teacherCode}&videoId=${lessonId}`,
+          { signal: controller.signal }
+        );
         const data = await res.json();
 
         if (data.success && data.data) {
@@ -286,18 +485,25 @@ function LessonContent() {
             if (targetIndex === currentIndex) {
               if (videoRef.current) {
                 const offset = videoRef.current.seekable.length > 0 ? videoRef.current.seekable.start(0) : 0;
+                isReplayingRef.current = true;
                 lastValidTimeRef.current = time_spent_seconds;
+                lastSafePositionRef.current = timeInTargetVideo;
+                wallStartRef.current = null;
                 videoRef.current.currentTime = timeInTargetVideo + offset;
                 setLocalTime(timeInTargetVideo);
+                setTimeout(() => { isReplayingRef.current = false; }, 800);
               }
             } else {
               setIsPlaying(false);
               isPlayingRef.current = false;
+              isReplayingRef.current = true;
               lastValidTimeRef.current = time_spent_seconds;
+              lastSafePositionRef.current = timeInTargetVideo;
+              wallStartRef.current = null;
               setCurrentIndex(targetIndex);
               setPendingSeekTime(timeInTargetVideo);
+              setTimeout(() => { isReplayingRef.current = false; }, 800);
             }
-            console.log(`[Lesson] Resumed at ${time_spent_seconds}s`);
           }
 
           if (completion_status === 'completed') {
@@ -305,12 +511,15 @@ function LessonContent() {
             setProgress(100);
           }
         }
-      } catch (err) {
-        console.error('[Lesson] Failed to load progress:', err);
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          console.error('[Lesson] Failed to load progress:', err);
+        }
       }
     };
 
     loadProgress();
+    return () => controller.abort();
   }, [lessonId, user]);
 
   // Save progress periodically (every 10 seconds)
@@ -360,10 +569,8 @@ function LessonContent() {
         return;
       }
       try {
-        console.log(`[Lesson] 📥 Loading questions for video_id=${lessonId}`);
         const response = await fetch(`/api/training-video-questions?video_id=${lessonId}`);
         const data = await response.json();
-        console.log('[Lesson] API Response:', { success: data.success, count: data.data?.length || 0, data });
 
         if (data.success && data.data && data.data.length > 0) {
           const loadedQuestions = data.data.map((q: any) => ({
@@ -374,9 +581,7 @@ function LessonContent() {
             answer: parseInt(q.correct_answer) || 0
           }));
           setQuestions(loadedQuestions);
-          console.log(`[Lesson] ✅ Successfully loaded ${loadedQuestions.length} questions:`, loadedQuestions.map((q: Question) => `${q.question} (${q.time}s)`).join(', '));
         } else {
-          console.log('[Lesson] ⚠️ No questions found in response or API failed');
           setQuestions([]);
         }
       } catch (err) {
@@ -391,7 +596,6 @@ function LessonContent() {
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.playbackRate = playbackSpeed;
-      console.log(`[Lesson] Playback speed set to ${playbackSpeed}x`);
     }
   }, [playbackSpeed]);
 
@@ -401,7 +605,6 @@ function LessonContent() {
       if (!lessonId) return;
 
       try {
-        console.log(`[Lesson] Checking for next lesson after video_id=${lessonId}`);
         const response = await fetch('/api/training-videos');
         const data = await response.json();
 
@@ -413,11 +616,9 @@ function LessonContent() {
             // Has next lesson
             setHasNextLesson(true);
             setNextLessonData(videos[currentIndex + 1]);
-            console.log('[Lesson] ✓ Next lesson found:', videos[currentIndex + 1]);
           } else {
             // No next lesson (completed all)
             setHasNextLesson(false);
-            console.log('[Lesson] ✓ All lessons completed!');
           }
         }
       } catch (err) {
@@ -433,28 +634,15 @@ function LessonContent() {
     if (videoPaused || questions.length === 0 || currentQuestionIdx !== null) return;
     if (currentTime === 0 || duration === 0) return;
 
-    // Log question status periodically
-    if (Math.floor(currentTime) % 5 === 0 && Math.floor(currentTime) !== 0) {
-      console.log(`[Lesson] Checking questions at ${currentTime.toFixed(2)}s. Found ${questions.length} questions:`,
-        questions.map(q => `Q${q.id}@${q.time}s(${answeredQuestions.has(q.id) ? 'answered' : 'pending'})`).join(', ')
-      );
-    }
-
-    // Find question at current time (within 2 second tolerance)
     const foundQuestion = questions.findIndex(q => {
       const timeDiff = Math.abs(q.time - currentTime);
       return timeDiff <= 2 && !answeredQuestions.has(q.id);
     });
 
     if (foundQuestion !== -1) {
-      console.log(`[Lesson] 🎯 Question triggered at ${currentTime.toFixed(2)}s:`, questions[foundQuestion]);
       setCurrentQuestionIdx(foundQuestion);
       setVideoPaused(true);
-      // Pause video
-      if (videoRef.current) {
-        videoRef.current.pause();
-        console.log('[Lesson] ⏸️ Video paused');
-      }
+      if (videoRef.current) videoRef.current.pause();
     }
   }, [currentTime, questions, answeredQuestions, videoPaused, currentQuestionIdx]);
 
@@ -494,59 +682,37 @@ function LessonContent() {
         return;
       }
 
-      // Security: Enforce max playback speed of 2x (Anti-cheat)
-      if (video.playbackRate > 2) {
-        console.log('[Lesson] ⚠️ Speed limit exceeded! Resetting to 2x');
-        video.playbackRate = 2;
-        setPlaybackSpeed(2);
-      }
-
+      // ── Seek block ────────────────────────────────────────────────────────
       const offset = video.seekable.length > 0 ? video.seekable.start(0) : 0;
       const localCrtTime = Math.max(0, video.currentTime - offset);
       const gTime = (startTimes[currentIndex] ?? 0) + localCrtTime;
       const lastTime = lastValidTimeRef.current;
 
-      // Block both forward and backward seeking beyond 3 seconds (to allow natural playback and normal minor variations)
-      const allowedJump = Math.max(3, video.playbackRate * 2);
-
-      if (Math.abs(gTime - lastTime) > allowedJump) {
-        console.log(`[Lesson] 🚫 Seek blocked! Attempted: ${gTime.toFixed(2)}s (Last: ${lastTime.toFixed(2)}s)`);
+      if (Math.abs(gTime - lastTime) > 3) {
         video.currentTime = Math.max(0, lastValidTimeRef.current - (startTimes[currentIndex] ?? 0)) + offset;
         return;
       }
 
-      // Update last valid time (for seeking prevention)
       lastValidTimeRef.current = gTime;
-
       setLocalTime(localCrtTime);
       setCurrentTime(gTime);
-
-      // Update max watched time
       setMaxWatchedTime(prev => Math.max(prev, gTime));
 
-      // [Pre-Fetching & Early Switch] Chuyển trước 250ms — không làm khi tab ẩn (tránh vẫn phát / auto-next ở background)
+      // Early switch to next segment
       if (currentIndex < videoSegments.length - 1 && video.duration > 0) {
         const timeRemaining = video.duration - localCrtTime;
         if (timeRemaining <= 0.25) {
-          const tabHidden = document.hidden || document.visibilityState !== 'visible' || webkitHidden;
-          if (tabHidden || !playbackAllowedRef.current) {
+          if (document.hidden || !playbackAllowedRef.current) {
             if (!video.paused) video.pause();
             setIsPlaying(false);
             isPlayingRef.current = false;
             return;
           }
-          console.log(`[Lesson] Early switching to segment ${currentIndex + 1} (Pre-ending by ${timeRemaining.toFixed(2)}s)`);
           setIsWaiting(true);
           setCurrentIndex(prev => prev + 1);
           setIsPlaying(true);
           isPlayingRef.current = true;
-          return;
         }
-      }
-
-      // Log every 5 seconds
-      if (Math.floor(gTime) % 5 === 0 && Math.floor(gTime) !== 0) {
-        console.log(`[Lesson] Video time: ${gTime.toFixed(2)}s`);
       }
     };
 
@@ -554,7 +720,8 @@ function LessonContent() {
       const webkitHidden = !!(document as Document & { webkitHidden?: boolean }).webkitHidden;
       const visible =
         !document.hidden && document.visibilityState === 'visible' && !webkitHidden;
-      // Setup the real video segment duration mapped against start times if DB missed them
+      // Lock playbackRate ngay khi video load để chặn extension
+      lockPlaybackRate(video);
       const offset = video.seekable.length > 0 ? video.seekable.start(0) : 0;
       if (pendingSeekTime !== null) {
         video.currentTime = pendingSeekTime + offset;
@@ -596,7 +763,6 @@ function LessonContent() {
     const handleEnded = () => {
       if (currentIndex < videoSegments.length - 1) {
         // Có phần tiếp theo của video hiện tại (Cloudinary parts)
-        console.log(`[Lesson] Switching to segment ${currentIndex + 1}`);
 
         // Vanilla DOM fix for gapless transitions
         const nextVideoEl = document.getElementById(`video-part-${currentIndex + 1}`) as HTMLVideoElement;
@@ -636,7 +802,6 @@ function LessonContent() {
         setProgress(100);
         setVideoCompleted(true);
         setIsPlaying(false);
-        console.log('[Lesson] Video ended');
 
         // Save completion immediately using the current lesson ID and user
         if (lessonIdRef.current && userRef.current?.email) {
@@ -654,12 +819,15 @@ function LessonContent() {
         isPlayingRef.current = false;
         return;
       }
+      // Lock playbackRate và reset wall-clock baseline mỗi khi bắt đầu play
+      lockPlaybackRate(video);
+      startRateGuard(video);
+      resetWallClock(video);
+      isLockedRef.current = false;
       setIsWaiting(false);
-      console.log('[Lesson] Video playing');
     };
 
     const handlePause = () => {
-      console.log('[Lesson] Video paused at', video.currentTime.toFixed(2) + 's');
       if (lessonIdRef.current && userRef.current?.email) {
         const teacherCode = userRef.current.email.split('@')[0];
         fetch('/api/training-progress', {
@@ -686,24 +854,35 @@ function LessonContent() {
     };
 
     const handleSeeking = () => {
+      // Skip khi đang replay
+      if (isReplayingRef.current) return;
+
       const offset = video.seekable.length > 0 ? video.seekable.start(0) : 0;
       const attemptedTime = Math.max(0, video.currentTime - offset);
       const localLastTime = Math.max(0, lastValidTimeRef.current - (startTimes[currentIndex] ?? 0));
 
-      const allowedJump = Math.max(5, video.playbackRate * 2);
+      // allowedJump cố định 5s — không dùng playbackRate
+      const allowedJump = 5;
 
-      // Block seeking both forward and backward
       if (Math.abs(attemptedTime - localLastTime) > allowedJump) {
-        console.log(`[Lesson] 🚫 Seeking blocked! Attempted: ${attemptedTime.toFixed(2)}s → Reverted to: ${localLastTime.toFixed(2)}s`);
         video.currentTime = localLastTime + offset;
+        wallStartRef.current = Date.now();
+        videoTimeAtWallRef.current = localLastTime;
       }
     };
 
     const handleRateChange = () => {
-      if (video.playbackRate > 2) {
-        console.log('[Lesson] 🚫 External speed tool detected! Resetting to 2x');
-        video.playbackRate = 2;
-        setPlaybackSpeed(2);
+      const realRate = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate')
+        ?.get?.call(video) ?? video.playbackRate;
+      if (realRate > 1.01) {
+        try {
+          Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate')
+            ?.set?.call(video, 1.0);
+        } catch { /* ignore */ }
+        setPlaybackSpeed(1);
+        wallStartRef.current = Date.now();
+        const offset = video.seekable.length > 0 ? video.seekable.start(0) : 0;
+        videoTimeAtWallRef.current = Math.max(0, video.currentTime - offset);
       }
     };
 
@@ -732,7 +911,7 @@ function LessonContent() {
       video.removeEventListener('seeking', handleSeeking);
       video.removeEventListener('waiting', handleWaiting);
     };
-  }, [currentIndex, isPlaying, volume, pendingSeekTime, videoSegments, startTimes, overrideDurationSeconds, totalDurationMap, duration]);
+  }, [currentIndex, isPlaying, volume, pendingSeekTime, videoSegments, startTimes, overrideDurationSeconds, totalDurationMap, duration, lockPlaybackRate, resetWallClock]);
 
   // Update progress bar based on video time
   useEffect(() => {
@@ -748,17 +927,8 @@ function LessonContent() {
     const question = questions[currentQuestionIdx];
     const isCorrect = userAnswer === question.answer;
 
-    console.log(`[Lesson] Answer submitted:`, {
-      question: question.question,
-      userAnswer: userAnswer,
-      correctAnswer: question.answer,
-      isCorrect: isCorrect
-    });
-
     // Mark as answered
     setAnsweredQuestions(prev => new Set([...prev, question.id]));
-
-    // Show result UI
     setIsCorrectAnswer(isCorrect);
     setShowResult(true);
   };
@@ -770,7 +940,6 @@ function LessonContent() {
     setShowResult(false);
     setIsCorrectAnswer(false);
     setVideoPaused(false);
-    console.log('[Lesson] Resuming video playback');
     if (videoRef.current) {
       playbackAllowedRef.current = true;
       videoRef.current.play();
@@ -833,6 +1002,8 @@ function LessonContent() {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      // Clear controls timeout on unmount
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     };
   }, []);
 
@@ -1009,7 +1180,7 @@ function LessonContent() {
 
               {/* Speed control */}
               <div className="flex items-center gap-1">
-                {[0.5, 0.75, 1, 1.25, 1.5, 2].map((speed) => (
+                {[0.5, 0.75, 1].map((speed) => (
                   <button
                     key={speed}
                     onClick={() => setPlaybackSpeed(speed)}
@@ -1211,9 +1382,34 @@ function LessonContent() {
                   <Button
                     variant="ghost"
                     onClick={() => {
-                      playbackAllowedRef.current = true;
+                      const video = videoRef.current;
+                      if (video) {
+                        // Bật flag replay để skip mọi anti-cheat check trong lúc seek về 0
+                        isReplayingRef.current = true;
+
+                        // Reset toàn bộ state
+                        isLockedRef.current = false;
+                        violationCountRef.current = 0;
+                        lastValidTimeRef.current = 0;
+                        wallStartRef.current = null;
+                        videoTimeAtWallRef.current = 0;
+                        playbackAllowedRef.current = true;
+                        isPlayingRef.current = true;
+
+                        // Seek về 0 rồi play
+                        video.currentTime = 0;
+                        video.play()
+                          .then(() => {
+                            // Tắt flag replay sau khi play thành công
+                            isReplayingRef.current = false;
+                          })
+                          .catch(e => {
+                            console.error('[Lesson] Replay play failed:', e);
+                            isReplayingRef.current = false;
+                          });
+                      }
                       setVideoCompleted(false);
-                      videoRef.current?.play();
+                      setProgress(0);
                       setIsPlaying(true);
                     }}
                     className="text-gray-500 hover:text-gray-700"
