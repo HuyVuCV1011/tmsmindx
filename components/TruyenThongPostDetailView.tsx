@@ -1,17 +1,16 @@
 'use client'
 
 import Comments from '@/components/Comments'
+import CroppedImage from '@/components/CroppedImage'
 import PostCard from '@/components/post-card'
 import PostContentRenderer from '@/components/PostContentRenderer'
 import { PostDetailSkeleton } from '@/components/skeletons'
 import { Button } from '@/components/ui/button'
 import { Angry, ArrowLeft, Calendar, Check, Eye, FileText, Frown, Heart, Laugh, Share2, ThumbsUp } from 'lucide-react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useParams, usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-
 import { useAuth } from '@/lib/auth-context'
 
 export type TruyenThongPostDetailMode = 'user' | 'admin'
@@ -24,6 +23,7 @@ interface Post {
     content: string
     featured_image: string
     banner_image: string
+    thumbnail_position?: string
     post_type: string
     published_at: string
     view_count: number
@@ -271,34 +271,19 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
 
     return (
         <div>
-            <header className="border-b border-gray-200 bg-white sticky top-0 z-40 shadow-sm">
-                <div className="max-w-7xl mx-auto py-3 flex items-center gap-3">
-                    <Link href={backHref}>
-                        <Button variant="ghost" size="sm" className="gap-2 h-9 hover:bg-blue-50 hover:text-blue-600">
-                            <ArrowLeft className="w-4 h-4" />
-                            Quay lại
-                        </Button>
-                    </Link>
-                    <h1 className="text-sm font-semibold text-gray-900">
-                        {mode === 'admin' ? 'Xem bài & quản lý bình luận' : 'Chi tiết bài viết'}
-                    </h1>
-                </div>
-            </header>
+            
 
-            <main className="max-w-7xl mx-auto">
+            <main className="mt-3 max-w-7xl mx-auto px-4 lg:px-6">
                 <div className="relative w-full h-72 md:h-96 rounded-xl overflow-hidden mb-5 shadow-lg">
-                    <Image
-                        src={post.featured_image || "/placeholder.svg"}
+                    <CroppedImage
+                        src={post.featured_image || '/placeholder.svg'}
                         alt={post.title}
-                        fill
-                        className="object-cover"
-                        priority
-                        placeholder="blur"
-                        blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzAwIiBoZWlnaHQ9IjQ3NSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2ZXJzaW9uPSIxLjEiLz4="
+                        cropData={post.thumbnail_position}
+                        style={{ position: 'absolute', inset: 0 }}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                    <div className="absolute inset-0 bg-linear-to-t from-black/60 via-black/20 to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-5">
-                        <span className="inline-block px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-full mb-3">
+                        <span className="mb-3 inline-block rounded-full bg-[#a1001f] px-3 py-1 text-xs font-bold text-white">
                             {postTypeLabels[post.post_type] || post.post_type}
                         </span>
                         <h1 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
@@ -309,26 +294,26 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
 
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
                     <div className="lg:col-span-3">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 px-5 py-3">
+                        <div className="overflow-hidden rounded-xl border border-[#e6b8c2] bg-white shadow-sm">
+                            <div className="border-b border-[#e6b8c2] bg-[#f9ebef] px-5 py-3">
                                 <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-600">
                                     <div className="flex items-center gap-1.5">
-                                        <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                                        <Calendar className="h-3.5 w-3.5 text-[#a1001f]" />
                                         <span className="font-semibold">{publishDate}</span>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-4">
                                         <div className="flex items-center gap-1.5">
-                                            <Eye className="w-3.5 h-3.5 text-blue-600" />
+                                            <Eye className="h-3.5 w-3.5 text-[#a1001f]" />
                                             <span className="font-semibold">{post.view_count.toLocaleString('vi-VN')} lượt xem</span>
                                         </div>
                                         <div className="flex items-center gap-1.5">
-                                            <Heart className="w-3.5 h-3.5 text-blue-600" />
+                                            <Heart className="h-3.5 w-3.5 text-[#a1001f]" />
                                             <span className="font-semibold">{post.like_count?.toLocaleString('vi-VN') || 0} lượt thích</span>
                                         </div>
                                         <button
                                             type="button"
                                             onClick={copyShareLink}
-                                            className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-white px-3 py-1 font-semibold text-blue-700 hover:bg-blue-50 transition"
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-[#d8a1ae] bg-white px-3 py-1 font-semibold text-[#a1001f] transition hover:bg-[#fdf2f5]"
                                             title="Copy link bài viết"
                                         >
                                             {copied ? <Check className="w-3.5 h-3.5" aria-hidden /> : <Share2 className="w-3.5 h-3.5" aria-hidden />}
@@ -339,13 +324,13 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
                             </div>
 
                             <article className="p-5">
-                                <p className="text-base text-gray-600 italic mb-5 pb-5 border-b border-gray-200">
+                                <p className="mb-5 border-b border-[#efc9d1] pb-5 text-base italic text-gray-600">
                                     {post.description}
                                 </p>
 
                                 <PostContentRenderer html={post.content} />
 
-                                <div className="border-t border-gray-200 pt-5 mt-6">
+                                <div className="mt-6 border-t border-[#efc9d1] pt-5">
                                     <div className="flex items-center gap-3 px-1">
                                         {liked && currentReaction && (
                                             <div className="flex items-center gap-1 text-xs">
@@ -374,21 +359,21 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
                                                     setShowReactions(true)
                                                 }}
                                                 disabled={isLiking}
-                                                className={`text-xs font-semibold transition-all duration-200 cursor-pointer ${currentReaction ? 'text-blue-600' : 'text-muted-foreground hover:text-foreground'
+                                                className={`cursor-pointer text-xs font-semibold transition-all duration-200 ${currentReaction ? 'text-[#a1001f]' : 'text-muted-foreground hover:text-foreground'
                                                     } ${isLiking ? 'opacity-50' : ''}`}
                                             >
                                                 {currentReaction ? reactions.find(r => r.type === currentReaction)?.label : 'Thích'}
                                             </button>
 
                                             {showReactions && (
-                                                <div className="absolute bottom-full left-0 mb-2 bg-white/95 backdrop-blur-sm border border-border rounded-full shadow-2xl p-1.5 flex gap-1 z-10 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
+                                                <div className="absolute bottom-full left-0 z-10 mb-2 flex gap-1 rounded-full border border-[#e6b8c2] bg-white/95 p-1.5 shadow-2xl backdrop-blur-sm animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
                                                     {reactions.map((reaction, index) => {
                                                         const Icon = reaction.icon
                                                         return (
                                                             <button
                                                                 key={reaction.type}
                                                                 onClick={(e) => handleReaction(reaction.type, e)}
-                                                                className={`p-1.5 rounded-full hover:bg-muted/80 transition-all duration-200 transform hover:scale-125 hover:-translate-y-1 cursor-pointer ${reaction.color} animate-in fade-in-0 zoom-in-50`}
+                                                                className={`cursor-pointer rounded-full p-1.5 transition-all duration-200 hover:-translate-y-1 hover:scale-125 hover:bg-[#fdf2f5] transform ${reaction.color} animate-in fade-in-0 zoom-in-50`}
                                                                 style={{ animationDelay: `${index * 30}ms` }}
                                                                 title={reaction.label}
                                                             >
@@ -406,22 +391,22 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
                     </div>
 
                     <aside>
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-20">
-                            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 px-4 py-3">
+                        <div className="sticky top-20 overflow-hidden rounded-xl border border-[#e6b8c2] bg-white shadow-sm">
+                            <div className="border-b border-[#e6b8c2] bg-[#f9ebef] px-4 py-3">
                                 <h3 className="text-sm font-bold text-gray-900">Thông tin bài viết</h3>
                             </div>
                             <div className="p-4 space-y-3">
                                 <div className="space-y-2 text-xs">
                                     <div className="flex items-start gap-2">
-                                        <span className="font-semibold text-gray-600 w-16 flex-shrink-0">Loại:</span>
+                                        <span className="font-semibold text-gray-600 w-16 shrink-0">Loại:</span>
                                         <span className="text-gray-900">{postTypeLabels[post.post_type] || post.post_type}</span>
                                     </div>
                                     <div className="flex items-start gap-2">
-                                        <span className="font-semibold text-gray-600 w-16 flex-shrink-0">Đăng:</span>
+                                        <span className="font-semibold text-gray-600 w-16 shrink-0">Đăng:</span>
                                         <span className="text-gray-900">{publishDate}</span>
                                     </div>
                                     <div className="flex items-start gap-2">
-                                        <span className="font-semibold text-gray-600 w-16 flex-shrink-0">Lượt xem:</span>
+                                        <span className="font-semibold text-gray-600 w-16 shrink-0">Lượt xem:</span>
                                         <span className="text-gray-900">{post.view_count.toLocaleString('vi-VN')}</span>
                                     </div>
                                 </div>
@@ -441,8 +426,8 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
                 </div>
 
                 <section className="mt-5">
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 px-5 py-3">
+                    <div className="overflow-hidden rounded-xl border border-[#e6b8c2] bg-white shadow-sm">
+                        <div className="border-b border-[#e6b8c2] bg-[#f9ebef] px-5 py-3">
                             <h2 className="text-sm font-bold text-gray-900">Tin liên quan</h2>
                         </div>
                         <div className="p-5">

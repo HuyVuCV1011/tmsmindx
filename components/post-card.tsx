@@ -1,8 +1,8 @@
 'use client'
 
+import CroppedImage from '@/components/CroppedImage'
 import { cn } from '@/lib/utils'
 import { ArrowUpRight, Clock, Eye } from 'lucide-react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
 
@@ -12,6 +12,7 @@ interface Post {
     title: string
     description: string
     featured_image: string
+    thumbnail_position?: string
     post_type: string
     published_at: string
     view_count: number
@@ -53,17 +54,15 @@ export default function PostCard({
         >
             <article className="flex flex-col h-full bg-white rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl border border-gray-100/50">
                 {/* Image Container with Zoom Effect */}
-                <div className="relative aspect-[16/10] overflow-hidden bg-gray-100">
-                    <Image
-                        src={post.featured_image || "/placeholder.svg"}
+                <div className={cn(
+                    "relative aspect-[16/9] overflow-hidden bg-gray-100 transition-transform duration-700 ease-out",
+                    isHovered ? "scale-105" : "scale-100"
+                )}>
+                    <CroppedImage
+                        src={post.featured_image || '/placeholder.svg'}
                         alt={post.title}
-                        fill
-                        className={cn(
-                            "object-cover transition-transform duration-700 ease-out",
-                            isHovered ? "scale-105" : "scale-100"
-                        )}
-                        loading="lazy"
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        cropData={post.thumbnail_position}
+                        style={{ position: 'absolute', inset: 0 }}
                     />
 
                     {/* Overlay on hover */}

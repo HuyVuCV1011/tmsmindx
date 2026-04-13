@@ -81,7 +81,7 @@ Sự tham gia của các bạn sẽ góp phần tạo nên một chương trình
 Tháng 09/2025 đã ghi nhận nhiều nỗ lực từ đội ngũ giáo viên trong việc nâng cao chất lượng giảng dạy và tối ưu trải nghiệm học viên.\
 VINH DANH TOP 10 GIÁO VIÊN CÓ CHỈ SỐ CR46 CAO NHẤT HỆ THỐNG - THÁNG 09/2025Teaching HO xin chúc mừng các bạn giáo viên đã xuất sắc góp mặt trong bảng xếp hạng tháng này:<br>
 
-| STT | Giảng viên            | Khối dạy         | Cơ sở                           |
+| STT | Giáo viên            | Khối dạy         | Cơ sở                           |
 | --- | --------------------- | ---------------- | ------------------------------- |
 |     |                       |                  |                                 |
 | 1   | Vũ Văn Cường          | K12 (Kid - Teen) | Hải Phòng - 268 Trần Nguyên Hãn |
@@ -175,7 +175,7 @@ Nhằm đảm bảo việc tính thưởng CR46 cho giáo viên được thực 
 Tháng 08/2025 đã ghi nhận nhiều nỗ lực từ đội ngũ giáo viên trong việc nâng cao chất lượng giảng dạy và tối ưu trải nghiệm học viên.\
 VINH DANH TOP 10 GIÁO VIÊN CÓ CHỈ SỐ CR46 CAO NHẤT HỆ THỐNG - THÁNG 08/2025Teaching HO xin chúc mừng các bạn giáo viên đã xuất sắc góp mặt trong bảng xếp hạng tháng này:<br>
 
-| STT | Giảng viên       | Khối dạy         | Cơ sở                          |
+| STT | Giáo viên       | Khối dạy         | Cơ sở                          |
 | --- | ---------------- | ---------------- | ------------------------------ |
 | /   |                  |                  |                                |
 | 1   | Đàm Thị Tươi     | K12 (Kid - Teen) | Thái Nguyên - 04 Hoàng Văn Thụ |
@@ -256,7 +256,7 @@ Nếu có bất kỳ thắc mắc nào, giáo viên vui lòng liên hệ Leader/
 Tháng 07/2025 đã khép lại với nhiều nỗ lực và kết quả đáng ghi nhận từ đội ngũ giáo viên khối K12. Kết quả lần này cho thấy sự duy trì ổn định của cá nhân trong TOP10, đồng thời xuất hiện thêm những gương mặt mới, minh chứng cho tinh thần học hỏi và cải thiện không ngừng.\
 VINH DANH TOP 10 GIÁO VIÊN CÓ CHỈ SỐ CR46 CAO NHẤT HỆ THỐNG - THÁNG 07/2025Teaching HO xin chúc mừng các bạn giáo viên đã xuất sắc góp mặt trong bảng xếp hạng tháng này:<br>
 
-| STT | Giảng viên           | Khối | Cơ sở                           |
+| STT | Giáo viên           | Khối | Cơ sở                           |
 | --- | -------------------- | ---- | ------------------------------- |
 | 1   | Nguyễn Ngọc Sơn      | K12  | HCM - 01 Tô Ký                  |
 | 2   | Phạm Văn Chiến       | K12  | HN - 06 Nguyễn Hữu Thọ          |

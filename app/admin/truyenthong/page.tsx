@@ -86,13 +86,13 @@ export default function TruyenthongDashboardPage() {
             <div className="flex flex-wrap items-center gap-3 mb-8">
                 <Button asChild variant="mindx" className="gap-2 shadow-sm font-semibold">
                     <Link href="/admin/truyenthong/posts/create">
-                        <Plus className="h-4 w-4" />
+                        <Plus className="h-3 w-4" />
                         Tạo bài viết mới
                     </Link>
                 </Button>
                 <Button asChild variant="outline" className="gap-2 shadow-sm font-semibold border-gray-300">
                     <Link href="/admin/truyenthong/sliders">
-                        <ImageIcon className="h-4 w-4" />
+                        <ImageIcon className="h-3 w-4" />
                         Quản lý Slider
                     </Link>
                 </Button>

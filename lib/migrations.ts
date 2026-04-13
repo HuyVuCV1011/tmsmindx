@@ -1055,6 +1055,174 @@ const migrations: Migration[] = [
         DROP COLUMN IF EXISTS status;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V46: Add thumbnail_position to communications
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V46_communications_thumbnail_position',
+    version: 46,
+    sql: `
+      ALTER TABLE communications
+        ADD COLUMN IF NOT EXISTS thumbnail_position VARCHAR(20) DEFAULT '50% 50%';
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V47: Server-side time tracking — last_heartbeat_at
+  // Server tự tính thời gian xem thực tế, không tin client
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V47_training_progress_heartbeat',
+    version: 47,
+    sql: `
+      ALTER TABLE training_teacher_video_scores
+        ADD COLUMN IF NOT EXISTS last_heartbeat_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS server_time_seconds INTEGER DEFAULT 0;
+
+      UPDATE training_teacher_video_scores
+        SET server_time_seconds = COALESCE(time_spent_seconds, 0)
+        WHERE server_time_seconds = 0 AND time_spent_seconds > 0;
+    `,
+  },
+  {
+    name: 'V46_chuyen_sau_unique_indexes',
+    version: 46,
+    sql: `
+      -- Đảm bảo UNIQUE index trên chuyen_sau_bode.ma_de để ON CONFLICT (ma_de) hoạt động.
+      -- Trước khi tạo index, xoá duplicate (giữ bản ghi mới nhất theo id).
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes
+          WHERE tablename = 'chuyen_sau_bode' AND indexname = 'idx_bode_ma_de_uq'
+        ) THEN
+          DELETE FROM chuyen_sau_bode
+          WHERE id NOT IN (
+            SELECT MAX(id) FROM chuyen_sau_bode WHERE ma_de IS NOT NULL GROUP BY ma_de
+          )
+          AND ma_de IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM chuyen_sau_bode b2
+            WHERE b2.ma_de = chuyen_sau_bode.ma_de AND b2.id <> chuyen_sau_bode.id
+          );
+          CREATE UNIQUE INDEX idx_bode_ma_de_uq ON chuyen_sau_bode (ma_de)
+          WHERE ma_de IS NOT NULL;
+        END IF;
+      END $$;
+
+      -- Đảm bảo UNIQUE index trên chuyen_sau_monhoc.ma_mon để ON CONFLICT (ma_mon) hoạt động.
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes
+          WHERE tablename = 'chuyen_sau_monhoc' AND indexname = 'idx_monhoc_ma_mon_uq'
+        ) THEN
+          DELETE FROM chuyen_sau_monhoc
+          WHERE id NOT IN (
+            SELECT MAX(id) FROM chuyen_sau_monhoc WHERE ma_mon IS NOT NULL GROUP BY ma_mon
+          )
+          AND ma_mon IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM chuyen_sau_monhoc m2
+            WHERE m2.ma_mon = chuyen_sau_monhoc.ma_mon AND m2.id <> chuyen_sau_monhoc.id
+          );
+          CREATE UNIQUE INDEX idx_monhoc_ma_mon_uq ON chuyen_sau_monhoc (ma_mon)
+          WHERE ma_mon IS NOT NULL;
+        END IF;
+      END $$;
+    `,
+  },
+  {
+    name: 'V47_process_block_split',
+    version: 47,
+    sql: `
+      -- Chuẩn hóa 3 môn Quy trình & Kỹ năng trải nghiệm thành 3 block riêng để map đề theo id_mon rõ ràng.
+      UPDATE chuyen_sau_monhoc
+      SET ma_khoi = 'PROCESS-ART',
+          loai_ky_thi = 'experience'
+      WHERE ma_khoi = 'PROCESS'
+        AND (
+          lower(COALESCE(ma_mon, '')) LIKE '%[art]%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%[art]%'
+          OR lower(COALESCE(ma_mon, '')) LIKE '%my thuat%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%my thuat%'
+        );
+
+      UPDATE chuyen_sau_monhoc
+      SET ma_khoi = 'PROCESS-COD',
+          loai_ky_thi = 'experience'
+      WHERE ma_khoi = 'PROCESS'
+        AND (
+          lower(COALESCE(ma_mon, '')) LIKE '%[coding]%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%[coding]%'
+          OR lower(COALESCE(ma_mon, '')) LIKE '%code%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%code%'
+        );
+
+      UPDATE chuyen_sau_monhoc
+      SET ma_khoi = 'PROCESS-ROB',
+          loai_ky_thi = 'experience'
+      WHERE ma_khoi = 'PROCESS'
+        AND (
+          lower(COALESCE(ma_mon, '')) LIKE '%[robotics]%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%[robotics]%'
+          OR lower(COALESCE(ma_mon, '')) LIKE '%robot%'
+          OR lower(COALESCE(ten_mon, '')) LIKE '%robot%'
+        );
+    `,
+  },
+  {
+    name: 'V48_feedback_tickets',
+    version: 48,
+    sql: `
+      CREATE TABLE IF NOT EXISTS feedback_tickets (
+        id SERIAL PRIMARY KEY,
+        user_email VARCHAR(255) NOT NULL,
+        user_name VARCHAR(255),
+        user_code VARCHAR(100),
+        content TEXT NOT NULL,
+        suggestion TEXT,
+        image_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+        status VARCHAR(20) NOT NULL DEFAULT 'new'
+          CHECK (status IN ('new', 'in_progress', 'done')),
+        admin_note TEXT,
+        resolved_by_email VARCHAR(255),
+        resolved_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_feedback_tickets_status ON feedback_tickets(status);
+      CREATE INDEX IF NOT EXISTS idx_feedback_tickets_user_email ON feedback_tickets(user_email);
+      CREATE INDEX IF NOT EXISTS idx_feedback_tickets_created_at ON feedback_tickets(created_at DESC);
+
+      DROP TRIGGER IF EXISTS trg_feedback_tickets_updated_at ON feedback_tickets;
+      CREATE TRIGGER trg_feedback_tickets_updated_at
+      BEFORE UPDATE ON feedback_tickets
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
+  {
+    name: 'V49_feedback_screen_path',
+    version: 49,
+    sql: `
+      ALTER TABLE feedback_tickets
+      ADD COLUMN IF NOT EXISTS screen_path VARCHAR(500);
+
+      CREATE INDEX IF NOT EXISTS idx_feedback_tickets_screen_path ON feedback_tickets(screen_path);
+    `,
+  },
+  {
+    name: 'V50_feedback_admin_reply',
+    version: 50,
+    sql: `
+      ALTER TABLE feedback_tickets
+      ADD COLUMN IF NOT EXISTS admin_reply TEXT,
+      ADD COLUMN IF NOT EXISTS admin_image_urls JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

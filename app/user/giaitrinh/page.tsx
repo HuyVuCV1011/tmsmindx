@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 
 import Modal from '@/components/Modal';
@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useAuth } from '@/lib/auth-context';
 import { CAMPUS_LIST, findMatchingCampus } from '@/lib/campus-data';
 import { useTeacher } from '@/lib/teacher-context';
+import { Plus } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -345,7 +346,7 @@ export default function GiaiTrinhPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white px-4 lg:px-6">
+    <div className="min-h-screen bg-white p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
       {/* Header */}
       <PageHeader
@@ -357,9 +358,7 @@ export default function GiaiTrinhPage() {
             size="lg"
             className="whitespace-nowrap border-2 border-[#a1001f] bg-[#a1001f] text-white shadow-md hover:bg-[#8a001a]"
           >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+            <Plus className="mr-2 h-5 w-5" />
             Tạo Giải Trình Mới
           </Button>
         }
@@ -443,11 +442,11 @@ export default function GiaiTrinhPage() {
                   />
                 </div>
               </div>
-            <div className="mt-6 pt-6 border-t border-[#f1d1d8] flex justify-end">
+            <div className="mt-4 border-t border-[#f1d1d8] pt-3">
               <Button
                 type="submit"
                 disabled={submitting}
-                className="w-full sm:w-auto font-medium shadow-sm bg-[#a1001f] text-white hover:bg-[#8a0019]"
+                className="w-full font-medium shadow-sm bg-[#a1001f] text-white hover:bg-[#8a0019]"
               >
                 {submitting ? (
                   <span className="flex items-center justify-center">
@@ -462,23 +461,11 @@ export default function GiaiTrinhPage() {
 
       {/* Danh sách giải trình - Responsive Cards */}
       <div>
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-gray-50">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Danh Sách Giải Trình</h2>
-                <span className="text-xs text-gray-500 font-normal">({explanations.length} giải trình)</span>
-              </div>
-              <Button
-                onClick={() => setShowModal(true)}
-                size="sm"
-                className="whitespace-nowrap shadow-sm bg-gradient-to-r from-[#a1001f] to-[#c41230] hover:from-[#8a001a] hover:to-[#a8102a] text-white border-0"
-              >
-                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Tạo Giải Trình Mới
-              </Button>
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="min-w-0 text-lg sm:text-xl font-semibold text-gray-900">Danh sách giải trình</h2>
+              <span className="shrink-0 whitespace-nowrap text-sm text-gray-600">Tổng: {explanations.length} giải trình</span>
             </div>
           </div>
           
@@ -488,16 +475,7 @@ export default function GiaiTrinhPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               <h3 className="mt-4 text-lg font-medium text-gray-900">Chưa có giải trình nào</h3>
-              <p className="mt-2 text-sm text-gray-600">Bắt đầu bằng cách tạo giải trình mới</p>
-              <Button
-                onClick={() => setShowModal(true)}
-                className="mt-6"
-              >
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Tạo Giải Trình Mới
-              </Button>
+              <p className="mt-2 text-sm text-gray-600">Chưa có yêu cầu giải trình nào.</p>
             </div>
           ) : (
             <div>

@@ -927,11 +927,7 @@ export default function ProfessionalEvaluationSchedulePage() {
   return (
     <PageContainer title="Lịch sự kiện">
       <Card className="overflow-hidden" padding="sm">
-        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 text-center">
-          <h2 className="text-2xl font-bold text-gray-900">Lịch Sự Kiện</h2>
-        </div>
-
-        <div className="px-4 py-2 border-b border-gray-200 bg-white flex flex-wrap items-center justify-between gap-3">
+        <div className="px-4 py-2 border-b flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-gray-700" />
             <select
@@ -1384,8 +1380,13 @@ export default function ProfessionalEvaluationSchedulePage() {
                               value={schedule.subjectId ?? ""}
                               onChange={(e) => {
                                 const newSubjectId = Number(e.target.value) || null;
+                                // Tạm thời bỏ điều kiện "bộ đề phải có câu hỏi" để phục vụ test.
+                                // const firstValidSet = newSubjectId
+                                //   ? (setsBySubjectId.get(newSubjectId) || []).find(s => s.question_count > 0)
+                                //   : null;
                                 const firstValidSet = newSubjectId
-                                  ? (setsBySubjectId.get(newSubjectId) || []).find(s => s.question_count > 0)
+                                  // ? (setsBySubjectId.get(newSubjectId) || []).find(s => s.question_count > 0)
+                                  ? (setsBySubjectId.get(newSubjectId) || [])[0] ?? null
                                   : null;
                                 const subject = subjectList.find(s => s.id === newSubjectId);
                                 setFormData((previous) => ({
@@ -1419,9 +1420,9 @@ export default function ProfessionalEvaluationSchedulePage() {
                           {schedule.subjectId && (
                             <div className="mt-2">
                               <label className="mb-1 block text-sm font-medium">Bộ đề áp dụng</label>
-                              {(setsBySubjectId.get(schedule.subjectId) || []).filter(s => s.question_count > 0).length === 0 ? (
+                              {(setsBySubjectId.get(schedule.subjectId) || []).length === 0 ? (
                                 <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                                  Môn này chưa có bộ đề nào có câu hỏi.
+                                  Môn này chưa có bộ đề nào.
                                 </div>
                               ) : (
                                 <select
@@ -1439,7 +1440,6 @@ export default function ProfessionalEvaluationSchedulePage() {
                                 >
                                   <option value="">-- Chọn bộ đề --</option>
                                   {(setsBySubjectId.get(schedule.subjectId) || [])
-                                    .filter(s => s.question_count > 0)
                                     .map((s) => (
                                       <option key={s.id} value={s.id}>
                                         {s.set_code}{s.set_name ? ` · ${s.set_name}` : ""} ({s.question_count} câu)
@@ -1733,7 +1733,7 @@ export default function ProfessionalEvaluationSchedulePage() {
       )}
 
       {showParticipantsModal && selectedParticipantEvent && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
               <div>

@@ -26,6 +26,16 @@ function processHTML(html: string): Segment[] {
 
   const doc = new DOMParser().parseFromString(`<div id="r">${html}</div>`, 'text/html')
   const root = doc.getElementById('r')!
+
+  // Wrap tất cả <table> trong div.table-scroll-wrapper để scroll ngang trên mobile
+  root.querySelectorAll('table').forEach(table => {
+    if (table.parentElement?.classList.contains('table-scroll-wrapper')) return
+    const wrapper = doc.createElement('div')
+    wrapper.className = 'table-scroll-wrapper'
+    table.parentNode!.insertBefore(wrapper, table)
+    wrapper.appendChild(table)
+  })
+
   const segments: Segment[] = []
   let pendingImages: ImageInfo[] = []
   let pendingHtml = ''
@@ -114,6 +124,41 @@ function SmartImageGroup({ images, globalOffset, onOpenLightbox }: SmartImageGro
     if (n === 2) return '400px'
     if (n === 3) return idx === 0 ? '404px' : '200px'
     return '200px'
+  }
+
+  // ── Single image: hiển thị tối ưu, giữ tỷ lệ gốc, max-height hợp lý ──
+  if (n === 1) {
+    const img = visible[0]
+    return (
+      <div
+        className="smart-img-group"
+        style={{ margin: '12px 0', borderRadius: '10px', overflow: 'hidden', lineHeight: 0 }}
+      >
+        <div
+          className="smart-img-item"
+          style={{ position: 'relative', cursor: 'pointer', display: 'inline-block', width: '100%' }}
+          onClick={() => onOpenLightbox(globalOffset)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={img.src}
+            alt={img.alt}
+            className="smart-img-thumb"
+            draggable={false}
+            style={{
+              display: 'block',
+              width: '100%',
+              height: 'auto',
+              maxHeight: '600px',
+              objectFit: 'contain',
+              backgroundColor: '#f3f4f6',
+              borderRadius: '10px',
+            }}
+          />
+          <div className="smart-img-hover-overlay" style={{ borderRadius: '10px' }} />
+        </div>
+      </div>
+    )
   }
 
   return (

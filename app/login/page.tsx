@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import toast from 'react-hot-toast';
 
+const SAVED_LOGIN_KEY = 'tps_saved_login_account';
+
 export default function LoginPage() {
   const router = useRouter();
   const { user, isLoading, updateUser } = useAuth();
@@ -14,9 +16,44 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberAccount, setRememberAccount] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const hasCheckedAuth = useRef(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SAVED_LOGIN_KEY);
+      if (!saved) return;
+
+      const parsed = JSON.parse(saved) as { email?: string; role?: 'teacher' | 'manager' };
+      if (parsed.email) {
+        setEmail(parsed.email);
+        setRememberAccount(true);
+      }
+      if (parsed.role === 'teacher' || parsed.role === 'manager') {
+        setRole(parsed.role);
+      }
+    } catch (e) {
+      logger.warn('Unable to load saved login account', { error: (e as Error).message });
+    }
+  }, []);
+
+  const persistRememberedAccount = useCallback((accountEmail: string, accountRole: 'teacher' | 'manager') => {
+    try {
+      if (!rememberAccount) {
+        localStorage.removeItem(SAVED_LOGIN_KEY);
+        return;
+      }
+
+      localStorage.setItem(
+        SAVED_LOGIN_KEY,
+        JSON.stringify({ email: accountEmail.trim(), role: accountRole })
+      );
+    } catch (e) {
+      logger.warn('Unable to persist saved login account', { error: (e as Error).message });
+    }
+  }, [rememberAccount]);
 
   useEffect(() => {
     // If already logged in, redirect to dashboard - wait for auth to finish loading
@@ -103,6 +140,8 @@ export default function LoginPage() {
         } else {
           toast.success(`Chào mừng ${appAuthData.displayName}!`, { icon: '👋' });
         }
+
+        persistRememberedAccount(appAuthData.email || trimmedEmail, role);
 
         logger.info('Redirecting app user to', { path: redirectPath });
         setTimeout(() => { router.replace(redirectPath); }, 500);
@@ -198,6 +237,8 @@ export default function LoginPage() {
         toast.success(`Chào mừng ${userData.displayName}!`, { icon: '👋' });
       }
 
+      persistRememberedAccount(trimmedEmail, role);
+
       updateUser(userData, data.idToken);
 
       logger.info('Redirecting to', { path: finalRedirectPath, isAdmin: userData.isAdmin });
@@ -221,7 +262,7 @@ export default function LoginPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [email, password, role, updateUser, router]);
+  }, [email, password, role, updateUser, router, persistRememberedAccount]);
 
   // Memoize button classes to prevent recalculation
   const getRoleButtonClass = useCallback((buttonRole: 'teacher' | 'manager') => {
@@ -330,6 +371,16 @@ export default function LoginPage() {
                 <a href="#" className="text-xs text-[#800000] hover:underline transition-all duration-200 hover:text-[#c1122f]">Quên mật khẩu?</a>
               </div> */}
             </div>
+            <label className="inline-flex items-center gap-2 text-sm text-gray-600 select-none">
+              <input
+                type="checkbox"
+                checked={rememberAccount}
+                onChange={(e) => setRememberAccount(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-[#800000] focus:ring-[#800000]/30"
+                disabled={isSubmitting}
+              />
+              Lưu tài khoản
+            </label>
             <button
               type="submit"
               className="w-full bg-[#800000] text-white rounded py-2 font-semibold text-base mt-2 hover:bg-[#c1122f] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg"

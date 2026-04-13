@@ -7,6 +7,7 @@ import {
     Award,
     BookOpen,
     Calendar,
+    ChevronDown,
     Eye,
     EyeOff,
     FileText,
@@ -20,7 +21,7 @@ import {
     X
 } from 'lucide-react'
 import Image from 'next/image'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import useSWR from 'swr'
 
@@ -57,6 +58,9 @@ export default function TeacherProfilePage() {
     const [showCertModal, setShowCertModal] = useState(false)
     const [selectedCertImage, setSelectedCertImage] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const certTypeDropdownRef = useRef<HTMLDivElement>(null)
+    const [isCertTypeOpen, setIsCertTypeOpen] = useState(false)
+    const [selectedCertFile, setSelectedCertFile] = useState<File | null>(null)
 
     // Certificate form state
     const [certForm, setCertForm] = useState({
@@ -66,6 +70,19 @@ export default function TeacherProfilePage() {
         expiryDate: '',
         description: '',
     })
+
+    useEffect(() => {
+        if (!isCertTypeOpen) return
+
+        const handleOutsideClick = (event: MouseEvent) => {
+            if (!certTypeDropdownRef.current?.contains(event.target as Node)) {
+                setIsCertTypeOpen(false)
+            }
+        }
+
+        document.addEventListener('mousedown', handleOutsideClick)
+        return () => document.removeEventListener('mousedown', handleOutsideClick)
+    }, [isCertTypeOpen])
 
     // Fetch certificates
     const { data: certificatesData, mutate: mutateCertificates } = useSWR(
@@ -139,21 +156,47 @@ export default function TeacherProfilePage() {
         }
     }
 
-    // Handle certificate file upload
-    const handleCertificateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const validateCertificateFile = (file: File) => {
+        const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf']
+        if (!validTypes.includes(file.type)) {
+            return 'Chỉ hỗ trợ file ảnh (JPG, PNG, WEBP) hoặc PDF'
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+            return 'Kích thước file tối đa 10MB'
+        }
+
+        return null
+    }
+
+    const handleCertificateUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
 
-        // Validate file type
-        const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf']
-        if (!validTypes.includes(file.type)) {
-            toast.error('Chỉ hỗ trợ file ảnh (JPG, PNG, WEBP) hoặc PDF')
+        const validationError = validateCertificateFile(file)
+        if (validationError) {
+            toast.error(validationError)
+            setSelectedCertFile(null)
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+            }
             return
         }
 
-        // Validate file size (max 10MB)
-        if (file.size > 10 * 1024 * 1024) {
-            toast.error('Kích thước file tối đa 10MB')
+        setSelectedCertFile(file)
+        toast.success('Đã chọn file chứng chỉ')
+    }
+
+    const handleSubmitCertificate = async () => {
+        const file = selectedCertFile
+        if (!file) {
+            toast.error('Vui lòng chọn file chứng chỉ trước khi gửi')
+            return
+        }
+
+        const validationError = validateCertificateFile(file)
+        if (validationError) {
+            toast.error(validationError)
             return
         }
 
@@ -214,11 +257,15 @@ export default function TeacherProfilePage() {
             mutateCertificates()
             setShowCertModal(false)
             setCertForm({ name: '', type: '', issueDate: '', expiryDate: '', description: '' })
+            setSelectedCertFile(null)
         } catch (error) {
             console.error('Upload error:', error)
             toast.error('Lỗi khi tải lên chứng chỉ', { id: toastId })
         } finally {
             setIsUploadingCert(false)
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+            }
         }
     }
 
@@ -354,7 +401,7 @@ export default function TeacherProfilePage() {
                 {/* Privacy Settings Section */}
                 <div className="bg-white rounded-3xl shadow-xl border border-[#f1d1d8] overflow-hidden">
                     <div className="p-6 border-b border-[#f1d1d8] bg-[#fff5f7] flex items-center gap-3">
-                        <div className="w-12 h-12 bg-[#a1001f] rounded-xl flex items-center justify-center shadow-lg">
+                        <div className="h-12 w-12 min-h-12 min-w-12 shrink-0 rounded-xl bg-[#a1001f] shadow-lg flex items-center justify-center">
                             <Shield className="w-6 h-6 text-white" />
                         </div>
                         <div>
@@ -500,45 +547,37 @@ export default function TeacherProfilePage() {
                 {/* Certificates Section */}
                 <div className="bg-white rounded-3xl shadow-xl border border-[#f1d1d8] overflow-hidden">
                     {/* Header */}
-                    <div className="p-6 border-b border-[#f1d1d8] bg-[#fff5f7] flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-[#a1001f] rounded-xl flex items-center justify-center shadow-lg">
-                                <Award className="w-6 h-6 text-white" />
+                    <div className="p-4 sm:p-6 border-b border-[#f1d1d8] bg-[#fff5f7] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#a1001f] rounded-xl flex items-center justify-center shadow-lg shrink-0">
+                                <Award className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                             </div>
-                            <div>
-                                <h2 className="text-2xl font-black text-gray-900">Chứng chỉ của tôi</h2>
-                                <p className="text-sm text-gray-500 font-medium">
+                            <div className="min-w-0">
+                                <h2 className="text-[28px] sm:text-2xl font-black text-gray-900 leading-tight">Chứng chỉ của tôi</h2>
+                                <p className="text-xs sm:text-sm text-gray-500 font-medium">
                                     {certificates.length} chứng chỉ
                                 </p>
                             </div>
                         </div>
                         <Button
-                            size="lg"
+                            size="sm"
                             onClick={() => setShowCertModal(true)}
-                            className="flex items-center gap-2 bg-[#a1001f] hover:bg-[#870019] text-white hover:shadow-xl hover:scale-105 transition-all duration-200 rounded-xl"
+                            className="h-10 w-full sm:w-auto px-3 sm:px-4 flex items-center justify-center gap-2 bg-[#a1001f] hover:bg-[#870019] text-white transition-all duration-200 rounded-xl whitespace-nowrap"
                         >
-                            <Plus className="w-5 h-5" />
-                            <span>Thêm chứng chỉ</span>
+                            <Plus className="w-4 h-4" />
+                            <span className="text-sm">Thêm chứng chỉ</span>
                         </Button>
                     </div>
 
                     {/* Certificates Grid */}
-                    <div className="p-6">
+                    <div className="p-4 sm:p-6">
                         {certificates.length === 0 ? (
-                            <div className="text-center py-16">
-                                <div className="w-20 h-20 bg-gray-100 rounded-3xl flex items-center justify-center mx-auto mb-4">
-                                    <FileText className="w-10 h-10 text-gray-300" />
+                            <div className="text-center py-10 sm:py-16">
+                                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 rounded-3xl flex items-center justify-center mx-auto mb-4">
+                                    <FileText className="w-8 h-8 sm:w-10 sm:h-10 text-gray-300" />
                                 </div>
                                 <h3 className="text-lg font-bold text-gray-900 mb-2">Chưa có chứng chỉ</h3>
-                                <p className="text-gray-500 mb-4">Thêm chứng chỉ đầu tiên của bạn</p>
-                                <Button
-                                    size="lg"
-                                    onClick={() => setShowCertModal(true)}
-                                    className="inline-flex items-center gap-2 rounded-xl"
-                                >
-                                    <Plus className="w-5 h-5" />
-                                    <span>Thêm ngay</span>
-                                </Button>
+                                <p className="text-gray-500">Thêm chứng chỉ đầu tiên của bạn</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -607,14 +646,18 @@ export default function TeacherProfilePage() {
 
             {/* Add Certificate Modal */}
             {showCertModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start pt-20 sm:items-center sm:justify-center sm:pt-0 justify-center z-50 p-4">
                     <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
                         {/* Modal Header */}
-                        <div className="sticky top-0 bg-white p-6 border-b border-gray-200 flex items-center justify-between">
-                            <h2 className="text-2xl font-black text-gray-900">Thêm chứng chỉ mới</h2>
+                        <div className="sticky top-0 bg-[#a1001f] p-6 border-b border-[#870019] flex items-center justify-between">
+                            <h2 className="text-2xl font-black text-white">Thêm chứng chỉ mới</h2>
                             <button
-                                onClick={() => setShowCertModal(false)}
-                                className="w-10 h-10 bg-[#fff5f7] hover:bg-[#f9e2e8] text-[#a1001f] rounded-xl flex items-center justify-center transition-colors"
+                                onClick={() => {
+                                    setShowCertModal(false)
+                                    setIsCertTypeOpen(false)
+                                    setSelectedCertFile(null)
+                                }}
+                                className="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-xl flex items-center justify-center transition-colors"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -641,17 +684,55 @@ export default function TeacherProfilePage() {
                                 <label className="block text-sm font-bold text-gray-700 mb-2">
                                     Loại chứng chỉ
                                 </label>
-                                <select
-                                    value={certForm.type}
-                                    onChange={(e) => setCertForm({ ...certForm, type: e.target.value })}
-                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#a1001f] focus:ring-4 focus:ring-[#f9e2e8] outline-none transition-all"
-                                >
-                                    <option value="">Chọn loại</option>
-                                    <option value="Language">Ngoại ngữ</option>
-                                    <option value="Technology">Công nghệ</option>
-                                    <option value="Teaching">Sư phạm</option>
-                                    <option value="Other">Khác</option>
-                                </select>
+                                <div ref={certTypeDropdownRef} className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCertTypeOpen((prev) => !prev)}
+                                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#a1001f] focus:ring-4 focus:ring-[#f9e2e8] outline-none transition-all text-left flex items-center justify-between"
+                                        aria-haspopup="listbox"
+                                        aria-expanded={isCertTypeOpen}
+                                    >
+                                        <span className={certForm.type ? 'text-gray-900' : 'text-gray-500'}>
+                                            {certForm.type === 'Language'
+                                                ? 'Ngoại ngữ'
+                                                : certForm.type === 'Technology'
+                                                    ? 'Công nghệ'
+                                                    : certForm.type === 'Teaching'
+                                                        ? 'Sư phạm'
+                                                        : certForm.type === 'Other'
+                                                            ? 'Khác'
+                                                            : 'Chọn loại'}
+                                        </span>
+                                        <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${isCertTypeOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+
+                                    {isCertTypeOpen && (
+                                        <div className="absolute z-50 mt-2 w-full rounded-xl border border-[#f1d1d8] bg-white shadow-xl overflow-hidden">
+                                            {[
+                                                { value: '', label: 'Chọn loại' },
+                                                { value: 'Language', label: 'Ngoại ngữ' },
+                                                { value: 'Technology', label: 'Công nghệ' },
+                                                { value: 'Teaching', label: 'Sư phạm' },
+                                                { value: 'Other', label: 'Khác' },
+                                            ].map((option) => (
+                                                <button
+                                                    key={option.value || 'empty'}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setCertForm({ ...certForm, type: option.value })
+                                                        setIsCertTypeOpen(false)
+                                                    }}
+                                                    className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${certForm.type === option.value
+                                                            ? 'bg-[#fff5f7] text-[#a1001f] font-semibold'
+                                                            : 'text-gray-700 hover:bg-gray-50'
+                                                        }`}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Dates */}
@@ -708,18 +789,34 @@ export default function TeacherProfilePage() {
                                     className="hidden"
                                 />
                                 <button
+                                    type="button"
                                     onClick={() => fileInputRef.current?.click()}
-                                    disabled={isUploadingCert || !certForm.name}
+                                    disabled={isUploadingCert}
                                     className="w-full px-6 py-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-[#a1001f] hover:bg-[#fff5f7] transition-all flex flex-col items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <Upload className="w-8 h-8 text-gray-400" />
                                     <span className="text-sm font-semibold text-gray-600">
-                                        {isUploadingCert ? 'Đang tải lên...' : 'Chọn ảnh hoặc PDF (tối đa 10MB)'}
+                                        {isUploadingCert
+                                            ? 'Đang tải lên...'
+                                            : selectedCertFile
+                                                ? selectedCertFile.name
+                                                : 'Chọn ảnh hoặc PDF (tối đa 10MB)'}
                                     </span>
                                 </button>
                                 <p className="text-xs text-gray-500 mt-2">
                                     Hỗ trợ: JPG, PNG, WEBP, PDF
                                 </p>
+                            </div>
+
+                            <div className="mt-4 border-t border-[#f1d1d8] pt-3">
+                                <Button
+                                    type="button"
+                                    onClick={handleSubmitCertificate}
+                                    disabled={isUploadingCert || !selectedCertFile}
+                                    className="w-full bg-[#a1001f] hover:bg-[#870019] text-white"
+                                >
+                                    {isUploadingCert ? 'Đang gửi...' : 'Gửi thông tin'}
+                                </Button>
                             </div>
                         </div>
                     </div>

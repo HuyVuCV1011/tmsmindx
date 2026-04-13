@@ -2,11 +2,14 @@
 
 import Modal from '@/components/Modal';
 import { Tabs } from '@/components/Tabs';
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Stepper, StepItem } from '@/components/ui/stepper';
+import { StepItem, Stepper } from '@/components/ui/stepper';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/lib/auth-context';
-import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, RefreshCcw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface LeaveRequest {
@@ -27,8 +30,14 @@ interface LeaveRequest {
   class_status?: string;
   status: 'pending_admin' | 'approved_unassigned' | 'approved_assigned' | 'rejected' | 'substitute_confirmed';
   admin_note?: string;
+  admin_name?: string;
+  admin_email?: string;
+  substitute_confirmed_at?: string;
   created_at: string;
+  updated_at?: string;
 }
+
+type StatusVariant = 'warning' | 'info' | 'success' | 'destructive';
 
 function getWorkflowSteps(status: LeaveRequest['status']): StepItem[] {
   const step1: StepItem = { id: 1, label: 'Gửi mail xin nghỉ', status: 'completed' };
@@ -40,10 +49,7 @@ function getWorkflowSteps(status: LeaveRequest['status']): StepItem[] {
   if (status === 'rejected') {
     step2Status = 'error';
     step4Status = 'error';
-  } else if (status === 'approved_unassigned') {
-    step2Status = 'success';
-    step3Status = 'current';
-  } else if (status === 'approved_assigned') {
+  } else if (status === 'approved_unassigned' || status === 'approved_assigned') {
     step2Status = 'success';
     step3Status = 'current';
   } else if (status === 'substitute_confirmed') {
@@ -60,20 +66,20 @@ function getWorkflowSteps(status: LeaveRequest['status']): StepItem[] {
   ];
 }
 
-function statusLabel(status: LeaveRequest['status']) {
+function getStatusMeta(status: LeaveRequest['status']): { label: string; variant: StatusVariant } {
   switch (status) {
     case 'pending_admin':
-      return 'Chờ duyệt';
+      return { label: 'Chờ duyệt', variant: 'warning' };
     case 'approved_unassigned':
-      return 'Đã duyệt - chưa có GV thay';
+      return { label: 'Đã duyệt - chưa có GV thay', variant: 'info' };
     case 'approved_assigned':
-      return 'Đã gửi cho GV thay';
+      return { label: 'Đã gửi cho GV thay', variant: 'info' };
     case 'substitute_confirmed':
-      return 'GV thay đã xác nhận';
+      return { label: 'GV thay đã xác nhận', variant: 'success' };
     case 'rejected':
-      return 'Đã từ chối';
+      return { label: 'Đã từ chối', variant: 'destructive' };
     default:
-      return status;
+      return { label: status, variant: 'info' };
   }
 }
 
@@ -81,7 +87,14 @@ export default function AdminXinNghiMotBuoiPage() {
   const { user } = useAuth();
 
   const [items, setItems] = useState<LeaveRequest[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [campusFilter, setCampusFilter] = useState<string[]>([]);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [showCampusDropdown, setShowCampusDropdown] = useState(false);
+  const [campusSearchText, setCampusSearchText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('all');
 
   const [selected, setSelected] = useState<LeaveRequest | null>(null);
@@ -90,29 +103,68 @@ export default function AdminXinNghiMotBuoiPage() {
   const [substituteEmail, setSubstituteEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/leave-requests?mode=admin');
-      const data = await res.json();
-      if (data.success) {
-        setItems(data.data);
+  const fetchData = useCallback(
+    async (showToast = false) => {
+      try {
+        setLoading(true);
+        setLoadingError(null);
+
+        const res = await fetch('/api/leave-requests?mode=admin');
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Không thể tải dữ liệu xin nghỉ');
+        }
+
+        setItems(data.data || []);
+        if (showToast) toast.success('Đã cập nhật dữ liệu mới nhất');
+      } catch (error: unknown) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : 'Có lỗi xảy ra khi tải dữ liệu.';
+        setLoadingError(errorMessage);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    []
+  );
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
+  // Danh sách campus duy nhất
+  const campusOptions = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((item) => {
+      if (item.campus) set.add(item.campus);
+    });
+    return Array.from(set).sort();
+  }, [items]);
+
+  const filteredCampusOptions = useMemo(() => {
+    if (!campusSearchText.trim()) return campusOptions;
+    const searchLower = campusSearchText.toLowerCase();
+    return campusOptions.filter(campus => campus.toLowerCase().includes(searchLower));
+  }, [campusOptions, campusSearchText]);
+
+  // Lọc items theo tab, tìm kiếm, campus, thời gian
   const filteredItems = useMemo(() => {
-    if (activeTab === 'all') return items;
-    return items.filter((item) => item.status === activeTab);
-  }, [items, activeTab]);
+    let arr = items;
+    if (activeTab !== 'all') arr = arr.filter((item) => item.status === activeTab);
+    if (campusFilter.length > 0) arr = arr.filter(item => campusFilter.includes(item.campus));
+    if (fromDate) arr = arr.filter(item => new Date(item.leave_date) >= new Date(fromDate));
+    if (toDate) arr = arr.filter(item => new Date(item.leave_date) <= new Date(toDate));
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      arr = arr.filter(item =>
+        (item.class_code && item.class_code.toLowerCase().includes(q)) ||
+        (item.teacher_name && item.teacher_name.toLowerCase().includes(q)) ||
+        (item.lms_code && item.lms_code.toLowerCase().includes(q))
+      );
+    }
+    return arr;
+  }, [items, activeTab, campusFilter, fromDate, toDate, searchQuery]);
 
   const tabs = [
     { id: 'all', label: 'Tất cả', count: items.length },
@@ -123,6 +175,19 @@ export default function AdminXinNghiMotBuoiPage() {
     { id: 'rejected', label: 'Từ chối', count: items.filter((i) => i.status === 'rejected').length }
   ];
 
+  const getAdminConfirmText = (item: LeaveRequest) => {
+    if (!item.admin_name && !item.admin_email) return 'Chờ TC/Leader xác nhận';
+    return item.admin_name || item.admin_email || 'Đã xác nhận';
+  };
+
+  const getSubstituteConfirmText = (item: LeaveRequest) => {
+    if (item.status !== 'substitute_confirmed') return 'Chờ giáo viên thay xác nhận';
+    if (item.substitute_confirmed_at) {
+      return `Đã xác nhận ${new Date(item.substitute_confirmed_at).toLocaleString('vi-VN')}`;
+    }
+    return 'Đã xác nhận';
+  };
+
   const openDetail = (item: LeaveRequest) => {
     setSelected(item);
     setAdminNote(item.admin_note || '');
@@ -130,8 +195,25 @@ export default function AdminXinNghiMotBuoiPage() {
     setSubstituteEmail(item.substitute_email || '');
   };
 
+  const validateSubstituteFields = () => {
+    const teacher = substituteTeacher.trim();
+    const email = substituteEmail.trim();
+
+    if (!teacher && !email) return null;
+    if (!teacher || !email) return 'Vui lòng nhập đủ tên và email giáo viên thay thế.';
+    if (!/\S+@\S+\.\S+/.test(email)) return 'Email giáo viên thay thế chưa đúng định dạng.';
+
+    return null;
+  };
+
   const submitAdminReview = async (decision: 'approved' | 'rejected') => {
     if (!selected) return;
+
+    const substituteValidationError = validateSubstituteFields();
+    if (substituteValidationError) {
+      toast.error(substituteValidationError);
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -145,8 +227,8 @@ export default function AdminXinNghiMotBuoiPage() {
           admin_note: adminNote,
           admin_email: user?.email,
           admin_name: user?.displayName || user?.email,
-          substitute_teacher: substituteTeacher,
-          substitute_email: substituteEmail
+          substitute_teacher: substituteTeacher.trim(),
+          substitute_email: substituteEmail.trim()
         })
       });
 
@@ -169,6 +251,19 @@ export default function AdminXinNghiMotBuoiPage() {
   const submitAssignSubstitute = async () => {
     if (!selected) return;
 
+    const teacher = substituteTeacher.trim();
+    const email = substituteEmail.trim();
+
+    if (!teacher || !email) {
+      toast.error('Vui lòng nhập đủ tên và email giáo viên thay thế.');
+      return;
+    }
+
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      toast.error('Email giáo viên thay thế chưa đúng định dạng.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch('/api/leave-requests', {
@@ -177,8 +272,8 @@ export default function AdminXinNghiMotBuoiPage() {
         body: JSON.stringify({
           action: 'assign_substitute',
           id: selected.id,
-          substitute_teacher: substituteTeacher,
-          substitute_email: substituteEmail,
+          substitute_teacher: teacher,
+          substitute_email: email,
           admin_email: user?.email,
           admin_name: user?.displayName || user?.email
         })
@@ -201,20 +296,217 @@ export default function AdminXinNghiMotBuoiPage() {
   };
 
   if (loading) {
-    return <div className="min-h-screen p-6">Đang tải dữ liệu...</div>;
+    return (
+      <div className="min-h-screen p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-7xl space-y-4">
+          <div className="h-10 w-72 animate-pulse rounded bg-gray-200" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
+            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
+            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
+            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <TableSkeleton rows={6} columns={6} />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl space-y-5">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Tiếp nhận xin nghỉ 1 buổi</h1>
-          <p className="mt-1 text-sm text-gray-600">Step 2: TC/Leader duyệt yêu cầu và phân giáo viên thay thế khi cần.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Tiếp nhận xin nghỉ 1 buổi</h1>
+            <p className="mt-1 text-sm text-gray-600">Step 2: TC/Leader duyệt yêu cầu và phân giáo viên thay thế khi cần.</p>
+          </div>
+          <Button variant="outline" onClick={() => fetchData(true)}>
+            <RefreshCcw className="mr-1.5 h-4 w-4" />
+            Làm mới
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <button
+            type="button"
+            onClick={() => setActiveTab('pending_admin')}
+            className={`rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm ${
+              activeTab === 'pending_admin' ? 'border-amber-400 bg-amber-100 ring-2 ring-amber-300/60' : 'border-amber-200 bg-amber-50'
+            }`}
+          >
+            <p className="text-xs font-medium text-amber-700">Chờ duyệt</p>
+            <p className="mt-1 text-2xl font-bold text-amber-900">{tabs.find((t) => t.id === 'pending_admin')?.count || 0}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('approved_unassigned')}
+            className={`rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm ${
+              activeTab === 'approved_unassigned' ? 'border-sky-400 bg-sky-100 ring-2 ring-sky-300/60' : 'border-sky-200 bg-sky-50'
+            }`}
+          >
+            <p className="text-xs font-medium text-sky-700">Chờ phân GV thay</p>
+            <p className="mt-1 text-2xl font-bold text-sky-900">{tabs.find((t) => t.id === 'approved_unassigned')?.count || 0}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('approved_assigned')}
+            className={`rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm ${
+              activeTab === 'approved_assigned' ? 'border-indigo-400 bg-indigo-100 ring-2 ring-indigo-300/60' : 'border-indigo-200 bg-indigo-50'
+            }`}
+          >
+            <p className="text-xs font-medium text-indigo-700">Đã gửi GV thay</p>
+            <p className="mt-1 text-2xl font-bold text-indigo-900">{tabs.find((t) => t.id === 'approved_assigned')?.count || 0}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('substitute_confirmed')}
+            className={`rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm ${
+              activeTab === 'substitute_confirmed' ? 'border-emerald-400 bg-emerald-100 ring-2 ring-emerald-300/60' : 'border-emerald-200 bg-emerald-50'
+            }`}
+          >
+            <p className="text-xs font-medium text-emerald-700">Hoàn tất</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-900">{tabs.find((t) => t.id === 'substitute_confirmed')?.count || 0}</p>
+          </button>
         </div>
 
         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
+        {/* Bộ lọc nâng cao + tìm kiếm */}
+        <div className="mb-4 flex flex-wrap gap-3 items-end">
+          <div className="relative">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Cơ sở</label>
+            <button
+              type="button"
+              onClick={() => setShowCampusDropdown(!showCampusDropdown)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[180px] text-left flex items-center justify-between bg-white hover:bg-gray-50"
+            >
+              <span className="truncate">
+                {campusFilter.length === 0 ? 'Tất cả' : `${campusFilter.length} cơ sở`}
+              </span>
+              <svg className="w-4 h-4 ml-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showCampusDropdown && (
+              <div className="absolute z-10 mt-1 w-full min-w-[240px] bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-hidden flex flex-col">
+                <div className="p-2 border-b border-gray-200">
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm cơ sở..."
+                    value={campusSearchText}
+                    onChange={(e) => setCampusSearchText(e.target.value)}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+                <div className="p-2 border-b border-gray-200 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCampusFilter(filteredCampusOptions)}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Chọn tất cả
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCampusFilter([])}
+                    className="text-xs text-gray-600 hover:text-gray-800 font-medium"
+                  >
+                    Bỏ chọn
+                  </button>
+                </div>
+                <div className="overflow-y-auto flex-1">
+                {filteredCampusOptions.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-gray-500 text-center">Không tìm thấy cơ sở</div>
+                ) : (
+                  filteredCampusOptions.map((campus) => (
+                    <label
+                      key={campus}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={campusFilter.includes(campus)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setCampusFilter([...campusFilter, campus]);
+                          } else {
+                            setCampusFilter(campusFilter.filter((c) => c !== campus));
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                      />
+                      <span className="text-sm text-gray-700">{campus}</span>
+                    </label>
+                  ))
+                )}
+                </div>
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Từ ngày</label>
+            <input
+              type="date"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              value={fromDate}
+              onChange={e => setFromDate(e.target.value)}
+              max={toDate || undefined}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Đến ngày</label>
+            <input
+              type="date"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              value={toDate}
+              onChange={e => setToDate(e.target.value)}
+              min={fromDate || undefined}
+            />
+          </div>
+          <div className="relative">
+            <label className="block text-xs font-semibold text-gray-600 mb-1 invisible">Tìm kiếm</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Tìm theo mã lớp, tên GV, mã LMS..."
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[220px]"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                onClick={() => setSearchQuery('')}
+                tabIndex={-1}
+              >
+                ×
+              </button>
+            )}
+          </div>
+          {(campusFilter.length > 0 || fromDate || toDate || searchQuery) && (
+            <Button size="sm" variant="ghost" onClick={() => { setCampusFilter([]); setFromDate(''); setToDate(''); setSearchQuery(''); }}>
+              Xoá lọc
+            </Button>
+          )}
+        </div>
+
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-x-auto">
+          {loadingError && (
+            <div className="mx-4 mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 sm:mx-6">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium">Không thể tải danh sách</p>
+                <p className="mt-0.5">{loadingError}</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => fetchData()}>
+                Thử lại
+              </Button>
+            </div>
+          )}
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -222,25 +514,33 @@ export default function AdminXinNghiMotBuoiPage() {
                 <TableHead>Giáo viên</TableHead>
                 <TableHead>Cơ sở</TableHead>
                 <TableHead>Ngày nghỉ</TableHead>
+                <TableHead>Mã lớp</TableHead>
                 <TableHead>Trạng thái</TableHead>
-                <TableHead className="text-right">Hành động</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredItems.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>{new Date(item.created_at).toLocaleDateString('vi-VN')}</TableCell>
-                  <TableCell>{item.teacher_name}</TableCell>
-                  <TableCell>{item.campus}</TableCell>
-                  <TableCell>{new Date(item.leave_date).toLocaleDateString('vi-VN')}</TableCell>
-                  <TableCell>{statusLabel(item.status)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button size="sm" variant="outline" onClick={() => openDetail(item)}>
-                      Xem / Duyệt
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filteredItems.map((item) => {
+                const statusMeta = getStatusMeta(item.status);
+
+                return (
+                  <TableRow key={item.id} className="cursor-pointer hover:bg-blue-50/40" onClick={() => openDetail(item)}>
+                    <TableCell>{new Date(item.created_at).toLocaleDateString('vi-VN')}</TableCell>
+                    <TableCell>
+                      <p className="font-medium text-gray-900">{item.teacher_name}</p>
+                      <p className="text-xs text-gray-500">{item.lms_code || 'Chưa có LMS'}</p>
+                    </TableCell>
+                    <TableCell>{item.campus}</TableCell>
+                    <TableCell>{new Date(item.leave_date).toLocaleDateString('vi-VN')}</TableCell>
+                    <TableCell>{item.class_code || '-'}</TableCell>
+                    <TableCell>
+                      <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                      <p className="mt-1 text-[11px] text-gray-600">TC/Leader: {getAdminConfirmText(item)}</p>
+                      <p className="text-[11px] text-gray-600">GV thay: {getSubstituteConfirmText(item)}</p>
+                      {item.admin_note && <p className="mt-1 line-clamp-1 text-[11px] text-amber-700">Note: {item.admin_note}</p>}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
 
@@ -252,11 +552,15 @@ export default function AdminXinNghiMotBuoiPage() {
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={selected ? `Yêu cầu #${selected.id}` : 'Chi tiết yêu cầu'}
-        maxWidth="3xl"
+        maxWidth="5xl"
       >
         {selected && (
           <div className="space-y-4">
             <Stepper steps={getWorkflowSteps(selected.status)} />
+
+            <div className="flex items-center gap-2">
+              <Badge variant={getStatusMeta(selected.status).variant}>{getStatusMeta(selected.status).label}</Badge>
+            </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="rounded-lg bg-gray-50 p-3">
@@ -264,12 +568,59 @@ export default function AdminXinNghiMotBuoiPage() {
                 <p className="text-sm font-medium text-gray-900">{selected.teacher_name}</p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
-                <p className="text-xs text-gray-600">Email</p>
+                <p className="text-xs text-gray-600">Mã LMS</p>
+                <p className="text-sm font-medium text-gray-900">{selected.lms_code || '-'}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Email GV xin nghỉ</p>
                 <p className="text-sm font-medium text-gray-900 break-all">{selected.email}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Ngày nghỉ</p>
+                <p className="text-sm font-medium text-gray-900">{new Date(selected.leave_date).toLocaleDateString('vi-VN')}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Mã lớp</p>
+                <p className="text-sm font-medium text-gray-900">{selected.class_code || '-'}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Số học viên</p>
+                <p className="text-sm font-medium text-gray-900">{selected.student_count || '-'}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Thời gian học</p>
+                <p className="text-sm font-medium text-gray-900">{selected.class_time || '-'}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Buổi học xin nghỉ</p>
+                <p className="text-sm font-medium text-gray-900">{selected.leave_session || '-'}</p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3 sm:col-span-2">
                 <p className="text-xs text-gray-600">Lý do</p>
                 <p className="text-sm text-gray-900 whitespace-pre-wrap">{selected.reason}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3 sm:col-span-2">
+                <p className="text-xs text-gray-600">Tình hình lớp học</p>
+                <p className="text-sm text-gray-900 whitespace-pre-wrap">{selected.class_status || '-'}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs text-amber-800">Xác nhận từ TC/Leader</p>
+                <p className="mt-1 text-sm font-medium text-amber-900">{selected.admin_name || 'Chưa có tên người xác nhận'}</p>
+                <p className="text-xs text-amber-900/80 break-all">{selected.admin_email || 'Chưa có email người xác nhận'}</p>
+                <p className="mt-2 text-xs text-amber-900/80 whitespace-pre-wrap">{selected.admin_note || 'Chưa có ghi chú duyệt từ TC/Leader.'}</p>
+              </div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                <p className="text-xs text-emerald-800">Xác nhận từ giáo viên dạy thay</p>
+                <p className="mt-1 text-sm font-medium text-emerald-900">{selected.substitute_teacher || 'Chưa có tên giáo viên thay'}</p>
+                <p className="text-xs text-emerald-900/80 break-all">{selected.substitute_email || 'Chưa có email giáo viên thay'}</p>
+                <p className="mt-2 text-xs text-emerald-900/80">
+                  {selected.substitute_confirmed_at
+                    ? `Thời điểm xác nhận: ${new Date(selected.substitute_confirmed_at).toLocaleString('vi-VN')}`
+                    : 'Chưa xác nhận nhận lớp.'}
+                </p>
               </div>
             </div>
 
@@ -301,6 +652,13 @@ export default function AdminXinNghiMotBuoiPage() {
               </div>
             </div>
 
+            {selected.admin_note && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs text-amber-800">Ghi chú hiện tại</p>
+                <p className="text-sm text-amber-900 whitespace-pre-wrap">{selected.admin_note}</p>
+              </div>
+            )}
+
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               {selected.status === 'pending_admin' && (
                 <>
@@ -316,6 +674,12 @@ export default function AdminXinNghiMotBuoiPage() {
               {selected.status === 'approved_unassigned' && (
                 <Button disabled={submitting} onClick={submitAssignSubstitute}>
                   Phân giáo viên thay thế
+                </Button>
+              )}
+
+              {(selected.status === 'approved_assigned' || selected.status === 'substitute_confirmed' || selected.status === 'rejected') && (
+                <Button variant="outline" onClick={() => setSelected(null)}>
+                  Đóng
                 </Button>
               )}
             </div>
