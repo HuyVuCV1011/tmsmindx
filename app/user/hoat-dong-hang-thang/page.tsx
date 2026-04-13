@@ -4,8 +4,8 @@ import { Card } from "@/components/Card";
 import { PageContainer } from "@/components/PageContainer";
 import { useAuth } from "@/lib/auth-context";
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 type CalendarView = "day" | "week" | "month";
@@ -441,6 +441,7 @@ function buildCalendarCells(focusDate: Date, view: CalendarView) {
 export default function MonthlyActivitiesPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [view, setView] = useState<CalendarView>("month");
   const [focusDate, setFocusDate] = useState(new Date());
   const [events, setEvents] = useState<EvaluationEvent[]>([]);
@@ -464,6 +465,28 @@ export default function MonthlyActivitiesPage() {
   const [selectedExamEventByOption, setSelectedExamEventByOption] = useState<Record<string, string>>({});
   const [examAssignments, setExamAssignments] = useState<CalendarExamAssignment[]>([]);
   const [registeredScheduleIds, setRegisteredScheduleIds] = useState<Set<string>>(new Set());
+  const registerHintShownRef = useRef(false);
+
+  useEffect(() => {
+    if (searchParams.get("showRegisterHint") !== "1" || registerHintShownRef.current) {
+      return;
+    }
+
+    registerHintShownRef.current = true;
+
+    toast("Bấm vào lịch để có thể đăng ký.", {
+      id: "register-hint-toast",
+      duration: 2000,
+    });
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("showRegisterHint");
+    const nextQuery = nextParams.toString();
+    router.replace(
+      nextQuery ? `/user/hoat-dong-hang-thang?${nextQuery}` : "/user/hoat-dong-hang-thang",
+      { scroll: false }
+    );
+  }, [router, searchParams]);
 
   const resolveExamEventIdByOptionAndSchedule = useCallback(
     (option: string, scheduledAt: string) => {

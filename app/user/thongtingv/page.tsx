@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useAuth } from "@/lib/auth-context";
 import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck, LayoutDashboard, Database } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import toast from 'react-hot-toast';
 import useSWR, { mutate } from "swr";
 import { motion, AnimatePresence } from 'framer-motion';
@@ -159,6 +160,7 @@ function extractCodeFromEmail(email: string): string {
 
 export default function Page1() {
   const { user } = useAuth();
+  const router = useRouter();
   const [searchCode, setSearchCode] = useState("");
   const [submitCode, setSubmitCode] = useState("");
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
@@ -754,8 +756,8 @@ export default function Page1() {
     }
   };
 
-  // Tính điểm theo chu kỳ 4 tháng:
-  // - Khi có điểm tháng X → áp dụng cho tháng X, X+1, X+2, X+3
+  // Tính điểm theo chu kỳ 6 tháng:
+  // - Khi có điểm tháng X → áp dụng cho tháng X, X+1, X+2, X+3, X+4, X+5
   // - Nếu trong chu kỳ có điểm MỚI CAO HƠN → reset chu kỳ từ tháng đó
   // - Sau khi hết chu kỳ mà không có điểm mới → trả về "N/A"
   const computeCycleScore = useCallback((data: MonthlyAverage[], viewMonth: number, viewYear: number): string => {
@@ -1300,7 +1302,7 @@ export default function Page1() {
                                     <span
                                       onClick={() => {
                                         if (displayScore === "N/A" && isCurrentMonth) {
-                                          setRegistrationCheckModalOpen(true);
+                                          router.push("/user/hoat-dong-hang-thang?showRegisterHint=1");
                                         } else if (isActual) {
                                           openModal(month, "expertise");
                                         }
@@ -1344,7 +1346,7 @@ export default function Page1() {
                                     <span
                                       onClick={() => {
                                         if (displayScore === "N/A" && isCurrentMonth) {
-                                          setRegistrationCheckModalOpen(true);
+                                          router.push("/user/hoat-dong-hang-thang?showRegisterHint=1");
                                         } else if (isActual) {
                                           openModal(month, "experience");
                                         }
