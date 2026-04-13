@@ -1,9 +1,9 @@
 import pool from '@/lib/db';
 import { NextResponse } from 'next/server';
 
-type BlockCode = 'CODING' | 'ROBOTICS' | 'ART' | 'PROCESS';
+type BlockCode = 'CODING' | 'ROBOTICS' | 'ART' | 'PROCESS' | `PROCESS-${string}`;
 
-const ALLOWED_BLOCK_CODES: BlockCode[] = ['CODING', 'ROBOTICS', 'ART', 'PROCESS'];
+const STATIC_BLOCK_CODES: Array<'CODING' | 'ROBOTICS' | 'ART' | 'PROCESS'> = ['CODING', 'ROBOTICS', 'ART', 'PROCESS'];
 
 const normalizeSubjectKey = (value: string) =>
   value
@@ -14,14 +14,44 @@ const normalizeSubjectKey = (value: string) =>
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
 
+const normalizeProcessSuffix = (value: string) =>
+  value
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'CUSTOM';
+
+const resolveInputBlockCode = (rawValue: string): BlockCode => {
+  const value = String(rawValue || 'CODING').toUpperCase();
+  if ((STATIC_BLOCK_CODES as string[]).includes(value)) {
+    return value as BlockCode;
+  }
+  if (value.startsWith('PROCESS-')) {
+    const suffix = normalizeProcessSuffix(value.slice('PROCESS-'.length));
+    return `PROCESS-${suffix}` as BlockCode;
+  }
+  return 'CODING';
+};
+
+const isAllowedBlockCode = (value: string) => {
+  if ((STATIC_BLOCK_CODES as string[]).includes(value)) return true;
+  return value.startsWith('PROCESS-') && value.length > 'PROCESS-'.length;
+};
+
 const getSubjectPrefix = (blockCode: BlockCode) => {
   if (blockCode === 'CODING') return 'cod';
   if (blockCode === 'ROBOTICS') return 'rob';
   if (blockCode === 'ART') return 'art';
+  if (blockCode.startsWith('PROCESS-')) {
+    return `process_${normalizeSubjectKey(blockCode.slice('PROCESS-'.length))}`;
+  }
   return 'process';
 };
 
-const inferExamType = (blockCode: BlockCode) => (blockCode === 'PROCESS' ? 'experience' : 'expertise');
+const inferExamType = (blockCode: BlockCode) => (blockCode.startsWith('PROCESS') ? 'experience' : 'expertise');
 
 let subjectConfigColumnsEnsured = false;
 
@@ -45,6 +75,19 @@ async function ensureSubjectConfigColumns() {
       CASE WHEN loai_ky_thi = 'experience' THEN 60 ELSE 120 END
     )
     WHERE thoi_gian_thi_phut IS NULL;
+  `);
+
+  // Auto-fix dữ liệu cũ: nếu vẫn đang lưu PROCESS theo 3 môn chuẩn thì tách về PROCESS-ART/COD/ROB.
+  await pool.query(`
+    UPDATE chuyen_sau_monhoc
+    SET ma_khoi = CASE
+      WHEN lower(COALESCE(ma_mon, '')) LIKE '%[art]%' OR lower(COALESCE(ten_mon, '')) LIKE '%[art]%' THEN 'PROCESS-ART'
+      WHEN lower(COALESCE(ma_mon, '')) LIKE '%[coding]%' OR lower(COALESCE(ten_mon, '')) LIKE '%[coding]%' THEN 'PROCESS-COD'
+      WHEN lower(COALESCE(ma_mon, '')) LIKE '%[robotics]%' OR lower(COALESCE(ten_mon, '')) LIKE '%[robotics]%' THEN 'PROCESS-ROB'
+      ELSE ma_khoi
+    END,
+    loai_ky_thi = 'experience'
+    WHERE ma_khoi = 'PROCESS';
   `);
 
   subjectConfigColumnsEnsured = true;
@@ -105,18 +148,18 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const subjectName = String(body?.subject_name || '').trim();
-    const inputBlockCode = String(body?.block_code || 'CODING').toUpperCase() as BlockCode;
+    const rawBlockCode = String(body?.block_code || 'CODING').toUpperCase();
+    if (!isAllowedBlockCode(rawBlockCode)) {
+      return NextResponse.json(
+        { success: false, error: 'Khối môn không hợp lệ' },
+        { status: 400 }
+      );
+    }
+    const inputBlockCode = resolveInputBlockCode(rawBlockCode);
 
     if (!subjectName) {
       return NextResponse.json(
         { success: false, error: 'Tên môn là bắt buộc' },
-        { status: 400 }
-      );
-    }
-
-    if (!ALLOWED_BLOCK_CODES.includes(inputBlockCode)) {
-      return NextResponse.json(
-        { success: false, error: 'Khối môn không hợp lệ' },
         { status: 400 }
       );
     }
@@ -126,7 +169,7 @@ export async function POST(request: Request) {
     const subjectKey = `${prefix}_${normalizedBase}`;
     const examType = inferExamType(inputBlockCode);
     const inputDurationMinutes = Number(body?.duration_minutes);
-    const defaultDurationMinutes = inputBlockCode === 'PROCESS' ? 60 : 120;
+    const defaultDurationMinutes = inputBlockCode.startsWith('PROCESS') ? 60 : 120;
     const durationMinutes = Number.isFinite(inputDurationMinutes) && inputDurationMinutes > 0
       ? Math.min(1440, Math.floor(inputDurationMinutes))
       : defaultDurationMinutes;

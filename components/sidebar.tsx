@@ -151,8 +151,10 @@ export function Sidebar() {
       icon: Settings,
       submenu: [
         { href: "/admin/user-management", label: "Quản lý tài khoản"},
+        { href: "/admin/feedback", label: "Feedback Manager"},
         { href: "/admin/database", label: "Database Manager"},
         { href: "/admin/cloudinary", label: "Cloudinary Manager"},
+        { href: "/admin/s3-supabase-manager", label: "S3 Supabase Manager"},
       ]
     },
   ];

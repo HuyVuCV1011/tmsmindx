@@ -1,5 +1,5 @@
 export type ExamType = "expertise" | "experience";
-export type BlockCode = "CODING" | "ROBOTICS" | "ART" | "PROCESS";
+export type BlockCode = "CODING" | "ROBOTICS" | "ART" | "PROCESS" | `PROCESS-${string}`;
 export type LevelTag = "B" | "A" | "I";
 
 export interface ExamSetRecord {

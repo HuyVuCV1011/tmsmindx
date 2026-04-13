@@ -17,9 +17,25 @@ function buildSetPrefix(maKhoi: string, maMon: string) {
     CODING: 'COD',
     ROBOTICS: 'ROB',
     ART: 'ART',
-    PROCESS: 'PRC',
+    PROCESS: 'PRO',
+    'PROCESS-ART': 'PRO',
+    'PROCESS-COD': 'PRO',
+    'PROCESS-ROB': 'PRO',
   };
-  const blockPrefix = blockMap[maKhoi] || maKhoi.slice(0, 3).toUpperCase();
+  let blockPrefix = blockMap[maKhoi] || maKhoi.slice(0, 3).toUpperCase();
+  if (maKhoi.startsWith('PROCESS-') && !blockMap[maKhoi]) {
+    blockPrefix = 'PRO';
+  }
+
+  // PROCESS: dùng nội dung trong ngoặc [...] để phân biệt [Art]/[Coding]/[Robotics].
+  // normalizeText() xoá ngoặc trước khi lấy prefix → 3 môn đều ra "KIE" nếu không xử lý riêng.
+  if (maKhoi.startsWith('PROCESS')) {
+    const bracketMatch = maMon.match(/\[([^\]]+)\]/);
+    if (bracketMatch) {
+      return `${blockPrefix}-${bracketMatch[1].slice(0, 3).toUpperCase()}`;
+    }
+  }
+
   const normalized = normalizeText(maMon);
   const words = normalized.split(/\s+/).filter(Boolean);
   const subjectPrefix = words.length > 0 ? words[0].slice(0, 3).toUpperCase() : 'GEN';
@@ -35,6 +51,7 @@ export async function GET(request: NextRequest) {
     const examType = searchParams.get('exam_type');       // loai_ky_thi
     const blockCode = searchParams.get('block_code');     // ma_khoi
     const subjectCode = searchParams.get('subject_code'); // ma_mon
+    const subjectId = searchParams.get('subject_id');     // id_mon (chuyen_sau_monhoc.id) — lọc chính xác nhất
 
     const conditions: string[] = [];
     const values: unknown[] = [];
@@ -43,17 +60,23 @@ export async function GET(request: NextRequest) {
       conditions.push(`bd.id = $${values.length + 1}`);
       values.push(id);
     }
-    if (examType) {
-      conditions.push(`mh.loai_ky_thi = $${values.length + 1}`);
-      values.push(examType);
-    }
-    if (blockCode) {
-      conditions.push(`mh.ma_khoi = $${values.length + 1}`);
-      values.push(blockCode);
-    }
-    if (subjectCode) {
-      conditions.push(`mh.ma_mon = $${values.length + 1}`);
-      values.push(subjectCode);
+    // subject_id ưu tiên hơn block_code/examType/subjectCode: truy vấn thẳng qua id_mon
+    if (subjectId) {
+      conditions.push(`bd.id_mon = $${values.length + 1}`);
+      values.push(Number(subjectId));
+    } else {
+      if (examType) {
+        conditions.push(`mh.loai_ky_thi = $${values.length + 1}`);
+        values.push(examType);
+      }
+      if (blockCode) {
+        conditions.push(`mh.ma_khoi = $${values.length + 1}`);
+        values.push(blockCode);
+      }
+      if (subjectCode) {
+        conditions.push(`mh.ma_mon = $${values.length + 1}`);
+        values.push(subjectCode);
+      }
     }
 
     let query = `
@@ -127,32 +150,61 @@ export async function POST(request: NextRequest) {
       valid_to,
     } = body;
 
-    if (!exam_type || !block_code || !subject_code || !subject_name || !set_name) {
-      return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+    if (!set_name) {
+      return NextResponse.json({ success: false, error: 'set_name is required' }, { status: 400 });
     }
 
     await client.query('BEGIN');
 
-    // Upsert môn học
-    const durationMinutes = exam_type === 'experience' ? 60 : 120;
-    const subjectResult = await client.query(
-      `INSERT INTO chuyen_sau_monhoc (loai_ky_thi, ma_khoi, ma_mon, ten_mon, dang_hoat_dong, thoi_gian_thi_phut, exam_duration_minutes, che_do_chon_de)
-       VALUES ($1, $2, $3, $4, TRUE, $5, $5, 'mac_dinh')
-       ON CONFLICT (ma_mon) DO UPDATE SET
-         ten_mon               = EXCLUDED.ten_mon,
-         dang_hoat_dong        = TRUE,
-         ma_khoi               = EXCLUDED.ma_khoi,
-         loai_ky_thi           = EXCLUDED.loai_ky_thi,
-         exam_duration_minutes = EXCLUDED.exam_duration_minutes
-       RETURNING id`,
-      [exam_type, block_code, subject_code, subject_name, durationMinutes]
-    );
-    const subjectId = subjectResult.rows[0].id;
+    // Resolve subject id.
+    // Ưu tiên subject_id từ client (= chuyen_sau_monhoc.id) → không cần upsert lại monhoc.
+    const directSubjectId = body?.subject_id ? Number(body.subject_id) : null;
+    let subjectId: number;
+
+    if (directSubjectId && directSubjectId > 0) {
+      subjectId = directSubjectId;
+    } else {
+      // Fallback: upsert môn học theo ma_mon (giữ backward-compat với các caller không truyền subject_id)
+      if (!exam_type || !block_code || !subject_code || !subject_name) {
+        await client.query('ROLLBACK');
+        return NextResponse.json(
+          { success: false, error: 'Thiếu field bắt buộc: exam_type, block_code, subject_code, subject_name (khi không truyền subject_id)' },
+          { status: 400 }
+        );
+      }
+      const durationMinutes = exam_type === 'experience' ? 60 : 120;
+      const subjectUpsert = await client.query(
+        `INSERT INTO chuyen_sau_monhoc (loai_ky_thi, ma_khoi, ma_mon, ten_mon, dang_hoat_dong, thoi_gian_thi_phut, exam_duration_minutes, che_do_chon_de)
+         VALUES ($1, $2, $3, $4, TRUE, $5, $5, 'mac_dinh')
+         ON CONFLICT (ma_mon) DO UPDATE SET
+           ten_mon               = EXCLUDED.ten_mon,
+           dang_hoat_dong        = TRUE,
+           ma_khoi               = EXCLUDED.ma_khoi,
+           loai_ky_thi           = EXCLUDED.loai_ky_thi,
+           exam_duration_minutes = EXCLUDED.exam_duration_minutes
+         RETURNING id`,
+        [exam_type, block_code, subject_code, subject_name, durationMinutes]
+      );
+      subjectId = subjectUpsert.rows[0].id;
+    }
 
     // Tự sinh mã đề nếu không có
     let finalSetCode = (set_code || '').trim();
     if (!finalSetCode) {
-      const prefix = buildSetPrefix(block_code, subject_code);
+      // Khi gọi qua subject_id, block_code/subject_code có thể vắng mặt → load từ DB
+      let prefixBlockCode = block_code || '';
+      let prefixSubjectCode = subject_code || '';
+      if ((!prefixBlockCode || !prefixSubjectCode) && directSubjectId && directSubjectId > 0) {
+        const subjectRow = await client.query(
+          `SELECT ma_khoi, ma_mon FROM chuyen_sau_monhoc WHERE id = $1`,
+          [directSubjectId]
+        );
+        if (subjectRow.rows.length > 0) {
+          prefixBlockCode = subjectRow.rows[0].ma_khoi || prefixBlockCode;
+          prefixSubjectCode = subjectRow.rows[0].ma_mon || prefixSubjectCode;
+        }
+      }
+      const prefix = buildSetPrefix(prefixBlockCode, prefixSubjectCode);
       const nextSeqResult = await client.query(
         `SELECT COALESCE(MAX((regexp_match(ma_de, '-(\\d+)$'))[1]::int), 0) + 1 AS next_seq
          FROM chuyen_sau_bode

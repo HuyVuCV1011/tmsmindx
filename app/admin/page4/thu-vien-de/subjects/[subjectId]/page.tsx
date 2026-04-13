@@ -28,6 +28,8 @@ export default function SubjectDetailPage() {
   const [updatingStatusSetId, setUpdatingStatusSetId] = useState<number | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [setCodeCustomPart, setSetCodeCustomPart] = useState("01");
+  const [setCodeCustomPartSecond, setSetCodeCustomPartSecond] = useState("01");
   const [setName, setSetName] = useState("");
   const [status, setStatus] = useState<"active" | "inactive">("active");
 
@@ -62,15 +64,59 @@ export default function SubjectDetailPage() {
 
   const hasUsableSets = usableSubjectSets.length > 0;
 
+  const setCodePrefix = useMemo(() => {
+    if (!subject) return "SET";
+    if (subject.blockCode.startsWith("PROCESS")) return "PRO";
+    if (subject.blockCode === "CODING") return "COD";
+    if (subject.blockCode === "ROBOTICS") return "ROB";
+    if (subject.blockCode === "ART") return "ART";
+    return subject.blockCode.slice(0, 3).toUpperCase();
+  }, [subject]);
+
+  const isProcessSubject = useMemo(() => Boolean(subject?.blockCode.startsWith("PROCESS")), [subject]);
+
+  const setCodeSubjectToken = useMemo(() => {
+    if (!subject) return "CUS";
+
+    const fromBlock = subject.blockCode.startsWith("PROCESS-")
+      ? subject.blockCode.slice("PROCESS-".length)
+      : "";
+    const fromBracket = subject.label.match(/\[([^\]]+)\]/)?.[1] || "";
+    const plainLabel = subject.label
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\[[^\]]+\]/g, " ")
+      .replace(/[^A-Za-z0-9\s]/g, " ")
+      .trim();
+    const firstWord = plainLabel.split(/\s+/).filter(Boolean)[0] || "";
+
+    const base = fromBlock || fromBracket || firstWord || "CUS";
+
+    return base
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 3) || "CUS";
+  }, [subject]);
+
+  const setCodePlaceholder = useMemo(
+    () => `${setCodePrefix}-${setCodeSubjectToken}-01`,
+    [setCodePrefix, setCodeSubjectToken]
+  );
+
   const fetchSets = async () => {
     if (!subject) return;
 
     try {
       setLoading(true);
-      // Filter by the DB subject id (URL param = chuyen_sau_monhoc.id) for accurate results
+      // Dùng subject_id (= chuyen_sau_monhoc.id từ URL param) để lọc chính xác nhất.
+      // Phương pháp này giống Coding và đảm bảo 3 môn PROCESS tách biệt nhau hoàn toàn.
       const dbSubjectId = parseInt(subjectId || '0', 10);
       const url = dbSubjectId > 0
-        ? `/api/exam-sets?block_code=${encodeURIComponent(subject.blockCode)}&subject_code=${encodeURIComponent(subject.label)}`
+        ? `/api/exam-sets?subject_id=${dbSubjectId}`
         : `/api/exam-sets?block_code=${encodeURIComponent(subject.blockCode)}`;
       const response = await fetch(url);
       const data = await response.json();
@@ -166,6 +212,8 @@ export default function SubjectDetailPage() {
 
   const resetCreateForm = () => {
     setSetName("");
+    setSetCodeCustomPart("01");
+    setSetCodeCustomPartSecond("01");
     setStatus("active");
   };
 
@@ -187,17 +235,53 @@ export default function SubjectDetailPage() {
       return;
     }
 
+    const normalizedCustomPart = setCodeCustomPart
+      .trim()
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    const normalizedCustomPartSecond = setCodeCustomPartSecond
+      .trim()
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    let finalSetCode = "";
+    if (isProcessSubject) {
+      if (!normalizedCustomPart) {
+        toast.error("Vui lòng nhập phần tên mã đề (đuôi mã đề)");
+        return;
+      }
+      finalSetCode = `${setCodePrefix}-${setCodeSubjectToken}-${normalizedCustomPart}`;
+    } else {
+      if (!normalizedCustomPart || !normalizedCustomPartSecond) {
+        toast.error("Vui lòng nhập đủ 2 phần mã đề");
+        return;
+      }
+      finalSetCode = `${setCodePrefix}-${normalizedCustomPart}-${normalizedCustomPartSecond}`;
+    }
+
     try {
       setIsCreating(true);
+      // Truyền subject_id (DB id) để API gắn id_mon chính xác mà không cần upsert lại monhoc.
+      const dbSubjectId = parseInt(subjectId || '0', 10);
       const response = await fetch("/api/exam-sets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          subject_id: dbSubjectId > 0 ? dbSubjectId : (subjectDbId ?? undefined),
           exam_type: subject.examType,
           block_code: subject.blockCode,
-          subject_key: subject.subjectKey,
           subject_code: subject.label,
           subject_name: subject.label,
+          set_code: finalSetCode,
           set_name: setName.trim(),
           status,
         }),
@@ -595,6 +679,48 @@ export default function SubjectDetailPage() {
         headerColor="from-[#a1001f] to-[#c41230]"
       >
         <form onSubmit={handleCreateSet} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Mã đề</label>
+            {isProcessSubject ? (
+              <>
+                <input
+                  value={setCodeCustomPart}
+                  onChange={(e) => {
+                    const raw = e.target.value || "";
+                    const prefix = `${setCodePrefix}-${setCodeSubjectToken}-`;
+                    const next = raw.toUpperCase().startsWith(prefix) ? raw.slice(prefix.length) : raw;
+                    setSetCodeCustomPart(next);
+                  }}
+                  placeholder={setCodePlaceholder}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Mã sẽ lưu: <span className="font-semibold">{setCodePrefix}-{setCodeSubjectToken}-{setCodeCustomPart.trim() || "01"}</span>
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    value={setCodeCustomPart}
+                    onChange={(e) => setSetCodeCustomPart(e.target.value)}
+                    placeholder="PART-1"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={setCodeCustomPartSecond}
+                    onChange={(e) => setSetCodeCustomPartSecond(e.target.value)}
+                    placeholder="PART-2"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Mã sẽ lưu: <span className="font-semibold">{setCodePrefix}-{setCodeCustomPart.trim() || "PART-1"}-{setCodeCustomPartSecond.trim() || "PART-2"}</span>
+                </p>
+              </>
+            )}
+          </div>
+
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Ghi chú bộ đề</label>
             <input
