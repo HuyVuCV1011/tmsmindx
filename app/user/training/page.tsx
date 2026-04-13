@@ -7,10 +7,10 @@ import { useAuth } from "@/lib/auth-context";
 import { setVideo } from "@/lib/redux/features/trainingSlice";
 import { useAppDispatch } from "@/lib/redux/hooks";
 import { useTeacher } from "@/lib/teacher-context";
-import { Award, BookOpen, CheckCircle, Clock, FileText } from 'lucide-react';
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import useSWR from "swr";
+import { BookOpen, CheckCircle, Clock, FileText } from 'lucide-react';
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import useSWR, { useSWRConfig } from "swr";
 import AssignmentsPage from "../assignments/page";
 
 interface TrainingLesson {
@@ -18,9 +18,11 @@ interface TrainingLesson {
   name: string;
   score: number;
   link?: string;
+  segments?: Array<{ id: number; url: string; duration_minutes: number; duration_seconds?: number | null }>;
   thumbnail_url?: string;
   description?: string;
   duration_minutes?: number;
+  duration_seconds?: number | null;
   lesson_number?: number;
   completion_status?: string;
   completed_at?: string;
@@ -72,14 +74,43 @@ export default function TrainingPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const startAssignmentId = searchParams.get('start_assignment_id');
+  const { mutate } = useSWRConfig();
+
+  // Khi startAssignmentId biến mất (user quay về từ bài kiểm tra) → refetch ngay
+  const prevStartAssignmentIdRef = useRef(startAssignmentId);
+  useEffect(() => {
+    const prev = prevStartAssignmentIdRef.current;
+    prevStartAssignmentIdRef.current = startAssignmentId;
+    // Chỉ refetch khi chuyển từ có startAssignmentId → không có (tức là vừa quay về)
+    if (prev && !startAssignmentId) {
+      const code = submitCodeRef.current;
+      if (code) {
+        mutate(`/api/training-db?code=${code}`);
+        if (teacherCodeRef.current) {
+          mutate(`/api/training-assignments?status=published&teacher_code=${teacherCodeRef.current}`);
+        }
+      }
+    }
+  }, [startAssignmentId, mutate]);
 
   const [tab, setTab] = useState<'lessons' | 'stats' | 'tests'>('lessons');
   const [submitCode, setSubmitCode] = useState("");
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
   const [isResolvingCode, setIsResolvingCode] = useState(false);
+  const prewarmedLessonIdsRef = useRef<Set<number>>(new Set());
+  const prewarmedGroupIdsRef = useRef<Set<string>>(new Set());
+  const prewarmInFlightRef = useRef<Map<string, Promise<void>>>(new Map());
+  const prewarmLastAtRef = useRef<Map<string, number>>(new Map());
+  const prewarmTimerByLessonRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
 
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
+
+  // Refs để event listeners luôn đọc được giá trị mới nhất
+  const submitCodeRef = useRef(submitCode);
+  const teacherCodeRef = useRef<string | null>(null);
+  useEffect(() => { submitCodeRef.current = submitCode; }, [submitCode]);
 
   // ── Guard: block non-admin users if teacher profile is missing ──
   const [missingProfile, setMissingProfile] = useState(false);
@@ -217,13 +248,43 @@ export default function TrainingPage() {
 
   const teacher = teacherData?.teacher || null;
 
+  // Cập nhật ref khi teacher thay đổi
+  useEffect(() => { teacherCodeRef.current = teacher?.code || null; }, [teacher]);
+
+  // Refetch khi pathname thay đổi (user navigate về /user/training từ lesson page)
+  useEffect(() => {
+    const code = submitCodeRef.current;
+    if (!code) return;
+    mutate(`/api/training-db?code=${code}`);
+    if (teacherCodeRef.current) {
+      mutate(`/api/training-assignments?status=published&teacher_code=${teacherCodeRef.current}`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  // Refetch khi tab được focus lại (switch tab, alt-tab, v.v.)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      const code = submitCodeRef.current;
+      if (!code) return;
+      mutate(`/api/training-db?code=${code}`);
+      if (teacherCodeRef.current) {
+        mutate(`/api/training-assignments?status=published&teacher_code=${teacherCodeRef.current}`);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const { data: trainingData, isLoading: isLoadingTraining } = useSWR(
     teacher && user ? `/api/training-db?code=${submitCode}` : null,
     secureFetcher,
     { 
-      revalidateOnFocus: false,
+      revalidateOnFocus: true,
       revalidateOnReconnect: false,
-      dedupingInterval: 120000,
+      dedupingInterval: 30000,
       shouldRetryOnError: false
     }
   );
@@ -232,8 +293,8 @@ export default function TrainingPage() {
     teacher && user ? `/api/training-assignments?status=published&teacher_code=${teacher.code}` : null,
     secureFetcher,
     { 
-      revalidateOnFocus: false,
-      dedupingInterval: 120000
+      revalidateOnFocus: true,
+      dedupingInterval: 30000
     }
   );
 
@@ -245,14 +306,93 @@ export default function TrainingPage() {
     ).length;
   }, [trainingData]);
 
+  const prewarmLessonManifest = useCallback(async (lessonId: number) => {
+    if (!lessonId || prewarmedLessonIdsRef.current.has(lessonId)) return;
+
+    try {
+      const videoRes = await fetch(`/api/training-videos?id=${lessonId}`);
+      const videoData = await videoRes.json();
+
+      if (!videoRes.ok || !videoData?.success || !Array.isArray(videoData.data) || videoData.data.length === 0) {
+        return;
+      }
+
+      const groupId = videoData.data[0]?.video_group_id;
+      if (!groupId) {
+        prewarmedLessonIdsRef.current.add(lessonId);
+        return;
+      }
+
+      if (prewarmedGroupIdsRef.current.has(groupId)) {
+        prewarmedLessonIdsRef.current.add(lessonId);
+        return;
+      }
+
+      const now = Date.now();
+      const lastAt = prewarmLastAtRef.current.get(groupId) || 0;
+      if (now - lastAt < 1200) {
+        return;
+      }
+      prewarmLastAtRef.current.set(groupId, now);
+
+      const existing = prewarmInFlightRef.current.get(groupId);
+      if (existing) {
+        await existing;
+        prewarmedLessonIdsRef.current.add(lessonId);
+        return;
+      }
+
+      const task = (async () => {
+        await fetch(`/api/video/${encodeURIComponent(groupId)}`);
+        prewarmedGroupIdsRef.current.add(groupId);
+      })().finally(() => {
+        prewarmInFlightRef.current.delete(groupId);
+      });
+
+      prewarmInFlightRef.current.set(groupId, task);
+      await task;
+      prewarmedLessonIdsRef.current.add(lessonId);
+    } catch {
+      // Best-effort only. Playback flow will still work without prewarm.
+    }
+  }, []);
+
+  const schedulePrewarmLessonManifest = useCallback((lessonId: number) => {
+    const activeTimer = prewarmTimerByLessonRef.current.get(lessonId);
+    if (activeTimer) {
+      clearTimeout(activeTimer);
+    }
+
+    const timer = setTimeout(() => {
+      prewarmLessonManifest(lessonId);
+      prewarmTimerByLessonRef.current.delete(lessonId);
+    }, 180);
+
+    prewarmTimerByLessonRef.current.set(lessonId, timer);
+  }, [prewarmLessonManifest]);
+
+  useEffect(() => {
+    return () => {
+      prewarmTimerByLessonRef.current.forEach((timer) => clearTimeout(timer));
+      prewarmTimerByLessonRef.current.clear();
+    };
+  }, []);
+
   const handleLessonClick = (lesson: TrainingLesson, index: number) => {
     if (lesson.link) {
       console.log('[Training] Opening lesson:', { id: lesson.id, name: lesson.name, index: index + 1 });
+      const activeTimer = prewarmTimerByLessonRef.current.get(lesson.id);
+      if (activeTimer) {
+        clearTimeout(activeTimer);
+        prewarmTimerByLessonRef.current.delete(lesson.id);
+      }
+      prewarmLessonManifest(lesson.id);
       dispatch(setVideo({
         id: lesson.id,
         link: lesson.link,
         duration: lesson.duration_minutes || 0,
-        title: lesson.name
+        title: lesson.name,
+        segments: lesson.segments
       }));
       router.push(`/user/training/lesson?id=${lesson.id}`);
     }
@@ -285,12 +425,12 @@ export default function TrainingPage() {
 
   return (
     <PageContainer
-      title="Đào tạo nâng cao"
+      title="Đào Tạo Nâng Cao"
       description={`Điểm học trực tuyến - ${trainingData?.lessons?.length || 0} bài học`}
     >
 
         {/* Always show content structure with skeleton when loading */}
-        <div className="flex gap-6 border-b mb-6">
+        <div className="mb-6 flex gap-6 border-b border-[#e7c6cb]">
           <button
             className={`pb-3 px-2 border-b-2 font-bold transition-colors ${
               tab === 'lessons' 
@@ -388,6 +528,8 @@ export default function TrainingPage() {
                               ? 'border-green-300 bg-green-50/30' 
                               : 'border-gray-200'
                           }`}
+                          onMouseEnter={() => schedulePrewarmLessonManifest(lesson.id)}
+                          onFocus={() => schedulePrewarmLessonManifest(lesson.id)}
                           onClick={() => handleLessonClick(lesson, idx)}
                         >
                           {/* Thumbnail */}
@@ -411,12 +553,25 @@ export default function TrainingPage() {
                                 </div>
                               )}
                             </div>
-                            {/* Duration badge - Hide default 30 min placeholder */}
-                            {lesson.duration_minutes && lesson.duration_minutes !== 30 && (
-                              <div className="absolute bottom-1 right-1 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
-                                {lesson.duration_minutes} phút
-                              </div>
-                            )}
+                            {/* Duration badge — prefer duration_seconds for accuracy */}
+                            {(() => {
+                              // Sum duration_seconds across all segments if available
+                              const totalSeconds = lesson.segments
+                                ? lesson.segments.reduce((sum, s) => sum + (s.duration_seconds != null ? Number(s.duration_seconds) : (s.duration_minutes || 0) * 60), 0)
+                                : 0;
+                              const displaySeconds = totalSeconds > 0 ? totalSeconds : (lesson.duration_minutes && lesson.duration_minutes !== 30 ? lesson.duration_minutes * 60 : 0);
+                              if (!displaySeconds) return null;
+                              const mins = Math.floor(displaySeconds / 60);
+                              const secs = Math.round(displaySeconds % 60);
+                              const label = mins > 0
+                                ? (secs > 0 ? `${mins}p ${secs}s` : `${mins} phút`)
+                                : `${secs}s`;
+                              return (
+                                <div className="absolute bottom-1 right-1 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
+                                  {label}
+                                </div>
+                              );
+                            })()}
                             {/* Completion badge */}
                             {isCompleted && (
                               <div className="absolute top-1 left-1 bg-green-500 text-white rounded-full p-1">
@@ -615,105 +770,132 @@ export default function TrainingPage() {
                 {isLoadingAssignments ? (
                    <div className="text-center py-4">Đang tải danh sách bài tập...</div>
                 ) : (
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {assignmentsData?.data?.filter((a: any) => {
+                  (() => {
+                    const filteredAssignments = (assignmentsData?.data || []).filter((a: any) => {
                       if (!a.video_id) return false;
-                      const linkedVideo = trainingData?.lessons?.find((l: any) => l.id === a.video_id);
-                      return !!linkedVideo;
-                    }).length === 0 && (
-                        <div className="col-span-full text-center py-8 text-gray-500">
-                            Không có bài kiểm tra nào được tìm thấy
+                      return !!trainingData?.lessons?.find((l: any) => l.id === a.video_id);
+                    });
+
+                    if (filteredAssignments.length === 0) {
+                      return (
+                        <div className="text-center py-8 text-gray-500">
+                          Không có bài kiểm tra nào được tìm thấy
                         </div>
-                    )}
-                    {assignmentsData?.data?.filter((a: any) => {
-                        if (!a.video_id) return false;
-                        const linkedVideo = trainingData?.lessons?.find((l: any) => l.id === a.video_id);
-                        return !!linkedVideo;
-                    }).map((assignment: any) => {
-                        const linkedVideo = trainingData?.lessons?.find((l: any) => l.id === assignment.video_id);
-                        const isLocked = !linkedVideo || linkedVideo.completion_status !== 'completed';
-                        
-                        return (
-                          <div
-                            key={assignment.id}
-                            className={`bg-white rounded-lg shadow-sm border hover:shadow-md transition-all overflow-hidden group flex flex-col ${
-                              isLocked ? 'border-gray-200 opacity-75' : 'border-gray-200'
-                            }`}
-                          >
-                            <div className={`p-3 text-white ${isLocked ? 'bg-gray-400' : 'bg-linear-to-br from-[#a1001f] to-[#c41230]'}`}>
-                              <div className="flex items-start justify-between mb-1.5">
-                                <BookOpen className="w-5 h-5 shrink-0" />
-                                {!isLocked && (
-                                  <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-semibold">Mở</span>
-                                )}
-                                {isLocked && (
-                                  <span className="px-1.5 py-0.5 bg-black/20 rounded-full text-[10px] font-semibold">Locked</span>
-                                )}
-                              </div>
-                              <h3 className="text-sm font-bold mb-1 line-clamp-2 leading-tight min-h-[2.5em]">{assignment.assignment_title}</h3>
-                              <p className="text-[11px] text-rose-50 line-clamp-1 opacity-90">
-                                {linkedVideo?.name ? linkedVideo.name.replace(/^Lesson \d+:\s*/, '') : 'Unknown Video'}
-                              </p>
-                            </div>
+                      );
+                    }
 
-                            <div className="p-3 flex flex-col flex-1">
-                              <div className="flex items-center gap-2 mb-3 text-xs flex-wrap">
-                                <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
-                                  <FileText className="w-3 h-3 text-gray-500" />
-                                  <span className="font-bold text-gray-900">{assignment.question_count || '?'}</span>
-                                  <span className="text-gray-600">câu</span>
-                                </div>
+                    return (
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {filteredAssignments.map((assignment: any) => {
+                          const linkedVideo = trainingData?.lessons?.find((l: any) => l.id === assignment.video_id);
+                          const isLocked = !linkedVideo || linkedVideo.completion_status !== 'completed';
+                          const submission = assignment.recent_submission;
 
-                                <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
-                                  <Award className="w-3 h-3 text-gray-500" />
-                                  <span className="font-bold text-gray-900">{assignment.total_points || '?'}</span>
-                                  <span className="text-gray-600">đ</span>
-                                </div>
+                          // Điểm bài kiểm tra: ưu tiên recent_submission.score, fallback về 0
+                          const submissionScore = submission?.score != null ? Number(submission.score) : null;
+                          const submissionTotal = submission?.total_points != null ? Number(submission.total_points) : null;
+                          const isPassed = submission?.is_passed === true;
+                          const hasSubmission = submission != null;
 
-                                <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
-                                  <CheckCircle className="w-3 h-3 text-gray-500" />
-                                  <span className="font-bold text-gray-900">{assignment.passing_score}</span>
-                                </div>
+                          // Số câu hỏi từ API (đã được count từ DB)
+                          const questionCount = assignment.question_count || 0;
 
-                                <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
-                                  <Clock className="w-3 h-3 text-gray-500" />
-                                  <span className="font-bold text-gray-900">{assignment.time_limit_minutes}p</span>
+                          // Loại bài kiểm tra
+                          const assignmentType = assignment.assignment_type === 'quiz' ? 'Trắc nghiệm' : (assignment.assignment_type || 'Quiz');
+
+                          return (
+                            <div
+                              key={assignment.id}
+                              className={`bg-white rounded-lg shadow-sm border hover:shadow-md transition-all overflow-hidden group flex flex-col ${
+                                isLocked ? 'border-gray-200 opacity-75' : 'border-gray-200'
+                              }`}
+                            >
+                              {/* Header */}
+                              <div className={`p-3 text-white ${isLocked ? 'bg-gray-400' : 'bg-linear-to-br from-[#a1001f] to-[#c41230]'}`}>
+                                <div className="flex items-start justify-between mb-1.5">
+                                  <BookOpen className="w-5 h-5 shrink-0" />
+                                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                    isLocked ? 'bg-black/20' : hasSubmission ? (isPassed ? 'bg-green-400/80' : 'bg-amber-400/80') : 'bg-white/20'
+                                  }`}>
+                                    {isLocked ? 'Locked' : hasSubmission ? (isPassed ? '✓ Đạt' : 'Chưa đạt') : 'Mở'}
+                                  </span>
                                 </div>
+                                <h3 className="text-sm font-bold mb-1 line-clamp-2 leading-tight min-h-[2.5em]">{assignment.assignment_title}</h3>
+                                <p className="text-[11px] text-rose-50 line-clamp-1 opacity-90">
+                                  {linkedVideo?.name ? linkedVideo.name.replace(/^Lesson \d+:\s*/, '') : 'Unknown Video'}
+                                </p>
                               </div>
 
-                              <div className="mt-auto">
-                                {(linkedVideo?.score > 0 || assignment.recent_submission) ? (
-                                    <div className={`mb-2.5 p-2 rounded-lg border flex justify-between items-center ${
-                                      (linkedVideo?.score >= assignment.passing_score)
-                                        ? 'bg-green-50 border-green-200'
-                                        : 'bg-amber-50 border-amber-200'
-                                    }`}>
-                                        <span className="text-[10px] font-semibold text-gray-700">Điểm số:</span>
-                                        <span className={`text-sm font-bold ${
-                                          (linkedVideo?.score >= assignment.passing_score) ? 'text-green-600' : 'text-amber-600'
-                                        }`}>
-                                          {linkedVideo?.score > 0 ? linkedVideo.score : (assignment.recent_submission?.score || 0)}
-                                          <span className="text-xs text-gray-500">/{assignment.total_points || '?'}</span>
-                                        </span>
+                              {/* Body */}
+                              <div className="p-3 flex flex-col flex-1">
+                                {/* Thông tin bài kiểm tra */}
+                                <div className="flex items-center gap-2 mb-3 text-xs flex-wrap">
+                                  <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
+                                    <FileText className="w-3 h-3 text-gray-500" aria-hidden="true" />
+                                    <span className="font-bold text-gray-900">{questionCount > 0 ? questionCount : '—'}</span>
+                                    <span className="text-gray-600">câu</span>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
+                                    <BookOpen className="w-3 h-3 text-gray-500" aria-hidden="true" />
+                                    <span className="font-bold text-gray-900 text-[10px]">{assignmentType}</span>
+                                  </div>
+
+
+
+                                  {hasSubmission && submission.submitted_at && (
+                                    <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
+                                      <Clock className="w-3 h-3 text-gray-500" aria-hidden="true" />
+                                      <span className="font-bold text-gray-900">
+                                        {new Date(submission.submitted_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
+                                      </span>
                                     </div>
-                                ) : null}
+                                  )}
+                                </div>
 
-                                <Button
+                                <div className="mt-auto">
+                                  {/* Kết quả nộp bài */}
+                                  {hasSubmission && submissionScore !== null ? (
+                                    <div className={`mb-2.5 p-2 rounded-lg border flex justify-between items-center ${
+                                      isPassed ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'
+                                    }`}>
+                                      <div className="flex flex-col">
+                                        <span className="text-[10px] font-semibold text-gray-700">Điểm số:</span>
+                                        {submission.percentage != null && (
+                                          <span className="text-[10px] text-gray-500">{Number(submission.percentage).toFixed(0)}%</span>
+                                        )}
+                                      </div>
+                                      <span className={`text-sm font-bold ${isPassed ? 'text-green-600' : 'text-amber-600'}`}>
+                                        {submissionScore.toFixed(1)}
+                                        {submissionTotal != null && (
+                                          <span className="text-xs text-gray-500">/{submissionTotal.toFixed(0)}</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  ) : !isLocked && !hasSubmission ? (
+                                    <div className="mb-2.5 p-2 rounded-lg border border-dashed border-gray-200 flex items-center justify-center">
+                                      <span className="text-[10px] text-gray-400">Chưa làm bài</span>
+                                    </div>
+                                  ) : null}
+
+                                  <Button
                                     onClick={() => router.push(`/user/training?start_assignment_id=${assignment.id}`)}
                                     disabled={isLocked}
                                     variant={isLocked ? "secondary" : "default"}
                                     className={`w-full h-9 text-xs font-semibold ${
                                       !isLocked ? 'bg-[#a1001f] hover:bg-[#8a001a] text-white shadow-sm' : ''
                                     }`}
-                                >
-                                    {isLocked ? 'Hoàn thành video để mở' : ((linkedVideo?.score > 0 || assignment.recent_submission) ? 'Làm lại' : 'Làm bài')}
-                                </Button>
+                                  >
+                                    {isLocked ? 'Hoàn thành video để mở' : (hasSubmission ? 'Làm lại' : 'Làm bài')}
+                                  </Button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                    })}
-                  </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()
                 )}
               </div>
             )}

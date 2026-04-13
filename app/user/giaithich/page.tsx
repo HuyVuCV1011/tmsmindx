@@ -440,11 +440,11 @@ export default function GiaiTrinhPage() {
               />
             </div>
           </div>
-            <div className="mt-6 pt-6 border-t border-[#f1d1d8] flex justify-end">
+            <div className="mt-4 border-t border-[#f1d1d8] pt-3">
               <Button
                 type="submit"
                 disabled={submitting}
-                className="w-full sm:w-auto font-medium shadow-sm bg-[#a1001f] text-white hover:bg-[#8a0019]"
+                className="w-full font-medium shadow-sm bg-[#a1001f] text-white hover:bg-[#8a0019]"
               >
                 {submitting ? (
                   <span className="flex items-center justify-center">

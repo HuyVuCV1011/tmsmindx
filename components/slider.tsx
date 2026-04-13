@@ -11,6 +11,7 @@ interface Post {
     id: string | number
     title: string
     description: string
+    featured_image?: string
     banner_image: string
     post_type: string
     slug?: string // Optional slug for compatibility
@@ -63,7 +64,7 @@ export default function Slider({ posts }: SliderProps) {
 
     return (
         <div
-            className="relative w-full h-90 sm:h-105 md:h-150 rounded-3xl overflow-hidden bg-gray-950 group shadow-2xl ring-1 ring-white/10"
+            className="relative w-full h-72 sm:h-90 md:h-120 rounded-3xl overflow-hidden bg-white group shadow-2xl ring-1 ring-black/5"
             onMouseEnter={() => setAutoPlay(false)}
             onMouseLeave={() => setAutoPlay(true)}
         >
@@ -73,58 +74,62 @@ export default function Slider({ posts }: SliderProps) {
                     <div
                         key={post.id}
                         className={cn(
-                            "absolute inset-0 transition-all duration-1000 ease-in-out transform",
-                            index === currentSlide ? 'opacity-100 scale-100 z-10 will-change-transform' : 'opacity-0 scale-[1.05] z-0 pointer-events-none'
+                            "absolute inset-0 transition-opacity duration-700 ease-in-out",
+                            index === currentSlide ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
                         )}
                     >
-                        {/* Image with Parallax-like feel */}
-                        <Image
-                            src={post.banner_image || "/placeholder-banner.jpg"}
-                            alt={post.title}
-                            fill
-                            className="object-cover"
-                            priority={index === 0}
-                            sizes="100vw"
-                        />
+                        <div className="absolute inset-0 bg-white">
+                            {/* Keep image inside a fixed max-width canvas to avoid upscaling on ultra-wide screens */}
+                            <div className="relative h-full w-full max-w-480 mx-auto">
+                                <Image
+                                    src={post.banner_image || post.featured_image || "/placeholder-banner.jpg"}
+                                    alt={post.title}
+                                    fill
+                                    className="object-contain object-center"
+                                    priority={index === 0}
+                                    quality={95}
+                                    sizes="(min-width: 1920px) 1920px, 100vw"
+                                />
 
-                        {/* Contrast Overlay */}
-                        <div className="absolute inset-0 bg-linear-to-r from-black/70 via-black/35 to-transparent" />
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.12),transparent_45%)]" />
+                                {/* Contrast Overlay */}
+                                <div className="absolute inset-0 bg-linear-to-t from-black/45 via-black/10 to-transparent" />
+                            </div>
+                        </div>
 
                         {/* Content */}
-                        <div className="absolute inset-0 flex flex-col justify-end p-8 md:p-16 text-white max-w-5xl mx-auto w-full">
+                        <div className="absolute inset-0 flex w-full flex-col justify-center p-2 text-white sm:p-8 md:justify-end md:p-16">
                             <div className={cn(
-                                "flex flex-col gap-6 transform transition-all duration-1000 delay-300",
+                                "flex flex-col gap-3 sm:gap-6 transform transition-all duration-1000 delay-300",
                                 index === currentSlide ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0'
                             )}>
-                                <div className="max-w-3xl rounded-3xl bg-white/5 border border-white/15 backdrop-blur-md p-7 md:p-10 shadow-2xl">
+                                <div className="mt-3 mx-auto w-full max-w-3xl rounded-3xl bg-white/5 border border-white/15 p-4 shadow-2xl backdrop-blur-md sm:p-7 md:p-10">
                                 {/* Tag */}
                                 <div className="inline-flex">
-                                    <span className="px-4 py-1.5 rounded-full text-xs md:text-sm font-bold tracking-wider uppercase bg-white/10 text-white backdrop-blur-md shadow-lg transition-colors border border-white/20">
+                                    <span className="px-3 py-1 rounded-full text-[10px] sm:text-xs md:text-sm font-bold tracking-wider uppercase bg-white/10 text-white backdrop-blur-md shadow-lg transition-colors border border-white/20">
                                         {post.post_type}
                                     </span>
                                 </div>
 
                                 {/* Title */}
-                                <h3 className="mt-4 text-2xl md:text-4xl lg:text-5xl font-black leading-[1.08] tracking-tight text-white drop-shadow-lg">
+                                <h3 className="mt-2 text-xl sm:text-2xl md:text-4xl lg:text-5xl font-black leading-[1.08] tracking-tight text-white drop-shadow-lg">
                                     <Link href={`/user/truyenthong/${post.slug || post.id}`} className="transition-all hover:text-white/90">
                                         {post.title}
                                     </Link>
                                 </h3>
 
-                                <div className="mt-5 h-1 w-16 rounded-full bg-linear-to-r from-white/90 via-white/60 to-transparent" />
+                                <div className="mt-3 h-1 w-14 sm:w-16 rounded-full bg-linear-to-r from-white/90 via-white/60 to-transparent" />
 
                                 {/* Description */}
-                                <p className="mt-4 text-base md:text-lg text-white/80 line-clamp-2 max-w-2xl leading-relaxed font-light">
+                                <p className="mt-2 text-sm sm:text-base md:text-lg text-white/80 line-clamp-2 max-w-2xl leading-relaxed font-light">
                                     {post.description}
                                 </p>
 
                                 {/* Action */}
-                                <div className="pt-4 md:pt-5">
+                                <div className="pt-2 md:pt-5">
                                     <Link href={`/user/truyenthong/${post.slug || post.id}`}>
                                         <Button
                                             size="lg"
-                                            className="bg-white text-gray-900 hover:bg-gray-100 font-bold rounded-full px-8 py-6 text-base shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5"
+                                            className="bg-white text-gray-900 hover:bg-gray-100 font-bold rounded-full px-6 sm:px-8 py-4 sm:py-6 text-sm sm:text-base shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5"
                                         >
                                             Đọc ngay
                                         </Button>

@@ -197,7 +197,7 @@ export default function AdminGiaiThichPage() {
 
   if (loading) {
     return (
-      <PageContainer title="Quản lý giải trình" description="Xem và phê duyệt giải trình của giảng viên">
+      <PageContainer title="Quản lý giải trình" description="Xem và phê duyệt giải trình của giáo viên">
         <SkeletonPage />
       </PageContainer>
     );

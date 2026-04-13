@@ -2,183 +2,257 @@
 
 import { EmptyState } from '@/components/EmptyState'
 import { PageContainer } from '@/components/PageContainer'
-import { StatCard } from '@/components/StatCard'
-import { StatCardSkeleton } from '@/components/skeletons'
+import { SearchBar } from '@/components/SearchBar'
+import { TableSkeleton } from '@/components/skeletons'
+import { Tabs } from '@/components/Tabs'
+import TruyenThongStats from '@/components/truyenthong-stats'
 import { Button } from '@/components/ui/button'
-import { ChevronRight, Edit, Eye, FileText, Heart, Image, TrendingUp } from 'lucide-react'
+import { Eye, EyeOff, FileText, ImageIcon, MessageCircle, Pencil, Plus } from 'lucide-react'
 import Link from 'next/link'
+import { useState } from 'react'
 import useSWR from 'swr'
 
-// Fetcher for SWR
-const fetcher = (url: string) => fetch(url).then(r => r.json())
-
-interface RecentPost {
+interface Post {
     id: number
     slug: string
     title: string
+    post_type: string
+    status: 'draft' | 'published' | 'hidden'
     published_at: string
+    audience: string
     view_count: number
-    status: string
+    comment_count?: number
+    hidden_comment_count?: number
 }
 
-interface StatsData {
-    totalPosts: number
-    totalViews: number
-    totalLikes: number
-    recentPosts: RecentPost[]
-    error?: string
+const fetcher = (url: string) => fetch(url).then(r => r.json())
+
+const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+    published: { label: '✓ Đã công bố', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+    draft:     { label: '✎ Bản nháp',   className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+    hidden:    { label: '✕ Đã ẩn',      className: 'bg-red-50 text-red-600 border border-red-200' },
 }
 
-export default function AdminDashboard() {
-    const { data: statsData, error, isLoading } = useSWR<StatsData>('/api/truyenthong/stats', fetcher)
+const TYPE_LABELS: Record<string, string> = {
+    'tin-tuc':    'Tin tức',
+    'su-kien':    'Sự kiện',
+    'thong-bao':  'Thông báo',
+    'huong-dan':  'Hướng dẫn',
+}
 
-    const stats = [
-        {
-            title: 'Tổng bài viết',
-            value: statsData?.totalPosts || 0,
-            icon: FileText,
-            color: 'bg-blue-100 text-blue-600',
-        },
-        {
-            title: 'Lượt xem tổng',
-            value: statsData?.totalViews?.toLocaleString('vi-VN') || 0,
-            icon: Eye,
-            color: 'bg-green-100 text-green-600',
-        },
-        {
-            title: 'Tương tác',
-            value: statsData?.totalLikes?.toLocaleString('vi-VN') || 0,
-            icon: Heart,
-            color: 'bg-red-100 text-red-600',
-        },
-        {
-            title: 'Tăng trưởng',
-            value: '+28%', // Currently hardcoded
-            icon: TrendingUp,
-            color: 'bg-purple-100 text-purple-600',
-        },
+const AUDIENCE_LABELS: Record<string, string> = {
+    'toan-cong-ty': 'Toàn công ty',
+    'giao-vien':    'Giáo viên',
+    'hoc-vien':     'Học viên',
+    'quan-ly':      'Quản lý',
+}
+
+function StatusBadge({ status }: { status: string }) {
+    const cfg = STATUS_CONFIG[status]
+    if (!cfg) return null
+    return (
+        <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold ${cfg.className}`}>
+            {cfg.label}
+        </span>
+    )
+}
+
+export default function TruyenthongDashboardPage() {
+    const [searchTerm, setSearchTerm] = useState('')
+    const [filterStatus, setFilterStatus] = useState<'all' | 'draft' | 'published' | 'hidden'>('all')
+
+    const queryParams = new URLSearchParams()
+    if (filterStatus !== 'all') queryParams.append('status', filterStatus)
+    if (searchTerm) queryParams.append('search', searchTerm)
+
+    const { data: posts, isLoading } = useSWR<Post[]>(
+        `/api/truyenthong/posts?${queryParams.toString()}`,
+        fetcher
+    )
+
+    const tabs = [
+        { id: 'all',       label: 'Tất cả',   count: posts?.length || 0 },
+        { id: 'draft',     label: 'Bản nháp', count: posts?.filter(p => p.status === 'draft').length || 0 },
+        { id: 'published', label: 'Công bố',  count: posts?.filter(p => p.status === 'published').length || 0 },
+        { id: 'hidden',    label: 'Đã ẩn',    count: posts?.filter(p => p.status === 'hidden').length || 0 },
     ]
-
-    if (error) {
-        return (
-            <PageContainer title="Quản lý Truyền thông" description="Tổng quan và quản lý nội dung truyền thông">
-                <div className="text-red-600 text-center py-12">Lỗi tải dữ liệu.</div>
-            </PageContainer>
-        );
-    }
 
     return (
         <PageContainer
-            title="Quản lý Truyền thông"
-            description="Tổng quan và quản lý nội dung truyền thông"
+            title="Trung tâm Truyền thông"
+            description="Quản lý và theo dõi toàn bộ bài viết, sự kiện và thông báo nội bộ."
         >
-            {/* Action Buttons */}
-            <div className="flex flex-wrap gap-3 mb-6">
-                <Link href="/admin/truyenthong/posts">
-                    <Button variant="mindx" className="gap-2 shadow-sm font-semibold">
-                        <Edit className="h-4 w-4" />
-                        Quản lý bài viết
-                    </Button>
-                </Link>
-                <Link href="/admin/truyenthong/sliders">
-                    <Button variant="outline" className="gap-2 shadow-sm font-semibold border-gray-300">
-                        <Image className="h-4 w-4" />
+            {/* Quick Actions */}
+            <div className="flex flex-wrap items-center gap-3 mb-8">
+                <Button asChild variant="mindx" className="gap-2 shadow-sm font-semibold">
+                    <Link href="/admin/truyenthong/posts/create">
+                        <Plus className="h-3 w-4" />
+                        Tạo bài viết mới
+                    </Link>
+                </Button>
+                <Button asChild variant="outline" className="gap-2 shadow-sm font-semibold border-gray-300">
+                    <Link href="/admin/truyenthong/sliders">
+                        <ImageIcon className="h-3 w-4" />
                         Quản lý Slider
-                    </Button>
-                </Link>
+                    </Link>
+                </Button>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+            {/* Stats Dashboard */}
+            <div className="mb-8">
+                <TruyenThongStats />
+            </div>
+
+            {/* Posts Section */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
+                <div>
+                    <h3 className="text-lg font-extrabold text-gray-900">Danh sách bài viết</h3>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                        {posts?.length ? `${posts.length} bài viết` : 'Chưa có bài viết nào'}
+                    </p>
+                </div>
+                <div className="w-full md:w-72">
+                    <SearchBar
+                        value={searchTerm}
+                        onChange={setSearchTerm}
+                        placeholder="Tìm theo tiêu đề..."
+                    />
+                </div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="mb-4">
+                <Tabs
+                    tabs={tabs}
+                    activeTab={filterStatus}
+                    onChange={(id) => setFilterStatus(id as 'all' | 'draft' | 'published' | 'hidden')}
+                />
+            </div>
+
+            {/* Posts List */}
+            <div className="border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden">
                 {isLoading ? (
-                    <>
-                        <StatCardSkeleton />
-                        <StatCardSkeleton />
-                        <StatCardSkeleton />
-                        <StatCardSkeleton />
-                    </>
-                ) : (
-                    <>
-                        <StatCard
-                            title="Tổng bài viết"
-                    value={statsData?.totalPosts || 0}
-                    icon={FileText}
-                    color="blue"
-                />
-                <StatCard
-                    title="Lượt xem tổng"
-                    value={statsData?.totalViews?.toLocaleString('vi-VN') || '0'}
-                    icon={Eye}
-                    color="green"
-                />
-                <StatCard
-                    title="Tương tác"
-                    value={statsData?.totalLikes?.toLocaleString('vi-VN') || '0'}
-                    icon={Heart}
-                    color="red"
-                />
-                        <StatCard
-                            title="Tăng trưởng"
-                            value="+28%"
-                            icon={TrendingUp}
-                            color="purple"
-                            trend={{ value: "so với tháng trước", isPositive: true }}
+                    <div className="p-4">
+                        <TableSkeleton rows={5} columns={4} />
+                    </div>
+                ) : !posts || posts.length === 0 ? (
+                    <div className="py-4">
+                        <EmptyState
+                            icon={FileText}
+                            title="Không tìm thấy bài viết nào"
+                            description="Chưa có bài đăng nào phù hợp với bộ lọc hiện tại. Hãy thử tạo bài viết mới."
+                            action={{
+                                label: 'Tạo bài viết',
+                                onClick: () => window.location.href = '/admin/truyenthong/posts/create'
+                            }}
                         />
-                    </>
-                )}
-            </div>
-
-            {/* Recent Posts */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-                <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-blue-600" />
-                    Bài viết gần đây
-                </h2>
-                {statsData?.recentPosts && statsData.recentPosts.length > 0 ? (
-                    <div className="space-y-2">
-                        {statsData.recentPosts.map((post) => (
-                            <Link
-                                href={`/admin/truyenthong/posts/${post.id}/edit`}
-                                key={post.id}
-                                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-blue-50 hover:border-blue-200 border border-gray-200 transition-all group"
-                            >
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-semibold text-sm truncate group-hover:text-blue-600 transition-colors">
-                                        {post.title}
-                                    </p>
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <p className="text-xs text-gray-500">
-                                            {post.published_at ? new Date(post.published_at).toLocaleDateString('vi-VN') : 'N/A'}
-                                        </p>
-                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${post.status === 'published' ? 'bg-green-100 text-green-700' :
-                                                post.status === 'draft' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                                            }`}>
-                                            {post.status === 'published' ? 'Công bố' : post.status === 'draft' ? 'Nháp' : 'Ẩn'}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="text-right">
-                                        <div className="text-sm font-bold text-gray-900">
-                                            {post.view_count?.toLocaleString('vi-VN') || 0}
-                                        </div>
-                                        <div className="text-[10px] text-gray-500">lượt xem</div>
-                                    </div>
-                                    <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
-                                </div>
-                            </Link>
-                        ))}
                     </div>
                 ) : (
-                    <EmptyState
-                        icon={FileText}
-                        title="Chưa có bài viết"
-                        description="Tạo bài viết mới để bắt đầu"
-                        action={{
-                            label: "Tạo bài viết",
-                            onClick: () => window.location.href = '/admin/truyenthong/posts/create'
-                        }}
-                    />
+                    <ul className="divide-y divide-gray-100">
+                        {posts.map((post) => {
+                            const typeLabel  = TYPE_LABELS[post.post_type]  ?? post.post_type
+                            const audienceLabel = AUDIENCE_LABELS[post.audience] ?? post.audience
+                            const date = post.published_at
+                                ? new Date(post.published_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                : null
+
+                            return (
+                                <li key={post.id} className="group hover:bg-gray-50 transition-colors">
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4">
+
+                                        {/* Left – title + meta */}
+                                        <div className="flex-1 min-w-0">
+                                            <Link
+                                                href={`/admin/truyenthong/posts/${encodeURIComponent(post.slug)}`}
+                                                title="Xem bài & quản lý bình luận"
+                                                className="font-bold text-[15px] text-gray-900 hover:text-blue-600 hover:underline transition-colors line-clamp-1"
+                                            >
+                                                {post.title}
+                                            </Link>
+
+                                            {/* Meta row */}
+                                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                {date && (
+                                                    <span className="text-xs text-gray-400 font-medium">
+                                                        {date}
+                                                    </span>
+                                                )}
+
+                                                <StatusBadge status={post.status} />
+
+                                                {typeLabel && (
+                                                    <span className="text-[11px] px-2.5 py-0.5 bg-gray-100 text-gray-600 rounded-full font-semibold">
+                                                        {typeLabel}
+                                                    </span>
+                                                )}
+
+                                                {audienceLabel && (
+                                                    <span className="text-[11px] px-2.5 py-0.5 bg-blue-50 text-blue-600 rounded-full font-semibold max-w-[180px] truncate">
+                                                        {audienceLabel}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Right – stats + action */}
+                                        <div className="flex items-center gap-4 sm:gap-5 shrink-0">
+                                            {/* Lượt xem */}
+                                            <div className="flex items-center gap-1.5 text-gray-500" title="Lượt xem">
+                                                <Eye className="w-4 h-4" />
+                                                <span className="text-sm font-semibold tabular-nums text-gray-700">
+                                                    {post.view_count?.toLocaleString('vi-VN') || 0}
+                                                </span>
+                                            </div>
+
+                                            {/* Bình luận hiển thị */}
+                                            <div
+                                                className="flex items-center gap-1.5 text-gray-500"
+                                                title="Bình luận đang hiển thị"
+                                            >
+                                                <MessageCircle className="w-4 h-4 text-green-500" />
+                                                <div className="flex flex-col items-center leading-none">
+                                                    <span className="text-sm font-bold tabular-nums text-gray-800">
+                                                        {Number(post.comment_count ?? 0).toLocaleString('vi-VN')}
+                                                    </span>
+                                                    <span className="text-[10px] text-green-600 font-semibold">hiển thị</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Bình luận đang ẩn */}
+                                            <div
+                                                className={`flex items-center gap-1.5 ${Number(post.hidden_comment_count) > 0 ? 'text-red-500' : 'text-gray-400'}`}
+                                                title="Bình luận đang bị ẩn"
+                                            >
+                                                <EyeOff className="w-4 h-4" />
+                                                <div className="flex flex-col items-center leading-none">
+                                                    <span className={`text-sm font-bold tabular-nums ${Number(post.hidden_comment_count) > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                                                        {Number(post.hidden_comment_count ?? 0).toLocaleString('vi-VN')}
+                                                    </span>
+                                                    <span className={`text-[10px] font-semibold ${Number(post.hidden_comment_count) > 0 ? 'text-red-500' : 'text-gray-400'}`}>đang ẩn</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Divider */}
+                                            <div className="hidden sm:block w-px h-8 bg-gray-200" />
+
+
+                                            {/* Edit */}
+                                            <Link href={`/admin/truyenthong/posts/${post.slug}/edit`}>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 gap-1.5 font-semibold text-blue-600 hover:text-blue-700 bg-white hover:bg-blue-50 border-blue-200"
+                                                >
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                    Chỉnh sửa
+                                                </Button>
+                                            </Link>
+                                        </div>
+                                    </div>
+                                </li>
+                            )
+                        })}
+                    </ul>
                 )}
             </div>
         </PageContainer>

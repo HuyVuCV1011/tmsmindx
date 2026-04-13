@@ -2,7 +2,18 @@
 
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Calendar, Clock, MapPin, User, Save, Search, LayoutGrid, Info } from 'lucide-react';
+import { 
+  Calendar, 
+  Clock, 
+  MapPin, 
+  User, 
+  Save, 
+  Search, 
+  LayoutGrid, 
+  Info,
+  Loader2
+} from 'lucide-react';
+import { GenEntry } from '../types';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const SESSIONS = [
@@ -13,16 +24,6 @@ const SESSIONS = [
 ] as const;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type GenEntry = {
-  key: string;
-  genCode: string;
-  count: number;
-  regionCode: string;
-  regionLabel: string;
-  isTeacher4Plus: boolean;
-  note: string;
-};
-
 type SessionSchedule = {
   date: string;
   startTime: string;
@@ -34,22 +35,18 @@ type SessionSchedule = {
 interface GenSchedulingTabProps {
   genEntries: GenEntry[];
   regionFilter: 'all' | 'south' | 'north';
+  activeGenKey: string;
+  activeGenInfo: { genCode: string; regionCode: string } | null;
+  onSelectGen: (entry: GenEntry) => void;
 }
 
-// ─── Sort (identical to planner/tracking) ───────────────────────────────────
-function sortGenEntries(a: GenEntry, b: GenEntry, order: 'asc' | 'desc') {
-  const cmp = a.genCode.localeCompare(b.genCode, 'vi', { numeric: true });
-  if (cmp !== 0) return order === 'desc' ? -cmp : cmp;
-  return a.regionCode.localeCompare(b.regionCode, 'vi');
-}
-
-export default function GenSchedulingTab({ genEntries, regionFilter }: GenSchedulingTabProps) {
-  // GEN list state
-  const [genSearch, setGenSearch] = useState('');
-  const [genSortOrder, setGenSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [activeGenKey, setActiveGenKey] = useState('');
-  const [activeGenInfo, setActiveGenInfo] = useState<{ genCode: string; regionCode: string } | null>(null);
-
+export default function GenSchedulingTab({ 
+  genEntries, 
+  regionFilter,
+  activeGenKey,
+  activeGenInfo,
+  onSelectGen
+}: GenSchedulingTabProps) {
   // Mock schedule state (GenKey -> SessionNumber -> Schedule)
   const [schedules, setSchedules] = useState<Record<string, Record<number, SessionSchedule>>>({});
   const [saving, setSaving] = useState(false);
@@ -65,7 +62,7 @@ export default function GenSchedulingTab({ genEntries, regionFilter }: GenSchedu
     };
   };
 
-  const handleUpdate = (sessionNumber: number, field: keyof SessionSchedule, value: string) => {
+  const handleScheduleChange = (sessionNumber: number, field: keyof SessionSchedule, value: string) => {
     if (!activeGenKey) return;
     setSchedules(prev => {
       const genSchedules = { ...(prev[activeGenKey] ?? {}) };
@@ -84,223 +81,152 @@ export default function GenSchedulingTab({ genEntries, regionFilter }: GenSchedu
     }, 800);
   };
 
-  // ── Filtered GEN list ─────────────────────────────────────────────────────
-  const filteredGens = useMemo(() => {
-    const q = genSearch.trim().toLowerCase();
-    const filtered = q
-      ? genEntries.filter((e) => `${e.genCode} ${e.regionLabel}`.toLowerCase().includes(q))
-      : genEntries;
-    return [...filtered].sort((a, b) => sortGenEntries(a, b, genSortOrder));
-  }, [genEntries, genSearch, genSortOrder]);
-
-  const handleClickGen = (entry: GenEntry) => {
-    if (activeGenKey === entry.key) {
-      setActiveGenKey('');
-      setActiveGenInfo(null);
-    } else {
-      setActiveGenKey(entry.key);
-      setActiveGenInfo({ genCode: entry.genCode, regionCode: entry.regionCode });
-    }
-  };
-
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-      
-      {/* ══ LEFT: GEN List ══════════════════════════════════════════════ */}
-      <aside className="xl:col-span-4 space-y-4">
-        <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-bold text-gray-900">GEN đích</p>
-            <span className="text-xs font-medium text-gray-500">{genEntries.length} GEN</span>
-          </div>
+    <div className="w-full">
+      {/* ══ RIGHT: Scheduling Content ═════════════════════════════════════ */}
+      <section className="w-full rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
 
-          <div className="mb-2 flex items-center gap-2">
-            <input
-              value={genSearch}
-              onChange={(e) => setGenSearch(e.target.value)}
-              placeholder="Tìm GEN..."
-              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#a1001f] focus:ring-4 focus:ring-[#a1001f]/10"
-            />
-            <button
-              onClick={() => setGenSortOrder(genSortOrder === 'asc' ? 'desc' : 'asc')}
-              className="inline-flex h-10 shrink-0 items-center rounded-xl border border-gray-300 bg-white px-3 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              {genSortOrder === 'asc' ? 'Tăng dần' : 'Giảm dần'}
-            </button>
-          </div>
-
-          <div className="max-h-[calc(100vh-320px)] space-y-1 overflow-y-auto pr-1">
-            {filteredGens.map((entry) => {
-              const isActive = activeGenKey === entry.key;
-              return (
-                <button
-                  key={entry.key}
-                  onClick={() => handleClickGen(entry)}
-                  className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-semibold transition-colors ${
-                    isActive
-                      ? 'border-[#a1001f] bg-[#fff5f6] text-[#a1001f]'
-                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <span className="truncate block">{entry.genCode}</span>
-                    <p className="truncate text-[11px] text-gray-500 font-normal">{entry.regionLabel}</p>
-                  </div>
-                  <span className="ml-2 shrink-0 text-xs text-gray-400 font-normal">
-                    {entry.count} ứng viên
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      </aside>
-
-      {/* ══ RIGHT: Scheduling Area ══════════════════════════════════════ */}
-      <section className="xl:col-span-8 space-y-4">
+        {/* Empty state */}
         {!activeGenKey ? (
-          <div className="flex flex-1 min-h-[480px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-gray-400">
-            <Calendar className="h-12 w-12 opacity-20" />
-            <div>
-              <p className="text-sm font-bold text-gray-600">Chọn GEN để xếp lịch</p>
-              <p className="mt-1 text-xs text-gray-400">Lịch training bao gồm 4 buổi tiêu chuẩn cho mỗi GEN.</p>
+          <div className="flex flex-col items-center justify-center py-24 text-center px-4">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-50 text-gray-400 border border-gray-100">
+              <Calendar className="h-8 w-8" />
             </div>
+            <h3 className="text-lg font-bold text-gray-900">Chưa chọn GEN</h3>
+            <p className="mt-2 text-sm text-gray-500 max-w-xs">
+              Vui lòng chọn một GEN từ danh sách bên trái để bắt đầu xếp lịch đào tạo.
+            </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
-              <div>
-                <h3 className="text-lg font-extrabold text-gray-900">Xếp lịch training: {activeGenInfo?.genCode}</h3>
-                <p className="text-xs text-gray-500 mt-1">Khu vực: {genEntries.find(e => e.key === activeGenKey)?.regionLabel}</p>
+          <>
+            {/* Header: GEN Info + Actions */}
+            <div className="border-b border-gray-100 bg-gray-50/50 p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm border border-emerald-100">
+                    <Calendar className="h-6 w-6 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-gray-900">Lịch đào tạo {activeGenInfo?.genCode}</h2>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-0.5">
+                      Khu vực: {activeGenInfo?.regionCode === 'south' ? 'Miền Nam' : 'Miền Bắc'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveDemo}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-emerald-200 transition-all hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Lưu lịch training
+                </button>
               </div>
-              <button
-                onClick={handleSaveDemo}
-                disabled={saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#a1001f] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#880019] disabled:opacity-50 transition-all shadow-lg shadow-[#a1001f]/20"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Lưu lịch training
-              </button>
             </div>
 
-            {/* Session Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {SESSIONS.map((session) => {
-                const sched = getSchedule(activeGenKey, session.number);
-                return (
-                  <div key={session.number} className="group relative rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-[#a1001f]/30 hover:shadow-md">
-                    <div className="mb-4 flex items-center justify-between">
-                      <div className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold ${session.bg} ${session.color} ${session.border}`}>
-                        <LayoutGrid className="h-3 w-3" />
-                        {session.label}
-                      </div>
-                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Cấu hình buổi học</div>
-                    </div>
-
-                    <div className="space-y-3">
-                      {/* Date Row */}
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase">
-                            <Calendar className="h-3 w-3" /> Ngày học
-                          </label>
-                          <input
-                            type="date"
-                            value={sched.date}
-                            onChange={(e) => handleUpdate(session.number, 'date', e.target.value)}
-                            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium outline-none focus:border-[#a1001f] focus:ring-4 focus:ring-[#a1001f]/10"
-                          />
+            {/* Sessions Grid */}
+            <div className="p-6">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {SESSIONS.map((session) => {
+                  const schedule = getSchedule(activeGenKey, session.number);
+                  return (
+                    <div 
+                      key={session.number}
+                      className={`group relative rounded-2xl border transition-all hover:shadow-md ${session.border} ${session.bg} overflow-hidden`}
+                    >
+                      {/* Session Header */}
+                      <div className="border-b border-white/40 px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`flex h-7 w-7 items-center justify-center rounded-lg bg-white text-xs font-black shadow-sm ${session.color}`}>
+                            {session.number}
+                          </span>
+                          <span className="text-sm font-bold text-gray-900">{session.label}</span>
                         </div>
-                        <div className="space-y-1">
-                          <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase">
-                            <Clock className="h-3 w-3" /> Giờ học
-                          </label>
-                          <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Draft</span>
+                      </div>
+
+                      {/* Session Inputs */}
+                      <div className="p-5 space-y-4 bg-white/50">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1.5">
+                              <Calendar className="h-3 w-3" /> Ngày học
+                            </label>
                             <input
-                              type="time"
-                              value={sched.startTime}
-                              onChange={(e) => handleUpdate(session.number, 'startTime', e.target.value)}
-                              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium outline-none focus:border-[#a1001f]"
-                            />
-                            <span className="text-gray-400">-</span>
-                            <input
-                              type="time"
-                              value={sched.endTime}
-                              onChange={(e) => handleUpdate(session.number, 'endTime', e.target.value)}
-                              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium outline-none focus:border-[#a1001f]"
+                              type="date"
+                              value={schedule.date}
+                              onChange={(e) => handleScheduleChange(session.number, 'date', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
                             />
                           </div>
+                          <div className="space-y-1.5 text-right">
+                             <label className="text-[10px] font-bold text-gray-500 uppercase flex items-center justify-end gap-1.5">
+                              <Clock className="h-3 w-3" /> Thời gian
+                            </label>
+                            <div className="flex items-center gap-1 group">
+                              <input
+                                type="time"
+                                value={schedule.startTime}
+                                onChange={(e) => handleScheduleChange(session.number, 'startTime', e.target.value)}
+                                className="w-full rounded-xl border border-gray-200 bg-white px-2 py-2 text-sm font-bold text-gray-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                              />
+                              <span className="text-gray-400 font-bold">-</span>
+                              <input
+                                type="time"
+                                value={schedule.endTime}
+                                onChange={(e) => handleScheduleChange(session.number, 'endTime', e.target.value)}
+                                className="w-full rounded-xl border border-gray-200 bg-white px-2 py-2 text-sm font-bold text-gray-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Location & Mentor Row */}
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase">
-                            <MapPin className="h-3 w-3" /> Cơ sở / Địa điểm
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1.5">
+                            <MapPin className="h-3 w-3" /> Địa điểm / Room
                           </label>
                           <input
-                            type="text"
-                            value={sched.location}
-                            placeholder="Tên cơ sở..."
-                            onChange={(e) => handleUpdate(session.number, 'location', e.target.value)}
-                            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium outline-none focus:border-[#a1001f] focus:ring-4 focus:ring-[#a1001f]/10"
+                            value={schedule.location}
+                            onChange={(e) => handleScheduleChange(session.number, 'location', e.target.value)}
+                            placeholder="VD: Phòng họp A, Link Zoom..."
+                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
                           />
                         </div>
-                        <div className="space-y-1">
-                          <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase">
-                            <User className="h-3 w-3" /> Người phụ trách
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1.5">
+                            <User className="h-3 w-3" /> Mentor / Người phụ trách
                           </label>
                           <input
-                            type="text"
-                            value={sched.mentor}
-                            placeholder="Mentor / Teacher..."
-                            onChange={(e) => handleUpdate(session.number, 'mentor', e.target.value)}
-                            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium outline-none focus:border-[#a1001f] focus:ring-4 focus:ring-[#a1001f]/10"
+                            value={schedule.mentor}
+                            onChange={(e) => handleScheduleChange(session.number, 'mentor', e.target.value)}
+                            placeholder="Tên mentor phụ trách buổi này..."
+                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
                           />
                         </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
 
-            {/* Note/Info Section */}
-            <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4 flex items-start gap-3">
-              <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
-              <div className="text-xs text-blue-700 leading-relaxed">
-                <p className="font-bold mb-1">Lưu ý khi xếp lịch:</p>
-                <ul className="list-disc ml-4 space-y-0.5">
-                  <li>Lịch training sau khi lưu sẽ hiển thị trong trang quản lý của ứng viên.</li>
-                  <li>Nếu có thay đổi về mentor hoặc địa điểm, vui lòng cập nhật sớm nhất có thể.</li>
-                  <li>Ngày học nên được sắp xếp cách nhau ít nhất 2 ngày để ứng viên ôn bài.</li>
-                </ul>
+              <div className="mt-8 rounded-2xl bg-blue-50 border border-blue-100 p-5 flex items-start gap-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+                  <Info className="h-5 w-5" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-black text-blue-900">Lưu ý quan trọng</h4>
+                  <p className="text-sm text-blue-700/80 leading-relaxed font-medium">
+                    Lịch đào tạo này sẽ được hiển thị cho tất cả ứng viên thuộc GEN đã chọn. Vui lòng kiểm tra kỹ thời gian và địa điểm trước khi lưu chính thức.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          </>
         )}
       </section>
     </div>
-  );
-}
-
-function Loader2(props: any) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </svg>
   );
 }

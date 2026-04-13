@@ -1515,15 +1515,13 @@ export default function TeacherAssignmentPage() {
             </div>
 
             {/* Feedback Message */}
-            <div className={`rounded-xl p-6 mb-6 ${isPassed ? 'bg-green-50 border-2 border-green-200' : 'bg-amber-50 border-2 border-amber-200'
-              }`}>
-              <p className="text-center text-gray-700">
-                {isPassed
-                  ? `Xuất sắc! Bạn đã hoàn thành bài tập với ${submission.score}/${currentAssignment?.passing_score} điểm đạt!`
-                  : `Bạn cần đạt tối thiểu ${currentAssignment?.passing_score} điểm để hoàn thành bài tập. Hãy thử lại nhé!`
-                }
-              </p>
-            </div>
+            {isPassed && (
+              <div className="rounded-xl p-6 mb-6 bg-green-50 border-2 border-green-200">
+                <p className="text-center text-gray-700">
+                  Xuất sắc! Bạn đã hoàn thành bài tập với {submission.score} điểm!
+                </p>
+              </div>
+            )}
 
             {/* Action Button */}
             <Button
@@ -1664,8 +1662,8 @@ export default function TeacherAssignmentPage() {
             cursor: pointer !important;
           }
         `}</style>
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Bài kiểm tra của tôi</h1>
+        <div className="mb-8 border-b border-gray-200 pb-4 sm:pb-5">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Bài Kiểm Tra Của Tôi</h1>
           <p className="text-gray-600">Danh sách các bài kiểm tra đã được đăng ký.</p>
         </div>
 
@@ -1673,6 +1671,7 @@ export default function TeacherAssignmentPage() {
           tabs={mainTabs}
           activeTab={activeMainTab}
           onChange={(tabId) => setActiveMainTab(tabId as 'available' | 'list' | 'training')}
+          borderClassName="border-[#e7c6cb]"
         />
 
         {error ? (
@@ -1805,26 +1804,24 @@ export default function TeacherAssignmentPage() {
             </div>
 
             {/* Explanation Stats for Current Month */}
-            <div className="flex flex-col md:flex-row bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-5 gap-6 md:items-center justify-between">
-               <div className="flex-1">
-                 <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                   <AlertCircle className="w-5 h-5 text-blue-500" />
-                   Tình trạng giải trình ({formatMonthLabel(scoreStats.targetMonthKey)})
-                 </h3>
-                 <p className="text-sm text-gray-500 mt-1">Thống kê các bài thi được yêu cầu giải trình trong tháng đánh giá gần nhất</p>
-               </div>
-               <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
-                 <div className="flex-1 md:flex-none text-center bg-green-50 text-green-700 px-5 py-2.5 rounded-lg border border-green-200 min-w-[100px] hover:shadow-sm transition-all">
-                    <div className="text-2xl font-bold">{scoreStats.explanationsApproved}</div>
-                    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mt-0.5">Thành công</div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-5">
+               <h3 className="text-base font-bold text-gray-900 flex items-center gap-2 mb-4">
+                 <AlertCircle className="w-5 h-5 text-blue-500" />
+                 Tình trạng giải trình ({formatMonthLabel(scoreStats.targetMonthKey)})
+               </h3>
+               <p className="text-sm text-gray-500 mb-4">Thống kê các bài thi được yêu cầu giải trình trong tháng đánh giá gần nhất</p>
+               <div className="grid grid-cols-3 gap-2 md:gap-3">
+                 <div className="text-center bg-green-50 text-green-700 px-3 md:px-5 py-2.5 rounded-lg border border-green-200 hover:shadow-sm transition-all">
+                    <div className="text-xl md:text-2xl font-bold">{scoreStats.explanationsApproved}</div>
+                    <div className="text-[9px] md:text-xs font-semibold uppercase tracking-wider mt-1">Thành công</div>
                  </div>
-                 <div className="flex-1 md:flex-none text-center bg-red-50 text-red-700 px-5 py-2.5 rounded-lg border border-red-200 min-w-[100px] hover:shadow-sm transition-all">
-                    <div className="text-2xl font-bold">{scoreStats.explanationsRejected}</div>
-                    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mt-0.5">Thất bại</div>
+                 <div className="text-center bg-red-50 text-red-700 px-3 md:px-5 py-2.5 rounded-lg border border-red-200 hover:shadow-sm transition-all">
+                    <div className="text-xl md:text-2xl font-bold">{scoreStats.explanationsRejected}</div>
+                    <div className="text-[9px] md:text-xs font-semibold uppercase tracking-wider mt-1">Thất bại</div>
                  </div>
-                 <div className="flex-1 md:flex-none text-center bg-amber-50 text-amber-700 px-5 py-2.5 rounded-lg border border-amber-200 min-w-[100px] hover:shadow-sm transition-all">
-                    <div className="text-2xl font-bold">{scoreStats.explanationsPending}</div>
-                    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider mt-0.5">Đang chờ</div>
+                 <div className="text-center bg-amber-50 text-amber-700 px-3 md:px-5 py-2.5 rounded-lg border border-amber-200 hover:shadow-sm transition-all">
+                    <div className="text-xl md:text-2xl font-bold">{scoreStats.explanationsPending}</div>
+                    <div className="text-[9px] md:text-xs font-semibold uppercase tracking-wider mt-1">Đang chờ</div>
                  </div>
                </div>
             </div>
@@ -1864,7 +1861,7 @@ export default function TeacherAssignmentPage() {
                     return (
                       <div
                         key={data.month}
-                        className={`shrink-0 min-w-[160px] border rounded-lg p-3 snap-start transition-all cursor-pointer ${isStatHighlighted
+                        className={`shrink-0 min-w-40 border rounded-lg p-3 snap-start transition-all cursor-pointer ${isStatHighlighted
                           ? statHighlightClass
                           : isSelected
                             ? isExpired
@@ -1922,49 +1919,49 @@ export default function TeacherAssignmentPage() {
             )}
 
             {/* 2. Filter Bar */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col md:flex-row gap-4 items-end transition-all">
-              <div className="w-full md:w-1/4">
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Môn học</label>
-                <input
-                  type="text"
-                  placeholder="Nhập mã môn/bộ đề..."
-                  value={scoreSubjectKeyword}
-                  onChange={(e) => setScoreSubjectKeyword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 flex flex-col gap-3 transition-all">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="w-full">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Môn học</label>
+                  <input
+                    type="text"
+                    placeholder="Nhập mã môn/bộ đề..."
+                    value={scoreSubjectKeyword}
+                    onChange={(e) => setScoreSubjectKeyword(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
 
-              <div className="w-full md:w-1/4">
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Tháng</label>
-                <select
-                  value={selectedExamMonth}
-                  onChange={(e) => setSelectedExamMonth(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="6months">6 tháng gần nhất</option>
-                  <option value="all">Tất cả thời gian</option>
-                  {examMonthOptions.map(m => (
-                    <option key={m} value={m}>{formatMonthLabel(m)}</option>
-                  ))}
-                </select>
-              </div>
+                <div className="w-full">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Tháng</label>
+                  <select
+                    value={selectedExamMonth}
+                    onChange={(e) => setSelectedExamMonth(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="6months">6 tháng gần nhất</option>
+                    <option value="all">Tất cả thời gian</option>
+                    {examMonthOptions.map(m => (
+                      <option key={m} value={m}>{formatMonthLabel(m)}</option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="w-full md:w-1/4">
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Loại kiểm tra</label>
-                <select
-                  value={scoreTypeFilter}
-                  onChange={(e) => setScoreTypeFilter(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">Tất cả</option>
-                  <option value="expertise">Chuyên môn</option>
-                  <option value="experience">Trải nghiệm</option>
-                </select>
-              </div>
+                <div className="w-full">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Loại kiểm tra</label>
+                  <select
+                    value={scoreTypeFilter}
+                    onChange={(e) => setScoreTypeFilter(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">Tất cả</option>
+                    <option value="expertise">Chuyên môn</option>
+                    <option value="experience">Trải nghiệm</option>
+                  </select>
+                </div>
 
-              <div className="w-full md:w-1/4">
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Kết quả</label>
-                <div className="flex gap-2 items-center">
+                <div className="w-full">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Kết quả</label>
                   <select
                     value={scoreResultFilter}
                     onChange={(e) => setScoreResultFilter(e.target.value as any)}
@@ -1977,18 +1974,21 @@ export default function TeacherAssignmentPage() {
                     <option value="accepted">Accepted</option>
                     <option value="rejected">Rejected</option>
                   </select>
-
-                  {(scoreSubjectKeyword || selectedExamMonth !== '6months' || scoreTypeFilter !== 'all' || scoreResultFilter !== 'all') && (
-                    <button
-                      onClick={clearFilters}
-                      title="Xóa tất cả bộ lọc"
-                      className="shrink-0 p-2 text-red-600 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-lg transition-colors border border-red-100"
-                    >
-                      <FilterX className="w-5 h-5" />
-                    </button>
-                  )}
                 </div>
               </div>
+
+              {(scoreSubjectKeyword || selectedExamMonth !== '6months' || scoreTypeFilter !== 'all' || scoreResultFilter !== 'all') && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={clearFilters}
+                    title="Xóa tất cả bộ lọc"
+                    className="inline-flex items-center gap-2 px-3 py-2 text-red-600 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-lg transition-colors border border-red-100 text-sm font-medium"
+                  >
+                    <FilterX className="w-4 h-4" />
+                    Xóa bộ lọc
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* 3. Detailed Month View */}
@@ -2253,6 +2253,7 @@ export default function TeacherAssignmentPage() {
               title="Chi tiết Tỉ lệ đạt"
               subtitle={`${passed} / ${passRateItems.length} bài đạt yêu cầu trong 6 tháng gần nhất`}
               maxWidth="xl"
+              headerColor="bg-red-600"
               footer={
                 <div className="flex justify-end">
                   <Button variant="outline" onClick={() => setShowPassRateModal(false)}>Đóng</Button>

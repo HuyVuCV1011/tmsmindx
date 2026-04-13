@@ -104,22 +104,6 @@ async function validateHrAccess(requestEmail: string): Promise<{ ok: boolean; st
     return { ok: true, status: 200 };
   }
 
-  const rolesResult = await pool.query(
-    `SELECT role_code
-     FROM user_roles
-     WHERE user_id = $1`,
-    [user.id]
-  );
-
-  const hasTrainingInputRole = rolesResult.rows.some((row: { role_code: string }) => {
-    const roleCode = normalizeValue(row.role_code).toUpperCase();
-    return roleCode === 'HR' || roleCode === 'TE' || roleCode === 'TF';
-  });
-
-  if (hasTrainingInputRole) {
-    return { ok: true, status: 200 };
-  }
-
   const permissionResult = await pool.query(
     `SELECT route_path FROM app_permissions WHERE user_id = $1 AND can_access = true
      UNION
@@ -313,8 +297,6 @@ const handleGet = async (request: NextRequest) => {
     });
 
     const regionTotal = regionScopedRows.length;
-    const regionAssigned = regionScopedRows.filter((row) => !row.isUnassigned).length;
-    const regionUnassigned = regionScopedRows.filter((row) => row.isUnassigned).length;
 
     const regionScopedByGen = regionScopedRows.reduce<Record<string, number>>((acc, row) => {
       const gen = normalizeValue(row.effectiveGen);
@@ -407,8 +389,6 @@ const handleGet = async (request: NextRequest) => {
         availableGens: regionScopedGens,
         region: regionFilter || 'all',
         regionTotal,
-        regionAssigned,
-        regionUnassigned,
       },
       headers: sheetData.headers,
       source: {

@@ -76,6 +76,10 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
     const [isHiding, setIsHiding] = useState(false)
     const [optimisticHidden, setOptimisticHidden] = useState(comment.hidden)
 
+    useEffect(() => {
+        setOptimisticHidden(!!comment.hidden)
+    }, [comment.hidden])
+
     // Handle click outside to close reactions popup
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -196,14 +200,14 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
             onConfirm: async () => {
                 setIsHiding(true)
                 setConfirmDialog(prev => ({ ...prev, open: false }))
-
-                // Optimistic update
-                setOptimisticHidden(!isCurrentlyHidden)
-
-                if (onToggleHide) {
-                    await onToggleHide(comment.id, !isCurrentlyHidden)
+                try {
+                    if (onToggleHide) {
+                        await onToggleHide(comment.id, !isCurrentlyHidden)
+                        setOptimisticHidden(!isCurrentlyHidden)
+                    }
+                } finally {
+                    setIsHiding(false)
                 }
-                setIsHiding(false)
             },
             variant: isCurrentlyHidden ? 'unhide' : 'hide'
         })
@@ -237,11 +241,11 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
     }
 
     return (
-        <div className={`transition-all duration-300 ${depth > 0 ? 'ml-4 mt-2 pl-3 border-l-2 border-blue-200/50' : 'mt-3'} ${depth > 2 ? 'ml-2' : ''} ${isHidden && !isAdmin ? 'hidden' : ''} ${isHidden && isAdmin ? 'opacity-50' : ''} ${isDeleting ? 'opacity-30 pointer-events-none' : ''} ${isHiding ? 'opacity-70' : ''}`}>
+        <div className={`transition-all duration-300 ${depth > 0 ? 'mt-2 ml-4 border-l-2 border-[#e6b8c2] pl-3' : 'mt-3'} ${depth > 2 ? 'ml-2' : ''} ${isHidden && !isAdmin ? 'hidden' : ''} ${isHidden && isAdmin ? 'opacity-50' : ''} ${isDeleting ? 'pointer-events-none opacity-30' : ''} ${isHiding ? 'opacity-70' : ''}`}>
             <div className="flex gap-2">
                 {/* Avatar */}
                 <div className="shrink-0">
-                    <div className={`w-8 h-8 rounded-full bg-linear-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-sm font-semibold ${isHidden ? 'opacity-50' : ''}`}>
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full bg-[#a1001f] text-sm font-semibold text-white ${isHidden ? 'opacity-50' : ''}`}>
                         {comment.user_name.charAt(0).toUpperCase()}
                     </div>
                 </div>
@@ -256,7 +260,7 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                             </span>
                         </div>
                     )}
-                    <Card className={`p-2 bg-muted/50 border-none ${isHidden && isAdmin ? 'border border-dashed border-gray-400' : ''}`}>
+                    <Card className={`border-none bg-muted/50 p-2 ${isHidden && isAdmin ? 'border border-dashed border-gray-400' : ''}`}>
                         <div className="font-semibold text-sm text-foreground">{comment.user_name}</div>
                         {isEditing ? (
                             <div className="mt-1 space-y-2">
@@ -264,15 +268,15 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                                     <Textarea
                                         value={editContent}
                                         onChange={(e) => setEditContent(e.target.value)}
-                                        className="min-h-20 text-sm resize-none border-2 border-blue-200 focus:border-blue-400 rounded-lg p-2 transition-colors"
+                                        className="min-h-20 resize-none rounded-lg border-2 border-[#e6b8c2] p-2 text-sm transition-colors focus:border-[#a1001f]"
                                         placeholder="Chỉnh sửa bình luận của bạn..."
                                     />
                                     <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
                                         {editContent.length} ký tự
                                     </div>
                                 </div>
-                                <div className="flex items-center justify-between bg-blue-50 p-2 rounded-lg border border-blue-200">
-                                    <span className="text-xs text-blue-700 font-medium flex items-center gap-1">
+                                <div className="flex items-center justify-between rounded-lg border border-[#e6b8c2] bg-[#fdf2f5] p-2">
+                                    <span className="flex items-center gap-1 text-xs font-medium text-[#a1001f]">
                                         <Edit className="w-3 h-3" />
                                         Đang chỉnh sửa bình luận
                                     </span>
@@ -292,7 +296,7 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                                             size="sm"
                                             onClick={handleEdit}
                                             disabled={!editContent.trim() || editContent === comment.content}
-                                            className="cursor-pointer h-8 bg-blue-600 hover:bg-blue-700 text-white"
+                                            className="h-8 cursor-pointer bg-[#a1001f] text-white hover:bg-[#870019]"
                                         >
                                             <Edit className="w-3 h-3 mr-1" />
                                             Lưu thay đổi
@@ -336,7 +340,7 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                             onMouseEnter={() => setShowReactions(true)}
                         >
                             <button
-                                className={`text-xs font-semibold transition-all duration-200 cursor-pointer ${userReaction ? 'text-blue-600' : 'text-muted-foreground hover:text-foreground'
+                                className={`cursor-pointer text-xs font-semibold transition-all duration-200 ${userReaction ? 'text-[#a1001f]' : 'text-muted-foreground hover:text-foreground'
                                     }`}
                             >
                                 {userReaction ? REACTIONS.find(r => r.type === userReaction.type)?.label : 'Thích'}
@@ -344,14 +348,14 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
 
                             {/* Reactions Popup */}
                             {showReactions && (
-                                <div className="absolute bottom-full left-0 mb-2 bg-white/95 backdrop-blur-sm border border-border rounded-full shadow-2xl p-1.5 flex gap-1 z-10 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
+                                <div className="absolute bottom-full left-0 z-10 mb-2 flex gap-1 rounded-full border border-[#e6b8c2] bg-white/95 p-1.5 shadow-2xl backdrop-blur-sm animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
                                     {REACTIONS.map((reaction, index) => {
                                         const Icon = reaction.icon
                                         return (
                                             <button
                                                 key={reaction.type}
                                                 onClick={() => handleReact(reaction.type)}
-                                                className={`p-1.5 rounded-full hover:bg-muted/80 transition-all duration-200 transform hover:scale-125 hover:-translate-y-1 cursor-pointer ${reaction.color} animate-in fade-in-0 zoom-in-50`}
+                                                className={`cursor-pointer rounded-full p-1.5 transition-all duration-200 hover:-translate-y-1 hover:scale-125 hover:bg-[#fdf2f5] transform ${reaction.color} animate-in fade-in-0 zoom-in-50`}
                                                 style={{ animationDelay: `${index * 30}ms` }}
                                                 title={reaction.label}
                                             >
@@ -476,7 +480,7 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setVisibleRepliesCount(2)}
-                                    className="text-xs text-blue-600 hover:text-blue-700 font-medium -ml-2 cursor-pointer"
+                                    className="-ml-2 cursor-pointer text-xs font-medium text-[#a1001f] hover:text-[#870019]"
                                 >
                                     <ChevronDown className="w-3 h-3 mr-1" />
                                     Xem {comment.replies.length} câu trả lời
@@ -506,7 +510,7 @@ function CommentItem({ comment, currentUserId, currentUserEmail, isAdmin, onRepl
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => setVisibleRepliesCount(prev => Math.min(prev + 2, comment.replies.length))}
-                                            className="text-xs text-blue-600 hover:text-blue-700 font-medium mt-2 -ml-2 cursor-pointer"
+                                            className="-ml-2 mt-2 cursor-pointer text-xs font-medium text-[#a1001f] hover:text-[#870019]"
                                         >
                                             <ChevronDown className="w-3 h-3 mr-1" />
                                             Xem thêm {Math.min(2, comment.replies.length - visibleRepliesCount)} câu trả lời
@@ -854,7 +858,9 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
     }
 
     const handleToggleHide = async (commentId: number, hidden: boolean) => {
-        if (!isAdmin || !currentUserEmail) return
+        if (!isAdmin || !currentUserEmail) {
+            throw new Error('Thiếu quyền hoặc email')
+        }
 
         try {
             const res = await fetch(`/api/truyenthong/comments/${commentId}`, {
@@ -866,15 +872,19 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                 })
             })
 
-            if (res.ok) {
-                await loadComments()
-            } else {
-                const error = await res.json()
-                toast.error(error.error || 'Không thể ẩn bình luận')
+            if (!res.ok) {
+                const errBody = await res.json().catch(() => ({})) as { error?: string; details?: string }
+                const msg = errBody.details || errBody.error || 'Không thể ẩn/hiện bình luận'
+                toast.error(msg)
+                throw new Error(msg)
             }
-        } catch (error) {
-            console.error('Error toggling hide comment:', error)
-            toast.error('Có lỗi xảy ra khi ẩn bình luận')
+
+            await loadComments()
+        } catch (e) {
+            if (e instanceof TypeError) {
+                toast.error('Không kết nối được máy chủ')
+            }
+            throw e
         }
     }
 
@@ -901,8 +911,8 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
     }
 
     return (
-        <section className="mt-8 border-t border-border pt-6">
-            <h2 className="text-2xl font-bold text-foreground mb-4 flex items-center gap-2">
+        <section className="mt-8 border-t border-[#e6b8c2] pt-6">
+            <h2 className="text-m font-bold text-foreground mb-4 flex items-center gap-2">
                 <MessageCircle className="w-6 h-6" />
                 Bình luận ({comments.length})
                 {isAdmin && (
@@ -916,7 +926,7 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
             {currentUserId ? (
                 <div className="mb-6">
                     <div
-                        className={`relative border-2 rounded-lg transition-colors ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                        className={`relative rounded-lg border-2 transition-colors ${isDragging ? 'border-[#a1001f] bg-[#fdf2f5]' : 'border-[#e6b8c2]'}`}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
@@ -940,7 +950,7 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                                             alt={`Preview ${idx + 1}`}
                                             width={100}
                                             height={100}
-                                            className="rounded-lg object-cover border border-gray-200"
+                                            className="rounded-lg border border-[#efc9d1] object-cover"
                                         />
                                         <button
                                             onClick={() => removeImage(idx)}
@@ -967,7 +977,7 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                             variant="outline"
                             size="sm"
                             onClick={() => fileInputRef.current?.click()}
-                            className="gap-2 h-9"
+                            className="gap-2 h-9 border-red-200 text-[#a1001f] hover:bg-red-50"
                         >
                             <ImageIcon className="w-4 h-4" />
                             Thêm ảnh
@@ -975,7 +985,7 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                         <Button
                             onClick={handleSubmitComment}
                             disabled={loading || !newComment.trim()}
-                            className="gap-2 h-9 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                            className="gap-2 h-9 bg-[#a1001f] hover:bg-[#870019] text-white"
                         >
                             {loading ? 'Đang gửi...' : 'Đăng bình luận'}
                         </Button>
@@ -997,13 +1007,13 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
             {loadingComments ? (
                 <div className="text-center py-8 text-muted-foreground">Đang tải bình luận...</div>
             ) : comments.length === 0 ? (
-                <Card className="p-8 text-center bg-muted/20">
+                <Card className="p-8 text-center bg-red-50/30 border border-red-200 rounded-xl">
                     <p className="text-muted-foreground">Chưa có bình luận nào. Hãy là người đầu tiên!</p>
                 </Card>
             ) : (
                 <div>
                     {/* Filter Buttons */}
-                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border">
+                    <div className="mb-6 flex items-center gap-3 border-b border-[#e6b8c2] pb-4">
                         <span className="text-sm font-medium text-muted-foreground">Sắp xếp theo:</span>
                         <div className="flex gap-2">
                             <Button
@@ -1013,7 +1023,7 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                                     setSortBy('newest')
                                     setDisplayCount(5)
                                 }}
-                                className="flex items-center gap-1.5 cursor-pointer"
+                                className={`flex cursor-pointer items-center gap-1.5 ${sortBy === 'newest' ? 'border-[#a1001f] bg-[#a1001f] text-white hover:bg-[#870019]' : 'border-[#d8a1ae] text-[#a1001f] hover:bg-[#fdf2f5]'}`}
                             >
                                 <Clock className="w-4 h-4" />
                                 Mới nhất
@@ -1025,7 +1035,7 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                                     setSortBy('most_reactions')
                                     setDisplayCount(5)
                                 }}
-                                className="flex items-center gap-1.5 cursor-pointer"
+                                className={`flex cursor-pointer items-center gap-1.5 ${sortBy === 'most_reactions' ? 'border-[#a1001f] bg-[#a1001f] text-white hover:bg-[#870019]' : 'border-[#d8a1ae] text-[#a1001f] hover:bg-[#fdf2f5]'}`}
                             >
                                 <TrendingUp className="w-4 h-4" />
                                 Nhiều cảm xúc nhất
@@ -1057,7 +1067,7 @@ export default function Comments({ postSlug, currentUserId, currentUserName, cur
                             <Button
                                 variant="outline"
                                 onClick={handleLoadMore}
-                                className="flex items-center gap-2 cursor-pointer"
+                                className="flex cursor-pointer items-center gap-2 border-[#d8a1ae] text-[#a1001f] hover:bg-[#fdf2f5]"
                             >
                                 <ChevronDown className="w-4 h-4" />
                                 Xem thêm bình luận ({sortedComments.length - displayCount} còn lại)

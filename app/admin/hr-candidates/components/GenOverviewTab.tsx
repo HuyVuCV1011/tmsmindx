@@ -9,8 +9,10 @@ import {
   MapPin, 
   Clock, 
   Search,
-  Filter
+  Filter,
+  Info
 } from 'lucide-react';
+import { GenEntry } from '../types';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const WEEKDAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
@@ -23,7 +25,6 @@ const SESSION_STYLES = {
 } as const;
 
 // ─── Mock Data ──────────────────────────────────────────────────────────────
-// This mock data represents training sessions across different GENs
 const MOCK_SCHEDULES = [
   { gen: '109', region: 'Hà Nội', session: 1, date: '2026-04-06', time: '18:30 - 21:00', location: 'Trường Chinh' },
   { gen: '109', region: 'Hà Nội', session: 2, date: '2026-04-08', time: '18:30 - 21:00', location: 'Trường Chinh' },
@@ -42,66 +43,76 @@ function startOfDay(date: Date) {
 }
 
 function formatDateKey(date: Date) {
-  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  return date.toISOString().split('T')[0];
 }
 
 function buildCalendarCells(focusDate: Date) {
-  const monthStart = new Date(focusDate.getFullYear(), focusDate.getMonth(), 1);
-  const gridStart = new Date(monthStart);
-  gridStart.setDate(monthStart.getDate() - monthStart.getDay());
-
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(gridStart);
-    date.setDate(gridStart.getDate() + index);
-    return { date, inCurrentMonth: date.getMonth() === focusDate.getMonth() };
-  });
+  const startMonth = new Date(focusDate.getFullYear(), focusDate.getMonth(), 1);
+  const endMonth = new Date(focusDate.getFullYear(), focusDate.getMonth() + 1, 0);
+  
+  const cells = [];
+  
+  // Padding from prev month
+  const startDay = startMonth.getDay();
+  for (let i = startDay - 1; i >= 0; i--) {
+    const d = new Date(startMonth);
+    d.setDate(d.getDate() - i - 1);
+    cells.push({ date: d, isCurrentMonth: false });
+  }
+  
+  // Current month
+  for (let i = 1; i <= endMonth.getDate(); i++) {
+    const d = new Date(focusDate.getFullYear(), focusDate.getMonth(), i);
+    cells.push({ date: d, isCurrentMonth: true });
+  }
+  
+  // Padding for next month
+  const remaining = 42 - cells.length;
+  for (let i = 1; i <= remaining; i++) {
+    const d = new Date(endMonth);
+    d.setDate(d.getDate() + i);
+    cells.push({ date: d, isCurrentMonth: false });
+  }
+  
+  return cells;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
-export default function GenOverviewTab({ genEntries, regionFilter }: { genEntries: any[], regionFilter: string }) {
+interface GenOverviewTabProps {
+  genEntries: GenEntry[];
+  regionFilter: string;
+  activeGenKey: string;
+  activeGenInfo: { genCode: string; regionCode: string } | null;
+  onSelectGen: (entry: GenEntry) => void;
+}
+
+export default function GenOverviewTab({ 
+  genEntries, 
+  regionFilter,
+  activeGenKey,
+  activeGenInfo,
+  onSelectGen
+}: GenOverviewTabProps) {
   const [focusDate, setFocusDate] = useState(new Date());
-  const [genSearch, setGenSearch] = useState('');
-  const [genSortOrder, setGenSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [activeGenKey, setActiveGenKey] = useState('');
-  const [activeGenInfo, setActiveGenInfo] = useState<{ genCode: string; regionCode: string } | null>(null);
 
   // ── Logic ──────────────────────────────────────────────────────────────────
   const cells = useMemo(() => buildCalendarCells(focusDate), [focusDate]);
 
-  const filteredGens = useMemo(() => {
-    const q = genSearch.trim().toLowerCase();
-    const filtered = q
-      ? genEntries.filter((e) => `${e.genCode} ${e.regionLabel}`.toLowerCase().includes(q))
-      : genEntries;
-    return [...filtered].sort((a, b) => {
-      const cmp = a.genCode.localeCompare(b.genCode, 'vi', { numeric: true });
-      if (cmp !== 0) return genSortOrder === 'desc' ? -cmp : cmp;
-      return a.regionCode.localeCompare(b.regionCode, 'vi');
-    });
-  }, [genEntries, genSearch, genSortOrder]);
+  const filteredSchedules = useMemo(() => {
+    if (!activeGenKey) return MOCK_SCHEDULES;
+    return MOCK_SCHEDULES.filter(s => s.gen === activeGenInfo?.genCode);
+  }, [activeGenKey, activeGenInfo]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, typeof MOCK_SCHEDULES>();
-    
-    // Filter by selected GEN if one is active
-    const schedulesToDisplay = activeGenInfo 
-      ? MOCK_SCHEDULES.filter(s => s.gen === activeGenInfo.genCode) 
-      : []; // Start empty or show all? User said "mới hiện" (then show) - I'll show all if nothing selected?
-      // Actually, from "khi người dùng xem... mới hiện", let's show ALL if nothing selected, OR show message. 
-      // I'll show ALL by default, but if SELECTED, only show that one.
-    
-    const finalSchedules = activeGenInfo 
-      ? MOCK_SCHEDULES.filter(s => s.gen === activeGenInfo.genCode)
-      : MOCK_SCHEDULES;
-
-    finalSchedules.forEach(s => {
+    filteredSchedules.forEach(s => {
       const key = formatDateKey(new Date(s.date));
       const list = map.get(key) || [];
       list.push(s);
       map.set(key, list);
     });
     return map;
-  }, [activeGenInfo]);
+  }, [filteredSchedules]);
 
   const moveMonth = (offset: number) => {
     const next = new Date(focusDate);
@@ -109,192 +120,137 @@ export default function GenOverviewTab({ genEntries, regionFilter }: { genEntrie
     setFocusDate(next);
   };
 
-  const handleClickGen = (entry: any) => {
-    if (activeGenKey === entry.key) {
-      setActiveGenKey('');
-      setActiveGenInfo(null);
-    } else {
-      setActiveGenKey(entry.key);
-      setActiveGenInfo({ genCode: entry.genCode, regionCode: entry.regionCode });
-    }
-  };
-
   const currentMonthLabel = focusDate.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-12 animate-in fade-in duration-500">
+    <div className="w-full animate-in fade-in duration-500">
       
-      {/* ══ LEFT: GEN List (Same as other tabs) ══════════════════════════ */}
-      <aside className="xl:col-span-3 space-y-4">
-        <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-bold text-gray-900 leading-tight">GEN đào tạo</p>
-            <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded uppercase">{genEntries.length} GEN</span>
-          </div>
-
-          <div className="mb-3 space-y-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-              <input
-                value={genSearch}
-                onChange={(e) => setGenSearch(e.target.value)}
-                placeholder="Tìm GEN..."
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-3 py-2 text-xs font-medium outline-none focus:border-[#a1001f] focus:ring-4 focus:ring-[#a1001f]/10 transition-all"
-              />
-            </div>
-            <button
-              onClick={() => setGenSortOrder(genSortOrder === 'asc' ? 'desc' : 'asc')}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-50 transition-colors uppercase tracking-wider"
-            >
-              {genSortOrder === 'asc' ? 'Sắp xếp: Tăng dần' : 'Sắp xếp: Giảm dần'}
-            </button>
-          </div>
-
-          <div className="max-h-[calc(100vh-380px)] space-y-1 overflow-y-auto pr-1">
-            {filteredGens.map((entry) => {
-              const isActive = activeGenKey === entry.key;
-              return (
-                <button
-                  key={entry.key}
-                  onClick={() => handleClickGen(entry)}
-                  className={`flex w-full flex-col rounded-xl border px-3 py-2.5 text-left transition-all ${
-                    isActive
-                      ? 'border-[#a1001f] bg-[#fff5f6] shadow-sm'
-                      : 'border-transparent bg-white hover:bg-gray-50'
-                  }`}
-                >
-                  <span className={`text-sm font-extrabold ${isActive ? 'text-[#a1001f]' : 'text-gray-900'}`}>
-                    GEN {entry.genCode}
-                  </span>
-                  <p className="mt-0.5 text-[10px] font-medium text-gray-400 truncate">{entry.regionLabel}</p>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      </aside>
-
-      {/* ══ RIGHT: Calendar Overview ═════════════════════════════════════ */}
-      <section className="xl:col-span-9 flex flex-col gap-4">
-        
+      {/* ══ RIGHT: Calendar Area ══════════════════════════════════════════ */}
+      <section className="w-full rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
         {/* Calendar Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-4">
-            <h2 className="text-lg font-extrabold text-gray-900 capitalize leading-tight">{currentMonthLabel}</h2>
-            <div className="flex items-center rounded-xl bg-gray-100 p-0.5 ring-1 ring-gray-200">
+        <div className="border-b border-gray-100 bg-gray-50/50 p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm border border-blue-100">
+                <CalendarIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-gray-900 capitalize">{currentMonthLabel}</h2>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">
+                  {activeGenKey ? `Đang xem: ${activeGenInfo?.genCode}` : 'Lịch training tất cả GEN'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
               <button 
                 onClick={() => moveMonth(-1)}
-                className="rounded-lg p-1.5 hover:bg-white hover:shadow-sm transition-all"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
               >
-                <ChevronLeft className="h-4 w-4 text-gray-600" />
+                <ChevronLeft className="h-5 w-5" />
               </button>
               <button 
                 onClick={() => setFocusDate(new Date())}
-                className="px-3 text-[10px] font-extrabold text-gray-500 hover:text-gray-900 uppercase tracking-widest"
+                className="px-4 h-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm hidden sm:flex"
               >
                 Hôm nay
               </button>
               <button 
                 onClick={() => moveMonth(1)}
-                className="rounded-lg p-1.5 hover:bg-white hover:shadow-sm transition-all"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
               >
-                <ChevronRight className="h-4 w-4 text-gray-600" />
+                <ChevronRight className="h-5 w-5" />
               </button>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {activeGenInfo ? (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-700 animate-in zoom-in-95">
-                <LayoutGrid className="h-3.5 w-3.5" />
-                Đang xem: GEN {activeGenInfo.genCode}
-              </div>
-            ) : (
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">
-                Hiển thị tất cả lịch training
-              </div>
-            )}
           </div>
         </div>
 
         {/* Calendar Grid */}
-        <div className="rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden ring-1 ring-black/5 flex-1">
-        <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50/50">
-          {WEEKDAY_LABELS.map(label => (
-            <div key={label} className="py-2.5 text-center text-[10px] font-extrabold uppercase tracking-widest text-gray-400">
-              {label}
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-7 divide-x divide-y divide-gray-100">
-          {cells.map(({ date, inCurrentMonth }, i) => {
-            const isToday = formatDateKey(date) === formatDateKey(new Date());
-            const dateEvents = eventsByDate.get(formatDateKey(date)) || [];
-            
-            return (
-              <div 
-                key={i} 
-                className={`min-h-[120px] p-2 transition-colors ${
-                  inCurrentMonth ? 'bg-white' : 'bg-gray-50/30 opacity-40'
-                } group hover:bg-gray-50/50 cursor-pointer relative`}
-              >
-                {/* Date Number */}
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className={`inline-flex h-6 w-6 items-center justify-center rounded-lg text-[10px] font-extrabold transition-all ${
-                    isToday 
-                      ? 'bg-[#a1001f] text-white shadow-md shadow-[#a1001f]/20' 
-                      : 'text-gray-400 group-hover:text-gray-900 group-hover:bg-gray-100'
-                  }`}>
-                    {date.getDate()}
-                  </span>
-                </div>
-
-                {/* Event List */}
-                <div className="space-y-1 overflow-hidden">
-                  {dateEvents.map((ev, idx) => {
-                    const style = SESSION_STYLES[ev.session as keyof typeof SESSION_STYLES];
-                    return (
-                      <div 
-                        key={idx}
-                        className={`flex flex-col gap-0.5 rounded-lg border ${style.border} ${style.bg} p-1.5 shadow-sm transition-transform hover:scale-[1.02] active:scale-95`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className={`text-[9px] font-extrabold uppercase px-1 py-0.5 rounded bg-white/60 ${style.text}`}>
-                            GEN {ev.gen}
-                          </span>
-                          <span className={`text-[8px] font-bold ${style.text} opacity-60`}>{style.label}</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-[9px] font-bold text-gray-700">
-                          <Clock className="h-2 w-2" /> {ev.time.split(' - ')[0]}
-                        </div>
-                        <div className="flex items-center gap-1 text-[9px] font-medium text-gray-500 truncate">
-                          <MapPin className="h-2 w-2 shrink-0" /> {ev.location}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+        <div className="flex-1 bg-gray-50/30 p-4 sm:p-6">
+          <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 shadow-sm">
+            {/* Weekdays */}
+            {WEEKDAY_LABELS.map(label => (
+              <div key={label} className="bg-gray-50 py-3 text-center">
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">{label}</span>
               </div>
-            );
-          })}
-        </div>
-      </div>
+            ))}
 
-      {/* ══ LEGEND ══════════════════════════════════════════════════════════ */}
-      <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-gray-100 bg-white px-5 py-3 shadow-sm">
-        <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">Loại buổi học:</span>
-        <div className="flex flex-wrap items-center gap-4">
-          {Object.values(SESSION_STYLES).map(s => (
-            <div key={s.label} className="flex items-center gap-2">
-              <div className={`h-2.5 w-2.5 rounded-full ${s.bg} border ${s.border}`} />
-              <span className="text-[10px] font-bold text-gray-600">{s.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+            {/* Days */}
+            {cells.map((cell, idx) => {
+              const key = formatDateKey(cell.date);
+              const dayEvents = eventsByDate.get(key) || [];
+              const isToday = formatDateKey(new Date()) === key;
 
-    </section>
+              return (
+                <div 
+                  key={idx} 
+                  className={`min-h-[100px] sm:min-h-[140px] bg-white p-2 transition-colors hover:bg-gray-50/50 ${!cell.isCurrentMonth ? 'opacity-40 bg-gray-50/20' : ''}`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-black ${
+                      isToday ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'text-gray-500'
+                    }`}>
+                      {cell.date.getDate()}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {dayEvents.map((ev, evIdx) => {
+                      const style = SESSION_STYLES[ev.session as keyof typeof SESSION_STYLES];
+                      return (
+                        <div 
+                          key={evIdx}
+                          className={`group relative rounded-lg border p-1.5 shadow-sm transition-all hover:shadow-md cursor-help ${style.bg} ${style.text} ${style.border}`}
+                          title={`${ev.gen} - Session ${ev.session}\nTime: ${ev.time}\nLoc: ${ev.location}`}
+                        >
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <span className="text-[9px] font-black truncate">GEN {ev.gen}</span>
+                            <span className="text-[8px] font-bold opacity-70 whitespace-nowrap">S{ev.session}</span>
+                          </div>
+                          <div className="hidden sm:block">
+                            <div className="flex items-center gap-1 text-[8px] opacity-80 mb-0.5">
+                              <Clock className="h-2 w-2" />
+                              <span className="truncate">{ev.time}</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-[8px] opacity-80">
+                              <MapPin className="h-2 w-2" />
+                              <span className="truncate">{ev.location}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-6 rounded-2xl bg-white border border-gray-200 p-4 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mr-2">Ghi chú buổi học:</p>
+            {Object.entries(SESSION_STYLES).map(([num, style]) => (
+              <div key={num} className="flex items-center gap-2">
+                <div className={`h-3 w-3 rounded-md border ${style.bg} ${style.border}`} />
+                <span className="text-xs font-bold text-gray-600">Buổi {num}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Info Box */}
+        <div className="mx-6 mb-6 rounded-2xl bg-emerald-50 border border-emerald-100 p-4 flex items-start gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm border border-emerald-50">
+            <Info className="h-5 w-5" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="text-sm font-black text-emerald-900">Tính năng Calendar</h4>
+            <p className="text-xs text-emerald-700/80 leading-relaxed font-medium">
+              Lịch training giúp HR theo dõi tất cả các buổi đào tạo đang diễn ra. Bạn có thể nhấn vào từng GEN ở sidebar bên trái để lọc riêng lịch của GEN đó.
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
