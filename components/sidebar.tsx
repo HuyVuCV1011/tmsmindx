@@ -229,7 +229,6 @@ export function Sidebar() {
       icon: CalendarDays,
       submenu: [
         { href: '/user/hoat-dong-hang-thang', label: 'Hoạt động hàng tháng' },
-        { href: '/user/dang-ky-lich-lam-viec', label: 'Đăng ký lịch làm việc' },
         { href: '/user/xin-nghi-mot-buoi', label: 'Tạo yêu cầu xin nghỉ' },
         { href: '/user/nhan-lop-1-buoi', label: 'Danh sách nhận lớp 1 buổi' },
       ],
@@ -472,7 +471,6 @@ export function Sidebar() {
     if (path === "/user/truyenthong") return "tour-nav-truyenthong";
     if (path === "/user/thongtingv") return "tour-nav-thongtin";
     if (path === "/user/hoat-dong-hang-thang") return "tour-nav-hoatdong";
-    if (path === "/user/dang-ky-lich-lam-viec") return "tour-nav-dangky-lichlamviec";
     if (path === "/user/xin-nghi-mot-buoi") return "tour-nav-xinnghi";
     if (path === "/user/nhan-lop-1-buoi") return "tour-nav-nhanlop";
     if (path === "/user/training") return "tour-nav-training";

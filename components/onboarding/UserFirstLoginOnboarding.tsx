@@ -88,15 +88,6 @@ const TOUR_STEPS: TourStep[] = [
     mascotAction: "walk",
   },
   {
-    id: "dangky-lichlamviec",
-    title: "Đăng ký lịch làm việc",
-    description:
-      "Đăng ký lịch làm việc theo tháng để đội vận hành nắm được lịch của bạn.",
-    target: "tour-nav-dangky-lichlamviec",
-    route: "/user/dang-ky-lich-lam-viec",
-    mascotAction: "walk",
-  },
-  {
     id: "xinnghi",
     title: "Tạo yêu cầu xin nghỉ",
     description:

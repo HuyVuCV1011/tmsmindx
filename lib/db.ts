@@ -6,9 +6,10 @@ const isBuildPhase =
   process.env.npm_lifecycle_event === 'build';
 
 function buildPoolConfig(): PoolConfig {
-  // Keep conservative defaults to avoid exhausting Postgres slots in multi-process dev.
+  // Keep conservative defaults to avoid exhausting Postgres slots (Aiven hobby tiers are tiny).
+  // Raise DB_POOL_MAX in .env if local dev needs more parallel queries.
   const defaultPoolMax =
-    process.env.NODE_ENV === 'development' ? '3' : process.env.VERCEL ? '5' : '8';
+    process.env.NODE_ENV === 'development' ? '1' : process.env.VERCEL ? '5' : '8';
   const max = Math.max(1, parseInt(process.env.DB_POOL_MAX || defaultPoolMax, 10));
   const connectionTimeoutMillis = Math.max(
     2000,
@@ -62,7 +63,7 @@ function buildPoolConfig(): PoolConfig {
     max,
     idleTimeoutMillis,
     connectionTimeoutMillis,
-    allowExitOnIdle: false,
+    allowExitOnIdle: process.env.NODE_ENV === 'development',
     keepAlive: true,
     application_name: process.env.DB_APPLICATION_NAME || 'tps-next',
   };

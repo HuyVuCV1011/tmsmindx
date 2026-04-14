@@ -21,7 +21,8 @@ export function isDatabaseUnavailableError(error: unknown): boolean {
     code === '57P01' ||
     code === '57P02' ||
     code === '57P03' ||
-    code === '28000'
+    code === '28000' ||
+    code === '53300'
   ) {
     return true;
   }
@@ -29,7 +30,9 @@ export function isDatabaseUnavailableError(error: unknown): boolean {
     msg.includes('connection terminated') ||
     msg.includes('connection closed') ||
     msg.includes('no pg_hba.conf entry') ||
-    msg.includes('server closed the connection')
+    msg.includes('server closed the connection') ||
+    msg.includes('remaining connection slots') ||
+    msg.includes('too many connections')
   );
 }
 
