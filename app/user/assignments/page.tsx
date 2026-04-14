@@ -1,440 +1,494 @@
-'use client';
+'use client'
 
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { LoadingSpinner } from '@/components/LoadingSpinner';
-import Modal from '@/components/Modal';
-import { PageContainer } from '@/components/PageContainer';
-import { Tabs } from '@/components/Tabs';
-import { Button } from '@/components/ui/button';
-import { ExplanationSection } from '@/components/user/ExplanationSection';
-import { useAuth } from '@/lib/auth-context';
-import { useTeacher } from '@/lib/teacher-context';
-import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, ChevronDown, ChevronUp, Clock, FileText, FilterX, RefreshCw, Send, Trophy, XCircle } from 'lucide-react';
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { LoadingSpinner } from '@/components/LoadingSpinner'
+import Modal from '@/components/Modal'
+import { PageContainer } from '@/components/PageContainer'
+import { Tabs } from '@/components/Tabs'
+import { Button } from '@/components/ui/button'
+import { ExplanationSection } from '@/components/user/ExplanationSection'
+import { useAuth } from '@/lib/auth-context'
+import { useTeacher } from '@/lib/teacher-context'
+import {
+  AlertCircle,
+  ArrowLeft,
+  Award,
+  BookOpen,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  FileText,
+  FilterX,
+  RefreshCw,
+  Send,
+  Trophy,
+  XCircle,
+} from 'lucide-react'
 
-import NextImage from 'next/image';
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import toast from 'react-hot-toast';
+import NextImage from 'next/image'
+import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import toast from 'react-hot-toast'
 
 interface Assignment {
-  id: number;
-  video_title: string;
-  assignment_title: string;
-  assignment_type: string;
-  total_points: number;
-  passing_score: number;
-  time_limit_minutes: number;
-  max_attempts: number;
-  due_date: string;
-  status: string;
-  question_count: number;
+  id: number
+  video_title: string
+  assignment_title: string
+  assignment_type: string
+  total_points: number
+  passing_score: number
+  time_limit_minutes: number
+  max_attempts: number
+  due_date: string
+  status: string
+  question_count: number
   recent_submission?: {
-    score: number;
-    percentage: number;
-    is_passed: boolean;
-    submitted_at: string;
-    attempt_number: number;
-  };
+    score: number
+    percentage: number
+    is_passed: boolean
+    submitted_at: string
+    attempt_number: number
+  }
 }
 
 interface Question {
-  id: number;
-  question_text: string;
-  question_type: string;
-  correct_answer: string;
-  options: any;
-  image_url: string;
-  points: number;
-  order_number: number;
+  id: number
+  question_text: string
+  question_type: string
+  correct_answer: string
+  options: any
+  image_url: string
+  points: number
+  order_number: number
 }
 
 interface Submission {
-  id: number;
-  teacher_code: string;
-  assignment_id: number;
-  attempt_number: number;
-  score: number;
-  total_points: number;
-  percentage: number;
-  is_passed: boolean;
-  status: string;
-  started_at: string;
-  submitted_at: string;
-  time_spent_seconds: number;
+  id: number
+  teacher_code: string
+  assignment_id: number
+  attempt_number: number
+  score: number
+  total_points: number
+  percentage: number
+  is_passed: boolean
+  status: string
+  started_at: string
+  submitted_at: string
+  time_spent_seconds: number
 }
 
 interface ExamAssignment {
-  id: number;
-  teacher_code: string;
-  exam_type: 'expertise' | 'experience';
-  registration_type: 'official' | 'additional';
-  block_code: string;
-  subject_code: string;
-  open_at: string;
-  close_at: string;
-  assignment_status: 'assigned' | 'in_progress' | 'submitted' | 'expired' | 'graded';
-  score: number | null;
-  score_status: 'null' | 'auto_zero' | 'graded';
-  selected_set_id: number;
-  set_code: string;
-  set_name: string;
-  total_points: number;
-  passing_score: number;
-  duration_minutes: number;
-  correct_answers?: number;
-  total_questions?: number;
-  score_handling_note?: string;
-  explanation_status?: 'pending' | 'accepted' | 'rejected';
-  explanation_id?: number | null;
-  admin_note?: string;
-  is_open?: boolean;
-  can_take?: boolean;
+  id: number
+  teacher_code: string
+  exam_type: 'expertise' | 'experience'
+  registration_type: 'official' | 'additional'
+  block_code: string
+  subject_code: string
+  open_at: string
+  close_at: string
+  assignment_status:
+    | 'assigned'
+    | 'in_progress'
+    | 'submitted'
+    | 'expired'
+    | 'graded'
+  score: number | null
+  score_status: 'null' | 'auto_zero' | 'graded'
+  selected_set_id: number
+  set_code: string
+  set_name: string
+  total_points: number
+  passing_score: number
+  duration_minutes: number
+  correct_answers?: number
+  total_questions?: number
+  score_handling_note?: string
+  explanation_status?: 'pending' | 'accepted' | 'rejected'
+  explanation_id?: number | null
+  admin_note?: string
+  is_open?: boolean
+  can_take?: boolean
 }
 
 interface EffectiveExamScore {
-  score: number | null;
-  isMissedCurrentMonth: boolean;
+  score: number | null
+  isMissedCurrentMonth: boolean
 }
 
 export default function TeacherAssignmentPage() {
-  const { user, logout } = useAuth();
-  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
-  const router = useRouter();
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [examAssignments, setExamAssignments] = useState<ExamAssignment[]>([]);
-  const [currentAssignment, setCurrentAssignment] = useState<Assignment | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [answers, setAnswers] = useState<{ [key: number]: string }>({});
-  const [submission, setSubmission] = useState<Submission | null>(null);
-  const [trainingLoading, setTrainingLoading] = useState(true);
-  const [examLoading, setExamLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [teacherCode, setTeacherCode] = useState('');
-  const [activeMainTab, setActiveMainTab] = useState<'available' | 'list' | 'training'>('available');
+  const { user, logout } = useAuth()
+  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher()
+  const router = useRouter()
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [examAssignments, setExamAssignments] = useState<ExamAssignment[]>([])
+  const [currentAssignment, setCurrentAssignment] = useState<Assignment | null>(
+    null,
+  )
+  const [questions, setQuestions] = useState<Question[]>([])
+  const [answers, setAnswers] = useState<{ [key: number]: string }>({})
+  const [submission, setSubmission] = useState<Submission | null>(null)
+  const [trainingLoading, setTrainingLoading] = useState(true)
+  const [examLoading, setExamLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [teacherCode, setTeacherCode] = useState('')
+  const [activeMainTab, setActiveMainTab] = useState<
+    'available' | 'list' | 'training'
+  >('available')
 
-  const [selectedExamMonth, setSelectedExamMonth] = useState('6months');
-  const [scoreTypeFilter, setScoreTypeFilter] = useState<'all' | 'expertise' | 'experience'>('all');
-  const [scoreResultFilter, setScoreResultFilter] = useState<'all' | 'done' | 'waiting' | 'pending' | 'accepted' | 'rejected'>('all');
-  const [scoreSubjectKeyword, setScoreSubjectKeyword] = useState('');
+  const [selectedExamMonth, setSelectedExamMonth] = useState('6months')
+  const [scoreTypeFilter, setScoreTypeFilter] = useState<
+    'all' | 'expertise' | 'experience'
+  >('all')
+  const [scoreResultFilter, setScoreResultFilter] = useState<
+    'all' | 'done' | 'waiting' | 'pending' | 'accepted' | 'rejected'
+  >('all')
+  const [scoreSubjectKeyword, setScoreSubjectKeyword] = useState('')
 
-  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
-  const [activeStatCard, setActiveStatCard] = useState<null | 'expertise' | 'experience' | 'missing'>(null);
-  const [showPassRateModal, setShowPassRateModal] = useState(false);
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
+  const [activeStatCard, setActiveStatCard] = useState<
+    null | 'expertise' | 'experience' | 'missing'
+  >(null)
+  const [showPassRateModal, setShowPassRateModal] = useState(false)
 
   const toggleStatCard = (card: 'expertise' | 'experience' | 'missing') => {
-    setActiveStatCard(prev => prev === card ? null : card);
-  };
+    setActiveStatCard((prev) => (prev === card ? null : card))
+  }
 
   // Auto-expand month when selected
   useEffect(() => {
     if (selectedExamMonth !== '6months' && selectedExamMonth !== 'all') {
-      setExpandedMonths(prev => {
-        const next = new Set(prev);
-        next.add(selectedExamMonth);
-        return next;
-      });
+      setExpandedMonths((prev) => {
+        const next = new Set(prev)
+        next.add(selectedExamMonth)
+        return next
+      })
     }
-  }, [selectedExamMonth]);
+  }, [selectedExamMonth])
 
   const toggleMonthExpand = (month: string) => {
-    setExpandedMonths(prev => {
-      const next = new Set(prev);
+    setExpandedMonths((prev) => {
+      const next = new Set(prev)
       if (next.has(month)) {
-        next.delete(month);
+        next.delete(month)
       } else {
-        next.add(month);
+        next.add(month)
       }
-      return next;
-    });
-  };
+      return next
+    })
+  }
 
   const clearFilters = () => {
-    setScoreSubjectKeyword('');
-    setSelectedExamMonth('6months');
-    setScoreTypeFilter('all');
-    setScoreResultFilter('all');
-  };
-  const [view, setView] = useState<'list' | 'taking' | 'result'>('list');
-  const [nowTs, setNowTs] = useState(() => Date.now());
-  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
-  const [timerActive, setTimerActive] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
-  const isSubmittingRef = useRef(false);
+    setScoreSubjectKeyword('')
+    setSelectedExamMonth('6months')
+    setScoreTypeFilter('all')
+    setScoreResultFilter('all')
+  }
+  const [view, setView] = useState<'list' | 'taking' | 'result'>('list')
+  const [nowTs, setNowTs] = useState(() => Date.now())
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null)
+  const [timerActive, setTimerActive] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false)
+  const isSubmittingRef = useRef(false)
   // Track previous nowTs to detect crossing of open_at boundaries
-  const lastNowTsRef = useRef(Date.now());
-  const [selectedExamInfo, setSelectedExamInfo] = useState<ExamAssignment | null>(null);
+  const lastNowTsRef = useRef(Date.now())
+  const [selectedExamInfo, setSelectedExamInfo] =
+    useState<ExamAssignment | null>(null)
 
-  const searchParams = useSearchParams();
-  const startId = searchParams.get('start_assignment_id');
-  const tabParam = searchParams.get('tab');
+  const searchParams = useSearchParams()
+  const startId = searchParams.get('start_assignment_id')
+  const tabParam = searchParams.get('tab')
 
   // Auto-start assignment logic
   useEffect(() => {
     if (startId) {
       if (activeMainTab !== 'training') {
-        setActiveMainTab('training');
+        setActiveMainTab('training')
       } else if (assignments.length > 0 && view === 'list') {
-        const target = assignments.find(a => a.id.toString() === startId);
+        const target = assignments.find((a) => a.id.toString() === startId)
         if (target) {
-          startAssignment(target);
+          startAssignment(target)
         }
       }
     }
-  }, [startId, activeMainTab, assignments, view]);
+  }, [startId, activeMainTab, assignments, view])
 
   // Helper function to safely parse percentage
-  const formatPercentage = (percentage: number | string | undefined): string => {
-    if (percentage === undefined || percentage === null) return '0.0';
-    const num = typeof percentage === 'number' ? percentage : parseFloat(percentage);
-    return isNaN(num) ? '0.0' : num.toFixed(1);
-  };
+  const formatPercentage = (
+    percentage: number | string | undefined,
+  ): string => {
+    if (percentage === undefined || percentage === null) return '0.0'
+    const num =
+      typeof percentage === 'number' ? percentage : parseFloat(percentage)
+    return isNaN(num) ? '0.0' : num.toFixed(1)
+  }
 
   // Extract teacher code from email (fallback method)
   const extractCodeFromEmail = (email: string): string | null => {
-    const match = email.match(/^([^@]+)@/);
-    return match ? match[1] : null;
-  };
+    const match = email.match(/^([^@]+)@/)
+    return match ? match[1] : null
+  }
 
   // Get teacher code from user email
   useEffect(() => {
-    if (teacherCode) return; // Already have code
+    if (teacherCode) return // Already have code
 
     // 1. Try from context first (fastest)
     if (teacherProfile?.code) {
-      setTeacherCode(teacherProfile.code);
-      return;
+      setTeacherCode(teacherProfile.code)
+      return
     }
 
     // 2. Try from localStorage (fast)
     if (typeof window !== 'undefined') {
       try {
-        const cached = localStorage.getItem('teacher_auto_fill_data');
+        const cached = localStorage.getItem('teacher_auto_fill_data')
         if (cached) {
-          const data = JSON.parse(cached);
+          const data = JSON.parse(cached)
           if (data.lms_code) {
-            setTeacherCode(data.lms_code);
-            return;
+            setTeacherCode(data.lms_code)
+            return
           }
         }
       } catch (e) {
-        console.error("Failed to parse local teacher data", e);
+        console.error('Failed to parse local teacher data', e)
       }
     }
 
     // 3. Last reort: fetch from API (slowest)
     if (user && user.email) {
-      (async () => {
+      ;(async () => {
         try {
-          const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
-          const data = await res.json();
+          const res = await fetch(
+            `/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`,
+          )
+          const data = await res.json()
           if (data?.teacher?.code) {
-            setTeacherCode(data.teacher.code);
-            return;
+            setTeacherCode(data.teacher.code)
+            return
           }
         } catch (err) {
-          console.warn('Email-based lookup failed, falling back to code extraction');
+          console.warn(
+            'Email-based lookup failed, falling back to code extraction',
+          )
         }
 
         // Fallback: extract code from email
-        const code = extractCodeFromEmail(user.email);
+        const code = extractCodeFromEmail(user.email)
         if (code) {
-          setTeacherCode(code);
+          setTeacherCode(code)
         }
-      })();
+      })()
     }
-  }, [user, teacherCode, teacherProfile]);
+  }, [user, teacherCode, teacherProfile])
 
   useEffect(() => {
     if (teacherCode) {
-      fetchAvailableAssignments();
-      fetchExamAssignments();
+      fetchAvailableAssignments()
+      fetchExamAssignments()
     }
-  }, [teacherCode]);
+  }, [teacherCode])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setNowTs(Date.now());
-    }, 1000);
+      setNowTs(Date.now())
+    }, 1000)
 
     return () => {
-      window.clearInterval(timer);
-    };
-  }, []);
+      window.clearInterval(timer)
+    }
+  }, [])
 
   // Auto-refetch exam assignments when any exam's open_at boundary is crossed
   useEffect(() => {
-    const prev = lastNowTsRef.current;
-    lastNowTsRef.current = nowTs;
+    const prev = lastNowTsRef.current
+    lastNowTsRef.current = nowTs
 
     const anyJustOpened = examAssignments.some((item) => {
-      if (item.can_take) return false;
-      if (!['assigned', 'in_progress'].includes(item.assignment_status)) return false;
-      const openMs = new Date(item.open_at).getTime();
-      return prev < openMs && nowTs >= openMs;
-    });
+      if (item.can_take) return false
+      if (!['assigned', 'in_progress'].includes(item.assignment_status))
+        return false
+      const openMs = new Date(item.open_at).getTime()
+      return prev < openMs && nowTs >= openMs
+    })
 
     if (anyJustOpened) {
-      fetchExamAssignments(true);
+      fetchExamAssignments(true)
     }
-  }, [nowTs, examAssignments]);
+  }, [nowTs, examAssignments])
 
   const fetchAvailableAssignments = async (isBackgroundUpdate = false) => {
     try {
-      setTrainingLoading(true);
-      
+      setTrainingLoading(true)
+
       // 1. Fetch assignments list
-      const response = await fetch('/api/training-assignments?status=published');
-      const data = await response.json();
-      
+      const response = await fetch('/api/training-assignments?status=published')
+      const data = await response.json()
+
       if (data.success) {
-        let submissionsMap = new Map<number, any>();
+        let submissionsMap = new Map<number, any>()
 
         // 2. Fetch all submissions for teacher (instead of N+1 requests)
         if (teacherCode) {
-            try {
-                // Fetch ALL submissions for this teacher, ordered by created_at DESC
-                const subRes = await fetch(`/api/training-submissions?teacher_code=${teacherCode}`);
-                const subData = await subRes.json();
-                
-                if (subData.success && Array.isArray(subData.data)) {
-                    // Map assignment_id to its LATEST submission
-                    subData.data.forEach((sub: any) => {
-                        if (!submissionsMap.has(sub.assignment_id)) {
-                            submissionsMap.set(sub.assignment_id, sub);
-                        }
-                    });
+          try {
+            // Fetch ALL submissions for this teacher, ordered by created_at DESC
+            const subRes = await fetch(
+              `/api/training-submissions?teacher_code=${teacherCode}`,
+            )
+            const subData = await subRes.json()
+
+            if (subData.success && Array.isArray(subData.data)) {
+              // Map assignment_id to its LATEST submission
+              subData.data.forEach((sub: any) => {
+                if (!submissionsMap.has(sub.assignment_id)) {
+                  submissionsMap.set(sub.assignment_id, sub)
                 }
-            } catch (err) {
-                console.warn('Failed to batch fetch submissions', err);
+              })
             }
+          } catch (err) {
+            console.warn('Failed to batch fetch submissions', err)
+          }
         }
 
         // 3. Merge data
-        const assignmentsWithScores = data.data.map((assignment: Assignment) => {
-            const latestSubmission = submissionsMap.get(assignment.id);
+        const assignmentsWithScores = data.data.map(
+          (assignment: Assignment) => {
+            const latestSubmission = submissionsMap.get(assignment.id)
             if (latestSubmission) {
-                return {
-                    ...assignment,
-                    recent_submission: {
-                        score: latestSubmission.score,
-                        percentage: latestSubmission.percentage,
-                        is_passed: latestSubmission.is_passed,
-                        submitted_at: latestSubmission.submitted_at, 
-                        attempt_number: latestSubmission.attempt_number
-                    }
-                };
+              return {
+                ...assignment,
+                recent_submission: {
+                  score: latestSubmission.score,
+                  percentage: latestSubmission.percentage,
+                  is_passed: latestSubmission.is_passed,
+                  submitted_at: latestSubmission.submitted_at,
+                  attempt_number: latestSubmission.attempt_number,
+                },
+              }
             }
-            return assignment;
-        });
-        
-        setAssignments(assignmentsWithScores);
+            return assignment
+          },
+        )
+
+        setAssignments(assignmentsWithScores)
       }
     } catch (err) {
-      console.error('Error fetching assignments:', err);
-      setError('Failed to load assignments');
+      console.error('Error fetching assignments:', err)
+      setError('Failed to load assignments')
     } finally {
-      if (!isBackgroundUpdate) setTrainingLoading(false);
+      if (!isBackgroundUpdate) setTrainingLoading(false)
     }
-  };
+  }
 
   const fetchExamAssignments = async (isBackgroundUpdate = false) => {
     try {
-      if (!isBackgroundUpdate) setExamLoading(true);
+      if (!isBackgroundUpdate) setExamLoading(true)
 
-      let canonicalTeacherCode = '';
+      let canonicalTeacherCode = ''
       if (user?.email) {
         try {
-          const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
-          const data = await res.json();
-          canonicalTeacherCode = (data?.teacher?.code || '').toString().trim();
+          const res = await fetch(
+            `/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`,
+          )
+          const data = await res.json()
+          canonicalTeacherCode = (data?.teacher?.code || '').toString().trim()
           if (canonicalTeacherCode && canonicalTeacherCode !== teacherCode) {
-            setTeacherCode(canonicalTeacherCode);
+            setTeacherCode(canonicalTeacherCode)
           }
         } catch {
           // Keep fallback behavior below when teacher lookup is unavailable.
         }
       }
 
-      const candidates = new Set<string>();
-      const normalizedTeacherCode = teacherCode?.trim();
+      const candidates = new Set<string>()
+      const normalizedTeacherCode = teacherCode?.trim()
       if (normalizedTeacherCode) {
-        candidates.add(normalizedTeacherCode);
-        candidates.add(normalizedTeacherCode.toLowerCase());
-        candidates.add(normalizedTeacherCode.toUpperCase());
+        candidates.add(normalizedTeacherCode)
+        candidates.add(normalizedTeacherCode.toLowerCase())
+        candidates.add(normalizedTeacherCode.toUpperCase())
       }
 
       if (canonicalTeacherCode) {
-        candidates.add(canonicalTeacherCode);
-        candidates.add(canonicalTeacherCode.toLowerCase());
-        candidates.add(canonicalTeacherCode.toUpperCase());
+        candidates.add(canonicalTeacherCode)
+        candidates.add(canonicalTeacherCode.toLowerCase())
+        candidates.add(canonicalTeacherCode.toUpperCase())
       }
 
       if (user?.email) {
-        const emailCode = extractCodeFromEmail(user.email)?.trim();
+        const emailCode = extractCodeFromEmail(user.email)?.trim()
         if (emailCode) {
-          candidates.add(emailCode);
-          candidates.add(emailCode.toLowerCase());
-          candidates.add(emailCode.toUpperCase());
+          candidates.add(emailCode)
+          candidates.add(emailCode.toLowerCase())
+          candidates.add(emailCode.toUpperCase())
         }
       }
 
-      const teacherCodesParam = encodeURIComponent(Array.from(candidates).join(','));
-      const effectiveTeacherCode = canonicalTeacherCode || teacherCode;
-      const baseParams = `teacher_code=${encodeURIComponent(effectiveTeacherCode)}&teacher_codes=${teacherCodesParam}`;
+      const teacherCodesParam = encodeURIComponent(
+        Array.from(candidates).join(','),
+      )
+      const effectiveTeacherCode = canonicalTeacherCode || teacherCode
+      const baseParams = `teacher_code=${encodeURIComponent(effectiveTeacherCode)}&teacher_codes=${teacherCodesParam}`
       // Fetch full assignment history so score tab filters (6 months/all/custom month)
       // operate on complete data instead of only current month.
-      const recentRes = await fetch(
-        `/api/exam-assignments?${baseParams}`,
-        { cache: 'no-store' }
-      );
-      const recentData = await recentRes.json();
+      const recentRes = await fetch(`/api/exam-assignments?${baseParams}`, {
+        cache: 'no-store',
+      })
+      const recentData = await recentRes.json()
       if (recentData.success) {
-        setExamAssignments(recentData.data || []);
+        setExamAssignments(recentData.data || [])
       }
 
-      if (!isBackgroundUpdate) setExamLoading(false);
+      if (!isBackgroundUpdate) setExamLoading(false)
     } catch (err) {
-      console.error('Error fetching exam assignments:', err);
-      setError('Failed to load exam assignments');
-      if (!isBackgroundUpdate) setExamLoading(false);
+      console.error('Error fetching exam assignments:', err)
+      setError('Failed to load exam assignments')
+      if (!isBackgroundUpdate) setExamLoading(false)
     }
-  };
-
+  }
 
   const startAssignment = async (assignment: Assignment) => {
     try {
       // 1. Check teacher profile from context to insure data integrity
       if (isTeacherLoading) {
-        toast('Đang đồng bộ dữ liệu giáo viên, vui lòng thử lại sau giây lát...');
-        return;
+        toast(
+          'Đang đồng bộ dữ liệu giáo viên, vui lòng thử lại sau giây lát...',
+        )
+        return
       }
 
       if (!teacherProfile) {
-        toast.error('Thiếu thông tin giáo viên. Vui lòng đăng xuất và đăng nhập lại.');
+        toast.error(
+          'Thiếu thông tin giáo viên. Vui lòng đăng xuất và đăng nhập lại.',
+        )
         setTimeout(() => {
-           logout();
-        }, 1500);
-        return;
+          logout()
+        }, 1500)
+        return
       }
 
       // Check required fields directly from profile
-      const teacherBranch = teacherProfile.branchCurrent || teacherProfile.branchIn;
+      const teacherBranch =
+        teacherProfile.branchCurrent || teacherProfile.branchIn
       // Note: teacherProfile.status might be mapped differently, but checking basic existence is safer
       // We assume if profile loaded, it's good enough or we can check branch
       if (!teacherBranch) {
-        toast.error('Thiếu thông tin Cơ sở (Branch). Vui lòng cập nhật thông tin.');
-        return;
+        toast.error(
+          'Thiếu thông tin Cơ sở (Branch). Vui lòng cập nhật thông tin.',
+        )
+        return
       }
 
       // Fetch questions
-      const questionsRes = await fetch(`/api/training-assignment-questions?assignment_id=${assignment.id}`);
-      const questionsData = await questionsRes.json();
+      const questionsRes = await fetch(
+        `/api/training-assignment-questions?assignment_id=${assignment.id}`,
+      )
+      const questionsData = await questionsRes.json()
 
       if (!questionsData.success) {
-        toast.error('Không thể tải câu hỏi');
-        return;
+        toast.error('Không thể tải câu hỏi')
+        return
       }
 
       // Create submission
@@ -448,196 +502,228 @@ export default function TeacherAssignmentPage() {
           teacher_info: {
             full_name: teacherProfile?.name || teacherCode,
             center: teacherProfile?.branchCurrent || '',
-            teaching_block: teacherProfile?.programCurrent || '', 
+            teaching_block: teacherProfile?.programCurrent || '',
             work_email: user?.email || '',
-          }
-        })
-      });
+          },
+        }),
+      })
 
-      const submissionData = await submissionRes.json();
+      const submissionData = await submissionRes.json()
       if (!submissionData.success) {
-        toast.error('Không thể bắt đầu bài tập: ' + submissionData.error);
-        return;
+        toast.error('Không thể bắt đầu bài tập: ' + submissionData.error)
+        return
       }
 
-      setCurrentAssignment(assignment);
-      setQuestions(questionsData.data);
-      setSubmission(submissionData.data);
-      
+      setCurrentAssignment(assignment)
+      setQuestions(questionsData.data)
+      setSubmission(submissionData.data)
+
       // Load saved answers if this is a continuing submission
-      if (submissionData.existing_answers && Object.keys(submissionData.existing_answers).length > 0) {
-         setAnswers(submissionData.existing_answers);
-         toast.success('Đã tải lại bài làm cũ của bạn');
+      if (
+        submissionData.existing_answers &&
+        Object.keys(submissionData.existing_answers).length > 0
+      ) {
+        setAnswers(submissionData.existing_answers)
+        toast.success('Đã tải lại bài làm cũ của bạn')
       } else {
-         setAnswers({});
+        setAnswers({})
       }
-      
-      setView('taking');
-      
+
+      setView('taking')
+
       // Start timer - logic updated to use server started_at and server_time
       if (assignment.time_limit_minutes > 0) {
-        let remainingSeconds = assignment.time_limit_minutes * 60;
-        
+        let remainingSeconds = assignment.time_limit_minutes * 60
+
         if (submissionData.data.started_at) {
-           const startTime = new Date(submissionData.data.started_at).getTime();
-           
-           // Use server time if available to avoid clock drift, fallback to local
-           const serverNow = submissionData.server_time ? new Date(submissionData.server_time).getTime() : Date.now();
-           const elapsedSeconds = Math.floor((serverNow - startTime) / 1000);
-           
-           // Calculate offset for local countdown
-           const clientNow = Date.now();
-           // How much ahead/behind is the client vs server?
-           const clockOffset = clientNow - serverNow; // e.g. +5000ms if client is 5s ahead
-           
-           remainingSeconds = Math.max(0, (assignment.time_limit_minutes * 60) - elapsedSeconds);
-           
-           console.log('[Assignment] Timer init:', {
-             serverStarted: submissionData.data.started_at,
-             serverNow: submissionData.server_time,
-             elapsed: elapsedSeconds,
-             limit: assignment.time_limit_minutes * 60,
-             remaining: remainingSeconds,
-             offset: clockOffset
-           });
+          const startTime = new Date(submissionData.data.started_at).getTime()
+
+          // Use server time if available to avoid clock drift, fallback to local
+          const serverNow = submissionData.server_time
+            ? new Date(submissionData.server_time).getTime()
+            : Date.now()
+          const elapsedSeconds = Math.floor((serverNow - startTime) / 1000)
+
+          // Calculate offset for local countdown
+          const clientNow = Date.now()
+          // How much ahead/behind is the client vs server?
+          const clockOffset = clientNow - serverNow // e.g. +5000ms if client is 5s ahead
+
+          remainingSeconds = Math.max(
+            0,
+            assignment.time_limit_minutes * 60 - elapsedSeconds,
+          )
+
+          console.log('[Assignment] Timer init:', {
+            serverStarted: submissionData.data.started_at,
+            serverNow: submissionData.server_time,
+            elapsed: elapsedSeconds,
+            limit: assignment.time_limit_minutes * 60,
+            remaining: remainingSeconds,
+            offset: clockOffset,
+          })
         }
 
-        setTimeRemaining(remainingSeconds);
-        setTimerActive(remainingSeconds > 0);
-          
+        setTimeRemaining(remainingSeconds)
+        setTimerActive(remainingSeconds > 0)
+
         if (remainingSeconds === 0) {
           // If already expired according to server, submit immediately
-          setTimeout(() => submitAssignment(true), 100);
+          setTimeout(() => submitAssignment(true), 100)
         }
       }
     } catch (err) {
-      console.error('Error starting assignment:', err);
-      toast.error('Lỗi khi bắt đầu bài tập');
+      console.error('Error starting assignment:', err)
+      toast.error('Lỗi khi bắt đầu bài tập')
     }
-  };
+  }
 
   // Create debounced save function
-  const saveAnswerToDb = async (submissionId: number, questionId: number, answer: string) => {
+  const saveAnswerToDb = async (
+    submissionId: number,
+    questionId: number,
+    answer: string,
+  ) => {
     try {
-        await fetch('/api/training-submissions', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                id: submissionId,
-                action: 'save_draft',
-                answers: [{ question_id: questionId, answer_text: answer }]
-            })
-        });
+      await fetch('/api/training-submissions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: submissionId,
+          action: 'save_draft',
+          answers: [{ question_id: questionId, answer_text: answer }],
+        }),
+      })
     } catch (e) {
-        console.error("Failed to auto-save answer", e);
+      console.error('Failed to auto-save answer', e)
     }
-  };
+  }
 
   const handleAnswerChange = (questionId: number, answer: string) => {
-    setAnswers(prev => ({ ...prev, [questionId]: answer }));
+    setAnswers((prev) => ({ ...prev, [questionId]: answer }))
     if (submission?.id) {
-        saveAnswerToDb(submission.id, questionId, answer);
+      saveAnswerToDb(submission.id, questionId, answer)
     }
-  };
+  }
 
   const scrollToQuestion = (questionId: number) => {
-    const element = document.getElementById(`question-${questionId}`);
-    if (!element) return;
+    const element = document.getElementById(`question-${questionId}`)
+    if (!element) return
 
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    element.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    element.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2')
     setTimeout(() => {
-      element.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
-    }, 1200);
-  };
+      element.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2')
+    }, 1200)
+  }
 
   const handleStopAndSubmit = () => {
-    setIsStopConfirmOpen(false);
-    submitAssignment(true);
-  };
+    setIsStopConfirmOpen(false)
+    submitAssignment(true)
+  }
 
   // Timer countdown
   useEffect(() => {
-    if (!timerActive || timeRemaining === null || timeRemaining <= 0) return;
+    if (!timerActive || timeRemaining === null || timeRemaining <= 0) return
 
     const interval = setInterval(() => {
-      setTimeRemaining(prev => {
+      setTimeRemaining((prev) => {
         if (prev === null || prev <= 0) {
-            setTimerActive(false);
-            submitAssignment();
-            return 0;
+          setTimerActive(false)
+          submitAssignment()
+          return 0
         }
-        return prev - 1;
-      });
-    }, 1000);
+        return prev - 1
+      })
+    }, 1000)
 
-    return () => clearInterval(interval);
-  }, [timerActive, timeRemaining]);
+    return () => clearInterval(interval)
+  }, [timerActive, timeRemaining])
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
 
   const decodeEscapedHtml = (value: string) => {
-    if (!value) return '';
-    let decoded = String(value);
+    if (!value) return ''
+    let decoded = String(value)
 
     // Some records are escaped multiple times (e.g. &amp;lt;img...&amp;gt;).
     for (let i = 0; i < 4; i += 1) {
-      if (!decoded.includes('&')) break;
-      const textarea = document.createElement('textarea');
-      textarea.innerHTML = decoded;
-      const next = textarea.value;
-      if (next === decoded) break;
-      decoded = next;
+      if (!decoded.includes('&')) break
+      const textarea = document.createElement('textarea')
+      textarea.innerHTML = decoded
+      const next = textarea.value
+      if (next === decoded) break
+      decoded = next
     }
 
-    return decoded;
-  };
+    return decoded
+  }
 
-  const hasHtmlMarkup = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value);
+  const hasHtmlMarkup = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value)
 
   const submitAssignment = async (skipConfirm?: boolean | React.MouseEvent) => {
-    if (!submission) return;
-    if (isSubmittingRef.current) return;
+    if (!submission) return
+    if (isSubmittingRef.current) return
 
-    const isConfirmed = typeof skipConfirm === 'boolean' ? skipConfirm : false;
+    const isConfirmed = typeof skipConfirm === 'boolean' ? skipConfirm : false
 
-    const unansweredCount = questions.length - Object.keys(answers).length;
+    const unansweredCount = questions.length - Object.keys(answers).length
     if (!isConfirmed && unansweredCount > 0) {
-      if (!confirm(`Bạn còn ${unansweredCount} câu chưa trả lời. Bạn có chắc muốn nộp bài?`)) {
+      if (
+        !confirm(
+          `Bạn còn ${unansweredCount} câu chưa trả lời. Bạn có chắc muốn nộp bài?`,
+        )
+      ) {
         // Scroll to the first unanswered question
-        const firstUnansweredQuestion = questions.find(q => !answers[q.id]);
+        const firstUnansweredQuestion = questions.find((q) => !answers[q.id])
         if (firstUnansweredQuestion) {
-          const element = document.getElementById(`question-${firstUnansweredQuestion.id}`);
+          const element = document.getElementById(
+            `question-${firstUnansweredQuestion.id}`,
+          )
           if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            element.classList.add('ring-2', 'ring-red-500', 'ring-offset-2');
-            setTimeout(() => element.classList.remove('ring-2', 'ring-red-500', 'ring-offset-2'), 2000);
-            toast('Đã chuyển đến câu hỏi chưa hoàn thành', { icon: '👇' });
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            element.classList.add('ring-2', 'ring-red-500', 'ring-offset-2')
+            setTimeout(
+              () =>
+                element.classList.remove(
+                  'ring-2',
+                  'ring-red-500',
+                  'ring-offset-2',
+                ),
+              2000,
+            )
+            toast('Đã chuyển đến câu hỏi chưa hoàn thành', { icon: '👇' })
           }
         }
-        return;
+        return
       }
     }
 
     try {
-      isSubmittingRef.current = true;
-      setIsSubmitting(true);
-      setTimerActive(false);
+      isSubmittingRef.current = true
+      setIsSubmitting(true)
+      setTimerActive(false)
 
       // Calculate score synchronously
-      let totalScore = 0;
-      console.log('[Assignment] Starting score calculation for', questions.length, 'questions');
+      let totalScore = 0
+      console.log(
+        '[Assignment] Starting score calculation for',
+        questions.length,
+        'questions',
+      )
 
       questions.forEach((question, idx) => {
-        const userAnswer = answers[question.id] || '';
-        const correctAnswer = (question.correct_answer || '').trim().toLowerCase();
-        const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer;
-        const points = parseFloat(question.points?.toString() || '0');
-        const pointsEarned = isCorrect ? points : 0;
+        const userAnswer = answers[question.id] || ''
+        const correctAnswer = (question.correct_answer || '')
+          .trim()
+          .toLowerCase()
+        const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer
+        const points = parseFloat(question.points?.toString() || '0')
+        const pointsEarned = isCorrect ? points : 0
 
         console.log(`[Assignment] Q${idx + 1}:`, {
           questionId: question.id,
@@ -645,39 +731,51 @@ export default function TeacherAssignmentPage() {
           userAnswer: userAnswer,
           correctAnswer: correctAnswer,
           isCorrect: isCorrect,
-          pointsEarned: pointsEarned
-        });
+          pointsEarned: pointsEarned,
+        })
 
-        totalScore += pointsEarned;
-      });
+        totalScore += pointsEarned
+      })
 
-      console.log('[Assignment] Final calculated total score:', totalScore, 'type:', typeof totalScore);
+      console.log(
+        '[Assignment] Final calculated total score:',
+        totalScore,
+        'type:',
+        typeof totalScore,
+      )
 
       // Ensure score is a valid number
-      if (isNaN(totalScore) || totalScore === null || totalScore === undefined) {
-        console.error('[Assignment] Invalid total score calculated:', totalScore);
-        toast.error('Lỗi: Không thể tính điểm. Vui lòng thử lại.');
-        return;
+      if (
+        isNaN(totalScore) ||
+        totalScore === null ||
+        totalScore === undefined
+      ) {
+        console.error(
+          '[Assignment] Invalid total score calculated:',
+          totalScore,
+        )
+        toast.error('Lỗi: Không thể tính điểm. Vui lòng thử lại.')
+        return
       }
 
       // Update submission
-      const isPassed = totalScore >= currentAssignment!.passing_score;
-      
+      const isPassed = totalScore >= currentAssignment!.passing_score
+
       // Prepare answers payload
-      const answersPayload = questions.map(q => {
-        const userAnswer = answers[q.id] || '';
-        const correctAnswer = (q.correct_answer || '').trim().toLowerCase();
-        const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer;
-        const points = parseFloat(q.points?.toString() || '0');
-        const pointsEarned = isCorrect ? points : 0;
-        
+      const answersPayload = questions.map((q) => {
+        const userAnswer = answers[q.id] || ''
+        const correctAnswer = (q.correct_answer || '').trim().toLowerCase()
+        const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer
+        const points = parseFloat(q.points?.toString() || '0')
+        const pointsEarned = isCorrect ? points : 0
+
         return {
           question_id: q.id,
           answer_text: userAnswer,
           is_correct: isCorrect,
-          points_earned: pointsEarned
-        };
-      });
+          points_earned: pointsEarned,
+        }
+      })
 
       const response = await fetch('/api/training-submissions', {
         method: 'PUT',
@@ -687,243 +785,257 @@ export default function TeacherAssignmentPage() {
           action: 'grade',
           score: totalScore,
           is_passed: isPassed,
-          answers: answersPayload
-        })
-      });
+          answers: answersPayload,
+        }),
+      })
 
-      const data = await response.json();
+      const data = await response.json()
       if (data.success) {
-        setSubmission(data.data);
-        setView('result');
+        setSubmission(data.data)
+        setView('result')
       } else {
-        toast.error('Lỗi khi nộp bài: ' + data.error);
+        toast.error('Lỗi khi nộp bài: ' + data.error)
       }
     } catch (err) {
-      console.error('Error submitting assignment:', err);
-      toast.error('Lỗi khi nộp bài');
+      console.error('Error submitting assignment:', err)
+      toast.error('Lỗi khi nộp bài')
     } finally {
-      isSubmittingRef.current = false;
-      setIsSubmitting(false);
+      isSubmittingRef.current = false
+      setIsSubmitting(false)
     }
-  };
+  }
 
   const getProgress = () => {
-    return Math.round((Object.keys(answers).length / questions.length) * 100);
-  };
+    return Math.round((Object.keys(answers).length / questions.length) * 100)
+  }
 
   // ─── Shared Helper Functions ───
   const formatMonthLabel = (ym: string) => {
-    const [y, m] = ym.split('-');
-    return `Tháng ${parseInt(m)}/${y}`;
-  };
+    const [y, m] = ym.split('-')
+    return `Tháng ${parseInt(m)}/${y}`
+  }
 
   function getEffectiveExamScore(item: ExamAssignment): EffectiveExamScore {
-    const now = new Date();
-    const openAt = new Date(item.open_at);
-    const closeAt = new Date(item.close_at);
+    const now = new Date()
+    const openAt = new Date(item.open_at)
+    const closeAt = new Date(item.close_at)
     const isCurrentMonth =
       openAt.getFullYear() === now.getFullYear() &&
-      openAt.getMonth() === now.getMonth();
+      openAt.getMonth() === now.getMonth()
 
     const isMissedCurrentMonth =
       isCurrentMonth &&
       closeAt < now &&
       item.score === null &&
       item.score_status === 'null' &&
-      !item.can_take;
+      !item.can_take
 
     // 0. "môn nào chưa tới giờ mở bài làm thì không tính"
     if (openAt > now) {
-      return { score: null, isMissedCurrentMonth: false };
+      return { score: null, isMissedCurrentMonth: false }
     }
 
     // 1. "nếu giải trình đã được duyệt thì điểm = null và loại bỏ môn đó khỏi các môn tính điểm trung bình"
     if (item.explanation_status === 'accepted') {
-      return { score: null, isMissedCurrentMonth: false };
+      return { score: null, isMissedCurrentMonth: false }
     }
 
     // 2. "trung bình điểm của các môn đăng ký trong tháng đó, nếu chưa giải trình thì điểm = 0, ... nếu đã giải trình thì nhưng bị từ chối thì điểm = 0"
     // Mặc định nạp 0 điểm cho bất kỳ môn nào không bị loại bỏ (tức là chưa thi, chưa giải trình, chờ giải trình, từ chối giải trình).
-    let effectiveScore = 0;
+    let effectiveScore = 0
     if (item.score !== null && item.score_status !== 'null') {
-      const parsed = Number(item.score);
-      effectiveScore = Number.isNaN(parsed) ? 0 : parsed;
+      const parsed = Number(item.score)
+      effectiveScore = Number.isNaN(parsed) ? 0 : parsed
     }
 
     return {
       score: effectiveScore,
-      isMissedCurrentMonth
-    };
+      isMissedCurrentMonth,
+    }
   }
 
   function shouldShowExplanationCTA(item: ExamAssignment): boolean {
-    const closeAt = new Date(item.close_at);
-    const expired = item.assignment_status === 'expired' || closeAt < new Date();
-    const note = (item.score_handling_note || '').toLowerCase();
-    const requiresExplanation = note.includes('mac dinh 0') || note.includes('mặc định 0') ||
-      note.includes('chờ giải trình') || note.includes('cho giai trinh');
-    const explanationId = Number(item.explanation_id || 0);
-    const hasLinkedExplanation = Number.isFinite(explanationId) && explanationId > 0;
-    const isPendingWithoutLinkedExplanation = item.explanation_status === 'pending' && !hasLinkedExplanation;
+    const closeAt = new Date(item.close_at)
+    const expired = item.assignment_status === 'expired' || closeAt < new Date()
+    const note = (item.score_handling_note || '').toLowerCase()
+    const requiresExplanation =
+      note.includes('mac dinh 0') ||
+      note.includes('mặc định 0') ||
+      note.includes('chờ giải trình') ||
+      note.includes('cho giai trinh')
+    const explanationId = Number(item.explanation_id || 0)
+    const hasLinkedExplanation =
+      Number.isFinite(explanationId) && explanationId > 0
+    const isPendingWithoutLinkedExplanation =
+      item.explanation_status === 'pending' && !hasLinkedExplanation
 
     if (item.explanation_status === 'accepted') {
-      return false;
+      return false
     }
 
     if (isPendingWithoutLinkedExplanation) {
-      return true;
+      return true
     }
 
-    return expired && requiresExplanation;
+    return expired && requiresExplanation
   }
 
   function buildExplanationHref(item: ExamAssignment): string {
-    return `/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`;
+    return `/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`
   }
 
   function getPassingScore(item: ExamAssignment): number | null {
-    const parsed = Number(item.passing_score);
-    if (!Number.isFinite(parsed) || parsed <= 0) return null;
-    return parsed;
+    const parsed = Number(item.passing_score)
+    if (!Number.isFinite(parsed) || parsed <= 0) return null
+    return parsed
   }
 
   function isExamPassed(item: ExamAssignment, score: number | null): boolean {
-    const passingScore = getPassingScore(item);
-    return score !== null && passingScore !== null && score >= passingScore;
+    const passingScore = getPassingScore(item)
+    return score !== null && passingScore !== null && score >= passingScore
   }
 
-  function formatScoreSummary(item: ExamAssignment, score: number | null): string {
-    if (score === null) return 'Chưa có';
-    const correctAnswers = Number(item.correct_answers ?? 0);
-    const totalQuestions = Number(item.total_questions ?? 0);
+  function formatScoreSummary(
+    item: ExamAssignment,
+    score: number | null,
+  ): string {
+    if (score === null) return 'Chưa có'
+    const correctAnswers = Number(item.correct_answers ?? 0)
+    const totalQuestions = Number(item.total_questions ?? 0)
     if (Number.isFinite(totalQuestions) && totalQuestions > 0) {
-      return `${correctAnswers}/${totalQuestions} câu • ${score} điểm`;
+      return `${correctAnswers}/${totalQuestions} câu • ${score} điểm`
     }
-    return `${score} điểm`;
+    return `${score} điểm`
   }
 
-  const formatExplanationStatus = (status?: ExamAssignment['explanation_status']) => {
-    if (status === 'pending') return 'Đang chờ duyệt';
-    if (status === 'accepted') return 'Đã duyệt';
-    if (status === 'rejected') return 'Từ chối';
-    return 'Chưa có';
-  };
+  const formatExplanationStatus = (
+    status?: ExamAssignment['explanation_status'],
+  ) => {
+    if (status === 'pending') return 'Đang chờ duyệt'
+    if (status === 'accepted') return 'Đã duyệt'
+    if (status === 'rejected') return 'Từ chối'
+    return 'Chưa có'
+  }
 
   // ─── Sub-tabs inside exam section (hooks must be before any early return) ──
   const scoreStats = useMemo(() => {
-    let totalAssigned = 0;
-    let totalPassed = 0;
-    let bestExperience = 0;
-    let missingOrPending = 0;
-    let explanationsApproved = 0;
-    let explanationsRejected = 0;
-    let explanationsPending = 0;
+    let totalAssigned = 0
+    let totalPassed = 0
+    let bestExperience = 0
+    let missingOrPending = 0
+    let explanationsApproved = 0
+    let explanationsRejected = 0
+    let explanationsPending = 0
 
-    const now = new Date();
-    
+    const now = new Date()
+
     // Determine the target month dynamically (realtime with filter)
-    let targetMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    
+    let targetMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
     if (selectedExamMonth !== 'all' && selectedExamMonth !== '6months') {
-      targetMonthKey = selectedExamMonth;
+      targetMonthKey = selectedExamMonth
     } else if (examAssignments.length > 0) {
-      const maxDate = new Date(Math.max(...examAssignments.map(a => new Date(a.open_at).getTime())));
-      targetMonthKey = `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, '0')}`;
+      const maxDate = new Date(
+        Math.max(...examAssignments.map((a) => new Date(a.open_at).getTime())),
+      )
+      targetMonthKey = `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, '0')}`
     }
 
     const last6Months = new Set(
       Array.from({ length: 6 }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      })
-    );
-    const monthlyExpertiseScores = new Map<string, number[]>();
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      }),
+    )
+    const monthlyExpertiseScores = new Map<string, number[]>()
 
-    examAssignments.forEach(item => {
-      const { score, isMissedCurrentMonth } = getEffectiveExamScore(item);
-      const date = new Date(item.open_at);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    examAssignments.forEach((item) => {
+      const { score, isMissedCurrentMonth } = getEffectiveExamScore(item)
+      const date = new Date(item.open_at)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 
       if (monthKey === targetMonthKey) {
-        if (item.explanation_status === 'accepted') explanationsApproved++;
-        else if (item.explanation_status === 'rejected') explanationsRejected++;
-        else if (item.explanation_status === 'pending') explanationsPending++;
+        if (item.explanation_status === 'accepted') explanationsApproved++
+        else if (item.explanation_status === 'rejected') explanationsRejected++
+        else if (item.explanation_status === 'pending') explanationsPending++
       }
 
       // Tính Tỉ lệ đạt trong 6 tháng: Loại bỏ bài được duyệt, chỉ đếm các bài đã được phép tính điểm (score !== null)
       if (last6Months.has(monthKey)) {
-        const isExcluded = item.explanation_status === 'accepted';
+        const isExcluded = item.explanation_status === 'accepted'
         if (!isExcluded && score !== null) {
-          totalAssigned++;
-          if (isExamPassed(item, score)) totalPassed++;
+          totalAssigned++
+          if (isExamPassed(item, score)) totalPassed++
         }
       }
 
       if (score !== null) {
-
         if (item.exam_type === 'experience') {
           if (last6Months.has(monthKey) && score > bestExperience) {
-            bestExperience = score;
+            bestExperience = score
           }
         }
         if (item.exam_type !== 'experience') {
           if (last6Months.has(monthKey)) {
             if (!monthlyExpertiseScores.has(monthKey)) {
-              monthlyExpertiseScores.set(monthKey, []);
+              monthlyExpertiseScores.set(monthKey, [])
             }
-            monthlyExpertiseScores.get(monthKey)!.push(score);
+            monthlyExpertiseScores.get(monthKey)!.push(score)
           }
         }
       }
 
       // Chỉ đếm nếu thiếu điểm và chưa từng gửi giải trình (pending/accepted/rejected đều coi đã xử lý)
       if (isMissedCurrentMonth && !item.explanation_status) {
-        missingOrPending++;
+        missingOrPending++
       }
-    });
+    })
 
-    let bestMonthAverage = 0;
-    let bestExpertiseMonth = '';
+    let bestMonthAverage = 0
+    let bestExpertiseMonth = ''
     monthlyExpertiseScores.forEach((scores, month) => {
       if (scores.length > 0) {
-        const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+        const avg = scores.reduce((a, b) => a + b, 0) / scores.length
         if (avg > bestMonthAverage) {
-          bestMonthAverage = avg;
-          bestExpertiseMonth = month;
+          bestMonthAverage = avg
+          bestExpertiseMonth = month
         }
       }
-    });
+    })
 
     // Track month of best experience score (within last 6 months)
-    let bestExperienceMonth = '';
-    let tempBest = 0;
-    examAssignments.forEach(item => {
-      if (item.exam_type !== 'experience') return;
-      const { score } = getEffectiveExamScore(item);
-      if (score === null) return;
-      const date = new Date(item.open_at);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    let bestExperienceMonth = ''
+    let tempBest = 0
+    examAssignments.forEach((item) => {
+      if (item.exam_type !== 'experience') return
+      const { score } = getEffectiveExamScore(item)
+      if (score === null) return
+      const date = new Date(item.open_at)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
       if (last6Months.has(monthKey) && score > tempBest) {
-        tempBest = score;
-        bestExperienceMonth = monthKey;
+        tempBest = score
+        bestExperienceMonth = monthKey
       }
-    });
+    })
 
     // Track all months with missing/pending items (only count if no explanation status at all)
-    const missingMonths = new Set<string>();
-    examAssignments.forEach(item => {
-      const { isMissedCurrentMonth } = getEffectiveExamScore(item);
+    const missingMonths = new Set<string>()
+    examAssignments.forEach((item) => {
+      const { isMissedCurrentMonth } = getEffectiveExamScore(item)
       if (isMissedCurrentMonth && !item.explanation_status) {
-        const date = new Date(item.open_at);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        missingMonths.add(monthKey);
+        const date = new Date(item.open_at)
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        missingMonths.add(monthKey)
       }
-    });
+    })
 
     return {
       totalAssigned,
       totalPassed,
-      passRate: totalAssigned > 0 ? ((totalPassed / totalAssigned) * 100).toFixed(1) : '0',
+      passRate:
+        totalAssigned > 0
+          ? ((totalPassed / totalAssigned) * 100).toFixed(1)
+          : '0',
       avgExpertise: bestMonthAverage > 0 ? bestMonthAverage.toFixed(2) : '0',
       bestExpertiseMonth,
       bestExperience,
@@ -934,142 +1046,174 @@ export default function TeacherAssignmentPage() {
       explanationsRejected,
       explanationsPending,
       targetMonthKey,
-    };
-  }, [examAssignments, selectedExamMonth]);
+    }
+  }, [examAssignments, selectedExamMonth])
 
   const monthlyOverviewData = useMemo(() => {
-    const dataMap = new Map<string, {
-      expertiseSum: number;
-      expertiseCount: number;
-      experienceScores: number[];
-    }>();
+    const dataMap = new Map<
+      string,
+      {
+        expertiseSum: number
+        expertiseCount: number
+        experienceScores: number[]
+      }
+    >()
 
-    examAssignments.forEach(item => {
-      const { score } = getEffectiveExamScore(item);
-      if (score === null) return;
+    examAssignments.forEach((item) => {
+      const { score } = getEffectiveExamScore(item)
+      if (score === null) return
 
-      const date = new Date(item.open_at);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const date = new Date(item.open_at)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 
       if (!dataMap.has(monthKey)) {
-        dataMap.set(monthKey, { expertiseSum: 0, expertiseCount: 0, experienceScores: [] });
+        dataMap.set(monthKey, {
+          expertiseSum: 0,
+          expertiseCount: 0,
+          experienceScores: [],
+        })
       }
 
-      const monthData = dataMap.get(monthKey)!;
+      const monthData = dataMap.get(monthKey)!
       if (item.exam_type === 'experience') {
-        monthData.experienceScores.push(score);
+        monthData.experienceScores.push(score)
       } else {
-        monthData.expertiseSum += score;
-        monthData.expertiseCount += 1;
+        monthData.expertiseSum += score
+        monthData.expertiseCount += 1
       }
-    });
+    })
 
     return Array.from(dataMap.entries())
       .map(([month, stats]) => ({
         month,
-        avgExpertise: stats.expertiseCount > 0 ? (stats.expertiseSum / stats.expertiseCount).toFixed(2) : null,
-        maxExperience: stats.experienceScores.length > 0 ? Math.max(...stats.experienceScores) : null
+        avgExpertise:
+          stats.expertiseCount > 0
+            ? (stats.expertiseSum / stats.expertiseCount).toFixed(2)
+            : null,
+        maxExperience:
+          stats.experienceScores.length > 0
+            ? Math.max(...stats.experienceScores)
+            : null,
       }))
-      .sort((a, b) => b.month.localeCompare(a.month)); // Newest first
-  }, [examAssignments]);
+      .sort((a, b) => b.month.localeCompare(a.month)) // Newest first
+  }, [examAssignments])
 
   const filteredGroupedExams = useMemo(() => {
-    const now = new Date();
+    const now = new Date()
     const last6MonthsSet = new Set(
       Array.from({ length: 6 }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      })
-    );
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      }),
+    )
 
-    const filtered = examAssignments.filter(item => {
+    const filtered = examAssignments.filter((item) => {
       if (scoreSubjectKeyword) {
-        const keyword = scoreSubjectKeyword.toLowerCase();
-        if (!item.subject_code.toLowerCase().includes(keyword) && (!item.set_name || !item.set_name.toLowerCase().includes(keyword))) {
-          return false;
+        const keyword = scoreSubjectKeyword.toLowerCase()
+        if (
+          !item.subject_code.toLowerCase().includes(keyword) &&
+          (!item.set_name || !item.set_name.toLowerCase().includes(keyword))
+        ) {
+          return false
         }
       }
 
-      const date = new Date(item.open_at);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const date = new Date(item.open_at)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 
       if (selectedExamMonth === '6months') {
-        if (!last6MonthsSet.has(monthKey)) return false;
+        if (!last6MonthsSet.has(monthKey)) return false
       } else if (selectedExamMonth !== 'all') {
-        if (monthKey !== selectedExamMonth) return false;
+        if (monthKey !== selectedExamMonth) return false
       }
 
       if (scoreTypeFilter !== 'all' && item.exam_type !== scoreTypeFilter) {
-        return false;
+        return false
       }
 
       if (scoreResultFilter !== 'all') {
         // Mirror admin "Thao tác HO" badge logic using score_handling_note (= xu_ly_diem)
-        const xuLower = (item.score_handling_note || '').trim().toLowerCase();
-        const isAccepted = xuLower === 'đã duyệt';
-        const isRejected = xuLower === 'từ chối';
-        const isWaiting  = xuLower === 'chờ giải trình';
-        const isDone     = item.score !== null || xuLower === 'đã hoàn thành' || xuLower === 'da thi';
+        const xuLower = (item.score_handling_note || '').trim().toLowerCase()
+        const isAccepted = xuLower === 'đã duyệt'
+        const isRejected = xuLower === 'từ chối'
+        const isWaiting = xuLower === 'chờ giải trình'
+        const isDone =
+          item.score !== null ||
+          xuLower === 'đã hoàn thành' ||
+          xuLower === 'da thi'
         // Pending = not yet done/waiting/accepted/rejected
-        const isPending  = !isDone && !isWaiting && !isAccepted && !isRejected;
+        const isPending = !isDone && !isWaiting && !isAccepted && !isRejected
 
         if (scoreResultFilter === 'done') {
-          if (!isDone) return false;
+          if (!isDone) return false
         } else if (scoreResultFilter === 'waiting') {
-          if (!isWaiting) return false;
+          if (!isWaiting) return false
         } else if (scoreResultFilter === 'pending') {
-          if (!isPending) return false;
+          if (!isPending) return false
         } else if (scoreResultFilter === 'accepted') {
-          if (!isAccepted) return false;
+          if (!isAccepted) return false
         } else if (scoreResultFilter === 'rejected') {
-          if (!isRejected) return false;
+          if (!isRejected) return false
         }
       }
 
-      return true;
-    });
+      return true
+    })
 
-    const groups: Record<string, typeof filtered> = {};
-    filtered.forEach(item => {
-      const date = new Date(item.open_at);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      if (!groups[monthKey]) groups[monthKey] = [];
-      groups[monthKey].push(item);
-    });
+    const groups: Record<string, typeof filtered> = {}
+    filtered.forEach((item) => {
+      const date = new Date(item.open_at)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      if (!groups[monthKey]) groups[monthKey] = []
+      groups[monthKey].push(item)
+    })
 
     return Object.entries(groups)
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([month, items]) => ({
         month,
-        items: items.sort((a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime())
-      }));
-  }, [examAssignments, scoreSubjectKeyword, selectedExamMonth, scoreTypeFilter, scoreResultFilter]);
+        items: items.sort(
+          (a, b) =>
+            new Date(b.open_at).getTime() - new Date(a.open_at).getTime(),
+        ),
+      }))
+  }, [
+    examAssignments,
+    scoreSubjectKeyword,
+    selectedExamMonth,
+    scoreTypeFilter,
+    scoreResultFilter,
+  ])
 
   const currentMonthExams = (() => {
-    const now = new Date();
-    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const now = new Date()
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     return examAssignments
       .filter((item) => {
-        const date = new Date(item.open_at);
-        const itemMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        return itemMonth === monthKey;
+        const date = new Date(item.open_at)
+        const itemMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        return itemMonth === monthKey
       })
-      .sort((a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime());
-  })();
+      .sort(
+        (a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime(),
+      )
+  })()
 
   // Loading state when auto-starting assignment
   if (startId && view === 'list') {
-    const target = assignments.find(a => a.id.toString() === startId);
+    const target = assignments.find((a) => a.id.toString() === startId)
     // Show loading if still fetching OR if target found (waiting for redirect effect)
     if (trainingLoading || target) {
       return (
         <PageContainer>
           <div className="flex flex-col items-center justify-center p-12 h-64">
             <LoadingSpinner />
-            <p className="mt-4 text-gray-500 font-medium">Đang chuẩn bị bài làm...</p>
+            <p className="mt-4 text-gray-500 font-medium">
+              Đang chuẩn bị bài làm...
+            </p>
           </div>
         </PageContainer>
-      );
+      )
     }
   }
 
@@ -1085,7 +1229,11 @@ export default function TeacherAssignmentPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4" style={{ animationDelay: `${i * 100}ms` }}>
+              <div
+                key={i}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-4"
+                style={{ animationDelay: `${i * 100}ms` }}
+              >
                 <div className="animate-pulse">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-8 h-8 bg-gray-200 rounded-lg"></div>
@@ -1104,13 +1252,13 @@ export default function TeacherAssignmentPage() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (view === 'taking' && currentAssignment) {
-    const progress = getProgress();
-    const answeredCount = Object.keys(answers).length;
-    
+    const progress = getProgress()
+    const answeredCount = Object.keys(answers).length
+
     return (
       <PageContainer>
         <div className="w-full">
@@ -1119,7 +1267,9 @@ export default function TeacherAssignmentPage() {
             <div className="flex-1 min-w-0">
               {/* Mobile Header */}
               <div className="lg:hidden mb-4">
-                <h1 className="text-xl font-bold text-gray-900 mb-1">{currentAssignment.assignment_title}</h1>
+                <h1 className="text-xl font-bold text-gray-900 mb-1">
+                  {currentAssignment.assignment_title}
+                </h1>
                 <p className="text-sm text-gray-600 flex items-center gap-2">
                   <BookOpen className="w-4 h-4" />
                   {currentAssignment.video_title}
@@ -1128,334 +1278,396 @@ export default function TeacherAssignmentPage() {
 
               {/* Questions */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
-            {questions.map((question, idx) => {
-              // Determine if question should span full width
-              const isFullWidth = question.question_type === 'essay' || 
-                                  question.question_type === 'multiple_choice' ||
-                                  question.image_url; // Questions with images also take full width
-              
-              return (
-              <div 
-                key={question.id} 
-                id={`question-${question.id}`}
-                className={`bg-white rounded-xl shadow-sm border-2 transition-all ${
-                  answers[question.id] 
-                    ? 'border-green-200 bg-green-50/30' 
-                    : 'border-gray-200 hover:border-blue-200'
-                } ${isFullWidth ? 'lg:col-span-2' : 'lg:col-span-1'}`}
-              >
-                <div className="p-4 md:p-6">
-                  {/* Question Header */}
-                  <div className="flex items-start gap-3 md:gap-4 mb-3 md:mb-4">
-                    <div className={`shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-sm md:text-base font-bold ${
-                      answers[question.id] 
-                        ? 'bg-green-600 text-white' 
-                        : 'bg-gray-200 text-gray-700'
-                    }`}>
-                      {idx + 1}
+                {questions.map((question, idx) => {
+                  // Determine if question should span full width
+                  const isFullWidth =
+                    question.question_type === 'essay' ||
+                    question.question_type === 'multiple_choice' ||
+                    question.image_url // Questions with images also take full width
+
+                  return (
+                    <div
+                      key={question.id}
+                      id={`question-${question.id}`}
+                      className={`bg-white rounded-xl shadow-sm border-2 transition-all ${
+                        answers[question.id]
+                          ? 'border-green-200 bg-green-50/30'
+                          : 'border-gray-200 hover:border-blue-200'
+                      } ${isFullWidth ? 'lg:col-span-2' : 'lg:col-span-1'}`}
+                    >
+                      <div className="p-4 md:p-6">
+                        {/* Question Header */}
+                        <div className="flex items-start gap-3 md:gap-4 mb-3 md:mb-4">
+                          <div
+                            className={`shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-sm md:text-base font-bold ${
+                              answers[question.id]
+                                ? 'bg-green-600 text-white'
+                                : 'bg-gray-200 text-gray-700'
+                            }`}
+                          >
+                            {idx + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2 mb-2">
+                              <div
+                                className="prose prose-sm max-w-none flex-1"
+                                dangerouslySetInnerHTML={{
+                                  __html: question.question_text,
+                                }}
+                              />
+                              <span className="self-start px-2 md:px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] md:text-xs font-semibold shrink-0">
+                                {question.points} điểm
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Question Image */}
+                        {question.image_url && (
+                          <div className="mb-3 md:mb-4 ml-11 md:ml-14">
+                            <NextImage
+                              src={question.image_url}
+                              alt="Question"
+                              width={400}
+                              height={300}
+                              className="rounded-lg border border-gray-300 w-full h-auto"
+                            />
+                          </div>
+                        )}
+
+                        {/* Answer Options */}
+                        <div className="ml-11 md:ml-14">
+                          {question.question_type === 'multiple_choice' &&
+                          Array.isArray(question.options) ? (
+                            <div className="space-y-2">
+                              {question.options.map(
+                                (option: string, optIdx: number) => (
+                                  <label
+                                    key={optIdx}
+                                    className={`flex items-start gap-2 md:gap-3 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                      answers[question.id] === option
+                                        ? 'border-[#a1001f] bg-[#fff5f7] shadow-sm'
+                                        : 'border-gray-200 hover:border-[#d47a8b] hover:bg-[#fff5f7]'
+                                    }`}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={`question-${question.id}`}
+                                      value={option}
+                                      checked={answers[question.id] === option}
+                                      onChange={(e) =>
+                                        handleAnswerChange(
+                                          question.id,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="w-4 md:w-5 h-4 md:h-5 text-[#a1001f]"
+                                    />
+                                    {(() => {
+                                      const normalizedOption =
+                                        decodeEscapedHtml(String(option))
+                                      const renderAsHtml =
+                                        hasHtmlMarkup(normalizedOption)
+
+                                      if (renderAsHtml) {
+                                        return (
+                                          <div
+                                            className="prose prose-sm md:prose-base max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
+                                            dangerouslySetInnerHTML={{
+                                              __html: normalizedOption,
+                                            }}
+                                          />
+                                        )
+                                      }
+
+                                      return (
+                                        <span className="flex-1 text-sm md:text-base font-medium text-gray-900">
+                                          {normalizedOption}
+                                        </span>
+                                      )
+                                    })()}
+                                  </label>
+                                ),
+                              )}
+                            </div>
+                          ) : question.question_type === 'true_false' ? (
+                            <div className="grid grid-cols-2 gap-2 md:gap-3">
+                              {['Đúng', 'Sai'].map((option) => (
+                                <label
+                                  key={option}
+                                  className={`flex items-center justify-center gap-2 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                    answers[question.id] === option
+                                      ? 'border-[#a1001f] bg-[#fff5f7] shadow-sm'
+                                      : 'border-gray-200 hover:border-[#d47a8b] hover:bg-[#fff5f7]'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`question-${question.id}`}
+                                    value={option}
+                                    checked={answers[question.id] === option}
+                                    onChange={(e) =>
+                                      handleAnswerChange(
+                                        question.id,
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="w-4 md:w-5 h-4 md:h-5 text-[#a1001f]"
+                                  />
+                                  <span className="text-sm md:text-base font-semibold text-gray-900">
+                                    {option}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          ) : (
+                            <textarea
+                              value={answers[question.id] || ''}
+                              onChange={(e) =>
+                                handleAnswerChange(question.id, e.target.value)
+                              }
+                              placeholder="Nhập câu trả lời của bạn..."
+                              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 transition-all resize-none"
+                              rows={question.question_type === 'essay' ? 6 : 3}
+                            />
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2 mb-2">
-                        <div 
-                          className="prose prose-sm max-w-none flex-1"
-                          dangerouslySetInnerHTML={{ __html: question.question_text }}
-                        />
-                        <span className="self-start px-2 md:px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] md:text-xs font-semibold shrink-0">
-                          {question.points} điểm
+                  )
+                })}
+              </div>
+
+              {/* Submit Footer */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6 sticky bottom-0 lg:hidden">
+                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 md:gap-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsStopConfirmOpen(true)}
+                    className="flex items-center justify-center gap-2 px-4 md:px-6 py-3 font-medium text-gray-700 text-sm md:text-base h-auto border-gray-300 hover:bg-gray-50"
+                  >
+                    <ArrowLeft className="w-4 md:w-5 h-4 md:h-5" />
+                    Hủy bài làm
+                  </Button>
+
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-4">
+                    {answeredCount < questions.length && (
+                      <div className="flex items-center justify-center gap-2 text-amber-600 py-2 md:py-0">
+                        <AlertCircle className="w-4 md:w-5 h-4 md:h-5" />
+                        <span className="text-xs md:text-sm font-medium">
+                          Còn {questions.length - answeredCount} câu chưa trả
+                          lời
+                        </span>
+                      </div>
+                    )}
+
+                    <Button
+                      disabled={isSubmitting}
+                      onClick={submitAssignment}
+                      className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 font-semibold shadow-md text-sm md:text-base h-auto bg-[#a1001f] text-white hover:bg-[#840018]"
+                    >
+                      <Send className="w-4 md:w-5 h-4 md:h-5" />
+                      {isSubmitting ? 'Đang nộp...' : 'Nộp bài'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sidebar - Desktop only */}
+            <div className="hidden lg:block w-72 shrink-0">
+              <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                {/* Assignment Info Card */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <h2 className="text-base font-bold text-gray-900 mb-1 line-clamp-2">
+                    {currentAssignment.assignment_title}
+                  </h2>
+                  <p className="text-xs text-gray-600 flex items-center gap-1.5 line-clamp-1">
+                    <BookOpen className="w-3.5 h-3.5" />
+                    {currentAssignment.video_title}
+                  </p>
+                </div>
+
+                {/* Timer Card */}
+                {timeRemaining !== null && (
+                  <div
+                    className={`rounded-lg shadow-sm border-2 p-4 ${
+                      timeRemaining < 300
+                        ? 'bg-red-50 border-red-300'
+                        : 'bg-[#fff5f7] border-[#f1d1d8]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Clock
+                        className={`w-4 h-4 ${timeRemaining < 300 ? 'text-red-600' : 'text-[#a1001f]'}`}
+                      />
+                      <span
+                        className={`text-xs font-semibold ${timeRemaining < 300 ? 'text-red-700' : 'text-[#a1001f]'}`}
+                      >
+                        Thời gian còn lại
+                      </span>
+                    </div>
+                    <div
+                      className={`font-mono text-2xl font-bold ${timeRemaining < 300 ? 'text-red-700' : 'text-[#a1001f]'}`}
+                    >
+                      {formatTime(timeRemaining)}
+                    </div>
+                  </div>
+                )}
+
+                {/* Progress Card */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-gray-700">
+                      Tiến độ
+                    </span>
+                    <span className="text-xl font-bold text-[#a1001f]">
+                      {progress}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                    <div
+                      className="bg-[#a1001f] h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-600 text-center">
+                    {answeredCount}/{questions.length} câu đã trả lời
+                  </p>
+
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <p className="text-[10px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">
+                      Ma trận câu hỏi
+                    </p>
+                    <div className="grid grid-cols-5 gap-2">
+                      {questions.map((q, index) => {
+                        const isAnswered =
+                          answers[q.id] !== undefined && answers[q.id] !== ''
+                        return (
+                          <button
+                            type="button"
+                            key={q.id}
+                            onClick={() => scrollToQuestion(q.id)}
+                            className={`
+                          flex items-center justify-center text-[10px] font-bold h-7 rounded transition-all duration-200 cursor-pointer
+                          ${
+                            isAnswered
+                              ? 'bg-[#a1001f] text-white shadow-sm ring-1 ring-[#840018]'
+                              : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                          }
+                        `}
+                            title={`Câu ${index + 1}: ${isAnswered ? 'Đã làm' : 'Chưa làm'}`}
+                            aria-label={`Đi tới câu ${index + 1}`}
+                          >
+                            {index + 1}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stats Card */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <h3 className="text-xs font-semibold text-gray-700 mb-3">
+                    Thông tin bài tập
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 bg-[#fde8ec] rounded-lg flex items-center justify-center">
+                        <FileText className="w-4 h-4 text-[#a1001f]" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-gray-500">Số câu hỏi</p>
+                        <p className="text-base font-bold text-gray-900">
+                          {questions.length}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 bg-[#fff1f2] rounded-lg flex items-center justify-center">
+                        <Award className="w-4 h-4 text-[#be123c]" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-gray-500">Tổng điểm</p>
+                        <p className="text-base font-bold text-gray-900">
+                          {currentAssignment.total_points}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 bg-[#ffe4e6] rounded-lg flex items-center justify-center">
+                        <CheckCircle className="w-4 h-4 text-[#9f1239]" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-gray-500">
+                          Điểm đạt yêu cầu
+                        </p>
+                        <p className="text-base font-bold text-gray-900">
+                          {currentAssignment.passing_score}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="space-y-2.5">
+                  {answeredCount < questions.length && (
+                    <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3">
+                      <div className="flex items-start gap-2 text-amber-700">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span className="text-xs font-medium">
+                          Còn {questions.length - answeredCount} câu chưa trả
+                          lời
                         </span>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Question Image */}
-                  {question.image_url && (
-                    <div className="mb-3 md:mb-4 ml-11 md:ml-14">
-                      <NextImage
-                        src={question.image_url}
-                        alt="Question"
-                        width={400}
-                        height={300}
-                        className="rounded-lg border border-gray-300 w-full h-auto"
-                      />
-                    </div>
                   )}
 
-                  {/* Answer Options */}
-                  <div className="ml-11 md:ml-14">
-                    {question.question_type === 'multiple_choice' && Array.isArray(question.options) ? (
-                      <div className="space-y-2">
-                        {question.options.map((option: string, optIdx: number) => (
-                          <label
-                            key={optIdx}
-                            className={`flex items-start gap-2 md:gap-3 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                              answers[question.id] === option
-                                ? 'border-blue-500 bg-blue-50 shadow-sm'
-                                : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name={`question-${question.id}`}
-                              value={option}
-                              checked={answers[question.id] === option}
-                              onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                              className="w-4 md:w-5 h-4 md:h-5 text-blue-600"
-                            />
-                            {(() => {
-                              const normalizedOption = decodeEscapedHtml(String(option));
-                              const renderAsHtml = hasHtmlMarkup(normalizedOption);
+                  <Button
+                    disabled={isSubmitting}
+                    onClick={submitAssignment}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-semibold shadow-md h-auto bg-[#a1001f] text-white hover:bg-[#840018]"
+                  >
+                    <Send className="w-4 h-4" />
+                    {isSubmitting ? 'Đang nộp...' : 'Nộp bài'}
+                  </Button>
 
-                              if (renderAsHtml) {
-                                return (
-                                  <div
-                                    className="prose prose-sm md:prose-base max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
-                                    dangerouslySetInnerHTML={{ __html: normalizedOption }}
-                                  />
-                                );
-                              }
-
-                              return <span className="flex-1 text-sm md:text-base font-medium text-gray-900">{normalizedOption}</span>;
-                            })()}
-                          </label>
-                        ))}
-                      </div>
-                    ) : question.question_type === 'true_false' ? (
-                      <div className="grid grid-cols-2 gap-2 md:gap-3">
-                        {['Đúng', 'Sai'].map((option) => (
-                          <label
-                            key={option}
-                            className={`flex items-center justify-center gap-2 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                              answers[question.id] === option
-                                ? 'border-blue-500 bg-blue-50 shadow-sm'
-                                : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name={`question-${question.id}`}
-                              value={option}
-                              checked={answers[question.id] === option}
-                              onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                              className="w-4 md:w-5 h-4 md:h-5 text-blue-600"
-                            />
-                            <span className="text-sm md:text-base font-semibold text-gray-900">{option}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <textarea
-                        value={answers[question.id] || ''}
-                        onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                        placeholder="Nhập câu trả lời của bạn..."
-                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-none"
-                        rows={question.question_type === 'essay' ? 6 : 3}
-                      />
-                    )}
-                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsStopConfirmOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-gray-700 h-auto border-gray-300 hover:bg-gray-50"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    Hủy bài làm
+                  </Button>
                 </div>
               </div>
-              );
-            })}
+            </div>
+
+            <ConfirmDialog
+              isOpen={isStopConfirmOpen}
+              onClose={() => setIsStopConfirmOpen(false)}
+              onConfirm={handleStopAndSubmit}
+              title="Xác nhận nộp bài"
+              message="Bạn có chắc muốn dừng và nộp bài luôn không? Kết quả hiện tại sẽ được lưu."
+              confirmText="Nộp bài"
+              cancelText="Tiếp tục làm"
+              type="warning"
+              icon="warning"
+            />
           </div>
-
-          {/* Submit Footer */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6 sticky bottom-0 lg:hidden">
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 md:gap-4">
-              <Button
-                variant="outline"
-                onClick={() => setIsStopConfirmOpen(true)}
-                className="flex items-center justify-center gap-2 px-4 md:px-6 py-3 font-medium text-gray-700 text-sm md:text-base h-auto"
-              >
-                <ArrowLeft className="w-4 md:w-5 h-4 md:h-5" />
-                Hủy bài làm
-              </Button>
-              
-              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-4">
-                {answeredCount < questions.length && (
-                  <div className="flex items-center justify-center gap-2 text-amber-600 py-2 md:py-0">
-                    <AlertCircle className="w-4 md:w-5 h-4 md:h-5" />
-                    <span className="text-xs md:text-sm font-medium">
-                      Còn {questions.length - answeredCount} câu chưa trả lời
-                    </span>
-                  </div>
-                )}
-                
-                <Button
-                  disabled={isSubmitting}
-                  onClick={submitAssignment}
-                  className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 font-semibold shadow-md text-sm md:text-base h-auto"
-                >
-                  <Send className="w-4 md:w-5 h-4 md:h-5" />
-                  {isSubmitting ? 'Đang nộp...' : 'Nộp bài'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sidebar - Desktop only */}
-        <div className="hidden lg:block w-72 shrink-0">
-          <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-            {/* Assignment Info Card */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <h2 className="text-base font-bold text-gray-900 mb-1 line-clamp-2">{currentAssignment.assignment_title}</h2>
-              <p className="text-xs text-gray-600 flex items-center gap-1.5 line-clamp-1">
-                <BookOpen className="w-3.5 h-3.5" />
-                {currentAssignment.video_title}
-              </p>
-            </div>
-
-            {/* Timer Card */}
-            {timeRemaining !== null && (
-              <div className={`rounded-lg shadow-sm border-2 p-4 ${
-                timeRemaining < 300 ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-300'
-              }`}>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <Clock className={`w-4 h-4 ${timeRemaining < 300 ? 'text-red-600' : 'text-blue-600'}`} />
-                  <span className={`text-xs font-semibold ${timeRemaining < 300 ? 'text-red-700' : 'text-blue-700'}`}>
-                    Thời gian còn lại
-                  </span>
-                </div>
-                <div className={`font-mono text-2xl font-bold ${timeRemaining < 300 ? 'text-red-700' : 'text-blue-700'}`}>
-                  {formatTime(timeRemaining)}
-                </div>
-              </div>
-            )}
-
-            {/* Progress Card */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-gray-700">Tiến độ</span>
-                <span className="text-xl font-bold text-blue-600">{progress}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <p className="text-xs text-gray-600 text-center">
-                {answeredCount}/{questions.length} câu đã trả lời
-              </p>
-
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <p className="text-[10px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">Ma trận câu hỏi</p>
-                <div className="grid grid-cols-5 gap-2">
-                  {questions.map((q, index) => {
-                    const isAnswered = answers[q.id] !== undefined && answers[q.id] !== '';
-                    return (
-                      <button
-                        type="button"
-                        key={q.id}
-                        onClick={() => scrollToQuestion(q.id)}
-                        className={`
-                          flex items-center justify-center text-[10px] font-bold h-7 rounded transition-all duration-200 cursor-pointer
-                          ${isAnswered 
-                            ? 'bg-green-500 text-white shadow-sm ring-1 ring-green-600' 
-                            : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                          }
-                        `}
-                        title={`Câu ${index + 1}: ${isAnswered ? 'Đã làm' : 'Chưa làm'}`}
-                        aria-label={`Đi tới câu ${index + 1}`}
-                      >
-                        {index + 1}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Stats Card */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <h3 className="text-xs font-semibold text-gray-700 mb-3">Thông tin bài tập</h3>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <FileText className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-gray-500">Số câu hỏi</p>
-                    <p className="text-base font-bold text-gray-900">{questions.length}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                    <Award className="w-4 h-4 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-gray-500">Tổng điểm</p>
-                    <p className="text-base font-bold text-gray-900">{currentAssignment.total_points}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <CheckCircle className="w-4 h-4 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-gray-500">Điểm đạt yêu cầu</p>
-                    <p className="text-base font-bold text-gray-900">{currentAssignment.passing_score}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="space-y-2.5">
-              {answeredCount < questions.length && (
-                <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3">
-                  <div className="flex items-start gap-2 text-amber-700">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span className="text-xs font-medium">
-                      Còn {questions.length - answeredCount} câu chưa trả lời
-                    </span>
-                  </div>
-                </div>
-              )}
-              
-              <Button
-                disabled={isSubmitting}
-                onClick={submitAssignment}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-semibold shadow-md h-auto"
-              >
-                <Send className="w-4 h-4" />
-                {isSubmitting ? 'Đang nộp...' : 'Nộp bài'}
-              </Button>
-              
-              <Button
-                variant="outline"
-                onClick={() => setIsStopConfirmOpen(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-gray-700 h-auto"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Hủy bài làm
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <ConfirmDialog
-          isOpen={isStopConfirmOpen}
-          onClose={() => setIsStopConfirmOpen(false)}
-          onConfirm={handleStopAndSubmit}
-          title="Xác nhận nộp bài"
-          message="Bạn có chắc muốn dừng và nộp bài luôn không? Kết quả hiện tại sẽ được lưu."
-          confirmText="Nộp bài"
-          cancelText="Tiếp tục làm"
-          type="warning"
-          icon="warning"
-        />
-      </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (view === 'result' && submission) {
-    const percentage = formatPercentage(submission.percentage);
-    const isPassed = submission.is_passed;
+    const percentage = formatPercentage(submission.percentage)
+    const isPassed = submission.is_passed
 
     return (
       <PageContainer>
@@ -1463,8 +1675,11 @@ export default function TeacherAssignmentPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
             {/* Result Header */}
             <div className="text-center mb-8">
-              <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${isPassed ? 'bg-green-100' : 'bg-red-100'
-                }`}>
+              <div
+                className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${
+                  isPassed ? 'bg-green-100' : 'bg-red-100'
+                }`}
+              >
                 {isPassed ? (
                   <CheckCircle className="w-12 h-12 text-green-600" />
                 ) : (
@@ -1476,7 +1691,9 @@ export default function TeacherAssignmentPage() {
                 {isPassed ? 'Chúc mừng!' : 'Cố gắng thêm nhé!'}
               </h2>
 
-              <p className={`text-lg font-semibold ${isPassed ? 'text-green-600' : 'text-red-600'}`}>
+              <p
+                className={`text-lg font-semibold ${isPassed ? 'text-green-600' : 'text-red-600'}`}
+              >
                 {isPassed ? '✅ Đạt yêu cầu' : '❌ Chưa đạt yêu cầu'}
               </p>
             </div>
@@ -1487,10 +1704,13 @@ export default function TeacherAssignmentPage() {
                 <p className="text-sm text-gray-600 mb-2">Điểm số của bạn</p>
                 <div className="text-6xl font-bold text-blue-600 mb-2">
                   {submission.score}
-                  <span className="text-3xl text-gray-400">/{submission.total_points}</span>
+                  <span className="text-3xl text-gray-400">
+                    /{submission.total_points}
+                  </span>
                 </div>
                 <p className="text-sm text-gray-600">
-                  Điểm đạt: {currentAssignment?.passing_score}/{submission.total_points}
+                  Điểm đạt: {currentAssignment?.passing_score}/
+                  {submission.total_points}
                 </p>
               </div>
             </div>
@@ -1500,15 +1720,20 @@ export default function TeacherAssignmentPage() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Award className="w-5 h-5 text-blue-600" />
-                  <span className="font-semibold text-gray-900">Tỷ lệ hoàn thành</span>
+                  <span className="font-semibold text-gray-900">
+                    Tỷ lệ hoàn thành
+                  </span>
                 </div>
-                <span className="text-2xl font-bold text-blue-600">{percentage}%</span>
+                <span className="text-2xl font-bold text-blue-600">
+                  {percentage}%
+                </span>
               </div>
 
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
-                  className={`h-3 rounded-full transition-all duration-500 ${isPassed ? 'bg-green-500' : 'bg-red-500'
-                    }`}
+                  className={`h-3 rounded-full transition-all duration-500 ${
+                    isPassed ? 'bg-green-500' : 'bg-red-500'
+                  }`}
                   style={{ width: `${percentage}%` }}
                 />
               </div>
@@ -1518,7 +1743,8 @@ export default function TeacherAssignmentPage() {
             {isPassed && (
               <div className="rounded-xl p-6 mb-6 bg-green-50 border-2 border-green-200">
                 <p className="text-center text-gray-700">
-                  Xuất sắc! Bạn đã hoàn thành bài tập với {submission.score} điểm!
+                  Xuất sắc! Bạn đã hoàn thành bài tập với {submission.score}{' '}
+                  điểm!
                 </p>
               </div>
             )}
@@ -1527,97 +1753,111 @@ export default function TeacherAssignmentPage() {
             <Button
               onClick={() => {
                 if (startId) {
-                  router.push('/user/training');
+                  router.push('/user/dao-tao-nang-cao')
                 } else {
-                  setView('list');
-                  fetchAvailableAssignments();
+                  setView('list')
+                  fetchAvailableAssignments()
                 }
               }}
               variant="outline"
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto"
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto border-[#d47a8b] bg-[#fff5f7] text-[#a1001f] hover:bg-[#fde8ec] hover:border-[#a1001f]"
             >
               <ArrowLeft className="w-5 h-5" />
               {startId ? 'Quay lại bài học' : 'Quay lại danh sách'}
             </Button>
-            
-            {currentAssignment?.max_attempts && submission && submission.attempt_number < currentAssignment.max_attempts && (
-               <Button
-                 onClick={() => {
-                   if (confirm('Bạn có chắc muốn làm lại bài tập này? Kết quả mới sẽ được tính là một lần làm bài mới.')) {
-                        startAssignment(currentAssignment);
-                   }
-                 }}
-                 className="w-full mt-3 flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto shadow-md"
-               >
-                 <RefreshCw className="w-5 h-5" />
-                 Làm lại bài tập
-               </Button>
-            )}
+
+            {currentAssignment?.max_attempts &&
+              submission &&
+              submission.attempt_number < currentAssignment.max_attempts && (
+                <Button
+                  onClick={() => {
+                    if (
+                      confirm(
+                        'Bạn có chắc muốn làm lại bài tập này? Kết quả mới sẽ được tính là một lần làm bài mới.',
+                      )
+                    ) {
+                      startAssignment(currentAssignment)
+                    }
+                  }}
+                  className="w-full mt-3 flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto shadow-md"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                  Làm lại bài tập
+                </Button>
+              )}
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   const examMonthOptions = Array.from(
     new Set(
       examAssignments
-        .filter(item => item.open_at)
-        .map(item => {
-          const date = new Date(item.open_at);
-          const month = `${date.getMonth() + 1}`.padStart(2, '0');
-          return `${date.getFullYear()}-${month}`;
-        })
-    )
-  ).sort((a, b) => b.localeCompare(a));
+        .filter((item) => item.open_at)
+        .map((item) => {
+          const date = new Date(item.open_at)
+          const month = `${date.getMonth() + 1}`.padStart(2, '0')
+          return `${date.getFullYear()}-${month}`
+        }),
+    ),
+  ).sort((a, b) => b.localeCompare(a))
 
-  const filteredExamAssignments = selectedExamMonth === 'all'
-    ? examAssignments
-    : examAssignments.filter(item => {
-      const date = new Date(item.open_at);
-      const month = `${date.getMonth() + 1}`.padStart(2, '0');
-      return `${date.getFullYear()}-${month}` === selectedExamMonth;
-    });
+  const filteredExamAssignments =
+    selectedExamMonth === 'all'
+      ? examAssignments
+      : examAssignments.filter((item) => {
+          const date = new Date(item.open_at)
+          const month = `${date.getMonth() + 1}`.padStart(2, '0')
+          return `${date.getFullYear()}-${month}` === selectedExamMonth
+        })
 
   const formatRegistrationType = (type: 'official' | 'additional') =>
-    type === 'official' ? 'Chính thức' : 'Bổ sung';
+    type === 'official' ? 'Chính thức' : 'Bổ sung'
 
   const getExamStatusLabel = (item: ExamAssignment) => {
-    const now = new Date();
-    const closeAt = new Date(item.close_at);
-    if (item.assignment_status === 'expired' || closeAt < now) return 'Đã đóng';
-    if (item.assignment_status === 'submitted') return 'Đã nộp';
-    if (item.assignment_status === 'graded') return 'Đã chấm';
-    if (item.assignment_status === 'in_progress') return 'Đang làm';
-    return 'Đang mở';
-  };
+    const now = new Date()
+    const closeAt = new Date(item.close_at)
+    if (item.assignment_status === 'expired' || closeAt < now) return 'Đã đóng'
+    if (item.assignment_status === 'submitted') return 'Đã nộp'
+    if (item.assignment_status === 'graded') return 'Đã chấm'
+    if (item.assignment_status === 'in_progress') return 'Đang làm'
+    return 'Đang mở'
+  }
 
   const getExamStatusClass = (item: ExamAssignment) => {
-    const status = getExamStatusLabel(item);
-    if (status === 'Đã đóng') return 'bg-red-100 text-red-700 border-red-300';
-    if (status === 'Đã nộp' || status === 'Đã chấm') return 'bg-green-100 text-green-700 border-green-300';
-    return 'bg-blue-100 text-blue-700 border-blue-300';
-  };
+    const status = getExamStatusLabel(item)
+    if (status === 'Đã đóng') return 'bg-red-100 text-red-700 border-red-300'
+    if (status === 'Đã nộp' || status === 'Đã chấm')
+      return 'bg-green-100 text-green-700 border-green-300'
+    return 'bg-blue-100 text-blue-700 border-blue-300'
+  }
 
   const formatCountdown = (seconds: number) => {
-    const safe = Math.max(0, Math.floor(seconds));
-    const hours = Math.floor(safe / 3600).toString().padStart(2, '0');
-    const minutes = Math.floor((safe % 3600) / 60).toString().padStart(2, '0');
-    const secs = Math.floor(safe % 60).toString().padStart(2, '0');
-    return `${hours}:${minutes}:${secs}`;
-  };
+    const safe = Math.max(0, Math.floor(seconds))
+    const hours = Math.floor(safe / 3600)
+      .toString()
+      .padStart(2, '0')
+    const minutes = Math.floor((safe % 3600) / 60)
+      .toString()
+      .padStart(2, '0')
+    const secs = Math.floor(safe % 60)
+      .toString()
+      .padStart(2, '0')
+    return `${hours}:${minutes}:${secs}`
+  }
 
   const getExamCountdownInfo = (item: ExamAssignment) => {
-    const openMs = new Date(item.open_at).getTime();
-    const closeMs = new Date(item.close_at).getTime();
-    const durationMins = item.duration_minutes || 90;
+    const openMs = new Date(item.open_at).getTime()
+    const closeMs = new Date(item.close_at).getTime()
+    const durationMins = item.duration_minutes || 90
 
     if (nowTs < openMs) {
       return {
         label: 'Mở sau',
         value: formatCountdown((openMs - nowTs) / 1000),
         className: 'text-amber-700 bg-amber-50 border-amber-200',
-      };
+      }
     }
 
     if (nowTs >= closeMs) {
@@ -1625,7 +1865,7 @@ export default function TeacherAssignmentPage() {
         label: 'Đã hết giờ',
         value: '00:00:00',
         className: 'text-red-700 bg-red-50 border-red-200',
-      };
+      }
     }
 
     // Cửa sổ đang mở → đếm ngược đến close_at theo giây
@@ -1633,13 +1873,17 @@ export default function TeacherAssignmentPage() {
       label: 'Đóng sau',
       value: formatCountdown((closeMs - nowTs) / 1000),
       className: 'text-blue-700 bg-blue-50 border-blue-200',
-    };
-  };
+    }
+  }
 
   const mainTabs = [
     { id: 'available', label: 'Bài kiểm tra khả dụng' },
-    { id: 'list', label: 'Danh sách bài kiểm tra', count: examAssignments.length },
-  ];
+    {
+      id: 'list',
+      label: 'Danh sách bài kiểm tra',
+      count: examAssignments.length,
+    },
+  ]
 
   return (
     <PageContainer>
@@ -1663,14 +1907,20 @@ export default function TeacherAssignmentPage() {
           }
         `}</style>
         <div className="mb-8 border-b border-gray-200 pb-4 sm:pb-5">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Bài Kiểm Tra Của Tôi</h1>
-          <p className="text-gray-600">Danh sách các bài kiểm tra đã được đăng ký.</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Bài Kiểm Tra Của Tôi
+          </h1>
+          <p className="text-gray-600">
+            Danh sách các bài kiểm tra đã được đăng ký.
+          </p>
         </div>
 
         <Tabs
           tabs={mainTabs}
           activeTab={activeMainTab}
-          onChange={(tabId) => setActiveMainTab(tabId as 'available' | 'list' | 'training')}
+          onChange={(tabId) =>
+            setActiveMainTab(tabId as 'available' | 'list' | 'training')
+          }
           borderClassName="border-[#e7c6cb]"
         />
 
@@ -1685,58 +1935,101 @@ export default function TeacherAssignmentPage() {
               <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500 shadow-sm">
                 Đang tải bài kiểm tra...
               </div>
-            ) : (() => {
-              const availableNow = examAssignments.filter(item => item.can_take === true);
-              return availableNow.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
-                  <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
-                  <p className="text-sm font-semibold text-gray-700 mb-1">Hiện tại không có bài kiểm tra nào đang mở.</p>
-                  <p className="text-xs text-gray-500">Những môn bạn đã đăng ký sẽ xuất hiện ở đây khi đến giờ làm bài.</p>
-                </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {availableNow.map((item) => {
-                    const countdown = getExamCountdownInfo(item);
-                    return (
-                      <div key={item.id} className="rounded-lg border-2 border-blue-200 bg-white p-5 shadow-sm hover:shadow-md transition-all flex flex-col">
-                        <div className="mb-3 flex items-start justify-between gap-2">
-                          <h4 className="line-clamp-2 text-base font-bold text-gray-900">{item.subject_code}</h4>
-                          <span className="shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold bg-green-100 text-green-700 border-green-300">
-                            Đang mở
-                          </span>
+            ) : (
+              (() => {
+                const availableNow = examAssignments.filter(
+                  (item) => item.can_take === true,
+                )
+                return availableNow.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
+                    <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
+                    <p className="text-sm font-semibold text-gray-700 mb-1">
+                      Hiện tại không có bài kiểm tra nào đang mở.
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Những môn bạn đã đăng ký sẽ xuất hiện ở đây khi đến giờ
+                      làm bài.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {availableNow.map((item) => {
+                      const countdown = getExamCountdownInfo(item)
+                      return (
+                        <div
+                          key={item.id}
+                          className="rounded-lg border-2 border-blue-200 bg-white p-5 shadow-sm hover:shadow-md transition-all flex flex-col"
+                        >
+                          <div className="mb-3 flex items-start justify-between gap-2">
+                            <h4 className="line-clamp-2 text-base font-bold text-gray-900">
+                              {item.subject_code}
+                            </h4>
+                            <span className="shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold bg-green-100 text-green-700 border-green-300">
+                              Đang mở
+                            </span>
+                          </div>
+                          <div className="mb-4 space-y-2 text-sm text-gray-600 flex-1">
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Loại:</span>
+                              <span className="font-medium text-gray-900">
+                                {item.exam_type === 'expertise'
+                                  ? 'Chuyên môn'
+                                  : 'Quy trình - KN trải nghiệm'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Mở:</span>
+                              <span>
+                                {new Date(item.open_at).toLocaleDateString(
+                                  'vi-VN',
+                                )}{' '}
+                                {new Date(item.open_at).toLocaleTimeString(
+                                  'vi-VN',
+                                  { hour: '2-digit', minute: '2-digit' },
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Đóng:</span>
+                              <span>
+                                {new Date(item.close_at).toLocaleDateString(
+                                  'vi-VN',
+                                )}{' '}
+                                {new Date(item.close_at).toLocaleTimeString(
+                                  'vi-VN',
+                                  { hour: '2-digit', minute: '2-digit' },
+                                )}
+                              </span>
+                            </div>
+                            <div
+                              className={`mt-3 flex items-center justify-between rounded-md border px-3 py-2 ${countdown.className}`}
+                            >
+                              <span className="text-xs font-semibold">
+                                {countdown.label}
+                              </span>
+                              <span className="font-mono text-sm font-bold">
+                                {countdown.value}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="pt-3 border-t border-gray-100">
+                            <Link
+                              href={`/user/assignments/exam/${item.id}`}
+                              className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
+                            >
+                              {item.score !== null ||
+                              item.assignment_status === 'submitted'
+                                ? 'Làm bài'
+                                : 'Bắt đầu làm bài'}
+                            </Link>
+                          </div>
                         </div>
-                        <div className="mb-4 space-y-2 text-sm text-gray-600 flex-1">
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Loại:</span>
-                            <span className="font-medium text-gray-900">{item.exam_type === 'expertise' ? 'Chuyên môn' : 'Quy trình - KN trải nghiệm'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Mở:</span>
-                            <span>{new Date(item.open_at).toLocaleDateString('vi-VN')} {new Date(item.open_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Đóng:</span>
-                            <span>{new Date(item.close_at).toLocaleDateString('vi-VN')} {new Date(item.close_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
-                          </div>
-                          <div className={`mt-3 flex items-center justify-between rounded-md border px-3 py-2 ${countdown.className}`}>
-                            <span className="text-xs font-semibold">{countdown.label}</span>
-                            <span className="font-mono text-sm font-bold">{countdown.value}</span>
-                          </div>
-                        </div>
-                        <div className="pt-3 border-t border-gray-100">
-                          <Link
-                            href={`/user/assignments/exam/${item.id}`}
-                            className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
-                          >
-                            {item.score !== null || item.assignment_status === 'submitted' ? 'Làm bài' : 'Bắt đầu làm bài'}
-                          </Link>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
+                      )
+                    })}
+                  </div>
+                )
+              })()
+            )}
           </div>
         ) : activeMainTab === 'list' ? (
           <div key="list" className="mt-6 space-y-6 animate-tab-enter">
@@ -1744,86 +2037,148 @@ export default function TeacherAssignmentPage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <button
                 onClick={() => setShowPassRateModal(true)}
-                className="text-left bg-white rounded-xl shadow-sm border border-gray-200 p-4 transition-all hover:border-blue-300 hover:shadow-md ring-offset-1"
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 transition-all hover:border-blue-300 hover:shadow-md ring-offset-1 text-center sm:text-left"
               >
-                <div className="flex items-center gap-2 mb-2">
+                <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-center sm:items-start sm:justify-start sm:text-left">
                   <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
                     <Award className="w-5 h-5" />
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-700">Tỉ lệ đạt</h3>
-                  <span className="ml-auto text-[10px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded-full font-semibold border border-blue-100">Xem chi tiết</span>
+                  <h3 className="w-full text-[13px] font-semibold leading-4 text-gray-700 sm:min-w-0 sm:flex-1 sm:w-auto sm:text-sm sm:leading-5">
+                    Tỉ lệ đạt
+                  </h3>
+                  <span className="mt-1 inline-flex w-full justify-center rounded-full border border-blue-100 bg-blue-50 px-1 py-0.5 text-[8px] font-semibold text-blue-500 sm:mt-0 sm:ml-auto sm:w-auto sm:justify-start sm:px-1.5 sm:text-[10px]">
+                    <span className="sm:hidden">Chi tiết</span>
+                    <span className="hidden sm:inline">Xem chi tiết</span>
+                  </span>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{scoreStats.passRate}%</p>
-                <p className="text-xs text-gray-500 mt-1">{scoreStats.totalPassed} / {scoreStats.totalAssigned} bài trong 6 tháng gần đây</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {scoreStats.passRate}%
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {scoreStats.totalPassed} / {scoreStats.totalAssigned} bài
+                  trong 6 tháng gần đây
+                </p>
               </button>
 
               <button
                 onClick={() => toggleStatCard('expertise')}
-                className={`text-left bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 ${activeStatCard === 'expertise' ? 'border-purple-400 ring-2 ring-purple-300' : 'border-gray-200 hover:border-purple-200'}`}
+                className={`bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 text-center sm:text-left ${activeStatCard === 'expertise' ? 'border-purple-400 ring-2 ring-purple-300' : 'border-gray-200 hover:border-purple-200'}`}
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`p-2 rounded-lg ${activeStatCard === 'expertise' ? 'bg-purple-200 text-purple-700' : 'bg-purple-100 text-purple-600'}`}>
+                <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-center sm:items-start sm:justify-start sm:text-left">
+                  <div
+                    className={`p-2 rounded-lg ${activeStatCard === 'expertise' ? 'bg-purple-200 text-purple-700' : 'bg-purple-100 text-purple-600'}`}
+                  >
                     <BookOpen className="w-5 h-5" />
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-700">TB Chuyên môn</h3>
-                  {activeStatCard === 'expertise' && <span className="ml-auto text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded-full font-semibold">Đang lọc</span>}
+                  <h3 className="w-full text-[13px] font-semibold leading-4 text-gray-700 sm:min-w-0 sm:flex-1 sm:w-auto sm:text-sm sm:leading-5">
+                    TB Chuyên môn
+                  </h3>
+                  {activeStatCard === 'expertise' && (
+                    <span className="mt-1 inline-flex w-full justify-center rounded-full bg-purple-100 px-1 py-0.5 text-[8px] font-semibold text-purple-600 sm:mt-0 sm:ml-auto sm:w-auto sm:justify-start sm:px-1.5 sm:text-[10px]">
+                      Đang lọc
+                    </span>
+                  )}
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{scoreStats.avgExpertise}</p>
-                <p className="text-xs text-gray-500 mt-1">Tháng cao nhất (6 tháng)</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {scoreStats.avgExpertise}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Tháng cao nhất (6 tháng)
+                </p>
               </button>
 
               <button
                 onClick={() => toggleStatCard('experience')}
-                className={`text-left bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 ${activeStatCard === 'experience' ? 'border-green-400 ring-2 ring-green-300' : 'border-gray-200 hover:border-green-200'}`}
+                className={`bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 text-center sm:text-left ${activeStatCard === 'experience' ? 'border-green-400 ring-2 ring-green-300' : 'border-gray-200 hover:border-green-200'}`}
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`p-2 rounded-lg ${activeStatCard === 'experience' ? 'bg-green-200 text-green-700' : 'bg-green-100 text-green-600'}`}>
+                <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-center sm:items-start sm:justify-start sm:text-left">
+                  <div
+                    className={`p-2 rounded-lg ${activeStatCard === 'experience' ? 'bg-green-200 text-green-700' : 'bg-green-100 text-green-600'}`}
+                  >
                     <Trophy className="w-5 h-5" />
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-700">Điểm QT - KN trải nghiệm</h3>
-                  {activeStatCard === 'experience' && <span className="ml-auto text-[10px] bg-green-100 text-green-600 px-1.5 py-0.5 rounded-full font-semibold">Đang lọc</span>}
+                  <h3 className="w-full text-[13px] font-semibold leading-4 text-gray-700 sm:min-w-0 sm:flex-1 sm:w-auto sm:text-sm sm:leading-5">
+                    Điểm QT - KN trải nghiệm
+                  </h3>
+                  {activeStatCard === 'experience' && (
+                    <span className="mt-1 inline-flex w-full justify-center rounded-full bg-green-100 px-1 py-0.5 text-[8px] font-semibold text-green-600 sm:mt-0 sm:ml-auto sm:w-auto sm:justify-start sm:px-1.5 sm:text-[10px]">
+                      Đang lọc
+                    </span>
+                  )}
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{scoreStats.bestExperience}</p>
-                <p className="text-xs text-gray-500 mt-1">Trong 6 tháng gần nhất</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {scoreStats.bestExperience}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Trong 6 tháng gần nhất
+                </p>
               </button>
 
               <button
                 onClick={() => toggleStatCard('missing')}
-                className={`text-left bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 ${activeStatCard === 'missing' ? 'border-amber-400 ring-2 ring-amber-300' : 'border-gray-200 hover:border-amber-200'}`}
+                className={`bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 text-center sm:text-left ${activeStatCard === 'missing' ? 'border-amber-400 ring-2 ring-amber-300' : 'border-gray-200 hover:border-amber-200'}`}
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`p-2 rounded-lg ${activeStatCard === 'missing' ? 'bg-amber-200 text-amber-700' : 'bg-amber-100 text-amber-600'}`}>
+                <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-center sm:items-start sm:justify-start sm:text-left">
+                  <div
+                    className={`p-2 rounded-lg ${activeStatCard === 'missing' ? 'bg-amber-200 text-amber-700' : 'bg-amber-100 text-amber-600'}`}
+                  >
                     <AlertCircle className="w-5 h-5" />
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-700">Cần giải trình</h3>
-                  {activeStatCard === 'missing' && <span className="ml-auto text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full font-semibold">Đang lọc</span>}
+                  <h3 className="w-full text-[13px] font-semibold leading-4 text-gray-700 sm:min-w-0 sm:flex-1 sm:w-auto sm:text-sm sm:leading-5">
+                    Cần giải trình
+                  </h3>
+                  {activeStatCard === 'missing' && (
+                    <span className="mt-1 inline-flex w-full justify-center rounded-full bg-amber-100 px-1 py-0.5 text-[8px] font-semibold text-amber-600 sm:mt-0 sm:ml-auto sm:w-auto sm:justify-start sm:px-1.5 sm:text-[10px]">
+                      Đang lọc
+                    </span>
+                  )}
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{scoreStats.missingOrPending}</p>
-                <p className="text-xs text-gray-500 mt-1">Bài thi cần giải trình</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {scoreStats.missingOrPending}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Bài thi cần giải trình
+                </p>
               </button>
             </div>
 
             {/* Explanation Stats for Current Month */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-5">
-               <h3 className="text-base font-bold text-gray-900 flex items-center gap-2 mb-4">
-                 <AlertCircle className="w-5 h-5 text-blue-500" />
-                 Tình trạng giải trình ({formatMonthLabel(scoreStats.targetMonthKey)})
-               </h3>
-               <p className="text-sm text-gray-500 mb-4">Thống kê các bài thi được yêu cầu giải trình trong tháng đánh giá gần nhất</p>
-               <div className="grid grid-cols-3 gap-2 md:gap-3">
-                 <div className="text-center bg-green-50 text-green-700 px-3 md:px-5 py-2.5 rounded-lg border border-green-200 hover:shadow-sm transition-all">
-                    <div className="text-xl md:text-2xl font-bold">{scoreStats.explanationsApproved}</div>
-                    <div className="text-[9px] md:text-xs font-semibold uppercase tracking-wider mt-1">Thành công</div>
-                 </div>
-                 <div className="text-center bg-red-50 text-red-700 px-3 md:px-5 py-2.5 rounded-lg border border-red-200 hover:shadow-sm transition-all">
-                    <div className="text-xl md:text-2xl font-bold">{scoreStats.explanationsRejected}</div>
-                    <div className="text-[9px] md:text-xs font-semibold uppercase tracking-wider mt-1">Thất bại</div>
-                 </div>
-                 <div className="text-center bg-amber-50 text-amber-700 px-3 md:px-5 py-2.5 rounded-lg border border-amber-200 hover:shadow-sm transition-all">
-                    <div className="text-xl md:text-2xl font-bold">{scoreStats.explanationsPending}</div>
-                    <div className="text-[9px] md:text-xs font-semibold uppercase tracking-wider mt-1">Đang chờ</div>
-                 </div>
-               </div>
+              <h3 className="text-base font-bold text-gray-900 flex items-center gap-2 mb-4">
+                <AlertCircle className="w-5 h-5 text-blue-500" />
+                Tình trạng giải trình (
+                {formatMonthLabel(scoreStats.targetMonthKey)})
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Thống kê các bài thi được yêu cầu giải trình trong tháng đánh
+                giá gần nhất
+              </p>
+              <div className="grid grid-cols-3 gap-2 md:gap-3">
+                <div className="text-center bg-green-50 text-green-700 px-3 md:px-5 py-2.5 rounded-lg border border-green-200 hover:shadow-sm transition-all">
+                  <div className="text-xl md:text-2xl font-bold">
+                    {scoreStats.explanationsApproved}
+                  </div>
+                  <div className="text-[9px] md:text-xs font-semibold uppercase tracking-wider mt-1">
+                    Thành công
+                  </div>
+                </div>
+                <div className="text-center bg-red-50 text-red-700 px-3 md:px-5 py-2.5 rounded-lg border border-red-200 hover:shadow-sm transition-all">
+                  <div className="text-xl md:text-2xl font-bold">
+                    {scoreStats.explanationsRejected}
+                  </div>
+                  <div className="text-[9px] md:text-xs font-semibold uppercase tracking-wider mt-1">
+                    Thất bại
+                  </div>
+                </div>
+                <div className="text-center bg-amber-50 text-amber-700 px-3 md:px-5 py-2.5 rounded-lg border border-amber-200 hover:shadow-sm transition-all">
+                  <div className="text-xl md:text-2xl font-bold">
+                    {scoreStats.explanationsPending}
+                  </div>
+                  <div className="text-[9px] md:text-xs font-semibold uppercase tracking-wider mt-1">
+                    Đang chờ
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* 1.5. Monthly Overview Timeline */}
@@ -1835,84 +2190,157 @@ export default function TeacherAssignmentPage() {
                 </h3>
                 <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x">
                   {monthlyOverviewData.map((data) => {
-                    const now = new Date();
+                    const now = new Date()
                     const last6MonthsSet = new Set(
                       Array.from({ length: 6 }, (_, i) => {
-                        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                      })
-                    );
-                    const isExpired = !last6MonthsSet.has(data.month);
-                    const isSelected = selectedExamMonth === data.month;
+                        const d = new Date(
+                          now.getFullYear(),
+                          now.getMonth() - i,
+                          1,
+                        )
+                        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                      }),
+                    )
+                    const isExpired = !last6MonthsSet.has(data.month)
+                    const isSelected = selectedExamMonth === data.month
 
                     // Stat card highlight logic
-                    const isExpertiseHighlight = activeStatCard === 'expertise' && data.month === scoreStats.bestExpertiseMonth;
-                    const isExperienceHighlight = activeStatCard === 'experience' && data.month === scoreStats.bestExperienceMonth;
-                    const isMissingHighlight = activeStatCard === 'missing' && scoreStats.missingMonths.has(data.month);
-                    const isStatHighlighted = isExpertiseHighlight || isExperienceHighlight || isMissingHighlight;
+                    const isExpertiseHighlight =
+                      activeStatCard === 'expertise' &&
+                      data.month === scoreStats.bestExpertiseMonth
+                    const isExperienceHighlight =
+                      activeStatCard === 'experience' &&
+                      data.month === scoreStats.bestExperienceMonth
+                    const isMissingHighlight =
+                      activeStatCard === 'missing' &&
+                      scoreStats.missingMonths.has(data.month)
+                    const isStatHighlighted =
+                      isExpertiseHighlight ||
+                      isExperienceHighlight ||
+                      isMissingHighlight
                     const statHighlightClass = isExpertiseHighlight
                       ? 'border-purple-400 ring-2 ring-purple-200 bg-purple-50 shadow-md'
                       : isExperienceHighlight
                         ? 'border-green-400 ring-2 ring-green-200 bg-green-50 shadow-md'
                         : isMissingHighlight
                           ? 'border-amber-400 ring-2 ring-amber-200 bg-amber-50 shadow-md'
-                          : '';
+                          : ''
 
                     return (
                       <div
                         key={data.month}
-                        className={`shrink-0 min-w-40 border rounded-lg p-3 snap-start transition-all cursor-pointer ${isStatHighlighted
-                          ? statHighlightClass
-                          : isSelected
-                            ? isExpired
-                              ? 'border-gray-400 bg-gray-100 shadow-sm'
-                              : 'border-blue-400 bg-blue-50 shadow-sm'
-                            : isExpired
-                              ? 'border-gray-200 bg-gray-50/60 opacity-70 hover:opacity-90 hover:border-gray-300'
-                              : 'border-gray-100 bg-gray-50 hover:border-blue-200 hover:bg-white'
-                          }`}
-                        onClick={() => setSelectedExamMonth(isSelected ? '6months' : data.month)}
+                        className={`shrink-0 min-w-40 border rounded-lg p-3 snap-start transition-all cursor-pointer ${
+                          isStatHighlighted
+                            ? statHighlightClass
+                            : isSelected
+                              ? isExpired
+                                ? 'border-gray-400 bg-gray-100 shadow-sm'
+                                : 'border-blue-400 bg-blue-50 shadow-sm'
+                              : isExpired
+                                ? 'border-gray-200 bg-gray-50/60 opacity-70 hover:opacity-90 hover:border-gray-300'
+                                : 'border-gray-100 bg-gray-50 hover:border-blue-200 hover:bg-white'
+                        }`}
+                        onClick={() =>
+                          setSelectedExamMonth(
+                            isSelected ? '6months' : data.month,
+                          )
+                        }
                       >
-                        <div className={`text-xs font-semibold mb-2 border-b pb-1 text-center flex items-center justify-center gap-1.5 ${isExpertiseHighlight ? 'text-purple-700 border-purple-200'
-                          : isExperienceHighlight ? 'text-green-700 border-green-200'
-                            : isMissingHighlight ? 'text-amber-700 border-amber-200'
-                              : isExpired ? 'text-gray-400 border-gray-200'
-                                : 'text-gray-600 border-gray-200'
-                          }`}>
+                        <div
+                          className={`text-xs font-semibold mb-2 border-b pb-1 text-center flex items-center justify-center gap-1.5 ${
+                            isExpertiseHighlight
+                              ? 'text-purple-700 border-purple-200'
+                              : isExperienceHighlight
+                                ? 'text-green-700 border-green-200'
+                                : isMissingHighlight
+                                  ? 'text-amber-700 border-amber-200'
+                                  : isExpired
+                                    ? 'text-gray-400 border-gray-200'
+                                    : 'text-gray-600 border-gray-200'
+                          }`}
+                        >
                           {formatMonthLabel(data.month)}
-                          {isExpired && !isStatHighlighted && <span className="text-[9px] bg-gray-200 text-gray-500 px-1 py-0.5 rounded font-normal">Quá hạn</span>}
-                          {isExpertiseHighlight && <span className="text-[9px] bg-purple-200 text-purple-700 px-1 py-0.5 rounded font-semibold">TB tốt nhất</span>}
-                          {isExperienceHighlight && <span className="text-[9px] bg-green-200 text-green-700 px-1 py-0.5 rounded font-semibold">Cao nhất</span>}
-                          {isMissingHighlight && <span className="text-[9px] bg-amber-200 text-amber-700 px-1 py-0.5 rounded font-semibold">Cần GT</span>}
+                          {isExpired && !isStatHighlighted && (
+                            <span className="text-[9px] bg-gray-200 text-gray-500 px-1 py-0.5 rounded font-normal">
+                              Quá hạn
+                            </span>
+                          )}
+                          {isExpertiseHighlight && (
+                            <span className="text-[9px] bg-purple-200 text-purple-700 px-1 py-0.5 rounded font-semibold">
+                              TB tốt nhất
+                            </span>
+                          )}
+                          {isExperienceHighlight && (
+                            <span className="text-[9px] bg-green-200 text-green-700 px-1 py-0.5 rounded font-semibold">
+                              Cao nhất
+                            </span>
+                          )}
+                          {isMissingHighlight && (
+                            <span className="text-[9px] bg-amber-200 text-amber-700 px-1 py-0.5 rounded font-semibold">
+                              Cần GT
+                            </span>
+                          )}
                         </div>
                         <div className="space-y-2 text-[11px]">
-                          <div className={`flex justify-between items-center px-2 py-1.5 rounded border ${isExpertiseHighlight ? 'bg-purple-50 border-purple-100'
-                            : isExpired ? 'bg-gray-50 border-gray-100'
-                              : 'bg-white border-gray-100'
-                            }`}>
-                            <span className={`font-medium ${isExpired && !isStatHighlighted ? 'text-gray-400' : 'text-gray-500'}`}>CM Chuyên sâu:</span>
-                            <span className={`font-bold ml-2 text-sm ${isExpertiseHighlight ? 'text-purple-700'
-                              : isExpired ? 'text-gray-400'
-                                : data.avgExpertise ? 'text-purple-700' : 'text-gray-400'
-                              }`}>
+                          <div
+                            className={`flex justify-between items-center px-2 py-1.5 rounded border ${
+                              isExpertiseHighlight
+                                ? 'bg-purple-50 border-purple-100'
+                                : isExpired
+                                  ? 'bg-gray-50 border-gray-100'
+                                  : 'bg-white border-gray-100'
+                            }`}
+                          >
+                            <span
+                              className={`font-medium ${isExpired && !isStatHighlighted ? 'text-gray-400' : 'text-gray-500'}`}
+                            >
+                              CM Chuyên sâu:
+                            </span>
+                            <span
+                              className={`font-bold ml-2 text-sm ${
+                                isExpertiseHighlight
+                                  ? 'text-purple-700'
+                                  : isExpired
+                                    ? 'text-gray-400'
+                                    : data.avgExpertise
+                                      ? 'text-purple-700'
+                                      : 'text-gray-400'
+                              }`}
+                            >
                               {data.avgExpertise ?? '-'}
                             </span>
                           </div>
-                          <div className={`flex justify-between items-center px-2 py-1.5 rounded border ${isExperienceHighlight ? 'bg-green-50 border-green-100'
-                            : isExpired ? 'bg-gray-50 border-gray-100'
-                              : 'bg-white border-gray-100'
-                            }`}>
-                            <span className={`font-medium ${isExpired && !isStatHighlighted ? 'text-gray-400' : 'text-gray-500'}`}>QT Trải nghiệm:</span>
-                            <span className={`font-bold ml-2 text-sm ${isExperienceHighlight ? 'text-green-700'
-                              : isExpired ? 'text-gray-400'
-                                : data.maxExperience !== null ? 'text-green-700' : 'text-gray-400'
-                              }`}>
+                          <div
+                            className={`flex justify-between items-center px-2 py-1.5 rounded border ${
+                              isExperienceHighlight
+                                ? 'bg-green-50 border-green-100'
+                                : isExpired
+                                  ? 'bg-gray-50 border-gray-100'
+                                  : 'bg-white border-gray-100'
+                            }`}
+                          >
+                            <span
+                              className={`font-medium ${isExpired && !isStatHighlighted ? 'text-gray-400' : 'text-gray-500'}`}
+                            >
+                              QT Trải nghiệm:
+                            </span>
+                            <span
+                              className={`font-bold ml-2 text-sm ${
+                                isExperienceHighlight
+                                  ? 'text-green-700'
+                                  : isExpired
+                                    ? 'text-gray-400'
+                                    : data.maxExperience !== null
+                                      ? 'text-green-700'
+                                      : 'text-gray-400'
+                              }`}
+                            >
                               {data.maxExperience ?? '-'}
                             </span>
                           </div>
                         </div>
                       </div>
-                    );
+                    )
                   })}
                 </div>
               </div>
@@ -1922,7 +2350,9 @@ export default function TeacherAssignmentPage() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 flex flex-col gap-3 transition-all">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="w-full">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Môn học</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Môn học
+                  </label>
                   <input
                     type="text"
                     placeholder="Nhập mã môn/bộ đề..."
@@ -1933,7 +2363,9 @@ export default function TeacherAssignmentPage() {
                 </div>
 
                 <div className="w-full">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Tháng</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Tháng
+                  </label>
                   <select
                     value={selectedExamMonth}
                     onChange={(e) => setSelectedExamMonth(e.target.value)}
@@ -1941,14 +2373,18 @@ export default function TeacherAssignmentPage() {
                   >
                     <option value="6months">6 tháng gần nhất</option>
                     <option value="all">Tất cả thời gian</option>
-                    {examMonthOptions.map(m => (
-                      <option key={m} value={m}>{formatMonthLabel(m)}</option>
+                    {examMonthOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {formatMonthLabel(m)}
+                      </option>
                     ))}
                   </select>
                 </div>
 
                 <div className="w-full">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Loại kiểm tra</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Loại kiểm tra
+                  </label>
                   <select
                     value={scoreTypeFilter}
                     onChange={(e) => setScoreTypeFilter(e.target.value as any)}
@@ -1961,10 +2397,14 @@ export default function TeacherAssignmentPage() {
                 </div>
 
                 <div className="w-full">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Kết quả</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Kết quả
+                  </label>
                   <select
                     value={scoreResultFilter}
-                    onChange={(e) => setScoreResultFilter(e.target.value as any)}
+                    onChange={(e) =>
+                      setScoreResultFilter(e.target.value as any)
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="all">Tất cả / Bất kỳ</option>
@@ -1977,7 +2417,10 @@ export default function TeacherAssignmentPage() {
                 </div>
               </div>
 
-              {(scoreSubjectKeyword || selectedExamMonth !== '6months' || scoreTypeFilter !== 'all' || scoreResultFilter !== 'all') && (
+              {(scoreSubjectKeyword ||
+                selectedExamMonth !== '6months' ||
+                scoreTypeFilter !== 'all' ||
+                scoreResultFilter !== 'all') && (
                 <div className="flex justify-end">
                   <button
                     onClick={clearFilters}
@@ -1999,15 +2442,25 @@ export default function TeacherAssignmentPage() {
             ) : filteredGroupedExams.length === 0 ? (
               <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
                 <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
-                <p className="text-sm text-gray-500">Không có bài thi nào phù hợp với bộ lọc hiện tại.</p>
+                <p className="text-sm text-gray-500">
+                  Không có bài thi nào phù hợp với bộ lọc hiện tại.
+                </p>
               </div>
             ) : (
               <div className="space-y-6">
                 {filteredGroupedExams.map((group, index) => {
-                  const isExpanded = expandedMonths.has(group.month) || (expandedMonths.size === 0 && (selectedExamMonth === '6months' || selectedExamMonth === 'all') && index === 0);
+                  const isExpanded =
+                    expandedMonths.has(group.month) ||
+                    (expandedMonths.size === 0 &&
+                      (selectedExamMonth === '6months' ||
+                        selectedExamMonth === 'all') &&
+                      index === 0)
 
                   return (
-                    <div key={group.month} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden mb-4">
+                    <div
+                      key={group.month}
+                      className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden mb-4"
+                    >
                       <div
                         className="flex items-center justify-between cursor-pointer group p-4 sm:p-6 bg-gray-50/50 hover:bg-gray-50 transition-colors"
                         onClick={() => toggleMonthExpand(group.month)}
@@ -2022,60 +2475,138 @@ export default function TeacherAssignmentPage() {
                           </span>
                         </h3>
                         <button className="p-2 rounded-full text-gray-400 group-hover:bg-white group-hover:text-gray-700 transition-colors border border-transparent group-hover:border-gray-200 shadow-sm">
-                          {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                          {isExpanded ? (
+                            <ChevronUp className="w-5 h-5" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5" />
+                          )}
                         </button>
                       </div>
 
                       {isExpanded && (
                         <div className="p-4 sm:p-6 pt-2 border-t border-gray-100 animate-tab-enter">
                           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            {group.items.map(item => {
-                              const now = new Date();
-                              const closeAt = new Date(item.close_at);
-                              const { score: effectiveScore, isMissedCurrentMonth } = getEffectiveExamScore(item);
-                              const hasPassingScore = getPassingScore(item) !== null;
+                            {group.items.map((item) => {
+                              const now = new Date()
+                              const closeAt = new Date(item.close_at)
+                              const {
+                                score: effectiveScore,
+                                isMissedCurrentMonth,
+                              } = getEffectiveExamScore(item)
+                              const hasPassingScore =
+                                getPassingScore(item) !== null
 
                               return (
-                                <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:shadow-lg transition-all flex flex-col h-full">
+                                <div
+                                  key={item.id}
+                                  className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:shadow-lg transition-all flex flex-col h-full"
+                                >
                                   <div className="mb-3 flex items-start justify-between gap-2">
-                                    <h4 className="line-clamp-2 text-base font-bold text-gray-900">{item.subject_code}</h4>
-                                    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getExamStatusClass(item)}`}>
+                                    <h4 className="line-clamp-2 text-base font-bold text-gray-900">
+                                      {item.subject_code}
+                                    </h4>
+                                    <span
+                                      className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getExamStatusClass(item)}`}
+                                    >
                                       {getExamStatusLabel(item)}
                                     </span>
                                   </div>
 
                                   <div className="mb-4 space-y-2 text-sm text-gray-600 flex-1">
                                     <div className="flex justify-between">
-                                      <span className="text-gray-500">Loại:</span>
-                                      <span className="font-medium text-gray-900">{formatRegistrationType(item.registration_type)} ({item.exam_type === 'expertise' ? 'CC' : 'TN'})</span>
+                                      <span className="text-gray-500">
+                                        Loại:
+                                      </span>
+                                      <span className="font-medium text-gray-900">
+                                        {formatRegistrationType(
+                                          item.registration_type,
+                                        )}{' '}
+                                        (
+                                        {item.exam_type === 'expertise'
+                                          ? 'CC'
+                                          : 'TN'}
+                                        )
+                                      </span>
                                     </div>
                                     <div className="flex justify-between">
                                       <span className="text-gray-500">Mở:</span>
-                                      <span>{new Date(item.open_at).toLocaleDateString('vi-VN')} {new Date(item.open_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                      <span>
+                                        {new Date(
+                                          item.open_at,
+                                        ).toLocaleDateString('vi-VN')}{' '}
+                                        {new Date(
+                                          item.open_at,
+                                        ).toLocaleTimeString('vi-VN', {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}
+                                      </span>
                                     </div>
                                     <div className="flex justify-between">
-                                      <span className="text-gray-500">Đóng:</span>
-                                      <span>{new Date(item.close_at).toLocaleDateString('vi-VN')} {new Date(item.close_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                      <span className="text-gray-500">
+                                        Đóng:
+                                      </span>
+                                      <span>
+                                        {new Date(
+                                          item.close_at,
+                                        ).toLocaleDateString('vi-VN')}{' '}
+                                        {new Date(
+                                          item.close_at,
+                                        ).toLocaleTimeString('vi-VN', {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}
+                                      </span>
                                     </div>
-                                    {nowTs < new Date(item.open_at).getTime() && (
+                                    {nowTs <
+                                      new Date(item.open_at).getTime() && (
                                       <div className="mt-3 flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700">
-                                        <span className="text-xs font-semibold">Mở sau</span>
-                                        <span className="font-mono text-sm font-bold">{formatCountdown((new Date(item.open_at).getTime() - nowTs) / 1000)}</span>
+                                        <span className="text-xs font-semibold">
+                                          Mở sau
+                                        </span>
+                                        <span className="font-mono text-sm font-bold">
+                                          {formatCountdown(
+                                            (new Date(item.open_at).getTime() -
+                                              nowTs) /
+                                              1000,
+                                          )}
+                                        </span>
                                       </div>
                                     )}
                                     <div className="flex justify-between items-center bg-gray-50 border border-gray-100 p-2.5 rounded-lg mt-3">
-                                      <span className="font-semibold text-gray-700">Điểm số:</span>
-                                      {item.explanation_status === 'accepted' ? (
-                                        <span className="text-blue-600 italic text-sm font-medium">Miễn thi (Đã duyệt GT)</span>
+                                      <span className="font-semibold text-gray-700">
+                                        Điểm số:
+                                      </span>
+                                      {item.explanation_status ===
+                                      'accepted' ? (
+                                        <span className="text-blue-600 italic text-sm font-medium">
+                                          Miễn thi (Đã duyệt GT)
+                                        </span>
                                       ) : effectiveScore === null ? (
-                                        <span className="text-gray-400 italic text-sm">Chưa có</span>
+                                        <span className="text-gray-400 italic text-sm">
+                                          Chưa có
+                                        </span>
                                       ) : !hasPassingScore ? (
-                                        <span className="font-bold text-sm text-amber-700">{formatScoreSummary(item, effectiveScore)}</span>
+                                        <span className="font-bold text-sm text-amber-700">
+                                          {formatScoreSummary(
+                                            item,
+                                            effectiveScore,
+                                          )}
+                                        </span>
                                       ) : (
-                                        <span className={`font-bold text-base flex items-center gap-2 ${isExamPassed(item, effectiveScore) ? 'text-green-600' : 'text-red-600'}`}>
-                                          {formatScoreSummary(item, effectiveScore)}
-                                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isExamPassed(item, effectiveScore) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                            {isExamPassed(item, effectiveScore) ? 'ĐẠT' : 'KHÔNG ĐẠT'}
+                                        <span
+                                          className={`font-bold text-base flex items-center gap-2 ${isExamPassed(item, effectiveScore) ? 'text-green-600' : 'text-red-600'}`}
+                                        >
+                                          {formatScoreSummary(
+                                            item,
+                                            effectiveScore,
+                                          )}
+                                          <span
+                                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isExamPassed(item, effectiveScore) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
+                                          >
+                                            {isExamPassed(item, effectiveScore)
+                                              ? 'ĐẠT'
+                                              : 'KHÔNG ĐẠT'}
                                           </span>
                                         </span>
                                       )}
@@ -2083,12 +2614,17 @@ export default function TeacherAssignmentPage() {
                                   </div>
 
                                   <div className="mt-auto pt-4 border-t border-gray-100">
-                                    {item.can_take && nowTs >= new Date(item.open_at).getTime() ? (
+                                    {item.can_take &&
+                                    nowTs >=
+                                      new Date(item.open_at).getTime() ? (
                                       <Link
                                         href={`/user/assignments/exam/${item.id}`}
                                         className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer"
                                       >
-                                        {item.score !== null || item.assignment_status === 'submitted' ? 'Làm bài' : 'Bắt đầu làm bài'}
+                                        {item.score !== null ||
+                                        item.assignment_status === 'submitted'
+                                          ? 'Làm bài'
+                                          : 'Bắt đầu làm bài'}
                                       </Link>
                                     ) : shouldShowExplanationCTA(item) ? (
                                       <Link
@@ -2097,7 +2633,8 @@ export default function TeacherAssignmentPage() {
                                       >
                                         Giải trình
                                       </Link>
-                                    ) : isMissedCurrentMonth && !item.explanation_status ? (
+                                    ) : isMissedCurrentMonth &&
+                                      !item.explanation_status ? (
                                       <Link
                                         href={buildExplanationHref(item)}
                                         className="inline-flex w-full items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition cursor-pointer"
@@ -2108,37 +2645,55 @@ export default function TeacherAssignmentPage() {
                                       item.explanation_status === 'rejected' ? (
                                         <Link
                                           href={`/user/giaitrinh`}
-                                          title={item.admin_note || 'Nhấn để xem chi tiết'}
+                                          title={
+                                            item.admin_note ||
+                                            'Nhấn để xem chi tiết'
+                                          }
                                           className="inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold border bg-red-50 text-red-700 border-red-200 hover:bg-red-100 transition-colors cursor-pointer"
                                         >
-                                          Giải trình: {formatExplanationStatus(item.explanation_status)}
+                                          Giải trình:{' '}
+                                          {formatExplanationStatus(
+                                            item.explanation_status,
+                                          )}
                                         </Link>
                                       ) : (
-                                        <div className={`inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold border ${item.explanation_status === 'accepted' ? 'bg-green-50 text-green-700 border-green-200' :
-                                          'bg-amber-50 text-amber-700 border-amber-200'
-                                          }`}>
-                                          Giải trình: {formatExplanationStatus(item.explanation_status)}
+                                        <div
+                                          className={`inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold border ${
+                                            item.explanation_status ===
+                                            'accepted'
+                                              ? 'bg-green-50 text-green-700 border-green-200'
+                                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                                          }`}
+                                        >
+                                          Giải trình:{' '}
+                                          {formatExplanationStatus(
+                                            item.explanation_status,
+                                          )}
                                         </div>
                                       )
                                     ) : (
                                       <button
                                         type="button"
-                                        onClick={() => setSelectedExamInfo(item)}
+                                        onClick={() =>
+                                          setSelectedExamInfo(item)
+                                        }
                                         className="inline-flex w-full items-center justify-center rounded-lg bg-blue-50 border border-blue-100 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
                                       >
-                                        {nowTs < new Date(item.open_at).getTime() ? 'Chưa tới giờ mở' : 'Chi tiết bài thi'}
+                                        {nowTs <
+                                        new Date(item.open_at).getTime()
+                                          ? 'Chưa tới giờ mở'
+                                          : 'Chi tiết bài thi'}
                                       </button>
                                     )}
                                   </div>
                                 </div>
-                              );
+                              )
                             })}
                           </div>
-
                         </div>
                       )}
                     </div>
-                  );
+                  )
                 })}
               </div>
             )}
@@ -2146,8 +2701,12 @@ export default function TeacherAssignmentPage() {
         ) : assignments.length === 0 ? (
           <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
             <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có bài tập</h3>
-            <p className="text-gray-500">Hiện tại chưa có bài tập nào được giao cho bạn.</p>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Chưa có bài tập
+            </h3>
+            <p className="text-gray-500">
+              Hiện tại chưa có bài tập nào được giao cho bạn.
+            </p>
           </div>
         ) : (
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -2160,49 +2719,75 @@ export default function TeacherAssignmentPage() {
                   <div className="flex items-start justify-between mb-1.5">
                     <BookOpen className="w-5 h-5 shrink-0" />
                     {assignment.status === 'published' && (
-                      <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-semibold">Mở</span>
+                      <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-semibold">
+                        Mở
+                      </span>
                     )}
                   </div>
-                  <h3 className="text-sm font-bold mb-1 line-clamp-2 leading-tight">{assignment.assignment_title}</h3>
-                  <p className="text-[11px] text-blue-100 line-clamp-1">{assignment.video_title}</p>
+                  <h3 className="text-sm font-bold mb-1 line-clamp-2 leading-tight">
+                    {assignment.assignment_title}
+                  </h3>
+                  <p className="text-[11px] text-blue-100 line-clamp-1">
+                    {assignment.video_title}
+                  </p>
                 </div>
 
                 <div className="p-3">
                   <div className="flex items-center gap-2 mb-2.5 text-xs flex-wrap">
                     <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
                       <FileText className="w-3 h-3 text-gray-500" />
-                      <span className="font-bold text-gray-900">{assignment.question_count || 0}</span>
+                      <span className="font-bold text-gray-900">
+                        {assignment.question_count || 0}
+                      </span>
                       <span className="text-gray-600">câu</span>
                     </div>
 
                     <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
                       <Award className="w-3 h-3 text-gray-500" />
-                      <span className="font-bold text-gray-900">{assignment.total_points}</span>
+                      <span className="font-bold text-gray-900">
+                        {assignment.total_points}
+                      </span>
                       <span className="text-gray-600">đ</span>
                     </div>
 
                     <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
                       <CheckCircle className="w-3 h-3 text-gray-500" />
-                      <span className="font-bold text-gray-900">{assignment.passing_score}</span>
+                      <span className="font-bold text-gray-900">
+                        {assignment.passing_score}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1">
                       <Clock className="w-3 h-3 text-gray-500" />
-                      <span className="font-bold text-gray-900">{assignment.time_limit_minutes}p</span>
+                      <span className="font-bold text-gray-900">
+                        {assignment.time_limit_minutes}p
+                      </span>
                     </div>
                   </div>
 
                   {assignment.recent_submission && (
-                    <div className={`mb-2.5 p-2.5 rounded-lg border ${assignment.recent_submission.is_passed
-                      ? 'bg-green-50 border-green-300'
-                      : 'bg-amber-50 border-amber-300'
-                      }`}>
+                    <div
+                      className={`mb-2.5 p-2.5 rounded-lg border ${
+                        assignment.recent_submission.is_passed
+                          ? 'bg-green-50 border-green-300'
+                          : 'bg-amber-50 border-amber-300'
+                      }`}
+                    >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-semibold text-gray-700">Điểm gần nhất:</span>
-                        <span className={`text-lg font-bold ${assignment.recent_submission.is_passed ? 'text-green-600' : 'text-amber-600'
-                          }`}>
+                        <span className="text-[10px] font-semibold text-gray-700">
+                          Điểm gần nhất:
+                        </span>
+                        <span
+                          className={`text-lg font-bold ${
+                            assignment.recent_submission.is_passed
+                              ? 'text-green-600'
+                              : 'text-amber-600'
+                          }`}
+                        >
                           {assignment.recent_submission.score}
-                          <span className="text-xs text-gray-500">/{assignment.total_points}</span>
+                          <span className="text-xs text-gray-500">
+                            /{assignment.total_points}
+                          </span>
                         </span>
                       </div>
                     </div>
@@ -2211,12 +2796,17 @@ export default function TeacherAssignmentPage() {
                   <Button
                     onClick={() => startAssignment(assignment)}
                     disabled={assignment.status !== 'published'}
-                    className={`w-full py-2 text-sm font-semibold h-auto cursor-pointer disabled:cursor-not-allowed ${assignment.status === 'published'
-                      ? 'shadow-sm hover:shadow-md'
-                      : 'bg-gray-200 text-gray-500 hover:bg-gray-200'
-                      }`}
+                    className={`w-full py-2 text-sm font-semibold h-auto cursor-pointer disabled:cursor-not-allowed ${
+                      assignment.status === 'published'
+                        ? 'shadow-sm hover:shadow-md'
+                        : 'bg-gray-200 text-gray-500 hover:bg-gray-200'
+                    }`}
                   >
-                    {assignment.status === 'published' ? (assignment.recent_submission ? 'Làm lại' : 'Bắt đầu') : 'Chưa mở'}
+                    {assignment.status === 'published'
+                      ? assignment.recent_submission
+                        ? 'Làm lại'
+                        : 'Bắt đầu'
+                      : 'Chưa mở'}
                   </Button>
                 </div>
               </div>
@@ -2226,25 +2816,30 @@ export default function TeacherAssignmentPage() {
 
         {/* Pass Rate Drill-down Modal */}
         {(() => {
-          const now = new Date();
+          const now = new Date()
           const last6Months = new Set(
             Array.from({ length: 6 }, (_, i) => {
-              const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+              const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+            }),
+          )
+          const passRateItems = examAssignments
+            .filter((item) => {
+              const date = new Date(item.open_at)
+              const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+              const isExcluded = item.explanation_status === 'accepted'
+              const { score } = getEffectiveExamScore(item)
+              return last6Months.has(monthKey) && !isExcluded && score !== null
             })
-          );
-          const passRateItems = examAssignments.filter(item => {
-            const date = new Date(item.open_at);
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            const isExcluded = item.explanation_status === 'accepted';
-            const { score } = getEffectiveExamScore(item);
-            return last6Months.has(monthKey) && !isExcluded && score !== null;
-          }).sort((a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime());
+            .sort(
+              (a, b) =>
+                new Date(b.open_at).getTime() - new Date(a.open_at).getTime(),
+            )
 
-          const passed = passRateItems.filter(item => {
-            const { score } = getEffectiveExamScore(item);
-            return isExamPassed(item, score);
-          }).length;
+          const passed = passRateItems.filter((item) => {
+            const { score } = getEffectiveExamScore(item)
+            return isExamPassed(item, score)
+          }).length
 
           return (
             <Modal
@@ -2253,67 +2848,103 @@ export default function TeacherAssignmentPage() {
               title="Chi tiết Tỉ lệ đạt"
               subtitle={`${passed} / ${passRateItems.length} bài đạt yêu cầu trong 6 tháng gần nhất`}
               maxWidth="xl"
-              headerColor="bg-red-600"
+              headerColor="bg-[#a1001f]"
               footer={
                 <div className="flex justify-end">
-                  <Button variant="outline" onClick={() => setShowPassRateModal(false)}>Đóng</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowPassRateModal(false)}
+                  >
+                    Đóng
+                  </Button>
                 </div>
               }
             >
               {passRateItems.length === 0 ? (
                 <div className="py-10 text-center text-gray-400">
                   <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                  <p className="text-sm">Không có bài thi nào được tính trong 6 tháng gần nhất.</p>
+                  <p className="text-sm">
+                    Không có bài thi nào được tính trong 6 tháng gần nhất.
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-                  {passRateItems.map(item => {
-                    const { score: effectiveScore } = getEffectiveExamScore(item);
-                    const isPassed = isExamPassed(item, effectiveScore);
-                    const date = new Date(item.open_at);
-                    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                  {passRateItems.map((item) => {
+                    const { score: effectiveScore } =
+                      getEffectiveExamScore(item)
+                    const isPassed = isExamPassed(item, effectiveScore)
+                    const date = new Date(item.open_at)
+                    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
                     return (
                       <div
                         key={item.id}
-                        className={`flex items-center gap-3 rounded-lg border px-4 py-3 transition-all ${isPassed
-                          ? 'border-green-200 bg-green-50'
-                          : 'border-red-200 bg-red-50'
-                          }`}
+                        className={`flex items-center gap-3 rounded-lg border px-4 py-3 transition-all ${
+                          isPassed
+                            ? 'border-green-200 bg-green-50'
+                            : 'border-red-200 bg-red-50'
+                        }`}
                       >
                         {/* Pass/Fail icon */}
-                        <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isPassed ? 'bg-green-200 text-green-700' : 'bg-red-200 text-red-700'
-                          }`}>
-                          {isPassed
-                            ? <CheckCircle className="w-4 h-4" />
-                            : <XCircle className="w-4 h-4" />}
+                        <div
+                          className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                            isPassed
+                              ? 'bg-green-200 text-green-700'
+                              : 'bg-red-200 text-red-700'
+                          }`}
+                        >
+                          {isPassed ? (
+                            <CheckCircle className="w-4 h-4" />
+                          ) : (
+                            <XCircle className="w-4 h-4" />
+                          )}
                         </div>
 
                         {/* Subject & type */}
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-sm text-gray-900 truncate">{item.subject_code}</p>
+                          <p className="font-bold text-sm text-gray-900 truncate">
+                            {item.subject_code}
+                          </p>
                           <p className="text-xs text-gray-500">
-                            {formatMonthLabel(monthKey)} · {item.exam_type === 'expertise' ? 'Chuyên môn' : 'Trải nghiệm'} · {item.registration_type === 'official' ? 'Chính thức' : 'Bổ sung'}
+                            {formatMonthLabel(monthKey)} ·{' '}
+                            {item.exam_type === 'expertise'
+                              ? 'Chuyên môn'
+                              : 'Trải nghiệm'}{' '}
+                            ·{' '}
+                            {item.registration_type === 'official'
+                              ? 'Chính thức'
+                              : 'Bổ sung'}
                           </p>
                         </div>
 
                         {/* Score */}
                         <div className="shrink-0 text-right">
-                          <p className={`text-base font-bold ${isPassed ? 'text-green-700' : 'text-red-700'
-                            }`}>
-                            {effectiveScore} <span className="text-xs font-normal text-gray-400">/ {item.total_points}</span>
+                          <p
+                            className={`text-base font-bold ${
+                              isPassed ? 'text-green-700' : 'text-red-700'
+                            }`}
+                          >
+                            {effectiveScore}{' '}
+                            <span className="text-xs font-normal text-gray-400">
+                              / {item.total_points}
+                            </span>
                           </p>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isPassed ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'
-                            }`}>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              isPassed
+                                ? 'bg-green-200 text-green-800'
+                                : 'bg-red-200 text-red-800'
+                            }`}
+                          >
                             {isPassed ? 'ĐẠT' : 'KHÔNG ĐẠT'}
                           </span>
                         </div>
                       </div>
-                    );
+                    )
                   })}
                 </div>
               )}
             </Modal>
-          );
+          )
         })()}
 
         <Modal
@@ -2324,7 +2955,10 @@ export default function TeacherAssignmentPage() {
           maxWidth="lg"
           footer={
             <div className="flex justify-end">
-              <Button variant="outline" onClick={() => setSelectedExamInfo(null)}>
+              <Button
+                variant="outline"
+                onClick={() => setSelectedExamInfo(null)}
+              >
                 Đóng
               </Button>
             </div>
@@ -2335,31 +2969,49 @@ export default function TeacherAssignmentPage() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-lg bg-gray-50 p-3">
                   <p className="text-xs text-gray-500">Môn học</p>
-                  <p className="font-semibold text-gray-900">{selectedExamInfo.subject_code}</p>
+                  <p className="font-semibold text-gray-900">
+                    {selectedExamInfo.subject_code}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">
                   <p className="text-xs text-gray-500">Trạng thái</p>
-                  <p className="font-semibold text-gray-900">{getExamStatusLabel(selectedExamInfo)}</p>
+                  <p className="font-semibold text-gray-900">
+                    {getExamStatusLabel(selectedExamInfo)}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">
                   <p className="text-xs text-gray-500">Loại đăng ký</p>
-                  <p className="font-semibold text-gray-900">{formatRegistrationType(selectedExamInfo.registration_type)}</p>
+                  <p className="font-semibold text-gray-900">
+                    {formatRegistrationType(selectedExamInfo.registration_type)}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">
                   <p className="text-xs text-gray-500">Bộ đề</p>
-                  <p className="font-semibold text-gray-900">{selectedExamInfo.set_code} - {selectedExamInfo.set_name}</p>
+                  <p className="font-semibold text-gray-900">
+                    {selectedExamInfo.set_code} - {selectedExamInfo.set_name}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">
                   <p className="text-xs text-gray-500">Mở bài</p>
-                  <p className="font-semibold text-gray-900">{new Date(selectedExamInfo.open_at).toLocaleString('vi-VN')}</p>
+                  <p className="font-semibold text-gray-900">
+                    {new Date(selectedExamInfo.open_at).toLocaleString('vi-VN')}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">
                   <p className="text-xs text-gray-500">Đóng bài</p>
-                  <p className="font-semibold text-gray-900">{new Date(selectedExamInfo.close_at).toLocaleString('vi-VN')}</p>
+                  <p className="font-semibold text-gray-900">
+                    {new Date(selectedExamInfo.close_at).toLocaleString(
+                      'vi-VN',
+                    )}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3 sm:col-span-2">
                   <p className="text-xs text-gray-500">Tình trạng giải trình</p>
-                  <p className="font-semibold text-gray-900">{formatExplanationStatus(selectedExamInfo.explanation_status)}</p>
+                  <p className="font-semibold text-gray-900">
+                    {formatExplanationStatus(
+                      selectedExamInfo.explanation_status,
+                    )}
+                  </p>
                 </div>
               </div>
 
@@ -2367,8 +3019,8 @@ export default function TeacherAssignmentPage() {
                 <p className="text-xs text-blue-700">Điểm</p>
                 <p className="text-base font-bold text-blue-900">
                   {(() => {
-                    const { score } = getEffectiveExamScore(selectedExamInfo);
-                    return formatScoreSummary(selectedExamInfo, score);
+                    const { score } = getEffectiveExamScore(selectedExamInfo)
+                    return formatScoreSummary(selectedExamInfo, score)
                   })()}
                 </p>
               </div>
@@ -2377,5 +3029,5 @@ export default function TeacherAssignmentPage() {
         </Modal>
       </div>
     </PageContainer>
-  );
+  )
 }

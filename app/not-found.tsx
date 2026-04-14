@@ -1,47 +1,47 @@
-"use client";
+'use client'
 
-import { useAuth } from "@/lib/auth-context";
-import { ArrowLeft, HomeIcon } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useAuth } from '@/lib/auth-context'
+import { ArrowLeft, HomeIcon } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
 export default function NotFound() {
-  const router = useRouter();
-  const { user, isLoading } = useAuth();
-  const [countdown, setCountdown] = useState(5);
+  const router = useRouter()
+  const { user, isLoading } = useAuth()
+  const [countdown, setCountdown] = useState(5)
 
   // Xác định trang chủ phù hợp
   const getHomePath = () => {
-    if (!user) return '/login';
-    return user.isAdmin ? '/admin/dashboard' : '/user/thongtingv';
-  };
+    if (!user) return '/login'
+    return user.isAdmin ? '/admin/dashboard' : '/user/thong-tin-giao-vien'
+  }
 
-  const homePath = getHomePath();
+  const homePath = getHomePath()
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading) return
 
     // Auto redirect sau 5 giây
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
-          router.push(homePath);
-          return 0;
+          router.push(homePath)
+          return 0
         }
-        return prev - 1;
-      });
-    }, 1000);
+        return prev - 1
+      })
+    }, 1000)
 
-    return () => clearInterval(timer);
-  }, [isLoading, homePath, router]);
+    return () => clearInterval(timer)
+  }, [isLoading, homePath, router])
 
   const handleGoHome = () => {
-    router.push(homePath);
-  };
+    router.push(homePath)
+  }
 
   const handleGoBack = () => {
-    router.back();
-  };
+    router.back()
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 p-4">
@@ -77,27 +77,28 @@ export default function NotFound() {
             Trang không tồn tại
           </h2>
           <p className="text-gray-600 text-lg mb-8 max-w-md mx-auto">
-            Đường dẫn bạn đang tìm không tồn tại hoặc đã bị di chuyển. Đừng lo, chúng tôi sẽ đưa bạn về nơi an toàn!
+            Đường dẫn bạn đang tìm không tồn tại hoặc đã bị di chuyển. Đừng lo,
+            chúng tôi sẽ đưa bạn về nơi an toàn!
           </p>
 
           {/* Auto Redirect Info */}
           {!isLoading && (
             <div className="bg-gradient-to-r from-[#a1001f]/10 to-[#c1122f]/10 border border-[#a1001f]/20 rounded-xl p-4 mb-8">
               <p className="text-gray-700 font-medium">
-                Tự động chuyển hướng sau{" "}
+                Tự động chuyển hướng sau{' '}
                 <span className="text-[#a1001f] font-bold text-xl">
                   {countdown}
-                </span>{" "}
+                </span>{' '}
                 giây...
               </p>
               <p className="text-sm text-gray-600 mt-1">
-                Đích đến:{" "}
+                Đích đến:{' '}
                 <span className="font-semibold">
                   {user
                     ? user.isAdmin
-                      ? "Admin Dashboard"
-                      : "Thông tin giáo viên"
-                    : "Trang đăng nhập"}
+                      ? 'Admin Dashboard'
+                      : 'Thông tin giáo viên'
+                    : 'Trang đăng nhập'}
                 </span>
               </p>
             </div>
@@ -113,12 +114,12 @@ export default function NotFound() {
               <HomeIcon className="w-5 h-5 group-hover:rotate-12 transition-transform" />
               <span>
                 {isLoading
-                  ? "Đang tải..."
+                  ? 'Đang tải...'
                   : user
-                  ? user.isAdmin
-                    ? "Về trang Admin"
-                    : "Về trang của tôi"
-                  : "Về trang đăng nhập"}
+                    ? user.isAdmin
+                      ? 'Về trang Admin'
+                      : 'Về trang của tôi'
+                    : 'Về trang đăng nhập'}
               </span>
             </button>
 
@@ -134,7 +135,8 @@ export default function NotFound() {
           {/* Additional Info */}
           <div className="mt-8 pt-8 border-t border-gray-200">
             <p className="text-gray-500 text-sm">
-              Nếu bạn nghĩ đây là lỗi hệ thống, vui lòng liên hệ bộ phận kỹ thuật.
+              Nếu bạn nghĩ đây là lỗi hệ thống, vui lòng liên hệ bộ phận kỹ
+              thuật.
             </p>
           </div>
         </div>
@@ -147,5 +149,5 @@ export default function NotFound() {
         </div>
       </div>
     </div>
-  );
+  )
 }
