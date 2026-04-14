@@ -25,7 +25,11 @@ interface Post {
     hidden_comment_count?: number
 }
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+async function fetchPostsArray<T>(url: string): Promise<T[]> {
+    const res = await fetch(url)
+    const data: unknown = await res.json().catch(() => null)
+    return Array.isArray(data) ? (data as T[]) : []
+}
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
     published: { label: '✓ Đã công bố', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
@@ -65,16 +69,18 @@ export default function TruyenthongDashboardPage() {
     if (filterStatus !== 'all') queryParams.append('status', filterStatus)
     if (searchTerm) queryParams.append('search', searchTerm)
 
-    const { data: posts, isLoading } = useSWR<Post[]>(
+    const { data: rawPosts, isLoading } = useSWR<Post[]>(
         `/api/truyenthong/posts?${queryParams.toString()}`,
-        fetcher
+        fetchPostsArray<Post>,
+        { revalidateOnFocus: false, dedupingInterval: 60000 }
     )
+    const posts = Array.isArray(rawPosts) ? rawPosts : []
 
     const tabs = [
-        { id: 'all',       label: 'Tất cả',   count: posts?.length || 0 },
-        { id: 'draft',     label: 'Bản nháp', count: posts?.filter(p => p.status === 'draft').length || 0 },
-        { id: 'published', label: 'Công bố',  count: posts?.filter(p => p.status === 'published').length || 0 },
-        { id: 'hidden',    label: 'Đã ẩn',    count: posts?.filter(p => p.status === 'hidden').length || 0 },
+        { id: 'all',       label: 'Tất cả',   count: posts.length },
+        { id: 'draft',     label: 'Bản nháp', count: posts.filter(p => p.status === 'draft').length },
+        { id: 'published', label: 'Công bố',  count: posts.filter(p => p.status === 'published').length },
+        { id: 'hidden',    label: 'Đã ẩn',    count: posts.filter(p => p.status === 'hidden').length },
     ]
 
     return (
@@ -108,7 +114,7 @@ export default function TruyenthongDashboardPage() {
                 <div>
                     <h3 className="text-lg font-extrabold text-gray-900">Danh sách bài viết</h3>
                     <p className="text-sm text-gray-500 mt-0.5">
-                        {posts?.length ? `${posts.length} bài viết` : 'Chưa có bài viết nào'}
+                        {posts.length ? `${posts.length} bài viết` : 'Chưa có bài viết nào'}
                     </p>
                 </div>
                 <div className="w-full md:w-72">
@@ -135,7 +141,7 @@ export default function TruyenthongDashboardPage() {
                     <div className="p-4">
                         <TableSkeleton rows={5} columns={4} />
                     </div>
-                ) : !posts || posts.length === 0 ? (
+                ) : posts.length === 0 ? (
                     <div className="py-4">
                         <EmptyState
                             icon={FileText}

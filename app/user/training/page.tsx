@@ -19,7 +19,6 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 import AssignmentsPage from '../assignments/page'
-
 interface TrainingLesson {
   id: number
   name: string
@@ -119,7 +118,6 @@ export default function TrainingPage() {
   const prewarmInFlightRef = useRef<Map<string, Promise<void>>>(new Map())
   const prewarmLastAtRef = useRef<Map<string, number>>(new Map())
   const prewarmTimerByLessonRef = useRef<Map<number, NodeJS.Timeout>>(new Map())
-
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher()
 
   // Refs để event listeners luôn đọc được giá trị mới nhất
@@ -151,7 +149,6 @@ export default function TrainingPage() {
 
   const handleForceLogout = () => {
     try {
-      localStorage.removeItem('teacher_auto_fill_data')
       localStorage.removeItem('token')
       localStorage.removeItem('refreshToken')
       localStorage.removeItem('user')
@@ -230,7 +227,7 @@ export default function TrainingPage() {
     return response.json()
   }, [])
 
-  // Auto-search based on logged-in user's email
+  // Auto-search: extract code from email local-part — no extra API call
   useEffect(() => {
     if (user && user.email && !hasAutoSearched && !submitCode) {
       setHasAutoSearched(true)
@@ -239,7 +236,7 @@ export default function TrainingPage() {
       ;(async () => {
         try {
           const res = await secureFetcher(
-            `/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`,
+            `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
           )
           if (res?.teacher?.code) {
             setSubmitCode(res.teacher.code)
@@ -263,10 +260,9 @@ export default function TrainingPage() {
   }, [user, hasAutoSearched, submitCode, secureFetcher])
 
   const { data: teacherData, isLoading: isLoadingTeacher } = useSWR(
-    submitCode && user ? `/api/teachers?code=${submitCode}` : null,
+    submitCode && user ? `/api/teachers/info?code=${submitCode}` : null,
     secureFetcher,
-    {
-      revalidateOnFocus: false,
+    {      revalidateOnFocus: false,
       revalidateOnReconnect: false,
       dedupingInterval: 120000,
       shouldRetryOnError: false,
@@ -322,7 +318,6 @@ export default function TrainingPage() {
       shouldRetryOnError: false,
     },
   )
-
   const { data: assignmentsData, isLoading: isLoadingAssignments } = useSWR(
     teacher && user
       ? `/api/training-assignments?status=published&teacher_code=${teacher.code}`
@@ -333,7 +328,6 @@ export default function TrainingPage() {
       dedupingInterval: 30000,
     },
   )
-
   const completedLessons = useMemo(() => {
     if (!trainingData?.lessons) return 0
     return trainingData.lessons.filter(
@@ -531,8 +525,7 @@ export default function TrainingPage() {
                   <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
                   <div className="h-3 bg-gray-200 rounded w-1/2"></div>
                 </div>
-              ))}
-            </div>
+              ))}            </div>
           </div>
         </div>
       ) : trainingData ? (

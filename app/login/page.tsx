@@ -45,7 +45,6 @@ export default function LoginPage() {
         localStorage.removeItem(SAVED_LOGIN_KEY);
         return;
       }
-
       localStorage.setItem(
         SAVED_LOGIN_KEY,
         JSON.stringify({ email: accountEmail.trim(), role: accountRole })
@@ -56,44 +55,46 @@ export default function LoginPage() {
   }, [rememberAccount]);
 
   useEffect(() => {
-    // If already logged in, redirect to dashboard - wait for auth to finish loading
     if (!isLoading && !hasCheckedAuth.current) {
       hasCheckedAuth.current = true;
       if (user) {
         const redirectPath = user.role === 'teacher' ? '/user/truyenthong' : '/admin/dashboard';
-        logger.info('User already logged in, redirecting based on role', {
-          user: user.email,
-          role: user.role,
-          path: redirectPath
-        });
+        logger.info('User already logged in, redirecting', { email: user.email, role: user.role, path: redirectPath });
         router.replace(redirectPath);
       }
     }
   }, [user, isLoading, router]);
 
-  // Memoize role change handlers to prevent re-renders
   const handleRoleChange = useCallback((newRole: 'teacher' | 'manager') => {
     setRole(newRole);
-    logger.debug('Role changed to', { role: newRole });
   }, []);
 
   const handleTogglePassword = useCallback(() => {
     setShowPassword(prev => !prev);
   }, []);
 
+  /** Determine teacher redirect based on teacherSync from API response. */
+  function resolveTeacherRedirect(teacherSync?: { foundInDatabase?: boolean }, teacherEmail?: string): string {
+    if (teacherSync?.foundInDatabase) {
+      if (teacherEmail) {
+        try { localStorage.setItem('tps_profile_check_done_email', teacherEmail.toLowerCase()); } catch { /* */ }
+      }
+      return '/user/truyenthong';
+    }
+    return '/checkdatasource';
+  }
+
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError("");
 
-    // Basic client-side validation
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
       setError('Vui lòng nhập Email hoặc Mã đăng nhập.');
       setIsSubmitting(false);
       return;
     }
-    // Strict email check removed to allow username/code login
     if (password.length < 6) {
       setError('Mật khẩu cần ít nhất 6 ký tự.');
       setIsSubmitting(false);
@@ -103,35 +104,54 @@ export default function LoginPage() {
     logger.info('Đang thực hiện login', { email: trimmedEmail, role });
 
     try {
-      // ─── Step 1: Try app-internal login first ───
-      logger.api('POST', '/api/app-auth/login', { email: trimmedEmail });
-
+      // ─── Step 1: Try app-internal login ───
       const appAuthResponse = await fetch('/api/app-auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: trimmedEmail, password }),
       });
 
-      const appAuthData = await appAuthResponse.json();
+      let appAuthData: {
+        appUser?: boolean;
+        error?: string;
+        dbUnavailable?: boolean;
+        idToken?: string;
+        email?: string;
+        displayName?: string;
+        role?: string;
+        localId?: string;
+        isAdmin?: boolean;
+        permissions?: string[];
+        teacherSync?: { foundInDatabase?: boolean };
+      } = {};
+      try {
+        appAuthData = await appAuthResponse.json();
+      } catch {
+        logger.warn('App auth response was not valid JSON');
+      }
 
       if (appAuthData.appUser === true) {
-        // ─── App user login successful ───
-        logger.success('App user login successful', { email: appAuthData.email });
+        if (!appAuthData.idToken || !appAuthData.localId) {
+          throw new Error('Phản hồi đăng nhập app không đầy đủ. Vui lòng thử lại.');
+        }
 
+        const emailResolved = appAuthData.email ?? trimmedEmail;
         const userData = {
-          email: appAuthData.email,
-          displayName: appAuthData.displayName,
-          role: appAuthData.role,
+          email: emailResolved,
+          displayName: appAuthData.displayName ?? emailResolved.split('@')[0] ?? emailResolved,
+          role: (appAuthData.role ?? 'teacher') as 'teacher' | 'manager' | 'super_admin' | 'admin' | 'hr',
           localId: appAuthData.localId,
-          isAdmin: appAuthData.isAdmin,
-          isAppUser: true,
-          permissions: appAuthData.permissions || [],
+          isAdmin: Boolean(appAuthData.isAdmin),
+          isAppUser: true as const,
+          permissions: appAuthData.permissions ?? [],
         };
 
         updateUser(userData, appAuthData.idToken);
 
-        const isAdminRole = appAuthData.isAdmin;
-        const redirectPath = isAdminRole ? '/admin/dashboard' : '/user/truyenthong';
+        const isAdminRole = Boolean(appAuthData.isAdmin);
+        const redirectPath = isAdminRole
+          ? '/admin/dashboard'
+          : resolveTeacherRedirect(appAuthData.teacherSync, emailResolved);
 
         if (appAuthData.role === 'super_admin') {
           toast.success(`Chào mừng Super Admin ${appAuthData.displayName}!`, { icon: '👑' });
@@ -142,22 +162,22 @@ export default function LoginPage() {
         }
 
         persistRememberedAccount(appAuthData.email || trimmedEmail, role);
-
-        logger.info('Redirecting app user to', { path: redirectPath });
+        logger.info('Redirecting app user', { path: redirectPath, role: userData.role });
         setTimeout(() => { router.replace(redirectPath); }, 500);
         return;
       }
 
-      if (!appAuthResponse.ok && appAuthData.appUser !== false) {
-        // App auth returned an actual error (wrong password for existing app user)
+      // ─── Fallback to Firebase ───
+      const allowFirebaseFallback =
+        (appAuthResponse.ok && appAuthData.appUser === false) ||
+        appAuthResponse.status >= 500 ||
+        appAuthData.dbUnavailable === true;
+
+      if (!allowFirebaseFallback) {
         throw new Error(appAuthData.error || 'Đăng nhập thất bại');
       }
 
-      // ─── Step 2: appUser === false → Fallback to Firebase ───
-      logger.info('Not an app user, trying Firebase login', { email: trimmedEmail });
-
-      logger.api('POST', '/api/auth/login', { email, role });
-
+      // ─── Step 2: Firebase login ───
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -165,15 +185,11 @@ export default function LoginPage() {
       });
 
       const data = await response.json();
-      logger.apiResponse('/api/auth/login', response.status, { email: data.email });
 
       if (!response.ok) {
-        const errorMessage = data.error || 'Đăng nhập thất bại';
-        logger.error('Login failed', { status: response.status, error: errorMessage });
-        throw new Error(errorMessage);
+        throw new Error(data.error || 'Đăng nhập thất bại');
       }
 
-      // Cập nhật auth context với user và token mới
       const userData: {
         email: string;
         displayName: string;
@@ -192,7 +208,6 @@ export default function LoginPage() {
 
       logger.success('Firebase login successful', { email: userData.email, role: userData.role });
 
-      // Store refresh token
       try {
         if (data.refreshToken) {
           localStorage.setItem('refreshToken', data.refreshToken);
@@ -201,56 +216,48 @@ export default function LoginPage() {
         logger.warn('Unable to persist refreshToken', { error: (e as Error).message });
       }
 
-      // Nếu chọn Manager, kiểm tra xem có phải admin không
       let finalRedirectPath = '/user/truyenthong';
 
       if (role === 'manager') {
-        logger.info('Checking admin permission for manager login', { email: userData.email });
-
         try {
           const adminCheckResponse = await fetch(`/api/check-admin?email=${encodeURIComponent(userData.email)}`);
           const adminData = await adminCheckResponse.json();
-
-          logger.apiResponse('/api/check-admin', adminCheckResponse.status, adminData);
 
           userData.isAdmin = adminData.isAdmin;
           userData.permissions = adminData.permissions || [];
 
           if (adminData.isAdmin) {
             finalRedirectPath = '/admin/dashboard';
-            logger.success('Admin verified', { email: userData.email });
             toast.success(`Chào mừng Admin ${userData.displayName}!`, { icon: '👑' });
           } else {
-            logger.warn('Not an admin, redirecting to user area', { email: userData.email });
-            toast.success(`Chào mừng ${userData.displayName}! Bạn không có quyền admin, chuyển đến trang user.`, {
-              icon: '👋',
-              duration: 4000,
-            });
+            toast.success(`Chào mừng ${userData.displayName}!`, { icon: '👋', duration: 4000 });
           }
-        } catch (adminCheckError) {
-          logger.error('Admin check failed, defaulting to user area', { error: adminCheckError });
+        } catch {
           toast.error('Không thể kiểm tra quyền admin, chuyển đến trang user', { icon: '⚠️' });
         }
       } else {
-        // Teacher role - go to user area
+        // Teacher: use teacherSync from backend (single source of truth)
         userData.isAdmin = false;
+        finalRedirectPath = resolveTeacherRedirect(data?.teacherSync, userData.email);
+
+        if (!data?.teacherSync?.foundInDatabase) {
+          toast('Chưa tìm thấy thông tin giáo viên trong database, vui lòng kiểm tra ở bước tiếp theo.', {
+            icon: '⚠️',
+            duration: 4500,
+          });
+        }
         toast.success(`Chào mừng ${userData.displayName}!`, { icon: '👋' });
       }
 
       persistRememberedAccount(trimmedEmail, role);
-
       updateUser(userData, data.idToken);
 
-      logger.info('Redirecting to', { path: finalRedirectPath, isAdmin: userData.isAdmin });
-
-      setTimeout(() => {
-        router.replace(finalRedirectPath);
-      }, 500);
-    } catch (err: any) {
-      const errorMessage = err.message || 'Có lỗi xảy ra. Vui lòng thử lại.';
+      logger.info('Redirecting to', { path: finalRedirectPath });
+      setTimeout(() => { router.replace(finalRedirectPath); }, 500);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Có lỗi xảy ra. Vui lòng thử lại.';
       setError(errorMessage);
-
-      logger.error('Login error', { error: err.message, stack: err.stack });
+      logger.error('Login error', { error: errorMessage });
 
       if (errorMessage.toLowerCase().includes('password') || errorMessage.toLowerCase().includes('mật khẩu')) {
         toast.error('Mật khẩu không chính xác!', { icon: '🔒' });
@@ -264,7 +271,6 @@ export default function LoginPage() {
     }
   }, [email, password, role, updateUser, router, persistRememberedAccount]);
 
-  // Memoize button classes to prevent recalculation
   const getRoleButtonClass = useCallback((buttonRole: 'teacher' | 'manager') => {
     const isActive = role === buttonRole;
     return `px-6 py-2 rounded-full border text-sm font-medium transition-all duration-300 transform hover:scale-105 active:scale-95 ${isActive
@@ -279,6 +285,7 @@ export default function LoginPage() {
         {/* Left side: Banner */}
         <div className="hidden md:flex flex-col justify-between items-start bg-linear-to-br from-[#800000] to-[#E31F26] w-1/3 h-full p-8 text-white">
           <div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo_white.svg" alt="logo" className="h-20 mb-8 animate-fade-in" />
             <h2 className="text-2xl font-bold mb-4 leading-tight animate-slide-up"> Teaching<br />Portal System (TPS)</h2>
             <p className="text-sm opacity-90 mb-8 animate-slide-up animation-delay-200">Hệ thống quản lý thông tin giáo viên, theo dõi tiến độ đào tạo, xử lý yêu cầu tra cứu thông tin nội bộ.</p>
@@ -292,6 +299,7 @@ export default function LoginPage() {
         <div className="flex-1 flex flex-col justify-center px-4 sm:px-8 md:px-12 py-4 sm:py-6 animate-fade-in animation-delay-200">
           <div className="flex flex-col gap-4 mb-2">
             <div className="flex justify-center md:hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logo.svg" alt="MindX logo" className="h-14 w-auto" />
             </div>
             <h2 className="hidden md:block text-xl font-bold text-center text-[#800000] animate-slide-up">MindX Technology School</h2>
@@ -367,9 +375,6 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
-              {/* <div className="text-right mt-1">
-                <a href="#" className="text-xs text-[#800000] hover:underline transition-all duration-200 hover:text-[#c1122f]">Quên mật khẩu?</a>
-              </div> */}
             </div>
             <label className="inline-flex items-center gap-2 text-sm text-gray-600 select-none">
               <input
@@ -397,10 +402,6 @@ export default function LoginPage() {
               ) : 'Đăng nhập'}
             </button>
           </form>
-
-          {/* <div className="text-xs text-center text-gray-500 mt-4 animate-fade-in animation-delay-400">
-           Bạn gặp khó khăn khi đăng nhập <a href="#" className="text-[#800000] hover:underline font-medium transition-all duration-200 hover:text-[#c1122f]">Nhận trợ giúp</a>
-          </div> */}
         </div>
       </div>
     </div>

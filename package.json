@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3000",
+    "dev": "next dev --port 3000 --webpack",
+    "dev:turbo": "next dev --port 3000 --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -86,6 +87,7 @@
     "baseline-browser-mapping": "^2.10.18",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
+    "kill-port": "^2.0.1",
     "ngrok": "^5.0.0-beta.2",
     "tailwindcss": "^4",
     "typescript": "^5"
