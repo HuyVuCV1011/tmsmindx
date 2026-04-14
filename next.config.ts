@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     webpackBuildWorker: false,
   },
   serverExternalPackages: ['ffprobe-static'],
-  
+
   images: {
     remotePatterns: [
       {
