@@ -109,14 +109,20 @@ function isRetryableFetchError(error: unknown): boolean {
   );
 }
 
-async function fetchCsvWithRetry(url: string, label: string): Promise<string> {
+async function fetchCsvWithRetry(
+  url: string,
+  label: string,
+  options?: { disableRetry?: boolean },
+): Promise<string> {
   if (!url) {
     throw new Error(`${label} URL is empty`);
   }
 
   let lastError: unknown;
 
-  for (let attempt = 0; attempt <= SHEET_FETCH_RETRIES; attempt++) {
+  const maxRetries = options?.disableRetry ? 0 : SHEET_FETCH_RETRIES;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch(url, {
         cache: "no-store",
@@ -125,7 +131,7 @@ async function fetchCsvWithRetry(url: string, label: string): Promise<string> {
 
       if (!response.ok) {
         const retryableStatus = response.status >= 500 || response.status === 429;
-        if (retryableStatus && attempt < SHEET_FETCH_RETRIES) {
+        if (retryableStatus && attempt < maxRetries) {
           await sleep(SHEET_RETRY_DELAY_MS * (attempt + 1));
           continue;
         }
@@ -136,13 +142,13 @@ async function fetchCsvWithRetry(url: string, label: string): Promise<string> {
     } catch (error) {
       lastError = error;
       const retryable = isRetryableFetchError(error);
-      const hasMoreAttempts = attempt < SHEET_FETCH_RETRIES;
+      const hasMoreAttempts = attempt < maxRetries;
       if (!retryable || !hasMoreAttempts) {
         break;
       }
       // Exponential backoff
       const delay = SHEET_RETRY_DELAY_MS * Math.pow(2, attempt);
-      console.warn(`⚠️ Retrying fetch for ${label} (attempt ${attempt + 1}/${SHEET_FETCH_RETRIES}) after ${delay}ms delay... Cause: ${error instanceof Error ? error.message : "Unknown"}`);
+      console.warn(`⚠️ Retrying fetch for ${label} (attempt ${attempt + 1}/${maxRetries}) after ${delay}ms delay... Cause: ${error instanceof Error ? error.message : "Unknown"}`);
       await sleep(delay);
     }
   }
@@ -476,7 +482,11 @@ async function fetchOnboardingByWorkEmail(email: string): Promise<OnboardingRow 
   if (!TEACHER_ONBOARDING_CSV_URL) return null;
 
   try {
-    const csvText = await fetchCsvWithRetry(TEACHER_ONBOARDING_CSV_URL, "teacher onboarding data");
+    const csvText = await fetchCsvWithRetry(
+      TEACHER_ONBOARDING_CSV_URL,
+      "teacher onboarding data",
+      { disableRetry: true },
+    );
     const lines = csvText.split("\n").filter((line) => line.trim());
     const dataLines = lines.slice(2);
     const targetEmail = normalizeEmail(email);

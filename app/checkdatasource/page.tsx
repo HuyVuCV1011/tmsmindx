@@ -104,6 +104,33 @@ function mapTeacherRecordToOnboardingData(record: Record<string, unknown>): Onbo
   return result;
 }
 
+/** Fallback: map legacy Teacher interface → onboardingData display keys (partial fields). */
+function mapTeacherToOnboardingData(t: Record<string, unknown>): OnboardingData {
+  const s = (k: string) => toText(t[k]);
+  const result: OnboardingData = {};
+  const mapping: Record<string, string> = {
+    code: "Code",
+    name: "Full name",
+    emailMindx: "Work email",
+    emailPersonal: "Personal email",
+    status: "Status check",
+    branchIn: "Centers",
+    programIn: "Khối final",
+    branchCurrent: "BU check",
+    programCurrent: "Khối check",
+    manager: "Leader quản lý",
+    responsible: "TE quản lý",
+    position: "Role",
+    startDate: "Joined date",
+    onboardBy: "Data HR (Raw)",
+  };
+  for (const [tKey, displayKey] of Object.entries(mapping)) {
+    const v = s(tKey);
+    if (v) result[displayKey] = v;
+  }
+  return result;
+}
+
 const MAX_FEEDBACK_IMAGES = 6;
 
 function FeedbackImageThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
@@ -201,19 +228,30 @@ function CheckDataSourceContent() {
     const fetchTeacherByEmail = async () => {
       setLoading(true);
       try {
-        // 1) Try DB first
+        // Primary: fetch from Google Sheets (source of truth for sync)
+        const sheetRes = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=true`);
+        if (sheetRes.ok) {
+          const sheetData = await sheetRes.json();
+          // onboardingData is the raw Sheet row (column names as keys)
+          if (sheetData?.onboardingData && Object.keys(sheetData.onboardingData).length > 0) {
+            setOnboardingData(sheetData.onboardingData as OnboardingData);
+            return;
+          }
+          // Sheet found teacher but no onboarding row — map legacy Teacher object
+          if (sheetData?.teacher) {
+            const mapped = mapTeacherToOnboardingData(sheetData.teacher as Record<string, unknown>);
+            if (Object.keys(mapped).length > 0) {
+              setOnboardingData(mapped);
+              return;
+            }
+          }
+        }
+
+        // Fallback: DB (already synced teachers)
         const dbRes = await fetch(`/api/teachers/info?email=${encodeURIComponent(user.email)}`);
         const dbData = await dbRes.json();
         if (dbRes.ok && dbData?.success && dbData?.teacher) {
           setOnboardingData(mapTeacherRecordToOnboardingData(dbData.teacher as Record<string, unknown>));
-          return;
-        }
-
-        // 2) Fallback: fetch from sheet
-        const sheetRes = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=true`);
-        const sheetData = await sheetRes.json();
-        if (sheetRes.ok && sheetData?.onboardingData) {
-          setOnboardingData(sheetData.onboardingData as OnboardingData);
           return;
         }
 

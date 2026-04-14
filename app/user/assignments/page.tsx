@@ -241,28 +241,12 @@ export default function TeacherAssignmentPage() {
       return
     }
 
-    // 2. Try from localStorage (fast)
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('teacher_auto_fill_data')
-        if (cached) {
-          const data = JSON.parse(cached)
-          if (data.lms_code) {
-            setTeacherCode(data.lms_code)
-            return
-          }
-        }
-      } catch (e) {
-        console.error('Failed to parse local teacher data', e)
-      }
-    }
-
-    // 3. Last reort: fetch from API (slowest)
+    // 2. Fetch from API
     if (user && user.email) {
       ;(async () => {
         try {
           const res = await fetch(
-            `/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`,
+            `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
           )
           const data = await res.json()
           if (data?.teacher?.code) {
@@ -389,7 +373,7 @@ export default function TeacherAssignmentPage() {
       if (user?.email) {
         try {
           const res = await fetch(
-            `/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`,
+            `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
           )
           const data = await res.json()
           canonicalTeacherCode = (data?.teacher?.code || '').toString().trim()

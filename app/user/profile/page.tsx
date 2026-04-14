@@ -99,20 +99,15 @@ export default function TeacherProfilePage() {
     fetcher,
   )
 
-  // Fetch teacher info from API to get teaching level
-  const { data: teacherData } = useSWR(
-    user?.email ? `/api/teachers?email=${user.email}` : null,
+  // Fetch teacher info from DB
+  const { data: rawTeacherData } = useSWR(
+    user?.email ? `/api/teachers/info?email=${user.email}` : null,
     fetcher,
   )
 
   const certificates = certificatesData?.data || []
   const privacySettings = privacyData?.data
-  const teacherInfo = teacherData?.teacher // API returns { teacher: {...} }
-
-  // Debug log to check teacher data
-  console.log('Teacher Data:', teacherData)
-  console.log('Teacher Info:', teacherInfo)
-  console.log('Program Current:', teacherInfo?.programCurrent)
+  const teacherInfo = parseLegacyTeacherFromInfoJson(rawTeacherData)?.teacher || null
 
   // Handle privacy setting toggle
   const handlePrivacyToggle = async (

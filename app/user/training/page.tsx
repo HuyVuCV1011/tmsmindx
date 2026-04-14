@@ -149,7 +149,6 @@ export default function TrainingPage() {
 
   const handleForceLogout = () => {
     try {
-      localStorage.removeItem('teacher_auto_fill_data')
       localStorage.removeItem('token')
       localStorage.removeItem('refreshToken')
       localStorage.removeItem('user')
@@ -237,7 +236,7 @@ export default function TrainingPage() {
       ;(async () => {
         try {
           const res = await secureFetcher(
-            `/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`,
+            `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
           )
           if (res?.teacher?.code) {
             setSubmitCode(res.teacher.code)
@@ -261,7 +260,7 @@ export default function TrainingPage() {
   }, [user, hasAutoSearched, submitCode, secureFetcher])
 
   const { data: teacherData, isLoading: isLoadingTeacher } = useSWR(
-    submitCode && user ? `/api/teachers?code=${submitCode}` : null,
+    submitCode && user ? `/api/teachers/info?code=${submitCode}` : null,
     secureFetcher,
     {      revalidateOnFocus: false,
       revalidateOnReconnect: false,

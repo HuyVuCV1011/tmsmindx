@@ -4,10 +4,8 @@ import { Teacher } from '@/types/teacher';
 import { parseLegacyTeacherFromInfoJson } from '@/lib/teacher-db-mapper';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './auth-context';
-import { findMatchingCampus } from './campus-data';
 import { logger } from './logger';
 
-const STORAGE_KEY = 'teacher_auto_fill_data';
 
 interface TeacherContextType {
   teacherProfile: Teacher | null;
@@ -52,25 +50,6 @@ export function TeacherProvider({ children }: { children: React.ReactNode }) {
       if (profile) {
           logger.success('Teacher profile loaded', { code: profile.code, branch: profile.branchCurrent });
           setTeacherProfile(profile);
-
-          // Auto-save to localStorage for global access
-          try {
-            const teacherBranch = profile.branchIn || profile.branchCurrent || '';
-            const matchedCampus = findMatchingCampus(teacherBranch);
-            
-            const autoFillData = {
-              teacher_name: profile.name || '',
-              lms_code: profile.code || '',
-              email: profile.emailMindx || profile.emailPersonal || user.email || '',
-              campus: matchedCampus || '',
-              status: profile.status || ''
-            };
-
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(autoFillData));
-            logger.info('Auto-fill data saved to localStorage', autoFillData);
-          } catch (e) {
-            logger.error('Failed to save auto-fill data', e);
-          }
 
       } else {
           logger.warn('Teacher profile not found for email', { email: user.email });

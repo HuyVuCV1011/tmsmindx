@@ -48,7 +48,6 @@ const SUBJECT_LIST = [
   '[Trial] Quy Trình Trai nghiệm',
 ]
 
-const STORAGE_KEY = 'teacher_auto_fill_data'
 
 interface RegisteredExam {
   result_id: number
@@ -86,20 +85,6 @@ export default function GiaiTrinhPage() {
   })
 
   useEffect(() => {
-    // Load cached data on mount
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        setFormData((prev) => ({ ...prev, ...parsed }))
-        if (parsed.campus) setCampusSearch(parsed.campus)
-      } catch (e) {
-        console.error('Error loading saved data', e)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
     if (teacherProfile) {
       // Improved campus matching algorithm
       // Prioritize branchIn as per user request
@@ -121,16 +106,6 @@ export default function GiaiTrinhPage() {
             user?.email ||
             '',
         }
-
-        // Save identity fields only to local storage
-        const dataToSave = {
-          teacher_name: updated.teacher_name,
-          lms_code: updated.lms_code,
-          email: updated.email,
-          campus: updated.campus,
-          status: teacherProfile.status || '',
-        }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave))
 
         return updated
       })
