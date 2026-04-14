@@ -78,13 +78,15 @@ export async function GET(
 
             const post = result.rows[0];
             let isLiked = false;
+            let reaction: string | null = null;
 
             if (userId) {
                 const likeCheck = await client.query(
-                    'SELECT 1 FROM communication_likes WHERE post_id = $1 AND user_id = $2',
+                    'SELECT reaction FROM communication_likes WHERE post_id = $1 AND user_id = $2',
                     [post.id, userId]
                 );
                 isLiked = likeCheck.rows.length > 0;
+                reaction = likeCheck.rows[0]?.reaction || null;
             }
 
             // Fetch related posts (same type, published, exclude current)
@@ -96,7 +98,7 @@ export async function GET(
             );
             const relatedPosts = relatedResult.rows;
 
-            return NextResponse.json({ ...post, isLiked, relatedPosts });
+            return NextResponse.json({ ...post, isLiked, reaction, relatedPosts });
         } finally {
             client.release();
         }

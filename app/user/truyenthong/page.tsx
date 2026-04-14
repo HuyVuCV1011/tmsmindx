@@ -176,7 +176,7 @@ export default function CommunicationsPage() {
 
             {/* Sidebar - Right Side */}
             <aside className="w-full lg:w-80 shrink-0">
-              <div className="sticky top-24">
+              <div>
                 <UpcomingEventsSidebar />
               </div>
             </aside>

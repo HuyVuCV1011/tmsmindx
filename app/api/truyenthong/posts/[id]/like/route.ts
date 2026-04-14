@@ -7,7 +7,7 @@ export async function POST(
 ) {
     try {
         const { id } = await params;
-        const { userId } = await request.json();
+        const { userId, reaction } = await request.json();
 
         if (!userId) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
@@ -30,36 +30,49 @@ export async function POST(
 
             // Check if user already liked the post
             const checkLike = await client.query(
-                'SELECT id FROM communication_likes WHERE post_id = $1 AND user_id = $2',
+                'SELECT id, reaction FROM communication_likes WHERE post_id = $1 AND user_id = $2',
                 [postId, userId]
             );
 
             let isLiked = false;
+            let savedReaction: string | null = null;
             let action = '';
 
             if (checkLike.rows.length > 0) {
-                // Unlike: Remove from communication_likes and decrement like_count
-                await client.query(
-                    'DELETE FROM communication_likes WHERE post_id = $1 AND user_id = $2',
-                    [postId, userId]
-                );
-                await client.query(
-                    'UPDATE communications SET like_count = like_count - 1 WHERE id = $1',
-                    [postId]
-                );
-                isLiked = false;
-                action = 'unliked';
+                const existingReaction = checkLike.rows[0].reaction;
+                // Same reaction → unlike; different reaction → update
+                if (!reaction || existingReaction === reaction) {
+                    await client.query(
+                        'DELETE FROM communication_likes WHERE post_id = $1 AND user_id = $2',
+                        [postId, userId]
+                    );
+                    await client.query(
+                        'UPDATE communications SET like_count = like_count - 1 WHERE id = $1',
+                        [postId]
+                    );
+                    isLiked = false;
+                    savedReaction = null;
+                    action = 'unliked';
+                } else {
+                    await client.query(
+                        'UPDATE communication_likes SET reaction = $1 WHERE post_id = $2 AND user_id = $3',
+                        [reaction, postId, userId]
+                    );
+                    isLiked = true;
+                    savedReaction = reaction;
+                    action = 'reacted';
+                }
             } else {
-                // Like: Add to communication_likes and increment like_count
                 await client.query(
-                    'INSERT INTO communication_likes (post_id, user_id) VALUES ($1, $2)',
-                    [postId, userId]
+                    'INSERT INTO communication_likes (post_id, user_id, reaction) VALUES ($1, $2, $3)',
+                    [postId, userId, reaction || 'like']
                 );
                 await client.query(
                     'UPDATE communications SET like_count = like_count + 1 WHERE id = $1',
                     [postId]
                 );
                 isLiked = true;
+                savedReaction = reaction || 'like';
                 action = 'liked';
             }
 
@@ -74,6 +87,7 @@ export async function POST(
             return NextResponse.json({
                 like_count: result.rows[0].like_count,
                 isLiked,
+                reaction: savedReaction,
                 action
             });
 
