@@ -3,6 +3,7 @@
 import { PageContainer } from '@/components/PageContainer';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
+import { useTeacher } from '@/lib/teacher-context';
 import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -38,6 +39,7 @@ export default function ExamAssignmentTakingPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
 
   const assignmentIdParam = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const assignmentId = Number(assignmentIdParam);
@@ -146,6 +148,12 @@ export default function ExamAssignmentTakingPage() {
 
   useEffect(() => {
     if (!user?.email) return;
+    if (isTeacherLoading) return;
+
+    if (teacherProfile?.code) {
+      setTeacherCode(String(teacherProfile.code).trim());
+      return;
+    }
 
     (async () => {
       try {
@@ -161,7 +169,7 @@ export default function ExamAssignmentTakingPage() {
       const fallback = user.email.split('@')[0];
       setTeacherCode(fallback);
     })();
-  }, [user]);
+  }, [user, isTeacherLoading, teacherProfile]);
 
   useEffect(() => {
     if (!assignmentIdParam || Number.isNaN(assignmentId)) return;

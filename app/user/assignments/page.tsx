@@ -231,9 +231,10 @@ export default function TeacherAssignmentPage() {
     return match ? match[1] : null
   }
 
-  // Get teacher code from user email
+  // Get teacher code from user email (tránh gọi /api/teachers/info trùng TeacherProvider khi profile đang load)
   useEffect(() => {
     if (teacherCode) return // Already have code
+    if (isTeacherLoading) return
 
     // 1. Try from context first (fastest)
     if (teacherProfile?.code) {

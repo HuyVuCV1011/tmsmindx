@@ -363,11 +363,30 @@ export type TeacherProfileBundle = {
   training: Awaited<ReturnType<typeof fetchTrainingRowByCode>> | null;
 };
 
+/**
+ * Chỉ tải chuyên sâu + trải nghiệm (query/CSV nặng). Dùng sau khi đã có `teacher.code` từ bundle nhanh.
+ */
+export async function loadTeacherScoresOnly(pool: Pool, code: string) {
+  const trimmed = code.trim();
+  if (!trimmed) {
+    return {
+      expertise: null as Awaited<ReturnType<typeof fetchExpertiseBundleByCode>> | null,
+      experience: null as Awaited<ReturnType<typeof fetchExperienceBundleByCode>> | null,
+    };
+  }
+  const [expertise, experience] = await Promise.all([
+    fetchExpertiseBundleByCode(pool, trimmed).catch(() => null),
+    fetchExperienceBundleByCode(trimmed).catch(() => null),
+  ]);
+  return { expertise, experience };
+}
+
 export async function loadTeacherProfileBundle(
   pool: Pool,
-  opts: { email?: string; code?: string }
+  opts: { email?: string; code?: string; fast?: boolean }
 ): Promise<TeacherProfileBundle> {
-  const raw = await findTeacherRowByEmailOrCode(pool, opts);
+  const { fast, ...lookup } = opts;
+  const raw = await findTeacherRowByEmailOrCode(pool, lookup);
   if (!raw) {
     return {
       exists: false,
@@ -382,6 +401,23 @@ export async function loadTeacherProfileBundle(
   const teacher = mergeTeacherRow(raw);
   const code = String(teacher.code ?? "").trim();
   const workEmail = String(teacher.work_email ?? teacher["Work email"] ?? "").trim();
+
+  if (fast) {
+    const [certificates, training] = await Promise.all([
+      workEmail
+        ? fetchCertificatesByEmail(pool, workEmail).catch(() => null)
+        : Promise.resolve(null),
+      code ? fetchTrainingRowByCode(pool, code).catch(() => null) : Promise.resolve(null),
+    ]);
+    return {
+      exists: true,
+      teacher,
+      expertise: null,
+      experience: null,
+      certificates,
+      training,
+    };
+  }
 
   const [expertise, experience, certificates, training] = await Promise.all([
     code
