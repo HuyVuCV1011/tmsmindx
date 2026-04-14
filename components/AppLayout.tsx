@@ -18,7 +18,8 @@ export default function AppLayout({
   requireAdmin = false,
   redirectPath = '/login',
 }: AppLayoutProps) {
-  const { user, isLoading, refreshPermissions } = useAuth();
+  const PROFILE_CHECK_DONE_EMAIL_KEY = "tps_profile_check_done_email";
+  const { user, isLoading, refreshPermissions, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const hasRedirected = useRef(false);
@@ -119,12 +120,49 @@ export default function AppLayout({
       }
     }
 
+    // Teacher users must complete datasource setup before entering /user area.
+    // Admin/super_admin/manager are excluded from this guard.
+    if (!requireAdmin && user && pathname.startsWith('/user') && user.role === 'teacher') {
+      const checkedEmail = localStorage.getItem(PROFILE_CHECK_DONE_EMAIL_KEY)?.trim().toLowerCase();
+      const currentEmail = (user.email || '').trim().toLowerCase();
+      if (!checkedEmail || checkedEmail !== currentEmail) {
+        if (!hasRedirected.current) {
+          hasRedirected.current = true;
+          router.replace('/checkdatasource');
+        }
+        return;
+      }
+    }
+
     // Reset redirect flag when user logs in
     if (user) {
       hasRedirected.current = false;
     }
     setNoPermission(false);
   }, [user, isLoading, router, requireAuth, requireAdmin, redirectPath, pathname]);
+
+  useEffect(() => {
+    const verifyTeacherStillExists = async () => {
+      if (!user || user.role !== "teacher") return;
+      if (!pathname.startsWith("/user")) return;
+
+      try {
+        const response = await fetch(`/api/checkdatasource/status?email=${encodeURIComponent(user.email)}`, {
+          cache: "no-store",
+        });
+        const data = await response.json();
+        // Only act on a definitive "not exists" answer, not on DB errors.
+        if (response.ok && data.success && data.exists === false && !data.dbUnavailable) {
+          localStorage.removeItem(PROFILE_CHECK_DONE_EMAIL_KEY);
+          router.replace("/checkdatasource");
+        }
+      } catch {
+        // DB/network error — don't kick the user out
+      }
+    };
+
+    verifyTeacherStillExists();
+  }, [user, pathname, router, logout]);
 
   // Show skeleton while checking authentication
   if (isLoading) {

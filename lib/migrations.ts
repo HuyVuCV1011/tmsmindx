@@ -109,30 +109,47 @@ const migrations: Migration[] = [
       );
       ALTER TABLE teaching_leaders ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Active';
 
-      -- 3. Teacher Core Tables (Dữ liệu từ Google Sheet)
+      -- 3. Teacher Core Table (matches onboarding sheet, skip "No"/stt)
       CREATE TABLE IF NOT EXISTS teachers (
         code VARCHAR(50) PRIMARY KEY,
+        full_name VARCHAR(255),
+        user_name VARCHAR(100),
+        work_email VARCHAR(255),
+        personal_email VARCHAR(255),
+        phone_number VARCHAR(50),
+        status_update VARCHAR(100),
+        centers VARCHAR(255),
+        khoi_final VARCHAR(100),
+        role VARCHAR(100),
+        course_line VARCHAR(100),
+        rank VARCHAR(100),
+        joined_date VARCHAR(50),
+        teacher_point VARCHAR(50),
+        data_hr_raw TEXT,
+        status_check VARCHAR(100),
+        bu_check VARCHAR(100),
+        khoi_check VARCHAR(100),
+        check_col VARCHAR(100),
+        te_quan_ly VARCHAR(255),
+        leader_quan_ly VARCHAR(255),
+        rate_k12_check VARCHAR(100),
+        rank_k12_check VARCHAR(100),
+        -- legacy quoted columns (kept for backward compatibility)
         "Full name" VARCHAR(255),
         "User name" VARCHAR(100),
         "Work email" VARCHAR(255),
         "Main centre" VARCHAR(255),
         "Status" VARCHAR(50) DEFAULT 'Active',
         "Course Line" VARCHAR(100),
-        full_name VARCHAR(255),
-        user_name VARCHAR(100),
-        work_email VARCHAR(255),
+        -- extra
         main_centre VARCHAR(255),
-        course_line VARCHAR(100),
         status VARCHAR(50),
+        onboarding_snapshot JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "Full name" VARCHAR(255);
-      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "User name" VARCHAR(100);
-      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "Work email" VARCHAR(255);
-      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "Main centre" VARCHAR(255);
-      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "Status" VARCHAR(50) DEFAULT 'Active';
-      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "Course Line" VARCHAR(100);
+      CREATE INDEX IF NOT EXISTS idx_teachers_work_email ON teachers (work_email);
+      CREATE INDEX IF NOT EXISTS idx_teachers_personal_email ON teachers (personal_email);
 
       -- 4. Content & Training Tables
       CREATE TABLE IF NOT EXISTS communications (
@@ -1221,6 +1238,50 @@ const migrations: Migration[] = [
       ALTER TABLE feedback_tickets
       ADD COLUMN IF NOT EXISTS admin_reply TEXT,
       ADD COLUMN IF NOT EXISTS admin_image_urls JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `,
+  },
+  {
+    name: 'V51_recreate_teachers_full',
+    version: 51,
+    sql: `
+      CREATE TABLE IF NOT EXISTS teachers (
+        code VARCHAR(50) PRIMARY KEY,
+        full_name VARCHAR(255),
+        user_name VARCHAR(100),
+        work_email VARCHAR(255),
+        personal_email VARCHAR(255),
+        phone_number VARCHAR(50),
+        status_update VARCHAR(100),
+        centers VARCHAR(255),
+        khoi_final VARCHAR(100),
+        role VARCHAR(100),
+        course_line VARCHAR(100),
+        rank VARCHAR(100),
+        joined_date VARCHAR(50),
+        teacher_point VARCHAR(50),
+        data_hr_raw TEXT,
+        status_check VARCHAR(100),
+        bu_check VARCHAR(100),
+        khoi_check VARCHAR(100),
+        check_col VARCHAR(100),
+        te_quan_ly VARCHAR(255),
+        leader_quan_ly VARCHAR(255),
+        rate_k12_check VARCHAR(100),
+        rank_k12_check VARCHAR(100),
+        "Full name" VARCHAR(255),
+        "User name" VARCHAR(100),
+        "Work email" VARCHAR(255),
+        "Main centre" VARCHAR(255),
+        "Status" VARCHAR(50) DEFAULT 'Active',
+        "Course Line" VARCHAR(100),
+        main_centre VARCHAR(255),
+        status VARCHAR(50),
+        onboarding_snapshot JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_teachers_work_email ON teachers (work_email);
+      CREATE INDEX IF NOT EXISTS idx_teachers_personal_email ON teachers (personal_email);
     `,
   },
 ];

@@ -21,6 +21,34 @@ type FeedbackItem = {
   updated_at: string;
 };
 
+function LocalFileImageThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+
+  return (
+    <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+      {url ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img src={url} alt={file.name} className="h-24 w-24 object-cover" />
+      ) : (
+        <div className="h-24 w-24 animate-pulse bg-gray-200" aria-hidden />
+      )}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute right-1 top-1 rounded bg-black/60 p-0.5 text-white hover:bg-red-600"
+        aria-label="Xóa ảnh"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
 const statusLabel: Record<FeedbackItem["status"], string> = {
   new: "Mới tiếp nhận",
   in_progress: "Đang xử lý",
@@ -72,6 +100,16 @@ export default function UserFeedbackWidget() {
   const [previewIndex, setPreviewIndex] = useState(0);
 
   const canSubmit = useMemo(() => content.trim().length > 0 && !submitting, [content, submitting]);
+
+  useEffect(() => {
+    if (!previewImages?.length) return;
+    const urls = previewImages.slice();
+    return () => {
+      for (const u of urls) {
+        if (u.startsWith("blob:")) URL.revokeObjectURL(u);
+      }
+    };
+  }, [previewImages]);
 
   useEffect(() => {
     if (!open && !previewImages) return;
@@ -277,17 +315,11 @@ export default function UserFeedbackWidget() {
                   {images.length > 0 && (
                     <div className="mt-2 flex items-center gap-2 overflow-x-auto">
                       {images.slice(0, 3).map((file, idx) => (
-                        <div key={file.name + file.size + idx} className="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={URL.createObjectURL(file)} alt={file.name} className="w-24 h-24 object-cover" />
-                          <button
-                            type="button"
-                            onClick={() => setImages((prev) => prev.filter((_, i) => i !== idx))}
-                            className="absolute top-1 right-1 bg-black/60 text-white rounded p-0.5 hover:bg-red-600"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        <LocalFileImageThumb
+                          key={`${file.name}-${file.size}-${file.lastModified}-${idx}`}
+                          file={file}
+                          onRemove={() => setImages((prev) => prev.filter((_, i) => i !== idx))}
+                        />
                       ))}
                       {images.length > 3 && (
                         <button

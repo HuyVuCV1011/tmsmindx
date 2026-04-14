@@ -4,6 +4,7 @@ import { PageContainer } from "@/components/PageContainer";
 import { StepItem, Stepper } from "@/components/ui/stepper";
 import { useAuth } from "@/lib/auth-context";
 import { ChevronLeft, ChevronRight, Loader2, RefreshCw, Search, UploadCloud, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
@@ -70,11 +71,15 @@ const getProgressSteps = (status: FeedbackItem["status"]): StepItem[] => {
 
 export default function AdminFeedbackPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const sourceParam = searchParams.get("source");
+  const initialSource = sourceParam === "datasource" ? "datasource" : "all";
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [filterStatus, setFilterStatus] = useState<"all" | FeedbackItem["status"]>("all");
+  const [filterSource, setFilterSource] = useState<"all" | "datasource">(initialSource);
   const [searchText, setSearchText] = useState("");
   const [previewImages, setPreviewImages] = useState<string[] | null>(null);
   const [previewIndex, setPreviewIndex] = useState(0);
@@ -133,6 +138,7 @@ export default function AdminFeedbackPage() {
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       const matchStatus = filterStatus === "all" || item.status === filterStatus;
+      const matchSource = filterSource === "all" || (item.screen_path || "").includes("/checkdatasource");
       const q = searchText.trim().toLowerCase();
       const matchSearch =
         q.length === 0 ||
@@ -140,9 +146,9 @@ export default function AdminFeedbackPage() {
         (item.user_name || "").toLowerCase().includes(q) ||
         (item.content || "").toLowerCase().includes(q) ||
         (item.screen_path || "").toLowerCase().includes(q);
-      return matchStatus && matchSearch;
+      return matchStatus && matchSource && matchSearch;
     });
-  }, [items, filterStatus, searchText]);
+  }, [items, filterStatus, filterSource, searchText]);
 
   const stats = useMemo(() => {
     return {
@@ -150,6 +156,7 @@ export default function AdminFeedbackPage() {
       new: items.filter((x) => x.status === "new").length,
       inProgress: items.filter((x) => x.status === "in_progress").length,
       done: items.filter((x) => x.status === "done").length,
+      datasource: items.filter((x) => (x.screen_path || "").includes("/checkdatasource")).length,
     };
   }, [items]);
 
@@ -197,7 +204,7 @@ export default function AdminFeedbackPage() {
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Không thể upload ảnh phản hồi");
       }
-      return data.url || data.storagePath;
+      return data.storagePath || data.url;
       })
     );
     return uploaded.filter(Boolean);
@@ -247,7 +254,7 @@ export default function AdminFeedbackPage() {
 
   return (
     <PageContainer title="Feedback Manager" description="Danh sách feedback người dùng và trạng thái xử lý">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         <button
           type="button"
           onClick={() => setFilterStatus("all")}
@@ -280,6 +287,16 @@ export default function AdminFeedbackPage() {
         </button>
         <button
           type="button"
+          onClick={() => setFilterSource(filterSource === "datasource" ? "all" : "datasource")}
+          className={`text-left rounded-lg border p-3 transition-colors ${
+            filterSource === "datasource" ? "bg-fuchsia-50 border-fuchsia-300" : "bg-white border-gray-200 hover:bg-gray-50"
+          }`}
+        >
+          <p className="text-xs text-gray-500">Datasource manager</p>
+          <p className="text-xl font-bold text-fuchsia-700">{stats.datasource}</p>
+        </button>
+        <button
+          type="button"
           onClick={() => setFilterStatus("done")}
           className={`text-left rounded-lg border p-3 transition-colors ${
             filterStatus === "done" ? "bg-emerald-50 border-emerald-300" : "bg-white border-gray-200 hover:bg-gray-50"
@@ -309,6 +326,14 @@ export default function AdminFeedbackPage() {
           <option value="new">Mới tiếp nhận</option>
           <option value="in_progress">Đang xử lý</option>
           <option value="done">Hoàn thành</option>
+        </select>
+        <select
+          value={filterSource}
+          onChange={(e) => setFilterSource(e.target.value as "all" | "datasource")}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+        >
+          <option value="all">Tất cả nguồn feedback</option>
+          <option value="datasource">Feedback datasource manager</option>
         </select>
         <button
           onClick={fetchItems}

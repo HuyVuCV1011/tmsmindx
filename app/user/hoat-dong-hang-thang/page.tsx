@@ -3,6 +3,7 @@
 import { Card } from "@/components/Card";
 import { PageContainer } from "@/components/PageContainer";
 import { useAuth } from "@/lib/auth-context";
+import { parseLegacyTeacherFromInfoJson } from "@/lib/teacher-db-mapper";
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -550,12 +551,13 @@ export default function MonthlyActivitiesPage() {
 
     (async () => {
       try {
-        const response = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
+        const response = await fetch(`/api/teachers/info?email=${encodeURIComponent(user.email)}`);
         const data = await response.json();
-        if (data?.teacher?.code) {
-          setTeacherCode(data.teacher.code);
-          if (data?.teacher?.branchCurrent) {
-            setTeacherCenterCode(String(data.teacher.branchCurrent));
+        const legacy = parseLegacyTeacherFromInfoJson(data);
+        if (legacy?.teacher?.code) {
+          setTeacherCode(legacy.teacher.code);
+          if (legacy.teacher.branchCurrent) {
+            setTeacherCenterCode(String(legacy.teacher.branchCurrent));
           }
           return;
         }
@@ -1374,13 +1376,13 @@ export default function MonthlyActivitiesPage() {
   const resolveValidTeacherCode = async () => {
     if (!user?.email) return "";
 
-    // /api/teachers trả về teacher đã được đối soát với training_teacher_stats.
     try {
-      const response = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}`);
+      const response = await fetch(`/api/teachers/info?email=${encodeURIComponent(user.email)}`);
       const data = await response.json();
-      const resolved = (data?.teacher?.code || "").toString().trim();
+      const legacy = parseLegacyTeacherFromInfoJson(data);
+      const resolved = (legacy?.teacher?.code || "").toString().trim();
 
-      if (response.ok && data?.teacher && resolved) {
+      if (response.ok && legacy?.teacher && resolved) {
         if (resolved !== teacherCode) {
           setTeacherCode(resolved);
         }

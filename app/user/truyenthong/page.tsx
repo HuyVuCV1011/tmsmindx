@@ -30,11 +30,16 @@ interface Post {
     created_at: string
 }
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+async function fetchPostsArray(url: string): Promise<Post[]> {
+    const res = await fetch(url)
+    const data: unknown = await res.json().catch(() => null)
+    return Array.isArray(data) ? (data as Post[]) : []
+}
 
 export default function CommunicationsPage() {
     const searchParams = useSearchParams()
-    const { data: posts = [], isLoading } = useSWR<Post[]>('/api/truyenthong/posts?status=published', fetcher)
+    const { data: rawPosts, isLoading } = useSWR<Post[]>('/api/truyenthong/posts?status=published', fetchPostsArray, { revalidateOnFocus: false, dedupingInterval: 120000 })
+    const posts = Array.isArray(rawPosts) ? rawPosts : []
     const [selectedFilter, setSelectedFilter] = useState<string>('all')
     const [searchQuery, setSearchQuery] = useState('')
 

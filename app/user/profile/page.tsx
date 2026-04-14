@@ -23,6 +23,7 @@ import {
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import { parseLegacyTeacherFromInfoJson } from '@/lib/teacher-db-mapper'
 import useSWR from 'swr'
 
 interface Certificate {
@@ -50,6 +51,12 @@ interface PrivacySettings {
 }
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
+
+const teacherInfoFetcher = async (url: string) => {
+    const r = await fetch(url)
+    const data = await r.json()
+    return parseLegacyTeacherFromInfoJson(data) ?? { teacher: null }
+}
 const BIRTHDAY_PRIVACY_SYNC_KEY = 'birthday-privacy-updated-at'
 
 export default function TeacherProfilePage() {
@@ -84,22 +91,27 @@ export default function TeacherProfilePage() {
         return () => document.removeEventListener('mousedown', handleOutsideClick)
     }, [isCertTypeOpen])
 
+    const swrOpts = { revalidateOnFocus: false, revalidateOnReconnect: false, dedupingInterval: 300000, shouldRetryOnError: false, revalidateIfStale: false } as const;
+
     // Fetch certificates
     const { data: certificatesData, mutate: mutateCertificates } = useSWR(
         user?.email ? `/api/teacher-certificates?email=${user.email}` : null,
-        fetcher
+        fetcher,
+        swrOpts
     )
 
     // Fetch privacy settings
     const { data: privacyData, mutate: mutatePrivacy } = useSWR(
         user?.email ? `/api/teacher-privacy?email=${user.email}` : null,
-        fetcher
+        fetcher,
+        swrOpts
     )
 
-    // Fetch teacher info from API to get teaching level
+    // Fetch teacher info from DB (teachers table)
     const { data: teacherData } = useSWR(
-        user?.email ? `/api/teachers?email=${user.email}` : null,
-        fetcher
+        user?.email ? `/api/teachers/info?email=${encodeURIComponent(user.email)}` : null,
+        teacherInfoFetcher,
+        swrOpts
     )
 
     const certificates = certificatesData?.data || []

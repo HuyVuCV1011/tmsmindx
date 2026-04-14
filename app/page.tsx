@@ -29,13 +29,17 @@ export default function Home() {
       isAdmin: user.isAdmin 
     });
 
+    const profileCheckedEmail = localStorage.getItem('tps_profile_check_done_email')?.trim().toLowerCase();
+    const currentUserEmail = (user.email || '').trim().toLowerCase();
+
     // Ưu tiên admin dashboard nếu là admin
     if (user.isAdmin) {
       logger.success('Root: Redirecting to admin dashboard');
       router.replace('/admin/dashboard');
     } else {
-      logger.success('Root: Redirecting to user portal');
-      router.replace('/user/thongtingv');
+      const nextPath = profileCheckedEmail === currentUserEmail ? '/user/thongtingv' : '/checkdatasource';
+      logger.success('Root: Redirecting to teacher flow', { nextPath });
+      router.replace(nextPath);
     }
   }, [user, token, isLoading, router]);
 

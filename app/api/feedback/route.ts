@@ -15,26 +15,50 @@ async function getUserRole(email?: string | null) {
   return result.rows[0]?.role || null;
 }
 
+/** Signed URLs expire; DB should store s3://bucket/key only. */
+const FEEDBACK_IMAGE_URL_TTL_SEC = 7 * 24 * 60 * 60;
+
+function coerceImageUrlArray(imageUrls: unknown): string[] {
+  if (imageUrls == null) return [];
+  if (Array.isArray(imageUrls)) return imageUrls.map((x) => String(x ?? ''));
+  if (typeof imageUrls === 'string') {
+    try {
+      const parsed = JSON.parse(imageUrls);
+      return Array.isArray(parsed) ? parsed.map((x: unknown) => String(x ?? '')) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 async function hydrateImageUrls(imageUrls: unknown, signedUrlCache: Map<string, string>) {
-  const source = Array.isArray(imageUrls) ? imageUrls : [];
+  const source = coerceImageUrlArray(imageUrls);
   const hydrated = await Promise.all(
     source.map(async (raw) => {
-    const value = String(raw || '').trim();
-    if (!value) return '';
-    const parsed = parseStoragePath(value);
-    if (parsed && isSupabaseS3Configured()) {
-      const cacheKey = `${parsed.bucket}/${parsed.key}`;
-      const cached = signedUrlCache.get(cacheKey);
-      if (cached) return cached;
-      try {
-        const signed = await getSignedObjectUrl(parsed.bucket, parsed.key, 3600);
-        signedUrlCache.set(cacheKey, signed);
-        return signed;
-      } catch {
+      const value = String(raw || '').trim();
+      if (!value) return '';
+      const ref = normalizeStorageRef(value);
+      const parsed = parseStoragePath(ref);
+      if (parsed) {
+        if (!isSupabaseS3Configured()) {
+          return ref.startsWith('s3://') ? ref : value;
+        }
+        const cacheKey = `${parsed.bucket}/${parsed.key}`;
+        const cached = signedUrlCache.get(cacheKey);
+        if (cached) return cached;
+        try {
+          const signed = await getSignedObjectUrl(parsed.bucket, parsed.key, FEEDBACK_IMAGE_URL_TTL_SEC);
+          signedUrlCache.set(cacheKey, signed);
+          return signed;
+        } catch {
+          return '';
+        }
+      }
+      if (value.startsWith('http://') || value.startsWith('https://')) {
         return value;
       }
-    }
-    return value;
+      return '';
     })
   );
   return hydrated.filter(Boolean);
@@ -55,6 +79,14 @@ function normalizeStorageRef(value: string) {
     if (publicMatch) {
       return `s3://${publicMatch[1]}/${decodeURIComponent(publicMatch[2])}`;
     }
+    const signMatch = url.pathname.match(/\/storage\/v1\/object\/sign\/([^/]+)\/(.+)/);
+    if (signMatch) {
+      return `s3://${signMatch[1]}/${decodeURIComponent(signMatch[2])}`;
+    }
+    const authMatch = url.pathname.match(/\/storage\/v1\/object\/authenticated\/([^/]+)\/(.+)/);
+    if (authMatch) {
+      return `s3://${authMatch[1]}/${decodeURIComponent(authMatch[2])}`;
+    }
   } catch {
     return raw;
   }
@@ -66,7 +98,7 @@ async function hydrateFeedbackRow(item: any, signedUrlCache: Map<string, string>
   return {
     ...item,
     image_urls: await hydrateImageUrls(item.image_urls, signedUrlCache),
-    admin_image_urls: await hydrateImageUrls(item.admin_image_urls, signedUrlCache),
+    admin_image_urls: await hydrateImageUrls(item.admin_image_urls ?? [], signedUrlCache),
   };
 }
 
@@ -131,7 +163,9 @@ export const POST = withApiProtection(async (request: NextRequest) => {
     const screenPath = String(body?.screenPath || '').trim();
     const content = String(body?.content || body?.comment || '').trim();
     const suggestion = String(body?.suggestion || body?.feature || '').trim();
-    const imageUrls = Array.isArray(body?.imageUrls) ? body.imageUrls.filter(Boolean) : [];
+    const imageUrls = Array.isArray(body?.imageUrls)
+      ? body.imageUrls.map((v: unknown) => normalizeStorageRef(String(v || ''))).filter(Boolean)
+      : [];
 
     if (!requestEmail || !content) {
       return NextResponse.json(
@@ -149,7 +183,9 @@ export const POST = withApiProtection(async (request: NextRequest) => {
       [requestEmail, userName || null, userCode || null, screenPath || null, content, suggestion || null, JSON.stringify(imageUrls)]
     );
 
-    return NextResponse.json({ success: true, item: result.rows[0] });
+    const row = result.rows[0];
+    const hydrated = await hydrateFeedbackRow(row, new Map<string, string>());
+    return NextResponse.json({ success: true, item: hydrated });
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error?.message || 'Không thể tạo feedback' },

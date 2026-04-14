@@ -1,7 +1,8 @@
 "use client";
 
+import { parseLegacyTeacherFromInfoJson } from "@/lib/teacher-db-mapper";
 import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from 'react-hot-toast';
 import useSWR from "swr";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -115,7 +116,13 @@ const fetcher = async (url: string) => {
     }
   });
   if (!res.ok) throw new Error('Failed to fetch');
-  return res.json();
+  const data = await res.json();
+  if (url.includes('/api/teachers/info')) {
+    const parsed = parseLegacyTeacherFromInfoJson(data);
+    if (!parsed) throw new Error('Failed to fetch');
+    return parsed;
+  }
+  return data;
 };
 
 export default function Page1() {
@@ -159,7 +166,7 @@ export default function Page1() {
 
   // SWR với auto caching và revalidation
   const { data: teacherData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
-    submitCode ? `/api/teachers?code=${submitCode}` : null,
+    submitCode ? `/api/teachers/info?code=${encodeURIComponent(submitCode)}` : null,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -337,13 +344,16 @@ export default function Page1() {
     return () => clearTimeout(timer);
   }, [searchCode]);
 
-  // Track page visit on mount
+  // Track page visit on mount — ref guard prevents double-fire in Strict Mode
+  const visitTracked = useRef(false);
   useEffect(() => {
+    if (visitTracked.current) return;
+    visitTracked.current = true;
     fetch('/api/analytics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'visit' })
-    }).catch(err => console.error('Visit tracking failed:', err));
+    }).catch(() => {});
   }, []);
 
   // Handle ESC key to close modals

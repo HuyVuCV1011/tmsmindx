@@ -2,17 +2,11 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from "@/lib/auth-context";
-import { Briefcase, Calendar, Clock, Mail, MapPin, Search, TrendingUp, User, UserCheck, LayoutDashboard, Database } from "lucide-react";
+import { mapTeachersDbRowToTeacher } from "@/lib/teacher-db-mapper";
+import { Briefcase, Calendar, Clock, Eye, EyeOff, Hash, Mail, MapPin, Phone, Search, Shield, Star, TrendingUp, User, UserCheck, Users } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from 'react-hot-toast';
 import useSWR, { mutate } from "swr";
-import { motion, AnimatePresence } from 'framer-motion';
-
-// Premium Components
-import ProfileHero from './components/ProfileHero';
-import StatsBento from './components/StatsBento';
-import AvailabilityGrid from './components/AvailabilityGrid';
-import EducationSection from './components/EducationSection';
 
 // Cache for processed data
 const dataCache = new Map();
@@ -65,23 +59,7 @@ interface MonthlyAverage {
   records: TestRecord[];
 }
 
-interface Teacher {
-  stt: string;
-  name: string;
-  code: string;
-  emailMindx: string;
-  emailPersonal: string;
-  status: string;
-  branchIn: string;
-  programIn: string;
-  branchCurrent: string;
-  programCurrent: string;
-  manager: string;
-  responsible: string;
-  position: string;
-  startDate: string;
-  onboardBy: string;
-}
+import type { Teacher } from "@/types/teacher";
 
 interface TrainingLesson {
   name: string;
@@ -103,15 +81,31 @@ interface TrainingData {
   lessons: TrainingLesson[];
 }
 
-// Memoized InfoItem component
-const InfoItem = memo(({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => {
+type TeacherDbRow = Record<string, unknown>;
+
+// Memoized InfoItem component — supports `sensitive` to mask value behind eye toggle
+const InfoItem = memo(({ icon, label, value, sensitive }: { icon: React.ReactNode; label: string; value: string; sensitive?: boolean }) => {
+  const [revealed, setRevealed] = useState(false);
+
   return (
     <div className="flex items-start gap-2 p-2.5 rounded-lg border border-gray-300 bg-[#f3f3f3]">
       <div className="text-gray-500 mt-0.5">{icon}</div>
       <div className="flex-1 min-w-0">
         <div className="text-xs text-gray-500">{label}</div>
-        <div className="text-sm font-semibold text-gray-900 truncate">{value}</div>
+        <div className="text-sm font-semibold text-gray-900 truncate">
+          {sensitive && !revealed ? "••••••" : value}
+        </div>
       </div>
+      {sensitive && (
+        <button
+          type="button"
+          onClick={() => setRevealed((v) => !v)}
+          className="text-gray-400 hover:text-gray-600 mt-1 shrink-0 transition-colors"
+          aria-label={revealed ? "Ẩn" : "Hiện"}
+        >
+          {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      )}
     </div>
   );
 });
@@ -164,12 +158,71 @@ function getVietnameseStatus(status: string): string {
   return status;
 }
 
+/** Ordered profile fields — DB column → Vietnamese label + icon key. Hidden keys omitted. */
+const PROFILE_FIELDS: { key: string; label: string; icon: string; format?: (v: string) => string; sensitive?: boolean }[] = [
+  { key: "code", label: "Mã giáo viên", icon: "hash" },
+  { key: "full_name", label: "Họ và tên", icon: "user" },
+  { key: "user_name", label: "Username", icon: "user" },
+  { key: "work_email", label: "Email MindX", icon: "mail" },
+  { key: "personal_email", label: "Email cá nhân", icon: "mail" },
+  { key: "phone_number", label: "Số điện thoại", icon: "phone", format: formatPhone },
+  { key: "centers", label: "Chi nhánh đầu vào", icon: "mappin" },
+  { key: "main_centre", label: "Chi nhánh hiện tại", icon: "mappin" },
+  { key: "bu_check", label: "BU Check", icon: "mappin" },
+  { key: "khoi_final", label: "Khối", icon: "briefcase" },
+  { key: "role", label: "Vị trí", icon: "shield" },
+  { key: "course_line", label: "Course Line", icon: "briefcase" },
+  { key: "rank", label: "Rank", icon: "star" },
+  { key: "joined_date", label: "Ngày vào", icon: "calendar" },
+  { key: "teacher_point", label: "Teacher Point", icon: "star" },
+  { key: "data_hr_raw", label: "Mã HR", icon: "hash" },
+  { key: "status_update", label: "Trạng thái (cập nhật)", icon: "shield" },
+  { key: "status_check", label: "Trạng thái check", icon: "shield" },
+  { key: "status", label: "Trạng thái", icon: "shield" },
+  { key: "check_col", label: "CHECK", icon: "shield" },
+  { key: "te_quan_ly", label: "TE quản lý", icon: "users" },
+  { key: "leader_quan_ly", label: "Leader quản lý", icon: "users" },
+  { key: "rate_k12_check", label: "Rate K12", icon: "star", format: formatRateVnd, sensitive: true },
+  { key: "rank_k12_check", label: "Rank K12", icon: "star", sensitive: true },
+];
+
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return raw;
+  let local = digits.startsWith("84") ? `0${digits.slice(2)}` : digits;
+  if (local.length === 10) return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`;
+  if (local.length === 11) return `${local.slice(0, 4)} ${local.slice(4, 8)} ${local.slice(8)}`;
+  return local;
+}
+
+function formatRateVnd(raw: string): string {
+  const t = raw.replace(/\s/g, "").replace(/\u00A0/g, "");
+  if (!t) return raw;
+  let n: number | null = null;
+  if (/^\d{1,3}(,\d{3})*(\.\d+)?$/.test(t)) n = parseFloat(t.replace(/,/g, ""));
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) n = parseFloat(t.replace(/\./g, ""));
+  if (n == null || !isFinite(n)) return raw;
+  return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(Math.round(n));
+}
+
+const ICON_MAP: Record<string, React.ReactNode> = {
+  hash: <Hash className="h-4 w-4" />,
+  user: <User className="h-4 w-4" />,
+  mail: <Mail className="h-4 w-4" />,
+  phone: <Phone className="h-4 w-4" />,
+  mappin: <MapPin className="h-4 w-4" />,
+  briefcase: <Briefcase className="h-4 w-4" />,
+  shield: <Shield className="h-4 w-4" />,
+  star: <Star className="h-4 w-4" />,
+  calendar: <Calendar className="h-4 w-4" />,
+  users: <Users className="h-4 w-4" />,
+};
+
 export default function Page1() {
   const { user } = useAuth();
   const [searchCode, setSearchCode] = useState("");
   const [submitCode, setSubmitCode] = useState("");
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
-  const [isResolvingCode, setIsResolvingCode] = useState(false);
   const [error, setError] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
   const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
@@ -289,70 +342,40 @@ export default function Page1() {
     return response.json();
   }, []);
 
-  // Auto-search based on logged-in user's email - ONLY ONCE
+  // Auto-search: extract teacher code from email local-part — no extra API call
   useEffect(() => {
-    if (user && user.email && !hasAutoSearched && !submitCode) {
-      // Mark we've attempted auto-search so we don't repeat
+    if (user?.email && !hasAutoSearched && !submitCode) {
       setHasAutoSearched(true);
-      setIsResolvingCode(true);
-
-      // First try resolving teacher by exact email (work OR personal)
-      (async () => {
-        try {
-          console.log('🔍 Attempting teacher lookup by email first:', user.email);
-          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
-          if (res?.teacher?.code) {
-            console.log('✅ Found teacher by email:', res.teacher.code);
-            setSearchCode(res.teacher.code);
-            setSubmitCode(res.teacher.code);
-            setIsResolvingCode(false);
-            return;
-          }
-        } catch (err) {
-          // ignore and fallback to code extraction
-          console.warn('Email-based lookup failed, falling back to code extraction');
-        }
-
-        // Fallback: try extracting code from the email local-part
-        const code = extractCodeFromEmail(user.email);
-        if (code) {
-          console.log('🔁 Fallback: Auto-searching for teacher code from email prefix:', code);
-          setSearchCode(code);
-          setSubmitCode(code);
-        }
-
-        setIsResolvingCode(false);
-      })();
+      const code = extractCodeFromEmail(user.email);
+      if (code) {
+        setSearchCode(code);
+        setSubmitCode(code);
+      }
     }
 
-    // Check if user has already given feedback
     if (!hasAutoSearched) {
       const feedbackGiven = localStorage.getItem('userHasFeedback');
-      if (feedbackGiven === 'true') {
-        setHasFeedback(true);
-      }
-
+      if (feedbackGiven === 'true') setHasFeedback(true);
       const disabled = localStorage.getItem('feedbackDisabled');
-      if (disabled === 'true') {
-        setFeedbackEnabled(false);
-      }
+      if (disabled === 'true') setFeedbackEnabled(false);
     }
-  }, [user, hasAutoSearched, submitCode, secureFetcher]);
+  }, [user, hasAutoSearched, submitCode]);
 
-  // Optimized SWR with better caching and parallel loading
-  const { data: teacherData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
-    submitCode && user ? `/api/teachers?code=${submitCode}` : null,
+  // Single SWR: fetch raw DB row from /api/teachers/info, map to Teacher + keep raw for profile grid
+  const { data: teacherInfoData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
+    submitCode && user ? `/api/teachers/info?code=${encodeURIComponent(submitCode)}` : null,
     secureFetcher,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      dedupingInterval: 300000, // 5 minutes deduping
+      dedupingInterval: 300000,
       shouldRetryOnError: false,
-      revalidateIfStale: false // Don't revalidate stale data automatically
+      revalidateIfStale: false
     }
   );
 
-  const teacher = teacherData?.teacher || null;
+  const dbRow: TeacherDbRow | null = teacherInfoData?.success && teacherInfoData?.teacher ? teacherInfoData.teacher : null;
+  const teacher: Teacher | null = dbRow ? mapTeachersDbRowToTeacher(dbRow) : null;
 
   // Parallel loading of score data - start immediately after teacher is found
   const { data: expertiseDataRes, isLoading: isLoadingExpertise } = useSWR(
@@ -382,13 +405,15 @@ export default function Page1() {
   // Load certificates data
   const { data: certificatesRes } = useSWR(
     teacher && user ? `/api/teacher-certificates?email=${encodeURIComponent(teacher.emailMindx)}` : null,
-    secureFetcher
+    secureFetcher,
+    { revalidateOnFocus: false, revalidateOnReconnect: false, dedupingInterval: 300000, shouldRetryOnError: false, revalidateIfStale: false }
   );
 
   // Load detailed training stats
   const { data: trainingStatsRes, isLoading: isLoadingTraining } = useSWR(
     teacher && user ? `/api/training-teacher-stats?teacher_code=${submitCode}` : null,
-    secureFetcher
+    secureFetcher,
+    { revalidateOnFocus: false, revalidateOnReconnect: false, dedupingInterval: 300000, shouldRetryOnError: false, revalidateIfStale: false }
   );
 
   const certificates = certificatesRes?.data || [];
@@ -399,31 +424,13 @@ export default function Page1() {
   const experienceData = experienceDataRes?.monthlyData || [];
   const scoresLoaded = !isLoadingExpertise && !isLoadingExperience;
 
-  // Process scores for StatsBento
-  const expertiseMap = useMemo(() => {
-    const res: Record<string, string> = {};
-    (expertiseData as MonthlyAverage[]).forEach(m => {
-      res[m.month] = m.average.toString();
-    });
-    return res;
-  }, [expertiseData]);
-
-  const experienceMap = useMemo(() => {
-    const res: Record<string, string> = {};
-    (experienceData as MonthlyAverage[]).forEach(m => {
-      res[m.month] = m.average.toString();
-    });
-    return res;
-  }, [experienceData]);
-
-  const [viewMode, setViewMode] = useState<"premium" | "classic">("premium");
 
   // Show feedback modal 30 seconds after successful teacher search
   useEffect(() => {
     // Auto-show disabled by default; enable by setting NEXT_PUBLIC_FEEDBACK_AUTO_SHOW=true
     const autoShowEnabled = process.env.NEXT_PUBLIC_FEEDBACK_AUTO_SHOW === 'true';
 
-    if (autoShowEnabled && submitCode && teacherData && !hasFeedback && !feedbackModalOpen && feedbackEnabled) {
+    if (autoShowEnabled && submitCode && teacherInfoData && !hasFeedback && !feedbackModalOpen && feedbackEnabled) {
       const timer = setTimeout(() => {
         setFeedbackModalOpen(true);
         setIsFirstTimeFeedback(false); // Disabled mandatory behavior
@@ -431,28 +438,8 @@ export default function Page1() {
 
       return () => clearTimeout(timer);
     }
-  }, [submitCode, teacherData, hasFeedback, feedbackModalOpen, feedbackEnabled]);
+  }, [submitCode, teacherInfoData, hasFeedback, feedbackModalOpen, feedbackEnabled]);
 
-  // If code-based lookup fails on first auto-search, try resolving teacher by the logged-in email (work OR personal)
-  useEffect(() => {
-    if (teacherError && hasAutoSearched && user?.email) {
-      (async () => {
-        try {
-          setIsResolvingCode(true);
-          console.log('🔁 Teacher lookup by code failed; trying lookup by email:', user.email);
-          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
-          if (res?.teacher?.code) {
-            console.log('✅ Resolved teacher code by email:', res.teacher.code);
-            setSubmitCode(res.teacher.code);
-          }
-        } catch (err) {
-          console.warn('Lookup by email failed', err);
-        } finally {
-          setIsResolvingCode(false);
-        }
-      })();
-    }
-  }, [teacherError, hasAutoSearched, user?.email, secureFetcher]);
 
   // Prevent body scroll when feedback modal is open
   useEffect(() => {
@@ -565,7 +552,7 @@ export default function Page1() {
                   localStorage.setItem('token', newIdToken);
                   if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
                   // Revalidate teacher data
-                  await mutate(`/api/teachers?code=${submitCode}`);
+                  await mutate(`/api/teachers/info?code=${encodeURIComponent(submitCode)}`);
                   return;
                 }
               }
@@ -584,18 +571,13 @@ export default function Page1() {
 
         // Other API errors: show not found modal
         setNotFoundModalOpen(true);
-      } else if (teacherData && teacherData.error) {
-        // API returned error in response body
-        setError(teacherData.error);
-        setNotFoundModalOpen(true);
-      } else if (submitCode && !isLoadingTeacher && teacherData && !teacher) {
-        // API returned but no teacher found
+      } else if (submitCode && !isLoadingTeacher && teacherInfoData && !teacher) {
         setNotFoundModalOpen(true);
       } else if (teacher) {
         setError("");
       }
     })();
-  }, [teacherData, teacher, submitCode, isLoadingTeacher, teacherError]);
+  }, [teacherInfoData, teacher, submitCode, isLoadingTeacher, teacherError]);
 
   // Handle not found modal confirm
   const handleNotFoundConfirm = useCallback(() => {
@@ -666,13 +648,16 @@ export default function Page1() {
     };
   }, [searchCode, submitCode, handleSearch]);
 
-  // Track page visit on mount
+  // Track page visit on mount — ref guard prevents double-fire in Strict Mode
+  const visitTracked = useRef(false);
   useEffect(() => {
+    if (visitTracked.current) return;
+    visitTracked.current = true;
     fetch('/api/analytics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'visit' })
-    }).catch(err => console.error('Visit tracking failed:', err));
+    }).catch(() => {});
   }, []);
 
   // Handle ESC key to close modals
@@ -1014,7 +999,7 @@ export default function Page1() {
         <div className="border-b border-gray-200 pb-2 sm:pb-3">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Thông Tin Của Tôi</h1>
           <div className="text-xs text-gray-600 mt-1">
-            {(isLoadingTeacher || isResolvingCode) ? (
+            {isLoadingTeacher ? (
               <span className="inline-flex items-center gap-2">
                 <div className="w-3 h-1 bg-gray-300 rounded overflow-hidden">
                   <div className="w-full h-full bg-blue-500 animate-pulse"></div>
@@ -1036,7 +1021,7 @@ export default function Page1() {
         )}
 
         {/* Empty State */}
-        {!submitCode && !error && !isResolvingCode && !isLoadingTeacher && (
+        {!submitCode && !error && !isLoadingTeacher && (
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 sm:p-12 text-center">
             <div className="flex flex-col items-center gap-3">
               <div className="w-16 h-16 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center">
@@ -1051,7 +1036,7 @@ export default function Page1() {
         )}
 
         {/* Teacher Info Skeleton */}
-        {(isResolvingCode || (isLoadingTeacher && submitCode)) && (
+        {(isLoadingTeacher && submitCode) && (
           <div className="border border-gray-200 rounded-xl overflow-hidden">
             {/* Header Skeleton */}
             <div className="bg-[#a1001f] text-white p-3 sm:p-4">
@@ -1082,10 +1067,10 @@ export default function Page1() {
           </div>
         )}
 
-        {/* Teacher Info */}
-        {teacher && !isLoadingTeacher && (
+        {/* Teacher Profile — unified from DB */}
+        {teacher && dbRow && !isLoadingTeacher && (
           <div className="border border-gray-200 rounded-xl overflow-hidden animate-fadeIn" style={{ animationDelay: '0.1s' }}>
-            {/* Header Card */}
+            {/* Header */}
             <div className="bg-[#a1001f] text-white p-3 sm:p-4">
               <div className="flex items-center gap-2 sm:gap-3">
                 <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white text-[#a1001f] flex items-center justify-center font-bold text-base sm:text-lg shrink-0">
@@ -1106,47 +1091,23 @@ export default function Page1() {
               </div>
             </div>
 
-            {/* Info Grid */}
-            <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
+            {/* Full Profile Grid */}
+            <div className="p-3 sm:p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
-                {teacher.emailMindx && teacher.emailMindx !== "N/A" && (
-                  <InfoItem icon={<Mail className="h-4 w-4" />} label="Email MindX" value={teacher.emailMindx} />
-                )}
-                {teacher.emailPersonal && teacher.emailPersonal !== "N/A" && (
-                  <InfoItem icon={<Mail className="h-4 w-4" />} label="Email cá nhân" value={teacher.emailPersonal} />
-                )}
-                {teacher.branchCurrent && teacher.branchCurrent !== "N/A" && (
-                  <InfoItem icon={<MapPin className="h-4 w-4" />} label="Chi nhánh hiện tại" value={teacher.branchCurrent} />
-                )}
-                {teacher.programCurrent && teacher.programCurrent !== "N/A" && (
-                  <InfoItem icon={<Briefcase className="h-4 w-4" />} label="Khối" value={teacher.programCurrent} />
-                )}
-                {teacher.position && teacher.position !== "N/A" && (
-                  <InfoItem icon={<User className="h-4 w-4" />} label="Vị trí" value={teacher.position} />
-                )}
-                {teacher.startDate && teacher.startDate !== "N/A" && (
-                  <InfoItem icon={<Calendar className="h-4 w-4" />} label="Ngày vào" value={teacher.startDate} />
-                )}
-              </div>
-
-              {/* Additional Info */}
-              <div className="pt-3 border-t border-gray-200">
-                <h3 className="text-xs font-bold text-gray-900 mb-2">Thông tin ban đầu</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div className="text-xs">
-                    <span className="text-gray-600">Chi nhánh đầu vào:</span>
-                    <span className="ml-2 font-medium">{teacher.branchIn}</span>
-                  </div>
-                  <div className="text-xs">
-                    <span className="text-gray-600">Khối đầu vào:</span>
-                    <span className="ml-2 font-medium">{teacher.programIn}</span>
-                  </div>
-                  <div className="text-xs">
-                    <span className="text-gray-600">Trạng thái hoạt động:</span>
-                    <span className={`ml-2 font-medium ${teacher.status === "Active" ? "text-green-600" : "text-gray-600"
-                      }`}>{getVietnameseStatus(teacher.status)}</span>
-                  </div>
-                </div>
+                {PROFILE_FIELDS.map(({ key, label, icon, format, sensitive }) => {
+                  const raw = dbRow[key];
+                  if (raw == null || String(raw).trim() === "" || String(raw).trim() === "N/A") return null;
+                  const display = format ? format(String(raw).trim()) : String(raw).trim();
+                  return (
+                    <InfoItem
+                      key={key}
+                      icon={ICON_MAP[icon] || <Hash className="h-4 w-4" />}
+                      label={label}
+                      value={display}
+                      sensitive={sensitive}
+                    />
+                  );
+                })}
               </div>
             </div>
           </div>

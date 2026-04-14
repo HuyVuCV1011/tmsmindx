@@ -6,6 +6,7 @@ import { PageContainer } from '@/components/PageContainer';
 import { useAuth } from "@/lib/auth-context";
 import { setVideo } from "@/lib/redux/features/trainingSlice";
 import { useAppDispatch } from "@/lib/redux/hooks";
+import { fetchTeacherInfoAsLegacy } from "@/lib/teacher-db-mapper";
 import { useTeacher } from "@/lib/teacher-context";
 import { BookOpen, CheckCircle, Clock, FileText } from 'lucide-react';
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -98,7 +99,6 @@ export default function TrainingPage() {
   const [tab, setTab] = useState<'lessons' | 'stats' | 'tests'>('lessons');
   const [submitCode, setSubmitCode] = useState("");
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
-  const [isResolvingCode, setIsResolvingCode] = useState(false);
   const prewarmedLessonIdsRef = useRef<Set<number>>(new Set());
   const prewarmedGroupIdsRef = useRef<Set<string>>(new Set());
   const prewarmInFlightRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -207,37 +207,20 @@ export default function TrainingPage() {
     return response.json();
   }, []);
 
-  // Auto-search based on logged-in user's email
+  // Auto-search: extract code from email local-part — no extra API call
   useEffect(() => {
-    if (user && user.email && !hasAutoSearched && !submitCode) {
+    if (user?.email && !hasAutoSearched && !submitCode) {
       setHasAutoSearched(true);
-      setIsResolvingCode(true);
-
-      (async () => {
-        try {
-          const res = await secureFetcher(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
-          if (res?.teacher?.code) {
-            setSubmitCode(res.teacher.code);
-            setIsResolvingCode(false);
-            return;
-          }
-        } catch (err) {
-          console.warn('Email-based lookup failed, falling back to code extraction');
-        }
-
-        const code = extractCodeFromEmail(user.email);
-        if (code) {
-          setSubmitCode(code);
-        }
-
-        setIsResolvingCode(false);
-      })();
+      const code = extractCodeFromEmail(user.email);
+      if (code) {
+        setSubmitCode(code);
+      }
     }
-  }, [user, hasAutoSearched, submitCode, secureFetcher]);
+  }, [user, hasAutoSearched, submitCode]);
 
   const { data: teacherData, isLoading: isLoadingTeacher } = useSWR(
-    submitCode && user ? `/api/teachers?code=${submitCode}` : null,
-    secureFetcher,
+    submitCode && user ? `/api/teachers/info?code=${encodeURIComponent(submitCode)}` : null,
+    (url) => fetchTeacherInfoAsLegacy(secureFetcher, url),
     { 
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
@@ -281,20 +264,24 @@ export default function TrainingPage() {
   const { data: trainingData, isLoading: isLoadingTraining } = useSWR(
     teacher && user ? `/api/training-db?code=${submitCode}` : null,
     secureFetcher,
-    { 
-      revalidateOnFocus: true,
+    {
+      revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      dedupingInterval: 30000,
-      shouldRetryOnError: false
+      dedupingInterval: 120000,
+      shouldRetryOnError: false,
+      revalidateIfStale: false
     }
   );
 
   const { data: assignmentsData, isLoading: isLoadingAssignments } = useSWR(
     teacher && user ? `/api/training-assignments?status=published&teacher_code=${teacher.code}` : null,
     secureFetcher,
-    { 
-      revalidateOnFocus: true,
-      dedupingInterval: 30000
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 120000,
+      shouldRetryOnError: false,
+      revalidateIfStale: false
     }
   );
 
@@ -464,7 +451,7 @@ export default function TrainingPage() {
         </div>
 
         {/* Loading Skeleton or Content */}
-        {(isResolvingCode || isLoadingTeacher || isLoadingTraining) ? (
+        {(isLoadingTeacher || isLoadingTraining) ? (
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="animate-pulse">
               <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
