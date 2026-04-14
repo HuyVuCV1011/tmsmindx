@@ -7,7 +7,7 @@ import { Briefcase, Calendar, Clock, Eye, EyeOff, Hash, Mail, MapPin, Phone, Sea
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from 'react-hot-toast';
-import useSWR, { mutate } from "swr";
+import useSWR from "swr";
 
 // Cache for processed data
 const dataCache = new Map();
@@ -115,6 +115,9 @@ InfoItem.displayName = 'InfoItem';
 // API Secret Key for internal requests
 const API_SECRET_KEY = process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025';
 
+/** Gốc API (vd. https://www.tpsmindx.com). Để trống = gọi /api cùng origin (khuyến nghị khi deploy cùng domain). */
+const PROFILE_API_ORIGIN = (process.env.NEXT_PUBLIC_TPS_PROFILE_API_ORIGIN ?? '').replace(/\/$/, '');
+
 // Optimized fetcher with better caching and compression
 const fetcher = async (url: string) => {
   // Check cache first
@@ -145,12 +148,6 @@ const fetcher = async (url: string) => {
 
   return data;
 };
-
-// Function to extract teacher code from email
-function extractCodeFromEmail(email: string): string {
-  const match = email.match(/^([^@]+)@/);
-  return match ? match[1] : '';
-}
 
 function getVietnameseStatus(status: string): string {
   const normalized = (status || '').trim().toLowerCase();
@@ -341,15 +338,10 @@ export default function Page1() {
     return response.json();
   }, []);
 
-  // Auto-search: extract teacher code from email local-part — no extra API call
+  // Tải profile: mặc định theo email đăng nhập; có nhập mã thì ?code= (một endpoint /api/checkdatasource/status)
   useEffect(() => {
-    if (user?.email && !hasAutoSearched && !submitCode) {
+    if (user?.email && !hasAutoSearched) {
       setHasAutoSearched(true);
-      const code = extractCodeFromEmail(user.email);
-      if (code) {
-        setSearchCode(code);
-        setSubmitCode(code);
-      }
     }
 
     if (!hasAutoSearched) {
@@ -358,70 +350,70 @@ export default function Page1() {
       const disabled = localStorage.getItem('feedbackDisabled');
       if (disabled === 'true') setFeedbackEnabled(false);
     }
-  }, [user, hasAutoSearched, submitCode]);
+  }, [user, hasAutoSearched]);
 
-  // Single SWR: fetch raw DB row from /api/teachers/info, map to Teacher + keep raw for profile grid
-  const { data: teacherInfoData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
-    submitCode && user ? `/api/teachers/info?code=${encodeURIComponent(submitCode)}` : null,
+  const profileUrl =
+    user?.email
+      ? `${PROFILE_API_ORIGIN}/api/checkdatasource/status?${
+          submitCode.trim()
+            ? `code=${encodeURIComponent(submitCode.trim())}`
+            : `email=${encodeURIComponent(user.email)}`
+        }`
+      : null;
+
+  const {
+    data: profileBundle,
+    isLoading: isLoadingProfile,
+    error: profileError,
+    mutate: mutateProfile,
+  } = useSWR(
+    profileUrl,
     secureFetcher,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       dedupingInterval: 300000,
       shouldRetryOnError: false,
-      revalidateIfStale: false
+      revalidateIfStale: false,
     }
   );
 
-  const dbRow: TeacherDbRow | null = teacherInfoData?.success && teacherInfoData?.teacher ? teacherInfoData.teacher : null;
+  const teacherInfoData =
+    profileBundle && profileBundle.exists && profileBundle.teacher
+      ? { success: true as const, teacher: profileBundle.teacher }
+      : profileBundle
+        ? { success: false as const }
+        : undefined;
+
+  const dbRow: TeacherDbRow | null =
+    profileBundle?.exists && profileBundle.teacher ? (profileBundle.teacher as TeacherDbRow) : null;
   const teacher: Teacher | null = dbRow ? mapTeachersDbRowToTeacher(dbRow) : null;
 
-  // Parallel loading of score data - start immediately after teacher is found
-  const { data: expertiseDataRes, isLoading: isLoadingExpertise } = useSWR(
-    teacher && user ? `/api/rawdata?code=${submitCode}` : null,
-    secureFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 300000,
-      shouldRetryOnError: false,
-      revalidateIfStale: false
-    }
-  );
-
-  const { data: experienceDataRes, isLoading: isLoadingExperience } = useSWR(
-    teacher && user ? `/api/rawdata-experience?code=${submitCode}` : null,
-    secureFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 300000,
-      shouldRetryOnError: false,
-      revalidateIfStale: false
-    }
-  );
-
-  // Load certificates data
-  const { data: certificatesRes } = useSWR(
-    teacher && user ? `/api/teacher-certificates?email=${encodeURIComponent(teacher.emailMindx)}` : null,
-    secureFetcher,
-    { revalidateOnFocus: false, revalidateOnReconnect: false, dedupingInterval: 300000, shouldRetryOnError: false, revalidateIfStale: false }
-  );
-
-  // Load detailed training stats
-  const { data: trainingStatsRes, isLoading: isLoadingTraining } = useSWR(
-    teacher && user ? `/api/training-teacher-stats?teacher_code=${submitCode}` : null,
-    secureFetcher,
-    { revalidateOnFocus: false, revalidateOnReconnect: false, dedupingInterval: 300000, shouldRetryOnError: false, revalidateIfStale: false }
-  );
-
-  const certificates = certificatesRes?.data || [];
-  const trainingStat = trainingStatsRes?.data?.[0] || null;
-  const trainingData = trainingStat as TrainingData | null;
-
-  const expertiseData = expertiseDataRes?.monthlyData || [];
-  const experienceData = experienceDataRes?.monthlyData || [];
-  const scoresLoaded = !isLoadingExpertise && !isLoadingExperience;
+  const {
+    certificates,
+    trainingData,
+    expertiseData,
+    experienceData,
+    scoresLoaded,
+    isLoadingTraining,
+  } = useMemo(() => {
+    const certificates = profileBundle?.certificates?.data ?? [];
+    const trainingStat = profileBundle?.training?.data?.[0] ?? null;
+    const trainingData = trainingStat as TrainingData | null;
+    const expertiseData = profileBundle?.expertise?.monthlyData ?? [];
+    const experienceData = profileBundle?.experience?.monthlyData ?? [];
+    const scoresLoaded =
+      !isLoadingProfile && profileBundle !== undefined && profileBundle !== null;
+    const isLoadingTraining = isLoadingProfile;
+    return {
+      certificates,
+      trainingData,
+      expertiseData,
+      experienceData,
+      scoresLoaded,
+      isLoadingTraining,
+    };
+  }, [profileBundle, isLoadingProfile]);
 
 
   // Show feedback modal 30 seconds after successful teacher search
@@ -529,9 +521,9 @@ export default function Page1() {
   // Handle teacher data errors
   useEffect(() => {
     (async () => {
-      if (teacherError) {
+      if (profileError) {
         // If unauthorized, try silent refresh and revalidate once
-        const status = (teacherError as any)?.status;
+        const status = (profileError as any)?.status;
         if (status === 401) {
           const refreshToken = localStorage.getItem('refreshToken');
           if (refreshToken) {
@@ -551,7 +543,7 @@ export default function Page1() {
                   localStorage.setItem('token', newIdToken);
                   if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
                   // Revalidate teacher data
-                  await mutate(`/api/teachers/info?code=${encodeURIComponent(submitCode)}`);
+                  if (profileUrl) await mutateProfile(profileUrl);
                   return;
                 }
               }
@@ -573,11 +565,16 @@ export default function Page1() {
       } else if (teacher) {
         setError("");
         setNotFoundModalOpen(false);
-      } else if (submitCode && !isLoadingTeacher && teacherInfoData && !teacher) {
+      } else if (
+        submitCode.trim() &&
+        !isLoadingProfile &&
+        profileBundle &&
+        !profileBundle.exists
+      ) {
         setNotFoundModalOpen(true);
       }
     })();
-  }, [teacherInfoData, teacher, submitCode, isLoadingTeacher, teacherError]);
+  }, [teacherInfoData, teacher, submitCode, isLoadingProfile, profileError, profileBundle, profileUrl, mutateProfile]);
 
   // Handle not found modal confirm
   const handleNotFoundConfirm = useCallback(() => {
@@ -999,7 +996,7 @@ export default function Page1() {
         <div className="border-b border-gray-200 pb-2 sm:pb-3">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Thông Tin Của Tôi</h1>
           <div className="text-xs text-gray-600 mt-1">
-            {isLoadingTeacher ? (
+            {isLoadingProfile ? (
               <span className="inline-flex items-center gap-2">
                 <div className="w-3 h-1 bg-gray-300 rounded overflow-hidden">
                   <div className="w-full h-full bg-blue-500 animate-pulse"></div>
@@ -1020,8 +1017,8 @@ export default function Page1() {
           </div>
         )}
 
-        {/* Empty State */}
-        {!submitCode && !error && !isLoadingTeacher && (
+        {/* Empty State — chưa có GV (kể cả sau khi tải theo email) */}
+        {!submitCode && !teacher && !error && !isLoadingProfile && (
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 sm:p-12 text-center">
             <div className="flex flex-col items-center gap-3">
               <div className="w-16 h-16 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center">
@@ -1036,7 +1033,7 @@ export default function Page1() {
         )}
 
         {/* Teacher Info Skeleton */}
-        {(isLoadingTeacher && submitCode) && (
+        {isLoadingProfile && !teacher && (
           <div className="border border-gray-200 rounded-xl overflow-hidden">
             {/* Header Skeleton */}
             <div className="bg-[#a1001f] text-white p-3 sm:p-4">
@@ -1068,7 +1065,7 @@ export default function Page1() {
         )}
 
         {/* Teacher Profile — unified from DB */}
-        {teacher && dbRow && !isLoadingTeacher && (
+        {teacher && dbRow && !isLoadingProfile && (
           <div className="border border-gray-200 rounded-xl overflow-hidden animate-fadeIn" style={{ animationDelay: '0.1s' }}>
             {/* Header */}
             <div className="bg-[#a1001f] text-white p-3 sm:p-4">

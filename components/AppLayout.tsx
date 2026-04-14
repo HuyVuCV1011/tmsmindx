@@ -170,9 +170,10 @@ export default function AppLayout({
       if (!pathname.startsWith("/user")) return;
 
       try {
-        const response = await fetch(`/api/checkdatasource/status?email=${encodeURIComponent(user.email)}`, {
-          cache: "no-store",
-        });
+        const response = await fetch(
+          `/api/checkdatasource/status?email=${encodeURIComponent(user.email)}&brief=1`,
+          { cache: "no-store" }
+        );
         const data = await response.json();
         // Only act on a definitive "not exists" answer, not on DB errors.
         if (response.ok && data.success && data.exists === false && !data.dbUnavailable) {

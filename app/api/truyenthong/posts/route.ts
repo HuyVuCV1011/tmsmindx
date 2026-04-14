@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { isDatabaseUnavailableError } from '@/lib/db-unavailable';
+import { isDegradedDatabaseQueryError } from '@/lib/db-unavailable';
 import { generateSlug } from '@/lib/utils';
 import { v2 as cloudinary } from 'cloudinary';
 
@@ -95,7 +95,7 @@ WHERE 1=1`;
             client.release();
         }
     } catch (error) {
-        if (isDatabaseUnavailableError(error)) {
+        if (isDegradedDatabaseQueryError(error)) {
             return NextResponse.json([], {
                 headers: {
                     'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59',

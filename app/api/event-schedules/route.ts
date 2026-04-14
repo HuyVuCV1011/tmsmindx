@@ -1,6 +1,6 @@
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
-import { isDatabaseUnavailableError } from '@/lib/db-unavailable';
+import { isDegradedDatabaseQueryError } from '@/lib/db-unavailable';
 import { NextRequest, NextResponse } from 'next/server';
 
 const EVENT_TYPES = [
@@ -120,7 +120,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       count: result.rows.length,
     });
   } catch (error: unknown) {
-    if (isDatabaseUnavailableError(error)) {
+    if (isDegradedDatabaseQueryError(error)) {
       return NextResponse.json({
         success: true,
         data: [],
