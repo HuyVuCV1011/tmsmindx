@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { isDatabaseUnavailableError } from './db-unavailable';
 
 // ============================================================
 // Hệ thống Migration tự động cho TPS
@@ -1353,7 +1354,13 @@ export async function runMigrations(pool: Pool): Promise<{ success: boolean; app
       client.release();
     }
   } catch (err: any) {
-    console.error('❌ Migration system error:', err.message);
+    if (isDatabaseUnavailableError(err)) {
+      console.warn(
+        '⚠️ Migrations skipped: database quá tải kết nối hoặc hết slot (thử giảm DB_POOL_MAX hoặc đóng kết nối khác).'
+      );
+    } else {
+      console.error('❌ Migration system error:', err.message);
+    }
     return { success: false, applied, errors: [err.message] };
   }
 }
@@ -1363,13 +1370,17 @@ export async function initDatabase(pool: Pool): Promise<void> {
   migrationRan = true;
   console.log('\n🔄 Running database migrations...');
   const result = await runMigrations(pool);
-  if (result.applied.length === 0) {
-    console.log('✅ Database is up to date. No new migrations.\n');
-  } else {
+  if (result.applied.length > 0) {
     console.log(`✅ Applied ${result.applied.length} migration(s).\n`);
   }
   if (result.errors.length > 0) {
-    console.warn(`⚠️ ${result.errors.length} migration(s) had errors.\n`);
+    const onlyConn =
+      result.errors.length === 1 && isDatabaseUnavailableError({ message: result.errors[0] });
+    if (!onlyConn) {
+      console.warn(`⚠️ ${result.errors.length} migration(s) had errors.\n`);
+    }
+  } else if (result.applied.length === 0) {
+    console.log('✅ Database is up to date. No new migrations.\n');
   }
 }
 
