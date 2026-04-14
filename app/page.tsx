@@ -1,43 +1,46 @@
-"use client";
+'use client'
 
-import { useAuth } from "@/lib/auth-context";
-import { logger } from "@/lib/logger";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useAuth } from '@/lib/auth-context'
+import { logger } from '@/lib/logger'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 
 export default function Home() {
-  const router = useRouter();
-  const { user, token, isLoading } = useAuth();
+  const router = useRouter()
+  const { user, token, isLoading } = useAuth()
 
   useEffect(() => {
     if (isLoading) {
-      logger.info('Root: Waiting for auth context to load...');
-      return;
+      logger.info('Root: Waiting for auth context to load...')
+      return
     }
 
     // Chưa đăng nhập → redirect đến login
     if (!token || !user) {
-      logger.info('Root: No auth found, redirecting to login');
-      router.replace('/login');
-      return;
+      logger.info('Root: No auth found, redirecting to login')
+      router.replace('/login')
+      return
     }
 
     // Đã đăng nhập → kiểm tra quyền và redirect
-    logger.info('Root: User authenticated, checking admin status', { 
-      email: user.email, 
+    logger.info('Root: User authenticated, checking admin status', {
+      email: user.email,
       role: user.role,
-      isAdmin: user.isAdmin 
-    });
+      isAdmin: user.isAdmin,
+    })
+
+    const profileCheckedEmail = localStorage.getItem('tps_profile_check_done_email')?.trim().toLowerCase();
+    const currentUserEmail = (user.email || '').trim().toLowerCase();
 
     // Ưu tiên admin dashboard nếu là admin
     if (user.isAdmin) {
-      logger.success('Root: Redirecting to admin dashboard');
-      router.replace('/admin/dashboard');
+      logger.success('Root: Redirecting to admin dashboard')
+      router.replace('/admin/dashboard')
     } else {
-      logger.success('Root: Redirecting to user portal');
-      router.replace('/user/thongtingv');
-    }
-  }, [user, token, isLoading, router]);
+      const nextPath = profileCheckedEmail === currentUserEmail ? '/user/thongtingv' : '/checkdatasource';
+      logger.success('Root: Redirecting to teacher flow', { nextPath });
+      router.replace(nextPath);    }
+  }, [user, token, isLoading, router])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
@@ -57,5 +60,5 @@ export default function Home() {
         </div>
       </div>
     </div>
-  );
+  )
 }

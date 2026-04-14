@@ -30,7 +30,8 @@ export default function EditPostPage() {
     // Using SWR for initial data fetch
     const { data: postData, error, isLoading: isFetching } = useSWR(
         slug ? `/api/truyenthong/posts/${slug}` : null,
-        fetcher
+        fetcher,
+        { revalidateOnFocus: false, dedupingInterval: 60000 }
     )
 
     const [loading, setLoading] = useState(false)

@@ -201,21 +201,16 @@ export async function GET(request: Request) {
         const cachedEntry = getCacheEntry(cacheKey)
         const isCached = cachedEntry && isCacheValid(cachedEntry)
 
-        console.log(`[Birthdays API] Cache check - key: ${cacheKey}, valid: ${isCached}`)
-
         // Fetch data: nếu cache valid thì dùng cache, nếu không thì fetch mới
         let birthdayRecords: Record<string, unknown>[]
         let hiddenEmails: Set<string>
 
         if (isCached) {
             // Use cached data
-            console.log(`[Birthdays API] Using cached data`)
             birthdayRecords = cachedEntry!.birthdayData
             // Luôn lấy privacy mới nhất để tránh stale khi user vừa bật/tắt show_birthday.
             hiddenEmails = await fetchHiddenBirthdayEmails()
         } else {
-            console.log(`[Birthdays API] Fetching data from Vercel cache + DB`)
-            
             // Fetch birthday list và hidden emails song song (userArea đã fetch ở trên)
             const [cachedBirthdayRecords, fetchedHiddenEmails] = await Promise.all([
                 getBirthdayRecordsFromDataCache(currentMonth, currentYear),
@@ -227,7 +222,6 @@ export async function GET(request: Request) {
             hiddenEmails = fetchedHiddenEmails
 
             // Update cache
-            console.log(`[Birthdays API] Saved to cache - key: ${cacheKey}, records: ${birthdayRecords.length}, hidden: ${hiddenEmails.size}`)
             setCacheEntry(cacheKey, {
                 timestamp: Date.now(),
                 birthdayData: birthdayRecords
@@ -264,8 +258,6 @@ export async function GET(request: Request) {
             )
         }
         
-        console.log(`[Birthdays API] Privacy applied - total: ${weekBirthdays.length}, masked: ${maskedCount}`)
-
         let birthdays = weekBirthdays
 
         // Nếu có username → filter theo leader.area
@@ -279,8 +271,6 @@ export async function GET(request: Request) {
                 .map((b, i) => ({ ...b, area: areasResult[i] || '' }))
                 .filter(b => b.area === userArea)
         }
-
-        console.log(`[Birthdays API] Response - count: ${birthdays.length}, fromCache: ${isCached}`)
 
         return NextResponse.json({
             success: true,

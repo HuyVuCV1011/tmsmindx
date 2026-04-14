@@ -123,7 +123,8 @@ export default function DealLuongPage() {
 
   const { data: dealsResponse, error: dealsError, mutate: fetchDeals } = useSWR(
     user?.email ? `/api/salary-deals?email=${encodeURIComponent(user.email)}` : null,
-    fetcher
+    fetcher,
+    { revalidateOnFocus: false, revalidateOnReconnect: false, dedupingInterval: 300000, shouldRetryOnError: false, revalidateIfStale: false }
   );
 
   const deals = dealsResponse?.success ? dealsResponse.data : [];
