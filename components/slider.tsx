@@ -72,7 +72,7 @@ export default function Slider({ posts }: SliderProps) {
             <div className="relative w-full h-full">
                 {posts.map((post, index) => (
                     <div
-                        key={post.id}
+                        key={`${post.id || post.slug || 'post'}-${index}`}
                         className={cn(
                             "absolute inset-0 transition-opacity duration-700 ease-in-out",
                             index === currentSlide ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'

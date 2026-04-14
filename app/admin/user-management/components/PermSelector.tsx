@@ -13,6 +13,7 @@ export const AVAILABLE_ROUTES = [
     { path: "/admin/hr-candidates/gen-planner/tracking", label: "Tab: Theo dõi đào tạo", group: "Đào tạo đầu vào" },
     { path: "/admin/hr-candidates/gen-planner/scheduling", label: "Tab: Xếp lịch training", group: "Đào tạo đầu vào" },
     { path: "/admin/hr-candidates/gen-planner/overview", label: "Tab: Theo dõi lịch training", group: "Đào tạo đầu vào" },
+    { path: "/admin/page4/quan-ly-lich-lam-viec", label: "Quản lý lịch làm việc", group: "Sự kiện" },
     { path: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện", group: "Sự kiện" },
     { path: "/admin/page4/danh-sach-dang-ky", label: "Danh sách đăng ký", group: "Đánh giá năng lực GV" },
     { path: "/admin/thu-vien-de", label: "Library đề chuyên môn", group: "Đánh giá năng lực GV" },

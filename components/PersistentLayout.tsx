@@ -1,6 +1,7 @@
 "use client";
 
 import { Sidebar } from "@/components/sidebar";
+import UserFirstLoginOnboarding from "@/components/onboarding/UserFirstLoginOnboarding";
 import { useAuth } from "@/lib/auth-context";
 import { SidebarProvider, useSidebar } from "@/lib/sidebar-context";
 import { usePathname } from "next/navigation";
@@ -32,6 +33,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         </Suspense>
       )}
       <main
+        data-tour="tour-content"
         className={`
           transition-all duration-500 ease-in-out min-h-screen will-change-transform
           ${shouldShowSidebar
@@ -56,6 +58,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </main>
+      <UserFirstLoginOnboarding />
     </div>
   );
 }

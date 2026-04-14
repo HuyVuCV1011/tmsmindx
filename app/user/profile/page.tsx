@@ -716,7 +716,7 @@ export default function TeacherProfilePage() {
                                                 { value: 'Other', label: 'Khác' },
                                             ].map((option) => (
                                                 <button
-                                                    key={option.value || 'empty'}
+                                                    key={`${option.value || 'empty'}-${option.label}`}
                                                     type="button"
                                                     onClick={() => {
                                                         setCertForm({ ...certForm, type: option.value })

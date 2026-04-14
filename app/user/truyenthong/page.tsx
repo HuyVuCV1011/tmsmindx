@@ -147,8 +147,8 @@ export default function CommunicationsPage() {
                                     </div>
                                 ) : filteredPosts.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-500">
-                                        {filteredPosts.map(post => (
-                                            <div key={post.id}>
+                                        {filteredPosts.map((post, index) => (
+                                            <div key={`${post.id || post.slug || 'post'}-${index}`}>
                                                 <PostCard post={post} />
                                             </div>
                                         ))}

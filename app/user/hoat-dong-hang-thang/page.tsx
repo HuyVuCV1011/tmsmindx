@@ -615,6 +615,13 @@ export default function MonthlyActivitiesPage() {
 
         const available = new Set<string>();
         Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
+          // "Kiểm tra quy trình - kỹ năng trải nghiệm" (experience) không phụ thuộc bộ đề chuyên môn
+          // nên vẫn cho phép đăng ký theo lịch nếu có event-schedule.
+          if (mapped.exam_type === "experience") {
+            available.add(option);
+            return;
+          }
+
           const hasDefaultSet = mapped.subjectCodeCandidates.some((candidate) =>
             subjectWithDefaultSet.has(`${mapped.block_code}::${normalize(candidate)}`)
           );
@@ -821,23 +828,12 @@ export default function MonthlyActivitiesPage() {
   }, [events]);
 
   const visibleEventsByDateKey = useMemo(() => {
-    const normalizeStr = (v: string) =>
-      v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     const map = new Map<string, EvaluationEvent[]>();
     eventsByDateKey.forEach((dayEvents, key) => {
       const visible = dayEvents.filter((event) => {
-        if (event.eventType !== "exam" && event.eventType !== "thi") return true;
-        // Nếu user đã đăng ký lịch thi này (id_su_kien khớp) và chưa hết giờ → luôn hiển thị
-        if (registeredScheduleIds.has(event.id) && !isPastEvent(event)) return true;
-        return Object.entries(REGISTER_OPTION_MAP).some(([option, mapped]) => {
-          if (!userRegisteredSubjects.has(option)) return false;
-          const specialty = normalizeStr(event.specialty || "");
-          const title = normalizeStr(event.title || "");
-          return mapped.specialtyAliases.some((alias) => {
-            const a = normalizeStr(alias);
-            return specialty.includes(a) || title.includes(a);
-          });
-        });
+        // Luôn hiển thị tất cả lịch thi/admin đã set để user có thể xem trước.
+        // Quyền "Làm bài" sẽ được kiểm soát theo assignment/can_take (chỉ khi đã đăng ký).
+        return true;
       });
       map.set(key, visible);
     });
@@ -1480,11 +1476,14 @@ export default function MonthlyActivitiesPage() {
           continue;
         }
 
-        const hasActiveSetForOption = availableOptions.has(option);
-        if (!hasActiveSetForOption) {
-          failedOptions.push(option);
-          failedDetails.push(`${option}: chưa có bộ đề active`);
-          continue;
+        // Experience test (quy trình/kỹ năng trải nghiệm) không cần bộ đề chuyên môn
+        if (mapped.exam_type !== "experience") {
+          const hasActiveSetForOption = availableOptions.has(option);
+          if (!hasActiveSetForOption) {
+            failedOptions.push(option);
+            failedDetails.push(`${option}: chưa có bộ đề active`);
+            continue;
+          }
         }
 
         const examEventId = selectedExamEventByOption[option];
@@ -2411,10 +2410,15 @@ export default function MonthlyActivitiesPage() {
                 <p>2. Tick môn muốn đăng ký rồi bấm Gửi đăng ký.</p>
               </div>
 
-              {REGISTER_OPTIONS.filter((option) =>
-                (upcomingExamEventsByOption[option] || []).length > 0 && availableOptions.has(option)
-              ).map((option) => {
-                const isAvailable = availableOptions.has(option);
+              {REGISTER_OPTIONS.filter((option) => {
+                const mapped = REGISTER_OPTION_MAP[option];
+                const hasExamEvents = (upcomingExamEventsByOption[option] || []).length > 0;
+                const isExperience = mapped?.exam_type === "experience";
+                return hasExamEvents && (isExperience || availableOptions.has(option));
+              }).map((option) => {
+                const mapped = REGISTER_OPTION_MAP[option];
+                const isExperience = mapped?.exam_type === "experience";
+                const isAvailable = isExperience ? true : availableOptions.has(option);
                 const isSelected = selectedOptions.includes(option);
                 const examEvents = upcomingExamEventsByOption[option] || [];
                 const hasExamEvents = examEvents.length > 0;
