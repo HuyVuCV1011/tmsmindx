@@ -1,132 +1,202 @@
-﻿'use client';
+'use client'
 
-import Modal from '@/components/Modal';
-import { PageHeader } from '@/components/PageHeader';
-import { TableSkeleton } from '@/components/skeletons/TableSkeleton';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { StepItem, Stepper } from '@/components/ui/stepper';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useAuth } from '@/lib/auth-context';
-import { findMatchingCampus } from '@/lib/campus-data';
-import { useTeacher } from '@/lib/teacher-context';
-import { AlertCircle, CalendarClock, CheckCircle2, CircleX, RefreshCcw } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import toast from 'react-hot-toast';
+import Modal from '@/components/Modal'
+import { PageHeader } from '@/components/PageHeader'
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { StepItem, Stepper } from '@/components/ui/stepper'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { useAuth } from '@/lib/auth-context'
+import { findMatchingCampus } from '@/lib/campus-data'
+import { useTeacher } from '@/lib/teacher-context'
+import {
+  AlertCircle,
+  CalendarClock,
+  CheckCircle2,
+  ChevronDown,
+  CircleX,
+  Plus,
+  RefreshCcw,
+} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import toast from 'react-hot-toast'
 
 interface LeaveRequest {
-  id: number;
-  teacher_name: string;
-  lms_code: string;
-  email: string;
-  campus: string;
-  leave_date: string;
-  reason: string;
-  class_code?: string;
-  student_count?: string;
-  class_time?: string;
-  leave_session?: string;
-  has_substitute: boolean;
-  substitute_teacher?: string;
-  substitute_email?: string;
-  class_status?: string;
-  email_subject?: string;
-  email_body?: string;
-  status: 'pending_admin' | 'approved_unassigned' | 'approved_assigned' | 'rejected' | 'substitute_confirmed';
-  admin_note?: string;
-  created_at: string;
-  updated_at: string;
+  id: number
+  teacher_name: string
+  lms_code: string
+  email: string
+  campus: string
+  leave_date: string
+  reason: string
+  class_code?: string
+  student_count?: string
+  class_time?: string
+  leave_session?: string
+  has_substitute: boolean
+  substitute_teacher?: string
+  substitute_email?: string
+  class_status?: string
+  email_subject?: string
+  email_body?: string
+  status:
+    | 'pending_admin'
+    | 'approved_unassigned'
+    | 'approved_assigned'
+    | 'rejected'
+    | 'substitute_confirmed'
+  admin_note?: string
+  created_at: string
+  updated_at: string
 }
 
-type StatusVariant = 'warning' | 'info' | 'success' | 'destructive';
+type StatusVariant = 'warning' | 'info' | 'success' | 'destructive'
 
-const STORAGE_KEY = 'teacher_leave_request_auto_fill_data';
-const NORTH_CAMPUS_KEYWORDS = ['ha noi', 'hanoi', 'bac', 'hai phong', 'quang ninh', 'thai nguyen', 'nam dinh'];
-const MIN_ADVANCE_HOURS = 72;
+const STORAGE_KEY = 'teacher_leave_request_auto_fill_data'
+const NORTH_CAMPUS_KEYWORDS = [
+  'ha noi',
+  'hanoi',
+  'bac',
+  'hai phong',
+  'quang ninh',
+  'thai nguyen',
+  'nam dinh',
+]
 
-function getStatusMeta(status: LeaveRequest['status']): { label: string; variant: StatusVariant } {
+const CLASS_TIME_OPTIONS = [
+  '8h00 - 10h00',
+  '10h00 - 12h00',
+  '14h00 - 16h00',
+  '16h00 - 18h00',
+  '18h00 - 20h00',
+  '18h30 - 20h30',
+  '19h00 - 21h00',
+] as const
+
+const LEAVE_SESSION_OPTIONS = Array.from(
+  { length: 14 },
+  (_, index) => `Buổi ${index + 1}`,
+)
+
+const SELECT_BASE_CLASS =
+  'w-full min-h-11 appearance-none rounded-lg border border-gray-300 bg-white px-3 py-3 pr-10 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm'
+const INPUT_BASE_CLASS =
+  'w-full min-h-11 rounded-lg border border-gray-300 px-3 py-3 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm'
+const TEXTAREA_BASE_CLASS =
+  'w-full rounded-lg border border-gray-300 px-3 py-2.5 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm'
+const MIN_ADVANCE_HOURS = 72
+
+function getStatusMeta(status: LeaveRequest['status']): {
+  label: string
+  variant: StatusVariant
+} {
   switch (status) {
     case 'pending_admin':
-      return { label: 'Chờ TC/Leader duyệt', variant: 'warning' };
+      return { label: 'Chờ TC/Leader duyệt', variant: 'warning' }
     case 'approved_unassigned':
-      return { label: 'Đã duyệt - chờ phân GV thay', variant: 'info' };
+      return { label: 'Đã duyệt - chờ phân GV thay', variant: 'info' }
     case 'approved_assigned':
-      return { label: 'Đã gửi cho GV thay thế', variant: 'info' };
+      return { label: 'Đã gửi cho GV thay thế', variant: 'info' }
     case 'substitute_confirmed':
-      return { label: 'GV thay đã xác nhận', variant: 'success' };
+      return { label: 'GV thay đã xác nhận', variant: 'success' }
     case 'rejected':
-      return { label: 'Từ chối', variant: 'destructive' };
+      return { label: 'Từ chối', variant: 'destructive' }
     default:
-      return { label: status, variant: 'info' };
+      return { label: status, variant: 'info' }
   }
 }
 
 function getWorkflowSteps(status: LeaveRequest['status']): StepItem[] {
-  const step1: StepItem = { id: 1, label: 'Gửi mail xin nghỉ', status: 'completed' };
+  const step1: StepItem = {
+    id: 1,
+    label: 'Gửi mail xin nghỉ',
+    status: 'completed',
+  }
 
-  let step2Status: StepItem['status'] = 'current';
-  let step3Status: StepItem['status'] = 'upcoming';
-  let step4Status: StepItem['status'] = 'upcoming';
+  let step2Status: StepItem['status'] = 'current'
+  let step3Status: StepItem['status'] = 'upcoming'
+  let step4Status: StepItem['status'] = 'upcoming'
 
   if (status === 'rejected') {
-    step2Status = 'error';
-    step4Status = 'error';
-  } else if (status === 'approved_unassigned' || status === 'approved_assigned') {
-    step2Status = 'success';
-    step3Status = 'current';
+    step2Status = 'error'
+    step4Status = 'error'
+  } else if (
+    status === 'approved_unassigned' ||
+    status === 'approved_assigned'
+  ) {
+    step2Status = 'success'
+    step3Status = 'current'
   } else if (status === 'substitute_confirmed') {
-    step2Status = 'success';
-    step3Status = 'success';
-    step4Status = 'success';
+    step2Status = 'success'
+    step3Status = 'success'
+    step4Status = 'success'
   }
 
   return [
     step1,
     { id: 2, label: 'TC/Leader duyệt', status: step2Status },
     { id: 3, label: 'GV thay thế xác nhận', status: step3Status },
-    { id: 4, label: 'Hoàn tất quy trình', status: step4Status }
-  ];
+    { id: 4, label: 'Hoàn tất quy trình', status: step4Status },
+  ]
 }
 
 export default function XinNghiMotBuoiPage() {
-  const { user } = useAuth();
-  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
+  const { user } = useAuth()
+  const { teacherProfile } = useTeacher()
 
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
-  const [campusFilter, setCampusFilter] = useState<string[]>([]);
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
-  const [showCampusDropdown, setShowCampusDropdown] = useState(false);
-  const [campusSearchText, setCampusSearchText] = useState('');
-    // Danh sách campus duy nhất
-    const campusOptions = useMemo(() => {
-      const set = new Set<string>();
-      leaveRequests.forEach((item) => {
-        if (item.campus) set.add(item.campus);
-      });
-      return Array.from(set).sort();
-    }, [leaveRequests]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([])
+  const [campusFilter, setCampusFilter] = useState<string[]>([])
+  const [fromDate, setFromDate] = useState<string>('')
+  const [toDate, setToDate] = useState<string>('')
+  const [showCampusDropdown, setShowCampusDropdown] = useState(false)
+  const [campusSearchText, setCampusSearchText] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [loadingError, setLoadingError] = useState<string | null>(null)
+  const [showModal, setShowModal] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(
+    null,
+  )
+  const [classTimePreset, setClassTimePreset] = useState('')
 
-    const filteredCampusOptions = useMemo(() => {
-      if (!campusSearchText.trim()) return campusOptions;
-      const searchLower = campusSearchText.toLowerCase();
-      return campusOptions.filter(campus => campus.toLowerCase().includes(searchLower));
-    }, [campusOptions, campusSearchText]);
+  const campusOptions = useMemo(() => {
+    const set = new Set<string>()
+    leaveRequests.forEach((item) => {
+      if (item.campus) set.add(item.campus)
+    })
+    return Array.from(set).sort()
+  }, [leaveRequests])
 
-    // Lọc leaveRequests theo campus và khoảng thời gian
-    const filteredRequests = useMemo(() => {
-      return leaveRequests.filter((item) => {
-        if (campusFilter.length > 0 && !campusFilter.includes(item.campus)) return false;
-        if (fromDate && new Date(item.leave_date) < new Date(fromDate)) return false;
-        if (toDate && new Date(item.leave_date) > new Date(toDate)) return false;
-        return true;
-      });
-    }, [leaveRequests, campusFilter, fromDate, toDate]);
-  const [loading, setLoading] = useState(true);
-  const [loadingError, setLoadingError] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
+  const filteredCampusOptions = useMemo(() => {
+    if (!campusSearchText.trim()) return campusOptions
+    const searchLower = campusSearchText.toLowerCase()
+    return campusOptions.filter((campus) =>
+      campus.toLowerCase().includes(searchLower),
+    )
+  }, [campusOptions, campusSearchText])
+
+  const filteredRequests = useMemo(() => {
+    return leaveRequests.filter((item) => {
+      if (campusFilter.length > 0 && !campusFilter.includes(item.campus)) {
+        return false
+      }
+      if (fromDate && new Date(item.leave_date) < new Date(fromDate)) {
+        return false
+      }
+      if (toDate && new Date(item.leave_date) > new Date(toDate)) {
+        return false
+      }
+      return true
+    })
+  }, [leaveRequests, campusFilter, fromDate, toDate])
 
   const [formData, setFormData] = useState({
     teacher_name: '',
@@ -142,38 +212,47 @@ export default function XinNghiMotBuoiPage() {
     has_substitute: false,
     substitute_teacher: '',
     substitute_email: '',
-    class_status: ''
-  });
+    class_status: '',
+  })
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return;
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (!saved) return
 
     try {
-      const parsed = JSON.parse(saved);
-      setFormData((prev) => ({ ...prev, ...parsed }));
+      const parsed = JSON.parse(saved)
+      setFormData((prev) => ({ ...prev, ...parsed }))
     } catch (error) {
-      console.error('Error loading leave request cache', error);
+      console.error('Error loading leave request cache', error)
     }
-  }, []);
+  }, [])
 
   useEffect(() => {
     if (!teacherProfile) {
-      setFormData((prev) => ({ ...prev, email: prev.email || user?.email || '' }));
-      return;
+      setFormData((prev) => ({
+        ...prev,
+        email: prev.email || user?.email || '',
+      }))
+      return
     }
 
-    const teacherBranch = teacherProfile.branchIn || teacherProfile.branchCurrent || '';
-    const matchedCampus = findMatchingCampus(teacherBranch);
+    const teacherBranch =
+      teacherProfile.branchIn || teacherProfile.branchCurrent || ''
+    const matchedCampus = findMatchingCampus(teacherBranch)
 
     setFormData((prev) => {
       const updated = {
         ...prev,
         teacher_name: teacherProfile.name || prev.teacher_name || '',
         lms_code: teacherProfile.code || prev.lms_code || '',
-        email: teacherProfile.emailMindx || teacherProfile.emailPersonal || prev.email || user?.email || '',
-        campus: matchedCampus || prev.campus || ''
-      };
+        email:
+          teacherProfile.emailMindx ||
+          teacherProfile.emailPersonal ||
+          prev.email ||
+          user?.email ||
+          '',
+        campus: matchedCampus || prev.campus || '',
+      }
 
       localStorage.setItem(
         STORAGE_KEY,
@@ -181,65 +260,89 @@ export default function XinNghiMotBuoiPage() {
           teacher_name: updated.teacher_name,
           lms_code: updated.lms_code,
           email: updated.email,
-          campus: updated.campus
-        })
-      );
+          campus: updated.campus,
+        }),
+      )
 
-      return updated;
-    });
-  }, [teacherProfile, user?.email]);
+      return updated
+    })
+  }, [teacherProfile, user?.email])
 
   const fetchLeaveRequests = useCallback(
     async (showRefreshToast = false) => {
-      if (!user?.email) return;
+      if (!user?.email) return
 
       try {
-        setLoading(true);
-        setLoadingError(null);
+        setLoading(true)
+        setLoadingError(null)
 
-        const response = await fetch(`/api/leave-requests?email=${encodeURIComponent(user.email)}`);
-        const data = await response.json();
+        const response = await fetch(
+          `/api/leave-requests?email=${encodeURIComponent(user.email)}`,
+        )
+        const data = await response.json()
 
         if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Không thể tải danh sách yêu cầu');
+          throw new Error(data.error || 'Không thể tải danh sách yêu cầu')
         }
 
-        setLeaveRequests(data.data || []);
-        if (showRefreshToast) toast.success('Đã cập nhật danh sách mới nhất');
+        setLeaveRequests(data.data || [])
+        if (showRefreshToast) toast.success('Đã cập nhật danh sách mới nhất')
       } catch (error: unknown) {
-        console.error('Error fetching leave requests:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Có lỗi khi tải dữ liệu';
-        setLoadingError(errorMessage);
+        console.error('Error fetching leave requests:', error)
+        const errorMessage =
+          error instanceof Error ? error.message : 'Có lỗi khi tải dữ liệu'
+        setLoadingError(errorMessage)
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
     },
-    [user?.email]
-  );
+    [user?.email],
+  )
 
   useEffect(() => {
     if (user?.email) {
-      fetchLeaveRequests();
+      fetchLeaveRequests()
     }
-  }, [fetchLeaveRequests, user?.email]);
+  }, [fetchLeaveRequests, user?.email])
+
+  useEffect(() => {
+    if (!formData.class_time) {
+      setClassTimePreset('')
+      return
+    }
+
+    setClassTimePreset(
+      CLASS_TIME_OPTIONS.includes(
+        formData.class_time as (typeof CLASS_TIME_OPTIONS)[number],
+      )
+        ? formData.class_time
+        : 'other',
+    )
+  }, [formData.class_time])
 
   const inferredRegion = useMemo(() => {
-    const normalizedCampus = formData.campus.toLowerCase();
-    const isNorthernCampus = NORTH_CAMPUS_KEYWORDS.some((keyword) => normalizedCampus.includes(keyword));
-    return isNorthernCampus ? 'mien_bac' : 'mien_nam';
-  }, [formData.campus]);
+    const normalizedCampus = formData.campus.toLowerCase()
+    const isNorthernCampus = NORTH_CAMPUS_KEYWORDS.some((keyword) =>
+      normalizedCampus.includes(keyword),
+    )
+    return isNorthernCampus ? 'mien_bac' : 'mien_nam'
+  }, [formData.campus])
 
-  const hasSubstitute = formData.has_substitute && formData.substitute_teacher.trim().length > 0;
+  const hasSubstitute =
+    formData.has_substitute && formData.substitute_teacher.trim().length > 0
 
-  const toLine = inferredRegion === 'mien_nam' ? 'TC/TE, CS cơ sở xin nghỉ' : 'TC/TE, TC, CS cơ sở xin nghỉ';
-  const ccLine = 'Leader, TEGL';
+  const toLine =
+    inferredRegion === 'mien_nam'
+      ? 'TC/TE, CS cơ sở xin nghỉ'
+      : 'TC/TE, TC, CS cơ sở xin nghỉ'
+  const ccLine = 'Leader, TEGL'
 
-  const subjectLine = `[MindX - ${formData.campus || 'Tên Cơ Sở'}] V/v xin nghỉ 1 buổi dạy`;
+  const subjectLine = `[MindX - ${formData.campus || 'Tên Cơ Sở'}] V/v xin nghỉ 1 buổi dạy`
 
   const leaveDateDisplay = useMemo(() => {
-    if (!formData.leave_date) return '[ngày/tháng/năm]';
-    return new Date(formData.leave_date).toLocaleDateString('vi-VN');
-  }, [formData.leave_date]);
+    if (!formData.leave_date) return '[ngày/tháng/năm]'
+    return new Date(formData.leave_date).toLocaleDateString('vi-VN')
+  }, [formData.leave_date])
 
   const emailBody = useMemo(() => {
     return `Kính gửi:
@@ -257,13 +360,15 @@ Buổi học: ${formData.leave_session || '[Buổi học xin nghỉ]'}.
 Giáo viên thay thế: ${formData.has_substitute ? formData.substitute_teacher || '[Nhập tên giáo viên thay thế]' : ''}. 
 Tình hình lớp học: ${formData.class_status || '[Nêu tình hình của lớp, có học viên nào cần lưu ý hay đặc biệt không]'}. 
 
-${hasSubstitute
-  ? 'Trên đây là thông tin lớp mà em xin nghỉ, mong phía chuyên môn cơ sở xem xét và xác nhận giúp em. Em xin cảm ơn!'
-  : 'Trên đây là thông tin lớp mà em xin nghỉ, vì chưa tìm được giáo viên thay nên em nhờ phía chuyên môn hỗ trợ tìm giáo viên giúp em cho buổi học trên. Em xin cảm ơn!'}
+${
+  hasSubstitute
+    ? 'Trên đây là thông tin lớp mà em xin nghỉ, mong phía chuyên môn cơ sở xem xét và xác nhận giúp em. Em xin cảm ơn!'
+    : 'Trên đây là thông tin lớp mà em xin nghỉ, vì chưa tìm được giáo viên thay nên em nhờ phía chuyên môn hỗ trợ tìm giáo viên giúp em cho buổi học trên. Em xin cảm ơn!'
+}
 
 Trân trọng,
 
-${formData.teacher_name || '[Họ Và Tên]'}`;
+${formData.teacher_name || '[Họ Và Tên]'}`
   }, [
     formData.teacher_name,
     formData.campus,
@@ -276,16 +381,31 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
     formData.has_substitute,
     formData.substitute_teacher,
     hasSubstitute,
-    leaveDateDisplay
-  ]);
+    leaveDateDisplay,
+  ])
 
-  const pendingCount = useMemo(() => leaveRequests.filter((item) => item.status === 'pending_admin').length, [leaveRequests]);
-  const doneCount = useMemo(() => leaveRequests.filter((item) => item.status === 'substitute_confirmed').length, [leaveRequests]);
-  const rejectedCount = useMemo(() => leaveRequests.filter((item) => item.status === 'rejected').length, [leaveRequests]);
+  const pendingCount = useMemo(
+    () =>
+      leaveRequests.filter((item) => item.status === 'pending_admin').length,
+    [leaveRequests],
+  )
+  const doneCount = useMemo(
+    () =>
+      leaveRequests.filter((item) => item.status === 'substitute_confirmed')
+        .length,
+    [leaveRequests],
+  )
+  const rejectedCount = useMemo(
+    () => leaveRequests.filter((item) => item.status === 'rejected').length,
+    [leaveRequests],
+  )
 
-  const handleChange = (field: keyof typeof formData, value: string | boolean) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
+  const handleChange = (
+    field: keyof typeof formData,
+    value: string | boolean,
+  ) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+  }
 
   const resetFormForNew = () => {
     setFormData((prev) => ({
@@ -299,48 +419,59 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
       has_substitute: false,
       substitute_teacher: '',
       substitute_email: '',
-      class_status: ''
-    }));
-  };
+      class_status: '',
+    }))
+    setClassTimePreset('')
+  }
 
   const validateForm = () => {
-    if (!formData.teacher_name || !formData.lms_code || !formData.email || !formData.campus || !formData.leave_date || !formData.reason) {
-      return 'Vui lòng điền đầy đủ các trường bắt buộc.';
+    if (
+      !formData.teacher_name ||
+      !formData.lms_code ||
+      !formData.email ||
+      !formData.campus ||
+      !formData.leave_date ||
+      !formData.reason
+    ) {
+      return 'Vui lòng điền đầy đủ các trường bắt buộc.'
     }
 
     if (formData.reason.trim().length < 10) {
-      return 'Lý do xin nghỉ cần rõ ràng hơn (tối thiểu 10 ký tự).';
+      return 'Lý do xin nghỉ cần rõ ràng hơn (tối thiểu 10 ký tự).'
     }
 
-    const leaveDateMs = new Date(`${formData.leave_date}T00:00:00`).getTime();
-    const diffHours = (leaveDateMs - Date.now()) / (1000 * 60 * 60);
+    const leaveDateMs = new Date(`${formData.leave_date}T00:00:00`).getTime()
+    const diffHours = (leaveDateMs - Date.now()) / (1000 * 60 * 60)
     if (diffHours < MIN_ADVANCE_HOURS) {
-      return `Ngày xin nghỉ cần cách thời điểm hiện tại tối thiểu ${MIN_ADVANCE_HOURS} giờ.`;
+      return `Ngày xin nghỉ cần cách thời điểm hiện tại tối thiểu ${MIN_ADVANCE_HOURS} giờ.`
     }
 
     if (formData.has_substitute) {
-      if (!formData.substitute_teacher.trim() || !formData.substitute_email.trim()) {
-        return 'Nếu đã tích giáo viên thay thế, cần nhập đầy đủ tên và email giáo viên thay.';
+      if (
+        !formData.substitute_teacher.trim() ||
+        !formData.substitute_email.trim()
+      ) {
+        return 'Nếu đã tích giáo viên thay thế, cần nhập đầy đủ tên và email giáo viên thay.'
       }
-      const emailValid = /\S+@\S+\.\S+/.test(formData.substitute_email.trim());
+      const emailValid = /\S+@\S+\.\S+/.test(formData.substitute_email.trim())
       if (!emailValid) {
-        return 'Email giáo viên thay thế chưa đúng định dạng.';
+        return 'Email giáo viên thay thế chưa đúng định dạng.'
       }
     }
 
-    return null;
-  };
+    return null
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
 
-    const validationError = validateForm();
+    const validationError = validateForm()
     if (validationError) {
-      toast.error(validationError);
-      return;
+      toast.error(validationError)
+      return
     }
 
-    setSubmitting(true);
+    setSubmitting(true)
 
     try {
       const response = await fetch('/api/leave-requests', {
@@ -350,37 +481,43 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
           ...formData,
           email_subject: subjectLine,
           email_body: emailBody,
-          substitute_teacher: formData.has_substitute ? formData.substitute_teacher : '',
-          substitute_email: formData.has_substitute ? formData.substitute_email : ''
-        })
-      });
+          substitute_teacher: formData.has_substitute
+            ? formData.substitute_teacher
+            : '',
+          substitute_email: formData.has_substitute
+            ? formData.substitute_email
+            : '',
+        }),
+      })
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (data.success) {
-        toast.success('Tạo mail xin nghỉ thành công. Yêu cầu đã vào quy trình duyệt.');
-        setShowModal(false);
-        resetFormForNew();
-        fetchLeaveRequests();
+        toast.success(
+          'Tạo mail xin nghỉ thành công. Yêu cầu đã vào quy trình duyệt.',
+        )
+        setShowModal(false)
+        resetFormForNew()
+        fetchLeaveRequests()
       } else {
-        toast.error(`Lỗi: ${data.error}`);
+        toast.error(`Lỗi: ${data.error}`)
       }
     } catch (error) {
-      console.error('Error creating leave request:', error);
-      toast.error('Có lỗi xảy ra khi tạo yêu cầu xin nghỉ');
+      console.error('Error creating leave request:', error)
+      toast.error('Có lỗi xảy ra khi tạo yêu cầu xin nghỉ')
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
-  };
+  }
 
   const copyText = async (label: string, value: string) => {
     try {
-      await navigator.clipboard.writeText(value);
-      toast.success(`Đã copy ${label}`);
+      await navigator.clipboard.writeText(value)
+      toast.success(`Đã copy ${label}`)
     } catch {
-      toast.error(`Không thể copy ${label}`);
+      toast.error(`Không thể copy ${label}`)
     }
-  };
+  }
 
   if (loading) {
     return (
@@ -397,7 +534,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -408,18 +545,22 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
           description="Tạo mail xin nghỉ và theo dõi quy trình 4 bước xuyên suốt User - Admin - User."
           actions={
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => fetchLeaveRequests(true)}>
+              <Button
+                variant="outline"
+                onClick={() => fetchLeaveRequests(true)}
+              >
                 <RefreshCcw className="mr-1.5 h-4 w-4" />
                 Làm mới
               </Button>
               <Button
                 size="lg"
                 onClick={() => {
-                  resetFormForNew();
-                  setShowModal(true);
+                  resetFormForNew()
+                  setShowModal(true)
                 }}
                 className="whitespace-nowrap border-2 border-[#a1001f] bg-[#a1001f] text-white shadow-md hover:bg-[#8a001a]"
               >
+                <Plus className="mr-2 h-5 w-5" />
                 Tạo mail xin nghỉ
               </Button>
             </div>
@@ -429,36 +570,56 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
             <p className="text-xs font-medium text-amber-700">Chờ duyệt</p>
-            <p className="mt-1 text-2xl font-bold text-amber-900">{pendingCount}</p>
+            <p className="mt-1 text-2xl font-bold text-amber-900">
+              {pendingCount}
+            </p>
           </div>
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-xs font-medium text-emerald-700">Đã hoàn tất</p>
-            <p className="mt-1 text-2xl font-bold text-emerald-900">{doneCount}</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-900">
+              {doneCount}
+            </p>
           </div>
           <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
             <p className="text-xs font-medium text-rose-700">Bị từ chối</p>
-            <p className="mt-1 text-2xl font-bold text-rose-900">{rejectedCount}</p>
+            <p className="mt-1 text-2xl font-bold text-rose-900">
+              {rejectedCount}
+            </p>
           </div>
         </div>
 
         {/* Bộ lọc nâng cao */}
         <div className="mb-4 flex flex-wrap gap-3 items-end">
           <div className="relative">
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Cơ sở</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
+              Cơ sở
+            </label>
             <button
               type="button"
               onClick={() => setShowCampusDropdown(!showCampusDropdown)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[180px] text-left flex items-center justify-between bg-white hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-45 text-left flex items-center justify-between bg-white hover:bg-gray-50"
             >
               <span className="truncate">
-                {campusFilter.length === 0 ? 'Tất cả' : `${campusFilter.length} cơ sở`}
+                {campusFilter.length === 0
+                  ? 'Tất cả'
+                  : `${campusFilter.length} cơ sở`}
               </span>
-              <svg className="w-4 h-4 ml-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              <svg
+                className="w-4 h-4 ml-2 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </button>
             {showCampusDropdown && (
-              <div className="absolute z-10 mt-1 w-full min-w-[240px] bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-hidden flex flex-col">
+              <div className="absolute z-10 mt-1 w-full min-w-60 bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-hidden flex flex-col">
                 <div className="p-2 border-b border-gray-200">
                   <input
                     type="text"
@@ -486,56 +647,72 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
                   </button>
                 </div>
                 <div className="overflow-y-auto flex-1">
-                {filteredCampusOptions.length === 0 ? (
-                  <div className="px-3 py-4 text-sm text-gray-500 text-center">Không tìm thấy cơ sở</div>
-                ) : (
-                  filteredCampusOptions.map((campus) => (
-                  <label
-                    key={campus}
-                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={campusFilter.includes(campus)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setCampusFilter([...campusFilter, campus]);
-                        } else {
-                          setCampusFilter(campusFilter.filter((c) => c !== campus));
-                        }
-                      }}
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600"
-                    />
-                    <span className="text-sm text-gray-700">{campus}</span>
-                  </label>
-                  ))
-                )}
+                  {filteredCampusOptions.length === 0 ? (
+                    <div className="px-3 py-4 text-sm text-gray-500 text-center">
+                      Không tìm thấy cơ sở
+                    </div>
+                  ) : (
+                    filteredCampusOptions.map((campus) => (
+                      <label
+                        key={campus}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={campusFilter.includes(campus)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setCampusFilter([...campusFilter, campus])
+                            } else {
+                              setCampusFilter(
+                                campusFilter.filter((c) => c !== campus),
+                              )
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                        />
+                        <span className="text-sm text-gray-700">{campus}</span>
+                      </label>
+                    ))
+                  )}
                 </div>
               </div>
             )}
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Từ ngày</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
+              Từ ngày
+            </label>
             <input
               type="date"
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
               value={fromDate}
-              onChange={e => setFromDate(e.target.value)}
+              onChange={(e) => setFromDate(e.target.value)}
               max={toDate || undefined}
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Đến ngày</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
+              Đến ngày
+            </label>
             <input
               type="date"
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
               value={toDate}
-              onChange={e => setToDate(e.target.value)}
+              onChange={(e) => setToDate(e.target.value)}
               min={fromDate || undefined}
             />
           </div>
           {(campusFilter.length > 0 || fromDate || toDate) && (
-            <Button size="sm" variant="ghost" onClick={() => { setCampusFilter([]); setFromDate(''); setToDate(''); }}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setCampusFilter([])
+                setFromDate('')
+                setToDate('')
+              }}
+            >
               Xoá lọc
             </Button>
           )}
@@ -543,8 +720,12 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
 
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
-            <h2 className="text-lg font-semibold text-gray-900">Danh sách yêu cầu xin nghỉ</h2>
-            <p className="text-sm text-gray-600">Tổng: {filteredRequests.length} yêu cầu</p>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Danh sách yêu cầu xin nghỉ
+            </h2>
+            <p className="text-sm text-gray-600">
+              Tổng: {filteredRequests.length} yêu cầu
+            </p>
           </div>
 
           {loadingError && (
@@ -554,14 +735,20 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
                 <p className="font-medium">Không thể tải dữ liệu</p>
                 <p className="mt-0.5">{loadingError}</p>
               </div>
-              <Button size="sm" variant="outline" onClick={() => fetchLeaveRequests()}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => fetchLeaveRequests()}
+              >
                 Thử lại
               </Button>
             </div>
           )}
 
           {filteredRequests.length === 0 ? (
-            <div className="p-10 text-center text-sm text-gray-600">Không có yêu cầu nào phù hợp bộ lọc.</div>
+            <div className="p-10 text-center text-sm text-gray-600">
+              Không có yêu cầu nào phù hợp bộ lọc.
+            </div>
           ) : (
             <>
               <div className="hidden overflow-x-auto lg:block">
@@ -577,18 +764,32 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
                   </TableHeader>
                   <TableBody>
                     {filteredRequests.map((item) => {
-                      const statusMeta = getStatusMeta(item.status);
+                      const statusMeta = getStatusMeta(item.status)
                       return (
-                        <TableRow key={item.id} className="cursor-pointer hover:bg-blue-50/40" onClick={() => setSelectedRequest(item)}>
-                          <TableCell>{new Date(item.created_at).toLocaleDateString('vi-VN')}</TableCell>
-                          <TableCell>{new Date(item.leave_date).toLocaleDateString('vi-VN')}</TableCell>
+                        <TableRow
+                          key={item.id}
+                          className="cursor-pointer hover:bg-blue-50/40"
+                          onClick={() => setSelectedRequest(item)}
+                        >
+                          <TableCell>
+                            {new Date(item.created_at).toLocaleDateString(
+                              'vi-VN',
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {new Date(item.leave_date).toLocaleDateString(
+                              'vi-VN',
+                            )}
+                          </TableCell>
                           <TableCell>{item.campus}</TableCell>
                           <TableCell>{item.class_code || '-'}</TableCell>
                           <TableCell>
-                            <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                            <Badge variant={statusMeta.variant}>
+                              {statusMeta.label}
+                            </Badge>
                           </TableCell>
                         </TableRow>
-                      );
+                      )
                     })}
                   </TableBody>
                 </Table>
@@ -596,7 +797,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
 
               <div className="divide-y divide-gray-200 lg:hidden">
                 {filteredRequests.map((item) => {
-                  const statusMeta = getStatusMeta(item.status);
+                  const statusMeta = getStatusMeta(item.status)
                   return (
                     <button
                       key={item.id}
@@ -605,13 +806,22 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
                       onClick={() => setSelectedRequest(item)}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-gray-900">{item.campus}</p>
-                        <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {item.campus}
+                        </p>
+                        <Badge variant={statusMeta.variant}>
+                          {statusMeta.label}
+                        </Badge>
                       </div>
-                      <p className="mt-1 text-xs text-gray-600">Ngày nghỉ: {new Date(item.leave_date).toLocaleDateString('vi-VN')}</p>
-                      <p className="mt-1 text-xs text-gray-600">Mã lớp: {item.class_code || '-'}</p>
+                      <p className="mt-1 text-xs text-gray-600">
+                        Ngày nghỉ:{' '}
+                        {new Date(item.leave_date).toLocaleDateString('vi-VN')}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-600">
+                        Mã lớp: {item.class_code || '-'}
+                      </p>
                     </button>
-                  );
+                  )
                 })}
               </div>
             </>
@@ -619,7 +829,12 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
         </div>
       </div>
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Tạo mail xin nghỉ 1 buổi" maxWidth="4xl">
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title="Tạo mail xin nghỉ 1 buổi"
+        maxWidth="4xl"
+      >
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <p className="font-semibold">Quy định nhanh</p>
@@ -639,115 +854,129 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Họ và tên *</label>
-              <input
-                required
-                type="text"
-                value={formData.teacher_name}
-                onChange={(e) => handleChange('teacher_name', e.target.value)}
-                placeholder={isTeacherLoading ? 'Đang tải...' : 'Họ tên giáo viên'}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Mã LMS *</label>
-              <input
-                required
-                type="text"
-                value={formData.lms_code}
-                onChange={(e) => handleChange('lms_code', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Email *</label>
-              <input
-                required
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleChange('email', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Cơ sở *</label>
-              <input
-                required
-                type="text"
-                value={formData.campus}
-                onChange={(e) => handleChange('campus', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Ngày xin nghỉ *</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Ngày xin nghỉ *
+              </label>
               <input
                 required
                 type="date"
                 value={formData.leave_date}
                 onChange={(e) => handleChange('leave_date', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
+                className={INPUT_BASE_CLASS}
               />
             </div>
-            <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Lý do xin nghỉ *</label>
+            <div className="md:col-span-2">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Lý do xin nghỉ *
+              </label>
               <textarea
                 required
                 rows={3}
                 value={formData.reason}
                 onChange={(e) => handleChange('reason', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
+                className={TEXTAREA_BASE_CLASS}
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Mã lớp</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Mã lớp
+              </label>
               <input
                 type="text"
                 value={formData.class_code}
                 onChange={(e) => handleChange('class_code', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
+                className={INPUT_BASE_CLASS}
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Số học viên</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Số học viên
+              </label>
               <input
                 type="text"
                 value={formData.student_count}
                 onChange={(e) => handleChange('student_count', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
+                className={INPUT_BASE_CLASS}
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Thời gian học</label>
-              <input
-                type="text"
-                value={formData.class_time}
-                onChange={(e) => handleChange('class_time', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
-              />
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Thời gian học
+              </label>
+              <div className="space-y-2">
+                <div className="relative">
+                  <select
+                    value={classTimePreset}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setClassTimePreset(value)
+
+                      if (value === 'other') {
+                        handleChange('class_time', '')
+                        return
+                      }
+
+                      handleChange('class_time', value)
+                    }}
+                    className={SELECT_BASE_CLASS}
+                  >
+                    <option value="">Chọn khung giờ</option>
+                    {CLASS_TIME_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                    <option value="other">Khung giờ khác</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                </div>
+
+                {classTimePreset === 'other' && (
+                  <input
+                    type="text"
+                    value={formData.class_time}
+                    onChange={(e) => handleChange('class_time', e.target.value)}
+                    placeholder="Nhập khung giờ khác"
+                    className="w-full min-h-11 rounded-lg border border-gray-300 px-3 py-3 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm"
+                  />
+                )}
+              </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Buổi học xin nghỉ</label>
-              <input
-                type="text"
-                value={formData.leave_session}
-                onChange={(e) => handleChange('leave_session', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
-              />
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Buổi học xin nghỉ
+              </label>
+              <div className="relative">
+                <select
+                  value={formData.leave_session}
+                  onChange={(e) =>
+                    handleChange('leave_session', e.target.value)
+                  }
+                  className={SELECT_BASE_CLASS}
+                >
+                  <option value="">Chọn buổi học</option>
+                  {LEAVE_SESSION_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              </div>
             </div>
-            <div className="sm:col-span-2">
+            <div className="md:col-span-2">
               <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
                 <input
                   type="checkbox"
                   checked={formData.has_substitute}
                   onChange={(e) => {
-                    const checked = e.target.checked;
-                    handleChange('has_substitute', checked);
+                    const checked = e.target.checked
+                    handleChange('has_substitute', checked)
                     if (!checked) {
-                      handleChange('substitute_teacher', '');
-                      handleChange('substitute_email', '');
+                      handleChange('substitute_teacher', '')
+                      handleChange('substitute_email', '')
                     }
                   }}
                   className="h-4 w-4 rounded border-gray-300 text-blue-600"
@@ -758,40 +987,58 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
             {formData.has_substitute && (
               <>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Tên giáo viên thay thế *</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Tên giáo viên thay thế *
+                  </label>
                   <input
                     type="text"
                     value={formData.substitute_teacher}
-                    onChange={(e) => handleChange('substitute_teacher', e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
+                    onChange={(e) =>
+                      handleChange('substitute_teacher', e.target.value)
+                    }
+                    className={INPUT_BASE_CLASS}
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Email giáo viên thay thế *</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Email giáo viên thay thế *
+                  </label>
                   <input
                     type="email"
                     value={formData.substitute_email}
-                    onChange={(e) => handleChange('substitute_email', e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
+                    onChange={(e) =>
+                      handleChange('substitute_email', e.target.value)
+                    }
+                    className={INPUT_BASE_CLASS}
                   />
                 </div>
               </>
             )}
-            <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Tình hình lớp học</label>
+            <div className="md:col-span-2">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Tình hình lớp học
+              </label>
               <textarea
                 rows={3}
                 value={formData.class_status}
                 onChange={(e) => handleChange('class_status', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
+                className={TEXTAREA_BASE_CLASS}
               />
             </div>
           </div>
 
-          <div className="space-y-3 rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-gray-800">Mẫu mail sẽ gửi</p>
-              <Button type="button" size="sm" variant="outline" onClick={() => copyText('nội dung mail', emailBody)}>
+          <div className="space-y-3 rounded-xl border border-gray-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold text-gray-800">
+                Mẫu mail sẽ gửi
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => copyText('nội dung mail', emailBody)}
+                className="w-full sm:w-auto border-[#a1001f]/30 text-[#a1001f] hover:border-[#a1001f]/50 hover:bg-[#a1001f]/5"
+              >
                 Copy nội dung
               </Button>
             </div>
@@ -804,15 +1051,18 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
             <p className="text-sm">
               <span className="font-medium">Tiêu đề:</span> {subjectLine}
             </p>
-            <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded bg-gray-50 p-3 text-sm text-gray-700">{emailBody}</pre>
+            <pre className="max-h-44 overflow-auto whitespace-pre-wrap rounded bg-gray-50 p-3 text-xs text-gray-700 sm:max-h-52 sm:text-sm">
+              {emailBody}
+            </pre>
           </div>
 
-          <div className="flex flex-col-reverse gap-3 border-t border-gray-200 pt-4 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => setShowModal(false)}>
-              Hủy
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Đang tạo...' : 'Gửi mail và tạo yêu cầu'}
+          <div className="flex justify-end border-t border-gray-200 pt-5">
+            <Button
+              type="submit"
+              disabled={submitting}
+              className="w-full sm:w-auto sm:min-w-60 justify-center bg-[#a1001f] px-6 py-3 text-base font-semibold text-white shadow-md hover:bg-[#8a001a]"
+            >
+              {submitting ? 'Đang tạo...' : 'Tạo yêu cầu xin nghỉ'}
             </Button>
           </div>
         </form>
@@ -821,7 +1071,11 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
       <Modal
         isOpen={!!selectedRequest}
         onClose={() => setSelectedRequest(null)}
-        title={selectedRequest ? `Chi tiết yêu cầu #${selectedRequest.id}` : 'Chi tiết yêu cầu'}
+        title={
+          selectedRequest
+            ? `Chi tiết yêu cầu #${selectedRequest.id}`
+            : 'Chi tiết yêu cầu'
+        }
         maxWidth="3xl"
       >
         {selectedRequest && (
@@ -833,52 +1087,83 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-600">Giáo viên</p>
-                <p className="text-sm font-medium text-gray-900">{selectedRequest.teacher_name}</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {selectedRequest.teacher_name}
+                </p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-600">Mã LMS</p>
-                <p className="text-sm font-medium text-gray-900">{selectedRequest.lms_code}</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {selectedRequest.lms_code}
+                </p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-600">Email</p>
-                <p className="text-sm font-medium text-gray-900 break-all">{selectedRequest.email}</p>
+                <p className="text-sm font-medium text-gray-900 break-all">
+                  {selectedRequest.email}
+                </p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-600">Ngày nghỉ</p>
-                <p className="text-sm font-medium text-gray-900">{new Date(selectedRequest.leave_date).toLocaleDateString('vi-VN')}</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {new Date(selectedRequest.leave_date).toLocaleDateString(
+                    'vi-VN',
+                  )}
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Trạng thái</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {getStatusMeta(selectedRequest.status).label}
+                </p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-600">Mã lớp</p>
-                <p className="text-sm font-medium text-gray-900">{selectedRequest.class_code || '-'}</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {selectedRequest.class_code || '-'}
+                </p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-600">Buổi học xin nghỉ</p>
-                <p className="text-sm font-medium text-gray-900">{selectedRequest.leave_session || '-'}</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {selectedRequest.leave_session || '-'}
+                </p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-600">Thời gian học</p>
-                <p className="text-sm font-medium text-gray-900">{selectedRequest.class_time || '-'}</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {selectedRequest.class_time || '-'}
+                </p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-600">Giáo viên thay thế</p>
                 <p className="text-sm font-medium text-gray-900">
-                  {selectedRequest.substitute_teacher || selectedRequest.substitute_email ? `${selectedRequest.substitute_teacher || '-'} (${selectedRequest.substitute_email || '-'})` : 'Chưa có'}
+                  {selectedRequest.substitute_teacher ||
+                  selectedRequest.substitute_email
+                    ? `${selectedRequest.substitute_teacher || '-'} (${selectedRequest.substitute_email || '-'})`
+                    : 'Chưa có'}
                 </p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3 sm:col-span-2">
                 <p className="text-xs text-gray-600">Lý do</p>
-                <p className="text-sm text-gray-900 whitespace-pre-wrap">{selectedRequest.reason}</p>
+                <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                  {selectedRequest.reason}
+                </p>
               </div>
               {selectedRequest.class_status && (
                 <div className="rounded-lg bg-gray-50 p-3 sm:col-span-2">
                   <p className="text-xs text-gray-600">Tình hình lớp</p>
-                  <p className="text-sm text-gray-900 whitespace-pre-wrap">{selectedRequest.class_status}</p>
+                  <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                    {selectedRequest.class_status}
+                  </p>
                 </div>
               )}
               {selectedRequest.admin_note && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 sm:col-span-2">
                   <p className="text-xs text-amber-800">Ghi chú từ TC/Leader</p>
-                  <p className="text-sm text-amber-900 whitespace-pre-wrap">{selectedRequest.admin_note}</p>
+                  <p className="text-sm text-amber-900 whitespace-pre-wrap">
+                    {selectedRequest.admin_note}
+                  </p>
                 </div>
               )}
             </div>
@@ -886,5 +1171,5 @@ ${formData.teacher_name || '[Họ Và Tên]'}`;
         )}
       </Modal>
     </div>
-  );
+  )
 }
