@@ -1,27 +1,36 @@
-"use client";
+'use client'
 
-import { Sidebar } from "@/components/sidebar";
-import { useAuth } from "@/lib/auth-context";
-import { SidebarProvider, useSidebar } from "@/lib/sidebar-context";
-import { usePathname } from "next/navigation";
-import { Suspense } from "react";
+import { Sidebar } from '@/components/sidebar'
+import { useAuth } from '@/lib/auth-context'
+import { SidebarProvider, useSidebar } from '@/lib/sidebar-context'
+import { usePathname } from 'next/navigation'
+import { Suspense } from 'react'
 
 function Layout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const { isOpen } = useSidebar();
-  const { user } = useAuth();
+  const pathname = usePathname()
+  const { isOpen } = useSidebar()
+  const { user } = useAuth()
 
   // Don't show sidebar on login/root/checkdatasource pages
-  const noSidebarPaths = pathname.startsWith('/login') || pathname === '/' || pathname.startsWith('/checkdatasource');
-  let shouldShowSidebar = !noSidebarPaths;
+  const noSidebarPaths =
+    pathname.startsWith('/login') ||
+    pathname === '/' ||
+    pathname.startsWith('/checkdatasource')
+  let shouldShowSidebar = !noSidebarPaths
 
   // Hide sidebar if admin user has no permissions
   if (shouldShowSidebar && pathname.startsWith('/admin')) {
-    const isSuperAdmin = user?.role === 'super_admin';
-    const isAdminUser = user?.isAdmin || ['super_admin', 'admin', 'manager'].includes(user?.role || '');
+    const isSuperAdmin = user?.role === 'super_admin'
+    const isAdminUser =
+      user?.isAdmin ||
+      ['super_admin', 'admin', 'manager'].includes(user?.role || '')
 
-    if (isAdminUser && !isSuperAdmin && (!user?.permissions || user.permissions.length === 0)) {
-      shouldShowSidebar = false;
+    if (
+      isAdminUser &&
+      !isSuperAdmin &&
+      (!user?.permissions || user.permissions.length === 0)
+    ) {
+      shouldShowSidebar = false
     }
   }
 
@@ -35,12 +44,12 @@ function Layout({ children }: { children: React.ReactNode }) {
       <main
         className={`
           transition-all duration-500 ease-in-out min-h-screen will-change-transform
-          ${shouldShowSidebar
-            ? (isOpen
-              ? 'lg:ml-56' // Desktop with sidebar 
-              : 'lg:ml-0'  // Desktop without sidebar
-            )
-            : ''
+          ${
+            shouldShowSidebar
+              ? isOpen
+                ? 'lg:ml-56' // Desktop with sidebar
+                : 'lg:ml-0' // Desktop without sidebar
+              : ''
           }
           ${shouldShowSidebar ? 'relative' : ''}
         `}
@@ -48,7 +57,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         <div className="w-full h-screen">
           <div className="h-full overflow-y-auto custom-scrollbar">
             <div
-              className={`w-full px-1.25 py-1.25 sm:px-[1.5%] sm:py-2 lg:px-[2%] lg:py-3 xl:px-[2.5%] xl:py-3 ${
+              className={`w-full px-0 py-1.25 sm:px-[1.5%] sm:py-2 lg:px-[2%] lg:py-3 xl:px-[2.5%] xl:py-3 ${
                 shouldShowSidebar && !isOpen ? 'pt-14 sm:pt-16 lg:pt-3' : ''
               }`}
             >
@@ -58,7 +67,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </main>
     </div>
-  );
+  )
 }
 
 export function PersistentLayout({ children }: { children: React.ReactNode }) {
@@ -66,5 +75,5 @@ export function PersistentLayout({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <Layout>{children}</Layout>
     </SidebarProvider>
-  );
+  )
 }
