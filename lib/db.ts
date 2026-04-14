@@ -6,8 +6,9 @@ const isBuildPhase =
   process.env.npm_lifecycle_event === 'build';
 
 function buildPoolConfig(): PoolConfig {
+  // Keep conservative defaults to avoid exhausting Postgres slots in multi-process dev.
   const defaultPoolMax =
-    process.env.NODE_ENV === 'development' ? '10' : process.env.VERCEL ? '5' : '8';
+    process.env.NODE_ENV === 'development' ? '3' : process.env.VERCEL ? '5' : '8';
   const max = Math.max(1, parseInt(process.env.DB_POOL_MAX || defaultPoolMax, 10));
   const connectionTimeoutMillis = Math.max(
     2000,

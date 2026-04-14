@@ -1284,6 +1284,31 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_teachers_personal_email ON teachers (personal_email);
     `,
   },
+  {
+    name: 'V52_user_onboarding_states',
+    version: 52,
+    sql: `
+      CREATE TABLE IF NOT EXISTS user_onboarding_states (
+        email VARCHAR(255) PRIMARY KEY,
+        tour_version INTEGER NOT NULL DEFAULT 1,
+        completed BOOLEAN NOT NULL DEFAULT false,
+        completed_at TIMESTAMP,
+        last_seen_step VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_user_onboarding_states_completed
+        ON user_onboarding_states(completed);
+
+      DROP TRIGGER IF EXISTS trg_user_onboarding_states_updated_at
+        ON user_onboarding_states;
+      CREATE TRIGGER trg_user_onboarding_states_updated_at
+      BEFORE UPDATE ON user_onboarding_states
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========
