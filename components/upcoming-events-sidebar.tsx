@@ -378,11 +378,11 @@ export function UpcomingEventsSidebar() {
                 <div className="p-5 space-y-3">
                     {upcomingEvents.length > 0 ? (
                         <>
-                            {upcomingEvents.map(event => {
+                            {upcomingEvents.map((event, index) => {
                                 const { day, month } = formatDate(event.start_at)
                                 return (
                                     <div
-                                        key={event.id}
+                                        key={`${event.id || event.title || 'event'}-${event.start_at || ''}-${index}`}
                                         className="flex gap-4 group hover:bg-linear-to-r hover:from-red-50 hover:to-orange-50 -mx-3 px-3 py-3 rounded-xl transition-all duration-200 border border-transparent hover:border-red-100 hover:shadow-md"
                                     >
                                         <div className="shrink-0">

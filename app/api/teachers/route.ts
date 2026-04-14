@@ -4,6 +4,7 @@ import { Teacher } from "@/types/teacher";
 import { NextRequest, NextResponse } from "next/server";
 
 const TEACHER_PROFILE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_PROFILE_CSV_URL || "";
+const TEACHER_ONBOARDING_CSV_URL = process.env.TEACHER_ONBOARDING_CSV_URL || "";
 const TEACHER_EXPERTISE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERTISE_CSV_URL || "";
 const TEACHER_EXPERIENCE_CSV_URL = process.env.NEXT_PUBLIC_TEACHER_EXPERIENCE_CSV_URL || "";
 const SHEET_FETCH_TIMEOUT_MS = 30000;
@@ -51,6 +52,36 @@ if (process.env.NODE_ENV !== "production") globalForCache.teacherCache = cache;
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 phút
 
+const ONBOARDING_HEADERS = [
+  "No",
+  "Full name",
+  "Code",
+  "User name",
+  "Work email",
+  "Personal email",
+  "Phone number",
+  "Status (update)",
+  "Centers",
+  "Khối final",
+  "Role",
+  "Course line",
+  "Rank",
+  "Joined date",
+  "Teacher point",
+  "Data HR (Raw)",
+  "Status check",
+  "BU check",
+  "Khối check",
+  "CHECK",
+  "TE quản lý",
+  "Leader quản lý",
+  "Rate K12 check",
+  "Rank K12 check",
+] as const;
+
+type OnboardingHeader = typeof ONBOARDING_HEADERS[number];
+type OnboardingRow = Partial<Record<OnboardingHeader, string>>;
+
 function isCacheValid<T>(entry: CacheEntry<T> | null): boolean {
   if (!entry) return false;
   return Date.now() - entry.timestamp < CACHE_TTL;
@@ -78,14 +109,20 @@ function isRetryableFetchError(error: unknown): boolean {
   );
 }
 
-async function fetchCsvWithRetry(url: string, label: string): Promise<string> {
+async function fetchCsvWithRetry(
+  url: string,
+  label: string,
+  options?: { disableRetry?: boolean },
+): Promise<string> {
   if (!url) {
     throw new Error(`${label} URL is empty`);
   }
 
   let lastError: unknown;
 
-  for (let attempt = 0; attempt <= SHEET_FETCH_RETRIES; attempt++) {
+  const maxRetries = options?.disableRetry ? 0 : SHEET_FETCH_RETRIES;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch(url, {
         cache: "no-store",
@@ -94,7 +131,7 @@ async function fetchCsvWithRetry(url: string, label: string): Promise<string> {
 
       if (!response.ok) {
         const retryableStatus = response.status >= 500 || response.status === 429;
-        if (retryableStatus && attempt < SHEET_FETCH_RETRIES) {
+        if (retryableStatus && attempt < maxRetries) {
           await sleep(SHEET_RETRY_DELAY_MS * (attempt + 1));
           continue;
         }
@@ -105,13 +142,13 @@ async function fetchCsvWithRetry(url: string, label: string): Promise<string> {
     } catch (error) {
       lastError = error;
       const retryable = isRetryableFetchError(error);
-      const hasMoreAttempts = attempt < SHEET_FETCH_RETRIES;
+      const hasMoreAttempts = attempt < maxRetries;
       if (!retryable || !hasMoreAttempts) {
         break;
       }
       // Exponential backoff
       const delay = SHEET_RETRY_DELAY_MS * Math.pow(2, attempt);
-      console.warn(`⚠️ Retrying fetch for ${label} (attempt ${attempt + 1}/${SHEET_FETCH_RETRIES}) after ${delay}ms delay... Cause: ${error instanceof Error ? error.message : "Unknown"}`);
+      console.warn(`⚠️ Retrying fetch for ${label} (attempt ${attempt + 1}/${maxRetries}) after ${delay}ms delay... Cause: ${error instanceof Error ? error.message : "Unknown"}`);
       await sleep(delay);
     }
   }
@@ -417,6 +454,62 @@ function buildFallbackTeacher(code: string, email: string, fullName = ""): Teach
   };
 }
 
+function normalizeEmail(value: string | null | undefined): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function mapOnboardingToTeacher(row: OnboardingRow): Teacher {
+  return {
+    stt: row["No"] || "",
+    name: row["Full name"] || "",
+    code: row["Code"] || "",
+    emailMindx: row["Work email"] || "",
+    emailPersonal: row["Personal email"] || "",
+    status: row["Status check"] || row["Status (update)"] || "",
+    branchIn: row["Centers"] || "",
+    programIn: row["Khối final"] || "",
+    branchCurrent: row["BU check"] || row["Centers"] || "",
+    programCurrent: row["Khối check"] || row["Khối final"] || "",
+    manager: row["Leader quản lý"] || "",
+    responsible: row["TE quản lý"] || "",
+    position: row["Role"] || "",
+    startDate: row["Joined date"] || "",
+    onboardBy: row["Data HR (Raw)"] || "",
+  };
+}
+
+async function fetchOnboardingByWorkEmail(email: string): Promise<OnboardingRow | null> {
+  if (!TEACHER_ONBOARDING_CSV_URL) return null;
+
+  try {
+    const csvText = await fetchCsvWithRetry(
+      TEACHER_ONBOARDING_CSV_URL,
+      "teacher onboarding data",
+      { disableRetry: true },
+    );
+    const lines = csvText.split("\n").filter((line) => line.trim());
+    const dataLines = lines.slice(2);
+    const targetEmail = normalizeEmail(email);
+
+    for (const line of dataLines) {
+      const cols = parseCSVLine(line).map((col) => col.trim().replace(/^"|"$/g, ""));
+      const row: OnboardingRow = {};
+
+      ONBOARDING_HEADERS.forEach((header, idx) => {
+        row[header] = cols[idx] || "";
+      });
+
+      if (normalizeEmail(row["Work email"]) === targetEmail) {
+        return row;
+      }
+    }
+  } catch (error) {
+    console.warn("fetchOnboardingByWorkEmail failed:", error);
+  }
+
+  return null;
+}
+
 async function resolveTeacherFallbackByEmail(email: string): Promise<Teacher | null> {
   try {
     const normalizedEmail = email.trim().toLowerCase();
@@ -459,6 +552,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
   const code = searchParams.get("code");
   const emailParam = searchParams.get("email");
   const isBasicLookup = searchParams.get("basic") === "true";
+  const onboardingByEmail = emailParam ? await fetchOnboardingByWorkEmail(emailParam) : null;
 
   if (!code && !emailParam) {
     return NextResponse.json(
@@ -498,16 +592,20 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     }
   } else if (emailParam) {
     const normalizedEmail = emailParam.trim().toLowerCase();
-    teacher = teachers.find(t =>
-      (t.emailMindx || '').toLowerCase().trim() === normalizedEmail ||
-      (t.emailPersonal || '').toLowerCase().trim() === normalizedEmail
-    );
+    if (onboardingByEmail) {
+      teacher = mapOnboardingToTeacher(onboardingByEmail);
+    } else {
+      teacher = teachers.find(t =>
+        (t.emailMindx || '').toLowerCase().trim() === normalizedEmail ||
+        (t.emailPersonal || '').toLowerCase().trim() === normalizedEmail
+      );
+    }
 
     if (!teacher) {
       const fallbackTeacher = await resolveTeacherFallbackByEmail(normalizedEmail);
       if (fallbackTeacher) {
         if (isBasicLookup) {
-          return NextResponse.json({ teacher: fallbackTeacher, fallback: true });
+          return NextResponse.json({ teacher: fallbackTeacher, fallback: true, onboardingData: null });
         }
         teacher = fallbackTeacher;
       } else {
@@ -533,6 +631,11 @@ export const GET = withApiProtection(async (request: NextRequest) => {
   // }
 
   // Fetch real monthly metrics từ Google Sheets
+  if (isBasicLookup) {
+    return NextResponse.json({ teacher, onboardingData: onboardingByEmail || null });
+  }
+
+  // Fetch real monthly metrics từ Google Sheets
   const [expertiseScores, experienceScores] = await Promise.all([
     fetchExpertiseScores(teacher.code),
     fetchExperienceScores(teacher.code)
@@ -554,7 +657,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
   });
 
   // Optimized response with caching headers
-  const response = NextResponse.json({ teacher });
+  const response = NextResponse.json({ teacher, onboardingData: onboardingByEmail || null });
   
   // Add performance headers
   response.headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');

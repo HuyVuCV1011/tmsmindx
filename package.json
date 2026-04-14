@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3000 --webpack",
+    "dev:turbo": "next dev --port 3000 --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -12,8 +13,8 @@
     "ngrok": "ngrok http 3000 --pooling-enabled"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1029.0",
-    "@aws-sdk/s3-request-presigner": "^3.1029.0",
+    "@aws-sdk/client-s3": "^3.1030.0",
+    "@aws-sdk/s3-request-presigner": "^3.1030.0",
     "@ffmpeg/core": "^0.12.10",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
@@ -86,6 +87,7 @@
     "baseline-browser-mapping": "^2.10.18",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
+    "kill-port": "^2.0.1",
     "ngrok": "^5.0.0-beta.2",
     "tailwindcss": "^4",
     "typescript": "^5"

@@ -96,6 +96,9 @@ export function Sidebar() {
     }
   }, [])
 
+  const isOnboardingActive =
+    typeof document !== "undefined" && document.documentElement.dataset.onboarding === "1";
+
   // Determine menu items based on current path (admin or user)
   const isUserArea = pathname.startsWith('/user')
 
@@ -111,6 +114,10 @@ export function Sidebar() {
       label: 'Đào tạo đầu vào',
       icon: Users,
       submenu: [
+        { href: '/admin/page1', label: 'Hồ sơ Giáo viên' },
+        { href: '/admin/page4/quan-ly-lich-lam-viec', label: 'Quản lý lịch làm việc' },
+        { href: '/admin/page4/lich-danh-gia', label: 'Lịch sự kiện' },
+        { href: '/admin/xin-nghi-mot-buoi', label: 'Tiếp nhận xin nghỉ 1 buổi' },
         {
           href: '/admin/hr-candidates/gen-planner?region=south',
           label: 'Miền Nam (HCM + Tỉnh Nam)',
@@ -197,13 +204,13 @@ export function Sidebar() {
       label: 'Cấu Hình Hệ Thống',
       icon: Settings,
       submenu: [
-        { href: '/admin/user-management', label: 'Quản lý tài khoản' },
-        { href: '/admin/feedback', label: 'Quản lý phản hồi' },
-        { href: '/admin/database', label: 'Database Manager' },
-        { href: '/admin/cloudinary', label: 'Cloudinary Manager' },
-        { href: '/admin/s3-supabase-manager', label: 'S3 Supabase Manager' },
-      ],
-    },
+        { href: "/admin/user-management", label: "Quản lý tài khoản"},
+        { href: "/admin/feedback", label: "Feedback Manager"},
+        { href: "/admin/feedback?source=datasource", label: "Feedback Datasource Manager"},
+        { href: "/admin/database", label: "Database Manager"},
+        { href: "/admin/cloudinary", label: "Cloudinary Manager"},
+        { href: "/admin/s3-supabase-manager", label: "S3 Supabase Manager"},
+      ]    },
   ]
 
   const userMenuItems = [
@@ -222,6 +229,7 @@ export function Sidebar() {
       icon: CalendarDays,
       submenu: [
         { href: '/user/hoat-dong-hang-thang', label: 'Hoạt động hàng tháng' },
+        { href: '/user/dang-ky-lich-lam-viec', label: 'Đăng ký lịch làm việc' },
         { href: '/user/xin-nghi-mot-buoi', label: 'Tạo yêu cầu xin nghỉ' },
         { href: '/user/nhan-lop-1-buoi', label: 'Danh sách nhận lớp 1 buổi' },
       ],
@@ -395,6 +403,21 @@ export function Sidebar() {
 
   // Auto-expand submenu if current page is in it (including nested submenu items)
   useEffect(() => {
+    if (isOnboardingActive) {
+      const labelsToExpand = menuItems
+        .filter((item: any) => item?.submenu && Array.isArray(item.submenu))
+        .map((item: any) => item.label);
+      setExpandedMenus((prev) => {
+        const next = Array.from(new Set([...prev, ...labelsToExpand]));
+        // Avoid infinite loops by not updating when unchanged.
+        if (next.length === prev.length && next.every((v, i) => v === prev[i])) {
+          return prev;
+        }
+        return next;
+      });
+      return;
+    }
+
     menuItems.forEach((item) => {
       if ('submenu' in item && item.submenu) {
         const isInSubmenu = hasActiveDescendant(item)
@@ -406,8 +429,8 @@ export function Sidebar() {
           })
         }
       }
-    })
-  }, [menuItems, pathname, searchParams, expandedMenus, hasActiveDescendant])
+    });
+  }, [menuItems, pathname, searchParams, expandedMenus, hasActiveDescendant, isOnboardingActive]);
 
   useEffect(() => {
     closeSidebarOnMobile()
@@ -442,6 +465,22 @@ export function Sidebar() {
         return user.role
     }
   }
+
+  const getTourTargetForHref = (href?: string) => {
+    if (!href) return undefined;
+    const path = href.split("?")[0];
+    if (path === "/user/truyenthong") return "tour-nav-truyenthong";
+    if (path === "/user/thongtingv") return "tour-nav-thongtin";
+    if (path === "/user/hoat-dong-hang-thang") return "tour-nav-hoatdong";
+    if (path === "/user/dang-ky-lich-lam-viec") return "tour-nav-dangky-lichlamviec";
+    if (path === "/user/xin-nghi-mot-buoi") return "tour-nav-xinnghi";
+    if (path === "/user/nhan-lop-1-buoi") return "tour-nav-nhanlop";
+    if (path === "/user/training") return "tour-nav-training";
+    if (path === "/user/assignments") return "tour-nav-assignments";
+    if (path === "/user/giaitrinh") return "tour-nav-giaitrinh";
+    if (path === "/user/page2") return "tour-nav-quytrinh";
+    return undefined;
+  };
 
   return (
     <>
@@ -502,6 +541,7 @@ export function Sidebar() {
 
       {/* Sidebar - Modern glass-morphism design */}
       <aside
+        data-tour="tour-sidebar"
         className={cn(
           'fixed inset-y-0 left-0 z-sidebar-custom h-dvh max-h-dvh overflow-hidden backdrop-blur-xl bg-white/95 border-r border-gray-200 shadow-xl w-56',
           'transition-all duration-500 ease-in-out will-change-transform',
@@ -588,6 +628,7 @@ export function Sidebar() {
                         {item.href ? (
                           <Link
                             href={item.href}
+                            data-tour={getTourTargetForHref(item.href)}
                             onClick={() => {
                               toggleSubmenu(item.label)
                               closeSidebarOnMobile()
@@ -687,6 +728,7 @@ export function Sidebar() {
                                         <Link
                                           key={nestedItem.href}
                                           href={nestedItem.href}
+                                          data-tour={getTourTargetForHref(nestedItem.href)}
                                           onClick={closeSidebarOnMobile}
                                           className={cn(
                                             'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium tracking-wide transition-all duration-300 hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-1',
@@ -713,6 +755,7 @@ export function Sidebar() {
                               <Link
                                 key={subItem.href}
                                 href={subItem.href}
+                                data-tour={getTourTargetForHref(subItem.href)}
                                 onClick={closeSidebarOnMobile}
                                 className={cn(
                                   'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium tracking-wide transition-all duration-300 hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-1',
@@ -731,6 +774,7 @@ export function Sidebar() {
                   ) : (
                     <Link
                       href={item.href}
+                      data-tour={getTourTargetForHref(item.href)}
                       onClick={() => {
                         handleTopLevelTabNavigation()
                         closeSidebarOnMobile()

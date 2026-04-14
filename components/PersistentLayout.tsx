@@ -1,5 +1,6 @@
 'use client'
 
+import UserFirstLoginOnboarding from '@/components/onboarding/UserFirstLoginOnboarding'
 import { Sidebar } from '@/components/sidebar'
 import { useAuth } from '@/lib/auth-context'
 import { SidebarProvider, useSidebar } from '@/lib/sidebar-context'
@@ -11,8 +12,12 @@ function Layout({ children }: { children: React.ReactNode }) {
   const { isOpen } = useSidebar()
   const { user } = useAuth()
 
-  // Don't show sidebar on login page or root page
-  let shouldShowSidebar = !pathname.startsWith('/login') && pathname !== '/'
+  // Don't show sidebar on login/root/checkdatasource pages
+  const noSidebarPaths =
+    pathname.startsWith('/login') ||
+    pathname === '/' ||
+    pathname.startsWith('/checkdatasource')
+  let shouldShowSidebar = !noSidebarPaths
 
   // Hide sidebar if admin user has no permissions
   if (shouldShowSidebar && pathname.startsWith('/admin')) {
@@ -38,6 +43,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         </Suspense>
       )}
       <main
+        data-tour="tour-content"
         className={`
           transition-all duration-500 ease-in-out min-h-screen will-change-transform
           ${
@@ -62,6 +68,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </main>
+      <UserFirstLoginOnboarding />
     </div>
   )
 }
