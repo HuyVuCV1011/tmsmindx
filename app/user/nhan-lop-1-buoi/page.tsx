@@ -1,16 +1,22 @@
 'use client';
 
 import Modal from '@/components/Modal';
+import { Tabs } from '@/components/Tabs';
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Stepper } from '@/components/ui/stepper';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/lib/auth-context';
-import { useEffect, useState } from 'react';
+import { AlertCircle, RefreshCcw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface LeaveRequest {
   id: number;
   teacher_name: string;
+  lms_code?: string;
+  email?: string;
   campus: string;
   leave_date: string;
   class_code?: string;
@@ -19,40 +25,141 @@ interface LeaveRequest {
   class_status?: string;
   substitute_teacher?: string;
   substitute_email?: string;
+  admin_name?: string;
+  admin_email?: string;
+  admin_note?: string;
+  substitute_confirmed_at?: string;
   status: 'pending_admin' | 'approved_unassigned' | 'approved_assigned' | 'rejected' | 'substitute_confirmed';
   created_at: string;
+  updated_at?: string;
+}
+
+type StatusVariant = 'warning' | 'info' | 'success' | 'destructive';
+
+function getStatusMeta(status: LeaveRequest['status']): { label: string; variant: StatusVariant } {
+  switch (status) {
+    case 'pending_admin':
+      return { label: 'Chờ duyệt', variant: 'warning' };
+    case 'approved_unassigned':
+      return { label: 'Đã duyệt - chưa có GV thay', variant: 'info' };
+    case 'approved_assigned':
+      return { label: 'Đã gửi cho GV thay', variant: 'info' };
+    case 'substitute_confirmed':
+      return { label: 'GV thay đã xác nhận', variant: 'success' };
+    case 'rejected':
+      return { label: 'Đã từ chối', variant: 'destructive' };
+    default:
+      return { label: status, variant: 'info' };
+  }
 }
 
 export default function NhanLop1BuoiPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
   const [selected, setSelected] = useState<LeaveRequest | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [activeTab, setActiveTab] = useState('all');
+  const [campusFilter, setCampusFilter] = useState<string[]>([]);
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+  const [showCampusDropdown, setShowCampusDropdown] = useState(false);
+  const [campusSearchText, setCampusSearchText] = useState('');
 
-  const fetchData = async () => {
-    if (!user?.email) return;
+  const fetchData = useCallback(
+    async (showToast = false) => {
+      if (!user?.email) return;
 
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/leave-requests?mode=substitute&email=${encodeURIComponent(user.email)}`);
-      const data = await res.json();
-      if (data.success) {
-        setItems(data.data);
+      try {
+        setLoading(true);
+        setLoadingError(null);
+
+        const res = await fetch(`/api/leave-requests?mode=substitute&email=${encodeURIComponent(user.email)}`);
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Không thể tải danh sách lớp nhận thay');
+        }
+
+        setItems(data.data || []);
+        if (showToast) toast.success('Đã cập nhật danh sách mới nhất');
+      } catch (error: unknown) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : 'Có lỗi xảy ra khi tải dữ liệu';
+        setLoadingError(errorMessage);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [user?.email]
+  );
 
   useEffect(() => {
     fetchData();
-  }, [user?.email]);
+  }, [fetchData]);
+
+  const campusOptions = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((item) => {
+      if (item.campus) set.add(item.campus);
+    });
+    return Array.from(set).sort();
+  }, [items]);
+
+  const filteredCampusOptions = useMemo(() => {
+    if (!campusSearchText.trim()) return campusOptions;
+    const searchLower = campusSearchText.toLowerCase();
+    return campusOptions.filter(campus => campus.toLowerCase().includes(searchLower));
+  }, [campusOptions, campusSearchText]);
+
+  const filteredItems = useMemo(() => {
+    let result = items;
+    
+    // Lọc theo tab
+    if (activeTab === 'pending') result = result.filter((item) => item.status === 'approved_assigned');
+    else if (activeTab === 'done') result = result.filter((item) => item.status === 'substitute_confirmed');
+    
+    // Lọc theo campus (nhiều cơ sở)
+    if (campusFilter.length > 0) result = result.filter((item) => campusFilter.includes(item.campus));
+    
+    // Lọc theo khoảng thời gian
+    if (fromDate) result = result.filter((item) => new Date(item.leave_date) >= new Date(fromDate));
+    if (toDate) result = result.filter((item) => new Date(item.leave_date) <= new Date(toDate));
+    
+    return result;
+  }, [activeTab, items, campusFilter, fromDate, toDate]);
+
+  const tabs = useMemo(
+    () => [
+      { id: 'all', label: 'Tất cả', count: items.length },
+      { id: 'pending', label: 'Chờ xác nhận', count: items.filter((item) => item.status === 'approved_assigned').length },
+      { id: 'done', label: 'Đã xác nhận', count: items.filter((item) => item.status === 'substitute_confirmed').length }
+    ],
+    [items]
+  );
+
+  const getAdminConfirmText = (item: LeaveRequest) => {
+    if (!item.admin_name && !item.admin_email) return 'Chờ TC/Leader xác nhận';
+    return item.admin_name || item.admin_email || 'Đã xác nhận';
+  };
+
+  const getSubstituteConfirmText = (item: LeaveRequest) => {
+    if (item.status !== 'substitute_confirmed') return 'Chờ giáo viên thay xác nhận';
+    if (item.substitute_confirmed_at) {
+      return `Đã xác nhận ${new Date(item.substitute_confirmed_at).toLocaleString('vi-VN')}`;
+    }
+    return 'Đã xác nhận';
+  };
 
   const handleConfirm = async (id: number) => {
     if (!user?.email) return;
+
+    const selectedItem = items.find((item) => item.id === id);
+    if (!selectedItem || selectedItem.status !== 'approved_assigned') {
+      toast.error('Yêu cầu này không ở trạng thái chờ xác nhận.');
+      return;
+    }
 
     setConfirming(true);
     try {
@@ -83,50 +190,252 @@ export default function NhanLop1BuoiPage() {
   };
 
   if (loading) {
-    return <div className="min-h-screen p-6">Đang tải danh sách lớp nhận thay...</div>;
+    return (
+      <div className="min-h-screen p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-7xl space-y-4">
+          <div className="h-10 w-80 animate-pulse rounded bg-gray-200" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
+            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
+            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <TableSkeleton rows={6} columns={6} />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-7xl space-y-5">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Danh sách nhận lớp 1 buổi</h1>
-          <p className="mt-1 text-sm text-gray-600">Step 3: Giáo viên thay thế xác nhận đã nhận thông tin.</p>
+        <div className="mx-auto max-w-7xl space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Danh sách nhận lớp 1 buổi</h1>
+            <p className="mt-1 text-sm text-gray-600">Step 3: Giáo viên thay thế xác nhận đã nhận thông tin lớp.</p>
+          </div>
+          <Button variant="outline" onClick={() => fetchData(true)}>
+            <RefreshCcw className="mr-1.5 h-4 w-4" />
+            Làm mới
+          </Button>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-x-auto">
-          <Table>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => setActiveTab('all')}
+            className={`rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm ${
+              activeTab === 'all' ? 'border-gray-400 bg-gray-50 ring-2 ring-gray-300/60' : 'border-gray-200 bg-white'
+            }`}
+          >
+            <p className="text-xs font-medium text-gray-600">Tổng lớp nhận thay</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">{items.length}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('pending')}
+            className={`rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm ${
+              activeTab === 'pending' ? 'border-amber-400 bg-amber-100 ring-2 ring-amber-300/60' : 'border-amber-200 bg-amber-50'
+            }`}
+          >
+            <p className="text-xs font-medium text-amber-700">Chờ xác nhận</p>
+            <p className="mt-1 text-2xl font-bold text-amber-900">{tabs.find((tab) => tab.id === 'pending')?.count || 0}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('done')}
+            className={`rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm ${
+              activeTab === 'done' ? 'border-emerald-400 bg-emerald-100 ring-2 ring-emerald-300/60' : 'border-emerald-200 bg-emerald-50'
+            }`}
+          >
+            <p className="text-xs font-medium text-emerald-700">Đã xác nhận</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-900">{tabs.find((tab) => tab.id === 'done')?.count || 0}</p>
+          </button>
+        </div>
+
+        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+
+        {/* Bộ lọc nâng cao */}
+        <div className="mb-4 flex flex-wrap gap-3 items-end">
+          <div className="relative">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Cơ sở</label>
+            <button
+              type="button"
+              onClick={() => setShowCampusDropdown(!showCampusDropdown)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[180px] text-left flex items-center justify-between bg-white hover:bg-gray-50"
+            >
+              <span className="truncate">
+                {campusFilter.length === 0 ? 'Tất cả' : `${campusFilter.length} cơ sở`}
+              </span>
+              <svg className="w-4 h-4 ml-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showCampusDropdown && (
+              <div className="absolute z-10 mt-1 w-full min-w-[240px] bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-hidden flex flex-col">
+                <div className="p-2 border-b border-gray-200">
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm cơ sở..."
+                    value={campusSearchText}
+                    onChange={(e) => setCampusSearchText(e.target.value)}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+                <div className="p-2 border-b border-gray-200 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCampusFilter(filteredCampusOptions)}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Chọn tất cả
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCampusFilter([])}
+                    className="text-xs text-gray-600 hover:text-gray-800 font-medium"
+                  >
+                    Bỏ chọn
+                  </button>
+                </div>
+                <div className="overflow-y-auto flex-1">
+                {filteredCampusOptions.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-gray-500 text-center">Không tìm thấy cơ sở</div>
+                ) : (
+                  filteredCampusOptions.map((campus) => (
+                  <label
+                    key={campus}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={campusFilter.includes(campus)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setCampusFilter([...campusFilter, campus]);
+                        } else {
+                          setCampusFilter(campusFilter.filter((c) => c !== campus));
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                    />
+                    <span className="text-sm text-gray-700">{campus}</span>
+                  </label>
+                  ))
+                )}
+                </div>
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Từ ngày</label>
+            <input
+              type="date"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              value={fromDate}
+              onChange={e => setFromDate(e.target.value)}
+              max={toDate || undefined}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Đến ngày</label>
+            <input
+              type="date"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              value={toDate}
+              onChange={e => setToDate(e.target.value)}
+              min={fromDate || undefined}
+            />
+          </div>
+          {(campusFilter.length > 0 || fromDate || toDate) && (
+            <Button size="sm" variant="ghost" onClick={() => { setCampusFilter([]); setFromDate(''); setToDate(''); }}>
+              Xoá lọc
+            </Button>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          {loadingError && (
+            <div className="mx-4 mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 sm:mx-6">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium">Không thể tải danh sách</p>
+                <p className="mt-0.5">{loadingError}</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => fetchData()}>
+                Thử lại
+              </Button>
+            </div>
+          )}
+
+          <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
+            <h2 className="text-lg font-semibold text-gray-900">Danh sách lớp nhận thay</h2>
+            <p className="text-sm text-gray-600">Tổng: {filteredItems.length} lớp</p>
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden overflow-x-auto lg:block">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Ngày phân</TableHead>
                 <TableHead>Giáo viên xin nghỉ</TableHead>
                 <TableHead>Cơ sở</TableHead>
                 <TableHead>Ngày nghỉ</TableHead>
+                <TableHead>Mã lớp</TableHead>
                 <TableHead>Trạng thái</TableHead>
-                <TableHead className="text-right">Hành động</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>{new Date(item.created_at).toLocaleDateString('vi-VN')}</TableCell>
-                  <TableCell>{item.teacher_name}</TableCell>
-                  <TableCell>{item.campus}</TableCell>
-                  <TableCell>{new Date(item.leave_date).toLocaleDateString('vi-VN')}</TableCell>
-                  <TableCell>
-                    {item.status === 'substitute_confirmed' ? 'Đã xác nhận' : 'Chờ xác nhận'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button size="sm" variant="outline" onClick={() => setSelected(item)}>
-                      Chi tiết
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filteredItems.map((item) => {
+                const statusMeta = getStatusMeta(item.status);
+
+                return (
+                  <TableRow key={item.id} className="cursor-pointer hover:bg-blue-50/40" onClick={() => setSelected(item)}>
+                    <TableCell>{new Date(item.created_at).toLocaleDateString('vi-VN')}</TableCell>
+                    <TableCell>
+                      <p className="font-medium text-gray-900">{item.teacher_name}</p>
+                      {item.lms_code && <p className="text-xs text-gray-500">LMS: {item.lms_code}</p>}
+                    </TableCell>
+                    <TableCell>{item.campus}</TableCell>
+                    <TableCell>{new Date(item.leave_date).toLocaleDateString('vi-VN')}</TableCell>
+                    <TableCell>{item.class_code || '-'}</TableCell>
+                    <TableCell>
+                      <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
+          </div>
 
-          {items.length === 0 && <div className="p-8 text-center text-sm text-gray-600">Bạn chưa có lớp nào được phân thay thế.</div>}
+          {/* Mobile Cards */}
+          <div className="divide-y divide-gray-200 lg:hidden">
+            {filteredItems.map((item) => {
+              const statusMeta = getStatusMeta(item.status);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="w-full p-4 text-left hover:bg-gray-50"
+                  onClick={() => setSelected(item)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-gray-900">{item.teacher_name}</p>
+                    <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-600">Cơ sở: {item.campus}</p>
+                  <p className="mt-1 text-xs text-gray-600">Ngày nghỉ: {new Date(item.leave_date).toLocaleDateString('vi-VN')}</p>
+                  <p className="mt-1 text-xs text-gray-600">Mã lớp: {item.class_code || '-'}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          {filteredItems.length === 0 && <div className="p-8 text-center text-sm text-gray-600">Không có lớp nào phù hợp bộ lọc.</div>}
         </div>
       </div>
 
@@ -147,10 +456,18 @@ export default function NhanLop1BuoiPage() {
               ]}
             />
 
+            <div className="flex items-center gap-2">
+              <Badge variant={getStatusMeta(selected.status).variant}>{getStatusMeta(selected.status).label}</Badge>
+            </div>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-600">Giáo viên xin nghỉ</p>
                 <p className="text-sm font-medium text-gray-900">{selected.teacher_name}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Email giáo viên xin nghỉ</p>
+                <p className="text-sm font-medium text-gray-900 break-all">{selected.email || '-'}</p>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-600">Mã lớp</p>
@@ -164,9 +481,32 @@ export default function NhanLop1BuoiPage() {
                 <p className="text-xs text-gray-600">Buổi học xin nghỉ</p>
                 <p className="text-sm font-medium text-gray-900">{selected.leave_session || '-'}</p>
               </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-600">Ngày nghỉ</p>
+                <p className="text-sm font-medium text-gray-900">{new Date(selected.leave_date).toLocaleDateString('vi-VN')}</p>
+              </div>
               <div className="rounded-lg bg-gray-50 p-3 sm:col-span-2">
                 <p className="text-xs text-gray-600">Tình hình lớp học</p>
                 <p className="text-sm text-gray-900 whitespace-pre-wrap">{selected.class_status || '-'}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs text-amber-800">Xác nhận từ TC/Leader</p>
+                <p className="mt-1 text-sm font-medium text-amber-900">{selected.admin_name || 'Chưa có tên người xác nhận'}</p>
+                <p className="text-xs text-amber-900/80 break-all">{selected.admin_email || 'Chưa có email người xác nhận'}</p>
+                <p className="mt-2 text-xs text-amber-900/80 whitespace-pre-wrap">{selected.admin_note || 'Chưa có ghi chú duyệt từ TC/Leader.'}</p>
+              </div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                <p className="text-xs text-emerald-800">Xác nhận từ giáo viên dạy thay</p>
+                <p className="mt-1 text-sm font-medium text-emerald-900">{selected.substitute_teacher || 'Chưa có tên giáo viên thay'}</p>
+                <p className="text-xs text-emerald-900/80 break-all">{selected.substitute_email || 'Chưa có email giáo viên thay'}</p>
+                <p className="mt-2 text-xs text-emerald-900/80">
+                  {selected.substitute_confirmed_at
+                    ? `Thời điểm xác nhận: ${new Date(selected.substitute_confirmed_at).toLocaleString('vi-VN')}`
+                    : 'Chưa xác nhận nhận lớp.'}
+                </p>
               </div>
             </div>
 

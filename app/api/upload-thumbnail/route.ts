@@ -25,9 +25,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       { 
         resource_type: "image", 
         folder: "mindx_thumbnails",
+        // Không crop ảnh — giữ nguyên ảnh gốc để admin có thể chỉnh vùng crop sau
         transformation: [
-          { width: 640, height: 360, crop: "fill" },
-          { quality: "auto" }
+          { quality: "auto" },
+          { fetch_format: "auto" }
         ]
       },
       (error, result) => {

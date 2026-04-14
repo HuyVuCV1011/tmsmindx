@@ -50,3 +50,12 @@ export interface DraftAssignment {
   gen: string;
   note: string;
 }
+export interface GenEntry {
+  key: string;
+  genCode: string;
+  count: number;
+  regionCode: string;
+  regionLabel: string;
+  isTeacher4Plus: boolean;
+  note: string;
+}

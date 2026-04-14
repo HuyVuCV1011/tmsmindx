@@ -151,8 +151,10 @@ export function Sidebar() {
       icon: Settings,
       submenu: [
         { href: "/admin/user-management", label: "Quản lý tài khoản"},
+        { href: "/admin/feedback", label: "Feedback Manager"},
         { href: "/admin/database", label: "Database Manager"},
         { href: "/admin/cloudinary", label: "Cloudinary Manager"},
+        { href: "/admin/s3-supabase-manager", label: "S3 Supabase Manager"},
       ]
     },
   ];
@@ -175,7 +177,7 @@ export function Sidebar() {
       submenu: [
         { href: "/user/training", label: "Đào tạo nâng cao" },
         {
-          label: "Kiểm tra chuyên môn/Trải nghiệm",
+          label: "Kiểm Tra Chuyên Môn/Trải Nghiệm",
           submenu: [
             { href: "/user/assignments", label: "Quản lý kiểm tra" },
             { href: "/user/giaitrinh", label: "Giải trình điểm kiểm tra" },
@@ -247,15 +249,9 @@ export function Sidebar() {
 
     const hasPermissionForHref = (href: string) => {
       const targetPath = href.split('?')[0];
-      const candidatePaths = getRoutePermissionAliases(targetPath);
-      return effectivePermissions.some((p) => {
-        const normalizedPermission = p.split('?')[0];
-        return candidatePaths.some(
-          (candidate) =>
-            candidate === normalizedPermission ||
-            candidate.startsWith(`${normalizedPermission}/`)
-        );
-      });
+      return permissions.some(
+        (p) => targetPath === p || targetPath.startsWith(`${p}/`) || p.startsWith(`${targetPath}/`)
+      );
     };
 
     const filterMenuItemsByPermissions = (items: any[]): any[] => {
@@ -363,6 +359,28 @@ export function Sidebar() {
 
   return (
     <>
+      {/* Mobile header: visible on pages, hidden while sidebar is open */}
+      {!isOpen && (
+        <div className="fixed left-0 right-0 top-0 z-sidebar-toggle lg:hidden">
+          <div className="flex h-14 items-center justify-between border border-gray-200 bg-white px-3 py-2 shadow-sm">
+            <Link href={isUserArea ? '/user/truyenthong' : '/admin/truyenthong'} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <Image src="/logo.svg" alt="MindX Technology School" width={92} height={40} className="h-7 w-auto" priority />
+              <div className="leading-tight">
+                <p className="text-sm font-bold tracking-wide text-[#2c2b2b]">Teaching Portal System</p>
+                <p className="text-[11px] font-medium text-[#6a6a6a]">Quản Lý Giảng Dạy</p>
+              </div>
+            </Link>
+            <button
+              onClick={() => setIsOpen(true)}
+              aria-label="Mở sidebar"
+              className="rounded-md p-1.5 text-[#1f1f1f] transition-all duration-200 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2"
+            >
+              <Menu className="h-3 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Mobile Overlay */}
       {isOpen && (
         <div
@@ -371,11 +389,12 @@ export function Sidebar() {
         />
       )}
 
-      {/* Toggle Button - Modern floating design */}
+      {/* Desktop toggle button when sidebar is collapsed */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed top-3 left-3 z-sidebar-toggle rounded-lg border border-gray-200 bg-white p-2 shadow-md transition-all duration-300 group animate-in fade-in-0 slide-in-from-left-2 hover:scale-105 hover:border-[#a1001f] hover:bg-[#a1001f] hover:text-white hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2"
+          className="fixed top-3 left-3 z-sidebar-toggle hidden rounded-lg border border-gray-200 bg-white p-2 shadow-md transition-all duration-300 group animate-in fade-in-0 slide-in-from-left-2 hover:scale-105 hover:border-[#a1001f] hover:bg-[#a1001f] hover:text-white hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2 lg:block"
+          aria-label="Mở sidebar"
         >
           <Menu className="h-4 w-4 transition-transform group-hover:rotate-180 duration-300" />
         </button>
@@ -393,7 +412,7 @@ export function Sidebar() {
         <div className="flex h-full min-h-0 flex-col">
           {/* Header - Solid brand header */}
           <div className="relative flex h-14 items-center justify-between bg-[#a1001f] px-4 text-white shadow-md">
-            <div className="flex items-center gap-2">
+            <Link href={isUserArea ? '/user/truyenthong' : '/admin/truyenthong'} onClick={() => setIsOpen(false)} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
               <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
                 <Image src="/x_white.svg" alt="X White" width={16} height={16} className="h-4 w-4" priority />
               </div>
@@ -401,7 +420,7 @@ export function Sidebar() {
                 <h2 className="text-sm font-bold tracking-wide">TPS</h2>
                 <p className="text-xs text-white/80">Quản Lý Giảng Dạy</p>
               </div>
-            </div>
+            </Link>
             <button
               onClick={() => setIsOpen(false)}
               className="rounded-lg p-1.5 transition-all duration-300 hover:rotate-90 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#a1001f]"
@@ -511,7 +530,12 @@ export function Sidebar() {
 
                               return (
                                 <div key={subItem.label} className="space-y-1 py-1">
-                                  <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                  <div
+                                    className={cn(
+                                      "px-2 py-1 text-[11px] font-semibold tracking-wide text-gray-500",
+                                      subItem.label !== 'Kiểm Tra Chuyên Môn/Trải Nghiệm' && 'uppercase'
+                                    )}
+                                  >
                                     {toTitleCase(subItem.label)}
                                   </div>
                                   <div className="ml-2 space-y-0.5 border-l border-gray-200 pl-2">

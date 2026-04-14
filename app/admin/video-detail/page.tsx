@@ -11,6 +11,9 @@ interface Video {
   id: number;
   title: string;
   video_link: string;
+  video_group_id?: string;
+  chunk_index?: number;
+  chunk_total?: number;
   start_date: string;
   duration_minutes: number;
   view_count: number;
@@ -56,6 +59,7 @@ function VideoDetailContent() {
   const videoId = searchParams.get("id");
   
   const [video, setVideo] = useState<Video | null>(null);
+  const [groupVideos, setGroupVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [questions, setQuestions] = useState<InteractiveQuestion[]>([]);
@@ -109,7 +113,24 @@ function VideoDetailContent() {
         const response = await fetch(`/api/training-videos?id=${videoId}`);
         const data = await response.json();
         if (data.success && data.data.length > 0) {
-          setVideo(data.data[0]);
+          const currentVideo = data.data[0];
+          setVideo(currentVideo);
+
+          if (currentVideo.video_group_id) {
+            const groupResponse = await fetch(`/api/training-videos?video_group_id=${encodeURIComponent(currentVideo.video_group_id)}`);
+            const groupData = await groupResponse.json();
+            if (groupData.success && Array.isArray(groupData.data)) {
+              const sortedGroupVideos = [...groupData.data].sort((a: Video, b: Video) => {
+                const left = a.chunk_index ?? 0;
+                const right = b.chunk_index ?? 0;
+                if (left !== right) return left - right;
+                return a.id - b.id;
+              });
+              setGroupVideos(sortedGroupVideos);
+            }
+          } else {
+            setGroupVideos([currentVideo]);
+          }
         } else {
           setError("Không tìm thấy video");
         }
@@ -291,21 +312,35 @@ function VideoDetailContent() {
     setMsg(null);
 
     try {
-      const response = await fetch('/api/training-videos', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: video.id,
-          status: newStatus
-        })
-      });
+      const targets = groupVideos.length > 1 ? groupVideos : [video];
 
-      const data = await response.json();
-      if (data.success) {
-        setVideo({ ...video, status: newStatus });
-        setMsg(isAssigning ? "Đã assign video cho học sinh!" : "Đã lưu video vào draft!");
+      const results = await Promise.all(
+        targets.map(async (targetVideo) => {
+          const response = await fetch('/api/training-videos', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: targetVideo.id,
+              status: newStatus
+            })
+          });
+
+          const data = await response.json();
+          return { ok: response.ok && data.success, data, id: targetVideo.id };
+        })
+      );
+
+      const failed = results.find((r) => !r.ok);
+      if (failed) {
+        setMsg("Lỗi: " + (failed.data?.error || `Không thể cập nhật video #${failed.id}`));
       } else {
-        setMsg("Lỗi: " + data.error);
+        setVideo({ ...video, status: newStatus });
+        setGroupVideos((prev) => prev.map((item) => ({ ...item, status: newStatus })));
+        if (targets.length > 1) {
+          setMsg(`Đã đồng bộ trạng thái cho ${targets.length} video trong cùng nhóm.`);
+        } else {
+          setMsg(isAssigning ? "Đã assign video cho học sinh!" : "Đã lưu video vào draft!");
+        }
       }
     } catch (err) {
       console.error('Error updating video:', err);
@@ -327,24 +362,35 @@ function VideoDetailContent() {
     setMsg(null);
 
     try {
-      const response = await fetch('/api/training-videos', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          id: video.id,
-          status: 'inactive'
-        })
-      });
+      const targets = groupVideos.length > 1 ? groupVideos : [video];
+      const results = await Promise.all(
+        targets.map(async (targetVideo) => {
+          const response = await fetch('/api/training-videos', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: targetVideo.id,
+              status: 'inactive'
+            })
+          });
 
-      const data = await response.json();
-      if (data.success) {
+          const data = await response.json();
+          return { ok: response.ok && data.success, data, id: targetVideo.id };
+        })
+      );
+
+      const failed = results.find((r) => !r.ok);
+      if (!failed) {
         setVideo({ ...video, status: 'inactive' });
-        setMsg("Đã khóa video thành công!");
+        setGroupVideos((prev) => prev.map((item) => ({ ...item, status: 'inactive' })));
+        setMsg(targets.length > 1
+          ? `Đã khóa ${targets.length} video trong cùng nhóm!`
+          : "Đã khóa video thành công!");
         setTimeout(() => {
           router.push('/admin/page5');
         }, 1000);
       } else {
-        setMsg("Lỗi: " + data.error);
+        setMsg("Lỗi: " + (failed.data?.error || `Không thể khóa video #${failed.id}`));
       }
     } catch (err) {
       console.error('Error locking video:', err);
@@ -357,35 +403,82 @@ function VideoDetailContent() {
   const handleDeleteVideo = async () => {
     if (!video) return;
 
-    if (!confirm(`Bạn có chắc muốn xóa vĩnh viễn video "${video.title}"?\n\nHành động này không thể hoàn tác.`)) {
-      return;
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Xóa video vĩnh viễn',
+      message: `Bạn có chắc chắn muốn XÓA VĨNH VIỄN video "${video.title}"?\n\n⚠️ CẢNH BÁO: Hành động này KHÔNG THỂ HOÀN TÁC!\n\n- Video sẽ bị xóa khỏi database và Cloudinary\n- Nếu video có nhiều phần (cùng group), tất cả sẽ bị xóa\n- Tất cả câu hỏi liên quan sẽ bị xóa\n- Dữ liệu xem của giáo viên sẽ bị xóa`,
+      confirmText: 'Xác nhận',
+      cancelText: 'Hủy',
+      type: 'danger',
+      icon: 'delete',
+      requireTextConfirm: true,
+      onConfirm: async () => {
+        setConfirmDialog((prev: any) => ({ ...prev, isOpen: false }));
+        setDeletingVideo(true);
+        setMsg(null);
 
-    setDeletingVideo(true);
-    setMsg(null);
+        try {
+          // Xóa trong database — API trả về tất cả video đã xóa (kể cả cùng group)
+          const response = await fetch('/api/training-videos', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: video.id })
+          });
 
-    try {
-      const response = await fetch('/api/training-videos', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: video.id })
-      });
+          const data = await response.json();
+          if (!data.success) {
+            setMsg('Lỗi: ' + data.error);
+            setDeletingVideo(false);
+            return;
+          }
 
-      const data = await response.json();
-      if (data.success) {
-        setMsg('Đã xóa video thành công!');
-        setTimeout(() => {
-          router.push('/admin/page5');
-        }, 500);
-      } else {
-        setMsg('Lỗi: ' + data.error);
-      }
-    } catch (err) {
-      console.error('Error deleting video:', err);
-      setMsg('Lỗi khi xóa video');
-    } finally {
-      setDeletingVideo(false);
-    }
+          // Xóa trên Cloudinary cho tất cả video đã bị xóa (không block nếu lỗi)
+          const extractPublicId = (url: string): string | null => {
+            if (!url) return null;
+            try {
+              const match = url.match(/\/(?:video|image|raw)\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/);
+              return match ? match[1] : null;
+            } catch { return null; }
+          };
+
+          const deletedVideos: Array<{ video_link: string; thumbnail_url: string }> = data.deleted_videos || [];
+          const cloudinaryDeletes: Promise<void>[] = [];
+
+          for (const v of deletedVideos) {
+            const videoPublicId = extractPublicId(v.video_link);
+            if (videoPublicId && v.video_link?.includes('cloudinary.com')) {
+              cloudinaryDeletes.push(
+                fetch('/api/admin/cloudinary', {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ public_id: videoPublicId, resource_type: 'video' })
+                }).then(() => {}).catch(e => console.warn('Cloudinary video delete warn:', e))
+              );
+            }
+            const thumbPublicId = extractPublicId(v.thumbnail_url);
+            if (thumbPublicId && v.thumbnail_url?.includes('cloudinary.com')) {
+              cloudinaryDeletes.push(
+                fetch('/api/admin/cloudinary', {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ public_id: thumbPublicId, resource_type: 'image' })
+                }).then(() => {}).catch(e => console.warn('Cloudinary thumb delete warn:', e))
+              );
+            }
+          }
+
+          await Promise.allSettled(cloudinaryDeletes);
+
+          toast.success('Đã xóa video thành công!');
+          setTimeout(() => router.push('/admin/page5'), 500);
+        } catch (err) {
+          console.error('Error deleting video:', err);
+          setMsg('Lỗi khi xóa video');
+        } finally {
+          setDeletingVideo(false);
+        }
+      },
+    });
   };
 
   if (loading) {
@@ -527,6 +620,37 @@ function VideoDetailContent() {
             </div>
           </div>
         </div>
+
+        {groupVideos.length > 1 && (
+          <div className="mb-3 bg-white rounded-2xl shadow-lg shadow-blue-100/50 p-4 border border-blue-50">
+            <h2 className="text-base font-bold text-gray-800 mb-3">Video cùng nhóm ({groupVideos.length} phần)</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {groupVideos.map((partVideo) => {
+                const isCurrent = partVideo.id === video.id;
+                return (
+                  <button
+                    key={partVideo.id}
+                    type="button"
+                    onClick={() => router.push(`/admin/video-detail?id=${partVideo.id}`)}
+                    className={`text-left rounded-xl border p-3 transition-all ${isCurrent
+                      ? 'border-[#a1001f] bg-[#fff1f4] shadow-md'
+                      : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                      }`}
+                  >
+                    <p className="text-xs font-semibold text-gray-500 mb-1">
+                      {partVideo.chunk_index && partVideo.chunk_total
+                        ? `P${partVideo.chunk_index}/${partVideo.chunk_total}`
+                        : `ID #${partVideo.id}`}
+                    </p>
+                    <p className="text-sm font-semibold text-gray-900 line-clamp-2 mb-2">{partVideo.title}</p>
+                    <video src={partVideo.video_link} className="w-full h-20 rounded-lg bg-gray-100 object-cover" preload="metadata" controls={false} />
+                    <p className="mt-2 text-xs text-gray-600">Trạng thái: {partVideo.status}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Message Banner */}
         {msg && (
@@ -1363,6 +1487,8 @@ function VideoDetailContent() {
         title={confirmDialog.title}
         message={confirmDialog.message}
         type={confirmDialog.type}
+        requireTextConfirm={confirmDialog.requireTextConfirm}
+        icon={confirmDialog.icon}
       />
     </div>
   );

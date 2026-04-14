@@ -159,6 +159,48 @@ function getCalendarEventStyle(eventType: EventCategory | undefined) {
   }
 }
 
+function getEventDotClass(eventType: EventCategory | undefined) {
+  switch (eventType) {
+    case "registration":
+      return "bg-red-500";
+    case "workshop_teaching":
+      return "bg-purple-500";
+    case "meeting":
+      return "bg-blue-500";
+    case "advanced_training_release":
+      return "bg-indigo-500";
+    case "holiday":
+      return "bg-amber-500";
+    case "thi":
+    case "exam":
+    default:
+      return "bg-green-500";
+  }
+}
+
+const DAY_TIMELINE_START_HOUR = 5;
+const DAY_TIMELINE_END_HOUR = 24;
+const DAY_TIMELINE_ROW_HEIGHT = 64;
+
+function getTimelineEventContainerClass(eventType: EventCategory | undefined) {
+  switch (eventType) {
+    case "registration":
+      return "border-red-300 bg-red-50/80 text-red-900";
+    case "workshop_teaching":
+      return "border-purple-300 bg-purple-50/80 text-purple-900";
+    case "meeting":
+      return "border-blue-300 bg-blue-50/80 text-blue-900";
+    case "advanced_training_release":
+      return "border-indigo-300 bg-indigo-50/80 text-indigo-900";
+    case "holiday":
+      return "border-amber-300 bg-amber-50/80 text-amber-900";
+    case "thi":
+    case "exam":
+    default:
+      return "border-green-300 bg-green-50/80 text-green-900";
+  }
+}
+
 const REGISTER_OPTIONS = [
   "[COD] Scratch (S)",
   "[COD] GameMaker (G)",
@@ -466,6 +508,8 @@ export default function MonthlyActivitiesPage() {
   const [examAssignments, setExamAssignments] = useState<CalendarExamAssignment[]>([]);
   const [registeredScheduleIds, setRegisteredScheduleIds] = useState<Set<string>>(new Set());
   const registerHintShownRef = useRef(false);
+  const [selectedWeekDateKeys, setSelectedWeekDateKeys] = useState<string[]>([]);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("showRegisterHint") !== "1" || registerHintShownRef.current) {
@@ -487,6 +531,21 @@ export default function MonthlyActivitiesPage() {
       { scroll: false }
     );
   }, [router, searchParams]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+    const updateViewport = (event?: MediaQueryListEvent) => {
+      setIsMobileViewport(event ? event.matches : mediaQuery.matches);
+    };
+
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+    return () => mediaQuery.removeEventListener("change", updateViewport);
+  }, []);
 
   const resolveExamEventIdByOptionAndSchedule = useCallback(
     (option: string, scheduledAt: string) => {
@@ -836,6 +895,194 @@ export default function MonthlyActivitiesPage() {
     return visibleEventsByDateKey.get(formatDateKey(selectedDate)) || [];
   }, [visibleEventsByDateKey, selectedDate]);
 
+  useEffect(() => {
+    if (view !== "month" || !isMobileViewport) {
+      return;
+    }
+
+    if (
+      !selectedDate ||
+      selectedDate.getMonth() !== focusDate.getMonth() ||
+      selectedDate.getFullYear() !== focusDate.getFullYear()
+    ) {
+      setSelectedDate(startOfDay(focusDate));
+    }
+  }, [focusDate, isMobileViewport, selectedDate, view]);
+
+  const weekDates = useMemo(
+    () => buildCalendarCells(focusDate, "week").map((cell) => cell.date),
+    [focusDate]
+  );
+
+  useEffect(() => {
+    if (view !== "week") {
+      return;
+    }
+
+    const focusKey = formatDateKey(focusDate);
+    const weekKeys = weekDates.map((date) => formatDateKey(date));
+    const firstIndex = weekKeys.includes(focusKey) ? weekKeys.indexOf(focusKey) : 0;
+    const firstKey = weekKeys[firstIndex];
+    const secondIndex =
+      firstIndex < weekKeys.length - 1
+        ? firstIndex + 1
+        : firstIndex > 0
+          ? firstIndex - 1
+          : -1;
+
+    if (secondIndex >= 0) {
+      const minIndex = Math.min(firstIndex, secondIndex);
+      const maxIndex = Math.max(firstIndex, secondIndex);
+      setSelectedWeekDateKeys([weekKeys[minIndex], weekKeys[maxIndex]]);
+      return;
+    }
+
+    setSelectedWeekDateKeys([firstKey]);
+  }, [focusDate, view, weekDates]);
+
+  const dayTimelineEvents = useMemo(() => {
+    const dayKey = formatDateKey(focusDate);
+    const list = visibleEventsByDateKey.get(dayKey) || [];
+
+    return [...list].sort(
+      (first, second) =>
+        parseLocalDateTime(first.startAt).getTime() - parseLocalDateTime(second.startAt).getTime()
+    );
+  }, [focusDate, visibleEventsByDateKey]);
+
+  const dayTimelineHours = useMemo(
+    () =>
+      Array.from(
+        { length: DAY_TIMELINE_END_HOUR - DAY_TIMELINE_START_HOUR + 1 },
+        (_, index) => DAY_TIMELINE_START_HOUR + index
+      ),
+    []
+  );
+
+  const dayTimelineGridHeight = dayTimelineHours.length * DAY_TIMELINE_ROW_HEIGHT;
+
+  const nowTimelineTop = useMemo(() => {
+    const now = new Date();
+    const totalMinutes = now.getHours() * 60 + now.getMinutes();
+    const minMinutes = DAY_TIMELINE_START_HOUR * 60;
+    const maxMinutes = DAY_TIMELINE_END_HOUR * 60;
+
+    if (totalMinutes < minMinutes || totalMinutes > maxMinutes) {
+      return null;
+    }
+
+    return ((totalMinutes - minMinutes) / 60) * DAY_TIMELINE_ROW_HEIGHT;
+  }, []);
+
+  const dayTimelineEventsByHour = useMemo(() => {
+    const grouped: Record<number, EvaluationEvent[]> = {};
+    dayTimelineHours.forEach((hour) => {
+      grouped[hour] = [];
+    });
+
+    dayTimelineEvents.forEach((event) => {
+      const start = parseLocalDateTime(event.startAt);
+      const slotHour = Math.max(
+        DAY_TIMELINE_START_HOUR,
+        Math.min(start.getHours(), DAY_TIMELINE_END_HOUR)
+      );
+      grouped[slotHour].push(event);
+    });
+
+    return grouped;
+  }, [dayTimelineEvents, dayTimelineHours]);
+
+  const selectedMonthTimelineEventsByHour = useMemo(() => {
+    const grouped: Record<number, EvaluationEvent[]> = {};
+    dayTimelineHours.forEach((hour) => {
+      grouped[hour] = [];
+    });
+
+    selectedDayEvents.forEach((event) => {
+      const start = parseLocalDateTime(event.startAt);
+      const slotHour = Math.max(
+        DAY_TIMELINE_START_HOUR,
+        Math.min(start.getHours(), DAY_TIMELINE_END_HOUR)
+      );
+      grouped[slotHour].push(event);
+    });
+
+    return grouped;
+  }, [dayTimelineHours, selectedDayEvents]);
+
+  const selectedWeekDates = useMemo(
+    () => weekDates.filter((date) => selectedWeekDateKeys.includes(formatDateKey(date))).slice(0, 2),
+    [selectedWeekDateKeys, weekDates]
+  );
+
+  const weekShowsNowLine = useMemo(
+    () => selectedWeekDates.some((date) => isSameDate(startOfDay(date), startOfDay(new Date()))),
+    [selectedWeekDates]
+  );
+
+  const weekTimelineEventsByDateHour = useMemo(() => {
+    const grouped: Record<string, Record<number, EvaluationEvent[]>> = {};
+
+    selectedWeekDates.forEach((date) => {
+      const dateKey = formatDateKey(date);
+      grouped[dateKey] = {};
+      dayTimelineHours.forEach((hour) => {
+        grouped[dateKey][hour] = [];
+      });
+
+      const eventsOfDay = visibleEventsByDateKey.get(dateKey) || [];
+      eventsOfDay.forEach((event) => {
+        const start = parseLocalDateTime(event.startAt);
+        const slotHour = Math.max(
+          DAY_TIMELINE_START_HOUR,
+          Math.min(start.getHours(), DAY_TIMELINE_END_HOUR)
+        );
+        grouped[dateKey][slotHour].push(event);
+      });
+    });
+
+    return grouped;
+  }, [dayTimelineHours, selectedWeekDates, visibleEventsByDateKey]);
+
+  const toggleWeekDateSelection = (date: Date) => {
+    const dateKey = formatDateKey(date);
+
+    setSelectedWeekDateKeys((previous) => {
+      const weekKeys = weekDates.map((item) => formatDateKey(item));
+      const getIndex = (key: string) => weekKeys.indexOf(key);
+      const sortByWeekOrder = (keys: string[]) =>
+        [...keys].sort((first, second) => getIndex(first) - getIndex(second));
+
+      if (previous.includes(dateKey)) {
+        if (previous.length <= 1) {
+          return previous;
+        }
+        return previous.filter((key) => key !== dateKey);
+      }
+
+      if (previous.length === 0) {
+        return [dateKey];
+      }
+
+      if (previous.length === 1) {
+        const previousIndex = getIndex(previous[0]);
+        const nextIndex = getIndex(dateKey);
+        const isAdjacent = Math.abs(previousIndex - nextIndex) === 1;
+        return isAdjacent ? sortByWeekOrder([previous[0], dateKey]) : [dateKey];
+      }
+
+      const adjacentCurrent = previous.find(
+        (key) => Math.abs(getIndex(key) - getIndex(dateKey)) === 1
+      );
+
+      if (adjacentCurrent) {
+        return sortByWeekOrder([adjacentCurrent, dateKey]);
+      }
+
+      return [dateKey];
+    });
+  };
+
   const examAssignmentByEventId = useMemo(() => {
     const next: Record<string, CalendarExamAssignment | null> = {};
 
@@ -1055,6 +1302,12 @@ export default function MonthlyActivitiesPage() {
 
   const handleDayClick = (date: Date) => {
     if (isPastDate(date)) {
+      return;
+    }
+
+    if (view === "month" && isMobileViewport) {
+      setSelectedDate(date);
+      setShowDayEventsModal(false);
       return;
     }
 
@@ -1444,120 +1697,445 @@ export default function MonthlyActivitiesPage() {
           {periodLabel}
         </div>
 
-        <div className="grid grid-cols-7 border-l border-t border-gray-200">
-          {WEEKDAY_LABELS.map((label) => (
-            <div
-              key={label}
-              className="h-10 border-r border-b border-gray-200 bg-gray-50 text-sm font-semibold text-gray-600 flex items-center justify-center"
-            >
-              {label}
-            </div>
-          ))}
-
-          {calendarCells.map(({ date, inCurrentMonth }) => {
-            const isToday = isSameDate(startOfDay(date), startOfDay(new Date()));
-            const dateKey = formatDateKey(date);
-            const isPastCalendarDate = isPastDate(date);
-            const dayEvents = isPastCalendarDate ? [] : visibleEventsByDateKey.get(dateKey) || [];
-            const hasActiveRegistration = !isPastCalendarDate && Boolean(activeRegistrationEventByDate(date));
-
-            return (
-              <div
-                key={dateKey}
-                className={`min-h-28 flex flex-col border-r border-b border-gray-200 p-2 ${
-                  isPastCalendarDate
-                    ? "bg-gray-100"
-                    : isToday
-                    ? "bg-yellow-50 border-yellow-300"
-                    : inCurrentMonth
-                      ? "bg-white"
-                      : "bg-gray-50"
-                  } ${dayEvents.length > 0 && !isPastCalendarDate ? "cursor-pointer hover:bg-blue-50" : ""}`}
-                onClick={() => handleDayClick(date)}
-              >
-                <div className="mb-1 flex items-center justify-between">
-                  {isToday ? (
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-yellow-300 text-sm font-bold text-yellow-900">
-                      {date.getDate()}
+        {view === "day" ? (
+          <div className="border-t border-gray-200 bg-white">
+            <div className="grid grid-cols-[64px_1fr]">
+              <div className="border-r border-gray-200 bg-gray-50/70">
+                {dayTimelineHours.map((hour) => (
+                  <div
+                    key={`label-${hour}`}
+                    className="relative"
+                    style={{ height: `${DAY_TIMELINE_ROW_HEIGHT}px` }}
+                  >
+                    <span className="absolute top-1 right-2 text-xs font-medium text-gray-500">
+                      {String(hour).padStart(2, "0")}:00
                     </span>
-                  ) : (
-                    <span
-                      className={`text-sm font-medium ${
-                        inCurrentMonth ? "text-gray-900" : "text-gray-400"
-                      }`}
+                  </div>
+                ))}
+              </div>
+
+              <div className="relative" style={{ height: `${dayTimelineGridHeight}px` }}>
+                {dayTimelineHours.map((hour) => {
+                  const hourEvents = dayTimelineEventsByHour[hour] || [];
+
+                  return (
+                    <div
+                      key={`slot-${hour}`}
+                      className="h-16 border-t border-gray-200 px-2 py-1.5 overflow-hidden"
+                      style={{ height: `${DAY_TIMELINE_ROW_HEIGHT}px` }}
                     >
-                      {date.getDate()}
-                    </span>
-                  )}
+                      <div className="space-y-1.5">
+                        {hourEvents.map((event) => {
+                          const calendarEventStyle = getCalendarEventStyle(event.eventType);
 
-                  {hasActiveRegistration && !isPastCalendarDate && !isFutureDate(date) && (
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-                      Đăng ký
-                    </span>
-                  )}
+                          return (
+                            <button
+                              key={event.id}
+                              type="button"
+                              className={`w-full overflow-hidden rounded-xl border-l-4 px-3 py-2 text-left shadow-sm hover:shadow-md transition ${getTimelineEventContainerClass(event.eventType)}`}
+                              onClick={() => handleDayEventClick(focusDate, event)}
+                              title={event.title.replace(/\n/g, " ")}
+                            >
+                              <p className="text-sm font-bold leading-5 line-clamp-1">{event.title}</p>
+                              <p className={`mt-0.5 text-xs font-semibold ${calendarEventStyle.timeClassName}`}>
+                                {formatEventTimeRange(event.startAt, event.endAt)}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {nowTimelineTop !== null && (
+                  <div
+                    className="pointer-events-none absolute left-0 right-0 border-t-2 border-red-500 z-20"
+                    style={{ top: `${nowTimelineTop}px` }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        ) : view === "week" ? (
+          <div className="border-t border-gray-200 bg-white">
+            <div className="lg:hidden">
+              <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
+                {weekDates.map((date) => {
+                  const key = formatDateKey(date);
+                  const isSelected = selectedWeekDateKeys.includes(key);
+                  const isToday = isSameDate(startOfDay(date), startOfDay(new Date()));
+                  const weekdayIndex = date.getDay() === 0 ? 6 : date.getDay() - 1;
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleWeekDateSelection(date)}
+                      className={`border-r border-gray-200 px-1 py-2 text-center transition-colors ${isSelected ? "bg-red-50" : "bg-white hover:bg-gray-50"}`}
+                    >
+                      <p className={`text-[11px] font-semibold ${isSelected ? "text-[#a1001f]" : "text-gray-500"}`}>
+                        {WEEKDAY_LABELS[weekdayIndex]}
+                      </p>
+                      <p className={`mt-1 text-sm font-bold ${isToday ? "text-red-600" : isSelected ? "text-gray-900" : "text-gray-600"}`}>
+                        {String(date.getDate()).padStart(2, "0")}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div
+                className="grid"
+                style={{
+                  gridTemplateColumns: `64px repeat(${Math.max(selectedWeekDates.length, 1)}, minmax(0, 1fr))`,
+                }}
+              >
+                <div className="border-r border-gray-200 bg-gray-50/70">
+                  {dayTimelineHours.map((hour) => (
+                    <div key={`week-label-${hour}`} className="relative" style={{ height: `${DAY_TIMELINE_ROW_HEIGHT}px` }}>
+                      <span className="absolute top-1 right-2 text-xs font-medium text-gray-500">
+                        {String(hour).padStart(2, "0")}:00
+                      </span>
+                    </div>
+                  ))}
                 </div>
 
-                <div className="space-y-1">
-                  {dayEvents.slice(0, 3).map((event) => {
-                    const calendarEventStyle = getCalendarEventStyle(event.eventType);
+                {selectedWeekDates.map((date) => {
+                  const dateKey = formatDateKey(date);
+                  const isToday = isSameDate(startOfDay(date), startOfDay(new Date()));
 
-                    if (event.eventType === "registration") {
-                      return (
+                  return (
+                    <div key={`week-col-${dateKey}`} className="relative border-r border-gray-200" style={{ height: `${dayTimelineGridHeight}px` }}>
+                      {dayTimelineHours.map((hour) => {
+                        const hourEvents = weekTimelineEventsByDateHour[dateKey]?.[hour] || [];
+
+                        return (
+                          <div
+                            key={`${dateKey}-${hour}`}
+                            className="h-16 border-t border-gray-200 px-1.5 py-1 overflow-hidden"
+                            style={{ height: `${DAY_TIMELINE_ROW_HEIGHT}px` }}
+                          >
+                            <div className="space-y-1">
+                              {hourEvents.map((event) => {
+                                const calendarEventStyle = getCalendarEventStyle(event.eventType);
+
+                                return (
+                                  <button
+                                    key={event.id}
+                                    type="button"
+                                    className={`w-full overflow-hidden rounded-lg border-l-4 px-2 py-1.5 text-left shadow-sm hover:shadow-md transition ${getTimelineEventContainerClass(event.eventType)}`}
+                                    onClick={() => handleDayEventClick(date, event)}
+                                    title={event.title.replace(/\n/g, " ")}
+                                  >
+                                    <p className="text-xs font-bold leading-4 line-clamp-1">{event.title}</p>
+                                    <p className={`mt-0.5 text-[11px] font-semibold ${calendarEventStyle.timeClassName}`}>
+                                      {formatEventTimeRange(event.startAt, event.endAt)}
+                                    </p>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {isToday && weekShowsNowLine && nowTimelineTop !== null && (
+                        <div
+                          className="pointer-events-none absolute left-0 right-0 border-t-2 border-red-500 z-20"
+                          style={{ top: `${nowTimelineTop}px` }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="hidden lg:block">
+              <div className="grid grid-cols-7 border-l border-t border-gray-200">
+                {WEEKDAY_LABELS.map((label) => (
+                  <div
+                    key={`week-head-${label}`}
+                    className="h-10 border-r border-b border-gray-200 bg-gray-50 text-sm font-semibold text-gray-600 flex items-center justify-center"
+                  >
+                    {label}
+                  </div>
+                ))}
+
+                {weekDates.map((date) => {
+                  const isToday = isSameDate(startOfDay(date), startOfDay(new Date()));
+                  const dateKey = formatDateKey(date);
+                  const isPastCalendarDate = isPastDate(date);
+                  const dayEvents = isPastCalendarDate ? [] : visibleEventsByDateKey.get(dateKey) || [];
+                  const hasActiveRegistration =
+                    !isPastCalendarDate && Boolean(activeRegistrationEventByDate(date));
+
+                  return (
+                    <div
+                      key={`week-grid-${dateKey}`}
+                      className={`min-h-36 flex flex-col border-r border-b border-gray-200 p-2 ${
+                        isPastCalendarDate
+                          ? "bg-gray-100"
+                          : isToday
+                            ? "bg-yellow-50 border-yellow-300"
+                            : "bg-white"
+                      } ${dayEvents.length > 0 && !isPastCalendarDate ? "cursor-pointer hover:bg-blue-50" : ""}`}
+                      onClick={() => handleDayClick(date)}
+                    >
+                      <div className="mb-1 flex items-center justify-between">
+                        {isToday ? (
+                          <span className="rounded-full bg-yellow-400 px-2 py-0.5 text-xs font-bold text-gray-900">
+                            Hôm nay {date.getDate()}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-gray-700">{date.getDate()}</span>
+                        )}
+
+                        {hasActiveRegistration && (
+                          <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                            Đang mở
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
+                        {dayEvents.slice(0, 4).map((event) => (
+                          <button
+                            key={event.id}
+                            type="button"
+                            className={`w-full rounded px-1.5 py-1 text-left text-[11px] font-semibold leading-4 ${getEventClass(event.eventType)}`}
+                            onClick={(eventMouse) => {
+                              eventMouse.stopPropagation();
+                              handleDayEventClick(date, event);
+                            }}
+                          >
+                            {event.title}
+                          </button>
+                        ))}
+
+                        {dayEvents.length > 4 && (
+                          <p className="text-[11px] font-semibold text-gray-500">+{dayEvents.length - 4} sự kiện</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-7 border-l border-t border-gray-200">
+            {WEEKDAY_LABELS.map((label) => (
+              <div
+                key={label}
+                className="h-10 border-r border-b border-gray-200 bg-gray-50 text-xs md:text-sm font-semibold text-gray-600 flex items-center justify-center"
+              >
+                {label}
+              </div>
+            ))}
+
+            {calendarCells.map(({ date, inCurrentMonth }) => {
+              const isToday = isSameDate(startOfDay(date), startOfDay(new Date()));
+              const dateKey = formatDateKey(date);
+              const isPastCalendarDate = isPastDate(date);
+              const dayEvents = isPastCalendarDate ? [] : visibleEventsByDateKey.get(dateKey) || [];
+              const hasActiveRegistration = !isPastCalendarDate && Boolean(activeRegistrationEventByDate(date));
+              const isSelectedMobileDate =
+                isMobileViewport &&
+                selectedDate !== null &&
+                isSameDate(startOfDay(date), startOfDay(selectedDate));
+
+              return (
+                <div
+                  key={dateKey}
+                  className={`min-h-20 md:min-h-28 flex flex-col border-r border-b border-gray-200 p-1.5 md:p-2 ${
+                    isPastCalendarDate
+                      ? "bg-gray-100"
+                      : isToday
+                      ? "bg-yellow-50 border-yellow-300"
+                      : inCurrentMonth
+                        ? "bg-white"
+                        : "bg-gray-50"
+                    } ${isSelectedMobileDate ? "ring-2 ring-blue-400 ring-inset" : ""} ${!isPastCalendarDate ? "cursor-pointer hover:bg-blue-50" : ""}`}
+                  onClick={() => handleDayClick(date)}
+                >
+                  <div className="mb-1 flex items-center justify-between">
+                    {isToday ? (
+                      <span className="inline-flex h-6 w-6 md:h-7 md:w-7 items-center justify-center rounded-full bg-yellow-300 text-xs md:text-sm font-bold text-yellow-900">
+                        {date.getDate()}
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-xs md:text-sm font-medium ${
+                          inCurrentMonth ? "text-gray-900" : "text-gray-400"
+                        }`}
+                      >
+                        {date.getDate()}
+                      </span>
+                    )}
+
+                    {hasActiveRegistration && !isPastCalendarDate && !isFutureDate(date) && (
+                      <span className="hidden lg:inline rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                        Đăng ký
+                      </span>
+                    )}
+                  </div>
+
+                  {isMobileViewport ? (
+                    <div className="mt-1 flex min-h-4 items-center gap-1">
+                      {dayEvents.slice(0, 4).map((event, index) => (
+                        <span
+                          key={`${event.id}-${index}`}
+                          className={`h-1.5 w-1.5 rounded-full ${getEventDotClass(event.eventType)}`}
+                        />
+                      ))}
+                      {dayEvents.length > 4 && (
+                        <span className="text-[9px] font-semibold text-gray-500">+{dayEvents.length - 4}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {dayEvents.slice(0, 3).map((event) => {
+                        const calendarEventStyle = getCalendarEventStyle(event.eventType);
+
+                        if (event.eventType === "registration") {
+                          return (
+                            <button
+                              type="button"
+                              key={event.id}
+                              className={`rounded-sm px-1 py-1 text-center text-[11px] leading-4 font-bold whitespace-pre-line ${calendarEventStyle.titleClassName}`}
+                              title={event.title.replace(/\n/g, " ")}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDayEventClick(date, event);
+                              }}
+                            >
+                              {event.title}
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <button
+                            type="button"
+                            key={event.id}
+                            className="flex w-full items-start gap-1 text-left"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDayEventClick(date, event);
+                            }}
+                            title={event.title.replace(/\n/g, " ")}
+                          >
+                            <div className={`w-18 shrink-0 text-[11px] font-semibold leading-4 ${calendarEventStyle.timeClassName}`}>
+                              {formatEventTimeRange(event.startAt, event.endAt)}
+                            </div>
+                            <div className={`flex-1 rounded-sm px-1 py-1 text-[11px] leading-4 font-semibold text-center ${calendarEventStyle.titleClassName}`}>
+                              {event.title}
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {dayEvents.length > 3 && (
                         <button
                           type="button"
-                          key={event.id}
-                          className={`rounded-sm px-1 py-1 text-center text-[11px] leading-4 font-bold whitespace-pre-line ${calendarEventStyle.titleClassName}`}
-                          title={event.title.replace(/\n/g, " ")}
+                          className="text-[11px] font-semibold text-gray-500"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDayEventClick(date, event);
+                            setSelectedDate(date);
+                            setShowDayEventsModal(true);
                           }}
                         >
-                          {event.title}
+                          +{dayEvents.length - 3} sự kiện khác
                         </button>
-                      );
-                    }
+                      )}
+                    </div>
+                  )}
+                  <div className="flex-1" />
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      {view === "month" && isMobileViewport && selectedDate && (
+        <Card className="mt-4" padding="sm">
+          <div className="border-b border-gray-200 px-4 py-3">
+            <h3 className="text-base font-bold text-gray-900">
+              Ngày {selectedDate.toLocaleDateString("vi-VN")}
+            </h3>
+          </div>
+
+          <div className="px-4 py-3">
+            <div className="overflow-hidden rounded-lg border border-gray-200">
+              <div className="grid grid-cols-[52px_1fr] bg-white">
+                <div className="border-r border-gray-200 bg-gray-50/80">
+                  {dayTimelineHours.map((hour) => (
+                    <div
+                      key={`mobile-month-label-${hour}`}
+                      className="relative border-b border-gray-200 last:border-b-0"
+                      style={{ height: `${DAY_TIMELINE_ROW_HEIGHT}px` }}
+                    >
+                      <span className="absolute top-1.5 right-1.5 text-[10px] font-semibold text-gray-500">
+                        {String(hour).padStart(2, "0")}:00
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  {dayTimelineHours.map((hour) => {
+                    const hourEvents = selectedMonthTimelineEventsByHour[hour] || [];
 
                     return (
-                      <button
-                        type="button"
-                        key={event.id}
-                        className="flex w-full items-start gap-1 text-left"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDayEventClick(date, event);
-                        }}
-                        title={event.title.replace(/\n/g, " ")}
+                      <div
+                        key={`mobile-month-slot-${hour}`}
+                        className="border-b border-gray-200 px-2 py-1.5 last:border-b-0"
+                        style={{ minHeight: `${DAY_TIMELINE_ROW_HEIGHT}px` }}
                       >
-                        <div className={`w-18 shrink-0 text-[11px] font-semibold leading-4 ${calendarEventStyle.timeClassName}`}>
-                          {formatEventTimeRange(event.startAt, event.endAt)}
+                        <div className="space-y-1.5">
+                          {hourEvents.map((event) => {
+                            const calendarEventStyle = getCalendarEventStyle(event.eventType);
+
+                            return (
+                              <button
+                                type="button"
+                                key={`mobile-month-event-${event.id}`}
+                                onClick={() => handleDayEventClick(selectedDate, event)}
+                                title={event.title.replace(/\n/g, " ")}
+                                className={`w-full rounded-lg border-l-4 px-2.5 py-2 text-left shadow-sm transition hover:shadow-md ${getTimelineEventContainerClass(event.eventType)}`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className={`text-[11px] font-semibold ${calendarEventStyle.timeClassName}`}>
+                                    {formatEventTimeRange(event.startAt, event.endAt)}
+                                  </p>
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getEventClass(event.eventType)}`}>
+                                    {EVENT_TYPE_LABELS[event.eventType || "exam"]}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-xs font-bold leading-4 text-gray-900 whitespace-pre-line">
+                                  {event.title}
+                                </p>
+                              </button>
+                            );
+                          })}
                         </div>
-                        <div className={`flex-1 rounded-sm px-1 py-1 text-[11px] leading-4 font-semibold text-center ${calendarEventStyle.titleClassName}`}>
-                          {event.title}
-                        </div>
-                      </button>
+                      </div>
                     );
                   })}
-                  {dayEvents.length > 3 && (
-                    <button
-                      type="button"
-                      className="text-[11px] font-semibold text-gray-500"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedDate(date);
-                        setShowDayEventsModal(true);
-                      }}
-                    >
-                      +{dayEvents.length - 3} sự kiện khác
-                    </button>
-                  )}
                 </div>
-                <div className="flex-1" />
               </div>
-            );
-          })}
-        </div>
-      </Card>
+            </div>
+
+            {selectedDayEvents.length === 0 && (
+              <p className="mt-3 text-center text-xs font-medium text-gray-500">
+                Ngày này chưa có sự kiện trong timeline.
+              </p>
+            )}
+          </div>
+        </Card>
+      )}
 
       {showDayEventsModal && selectedDate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -1739,7 +2317,7 @@ export default function MonthlyActivitiesPage() {
       )}
 
       {showParticipantsModal && participantsEvent && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
               <div>

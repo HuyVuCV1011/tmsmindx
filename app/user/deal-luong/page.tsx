@@ -237,7 +237,7 @@ export default function DealLuongPage() {
           </div>
           Quản lý lương
         </h1>
-        <p className="text-slate-500 mt-2 text-sm">Gửi yêu cầu nâng lương, hạ lương, hoặc thỏa thuận lương cho giảng viên</p>
+        <p className="text-slate-500 mt-2 text-sm">Gửi yêu cầu nâng lương, hạ lương, hoặc thỏa thuận lương cho giáo viên</p>
       </div>
 
       {/* Tabs */}
@@ -345,7 +345,7 @@ export default function DealLuongPage() {
                 value={form.teacher_name}
                 onChange={e => setForm(f => ({ ...f, teacher_name: e.target.value }))}
                 className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-                placeholder="Nhập họ tên giảng viên"
+                placeholder="Nhập họ tên giáo viên"
                 required
               />
             </div>
@@ -589,7 +589,7 @@ export default function DealLuongPage() {
             {/* Info */}
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-slate-50 rounded-lg px-4 py-3">
-                <p className="text-[11px] text-slate-400 uppercase font-bold tracking-wider mb-1">Giảng viên</p>
+                <p className="text-[11px] text-slate-400 uppercase font-bold tracking-wider mb-1">Giáo viên</p>
                 <p className="text-sm font-semibold text-slate-800">{selectedDeal.teacher_name}</p>
                 {selectedDeal.teacher_codename && <p className="text-xs text-slate-500">{selectedDeal.teacher_codename}</p>}
               </div>

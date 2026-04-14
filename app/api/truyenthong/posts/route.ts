@@ -1,6 +1,47 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { generateSlug } from '@/lib/utils';
+import { v2 as cloudinary } from 'cloudinary';
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+async function processBase64Images(htmlContent: string): Promise<string> {
+    if (!htmlContent) return htmlContent;
+    
+    const regex = /src=["'](data:image\/[^;]+;base64,[^"']+)["']/g;
+    let newContent = htmlContent;
+    
+    const matches = Array.from(htmlContent.matchAll(regex));
+    if (!matches || matches.length === 0) return htmlContent;
+
+    const uploadPromises = matches.map(async (match) => {
+        const fullMatch = match[0];
+        const base64Data = match[1];
+        
+        try {
+            const uploadRes = await cloudinary.uploader.upload(base64Data, {
+                folder: 'mindx_posts_content',
+                resource_type: 'image'
+            });
+            return { originalStr: fullMatch, newStr: `src="${uploadRes.secure_url}"` };
+        } catch (error) {
+            console.error('Failed to upload base64 image to cloudinary:', error);
+            return { originalStr: fullMatch, newStr: fullMatch };
+        }
+    });
+
+    const replacements = await Promise.all(uploadPromises);
+    
+    for (const { originalStr, newStr } of replacements) {
+        newContent = newContent.replace(originalStr, newStr);
+    }
+    
+    return newContent;
+}
 
 export async function GET(request: Request) {
     try {
@@ -9,29 +50,41 @@ export async function GET(request: Request) {
         const status = searchParams.get('status');
         const search = searchParams.get('search');
 
-        let queryText = 'SELECT * FROM communications WHERE 1=1';
+        let queryText = `
+SELECT c.*,
+  COALESCE(tt.comment_count, 0)::int AS comment_count,
+  COALESCE(tt.hidden_comment_count, 0)::int AS hidden_comment_count
+FROM communications c
+LEFT JOIN (
+  SELECT post_slug,
+    COUNT(*) FILTER (WHERE hidden IS NOT TRUE)::int AS comment_count,
+    COUNT(*) FILTER (WHERE hidden IS TRUE)::int AS hidden_comment_count
+  FROM truyenthong_comments
+  GROUP BY post_slug
+) tt ON tt.post_slug = c.slug
+WHERE 1=1`;
         const queryParams: any[] = [];
         let paramIndex = 1;
 
         if (type && type !== 'all') {
-            queryText += ` AND post_type = $${paramIndex}`;
+            queryText += ` AND c.post_type = $${paramIndex}`;
             queryParams.push(type);
             paramIndex++;
         }
 
         if (status && status !== 'all') {
-            queryText += ` AND status = $${paramIndex}`;
+            queryText += ` AND c.status = $${paramIndex}`;
             queryParams.push(status);
             paramIndex++;
         }
 
         if (search) {
-            queryText += ` AND (title ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`;
+            queryText += ` AND (c.title ILIKE $${paramIndex} OR c.description ILIKE $${paramIndex})`;
             queryParams.push(`%${search}%`);
             paramIndex++;
         }
 
-        queryText += ' ORDER BY created_at DESC';
+        queryText += ' ORDER BY c.created_at DESC';
 
         const client = await pool.connect();
         try {
@@ -58,8 +111,17 @@ export async function POST(request: Request) {
             post_type,
             audience,
             status,
-            published_at
+            published_at,
+            thumbnail_position,
         } = body;
+
+        let processedContent = content;
+        try {
+             processedContent = await processBase64Images(content);
+        } catch (err) {
+             console.error("Error processing base64 images in POST:", err);
+             // fallback to original if parsing fails catastrophically
+        }
 
         const client = await pool.connect();
         try {
@@ -91,11 +153,12 @@ export async function POST(request: Request) {
             const result = await client.query(
                 `INSERT INTO communications (
           title, slug, description, content, featured_image, banner_image, 
-          post_type, audience, status, published_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+          post_type, audience, status, published_at, thumbnail_position
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
                 [
-                    title, slug, description, content, featured_image, banner_image,
-                    post_type, audience, status, published_at || new Date()
+                    title, slug, description, processedContent, featured_image, banner_image,
+                    post_type, audience, status, published_at || new Date(),
+                    thumbnail_position || '50% 50%'
                 ]
             );
             return NextResponse.json(result.rows[0], { status: 201, headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } });

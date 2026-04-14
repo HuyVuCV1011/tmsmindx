@@ -158,6 +158,13 @@ function extractCodeFromEmail(email: string): string {
   return match ? match[1] : '';
 }
 
+function getVietnameseStatus(status: string): string {
+  const normalized = (status || '').trim().toLowerCase();
+  if (normalized === 'active') return 'Đang hoạt động';
+  if (normalized === 'deactive' || normalized === 'inactive') return 'Ngưng hoạt động';
+  return status;
+}
+
 export default function Page1() {
   const { user } = useAuth();
   const router = useRouter();
@@ -1003,11 +1010,11 @@ export default function Page1() {
   }, [availabilityRecords, availabilityPeriod, availabilityFromDate, availabilityToDate]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 lg:px-6">
+    <div className="max-w-7xl mx-auto px-4 lg:px-6 pt-14 lg:pt-0">
       <div className="space-y-3 sm:space-y-4">
         {/* Header */}
         <div className="border-b border-gray-200 pb-2 sm:pb-3">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Thông tin của tôi</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Thông Tin Của Tôi</h1>
           <div className="text-xs text-gray-600 mt-1">
             {(isLoadingTeacher || isResolvingCode) ? (
               <span className="inline-flex items-center gap-2">
@@ -1031,7 +1038,7 @@ export default function Page1() {
         )}
 
         {/* Empty State */}
-        {!submitCode && !error && (
+        {!submitCode && !error && !isResolvingCode && !isLoadingTeacher && (
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 sm:p-12 text-center">
             <div className="flex flex-col items-center gap-3">
               <div className="w-16 h-16 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center">
@@ -1095,7 +1102,7 @@ export default function Page1() {
                       ? "bg-white text-[#a1001f]"
                       : "bg-gray-300 text-gray-700"
                     }`}>
-                    {teacher.status}
+                    {getVietnameseStatus(teacher.status)}
                   </span>
                 </div>
               </div>
@@ -1114,7 +1121,7 @@ export default function Page1() {
                   <InfoItem icon={<MapPin className="h-4 w-4" />} label="Chi nhánh hiện tại" value={teacher.branchCurrent} />
                 )}
                 {teacher.programCurrent && teacher.programCurrent !== "N/A" && (
-                  <InfoItem icon={<Briefcase className="h-4 w-4" />} label="Program" value={teacher.programCurrent} />
+                  <InfoItem icon={<Briefcase className="h-4 w-4" />} label="Khối" value={teacher.programCurrent} />
                 )}
                 {teacher.position && teacher.position !== "N/A" && (
                   <InfoItem icon={<User className="h-4 w-4" />} label="Vị trí" value={teacher.position} />
@@ -1133,17 +1140,13 @@ export default function Page1() {
                     <span className="ml-2 font-medium">{teacher.branchIn}</span>
                   </div>
                   <div className="text-xs">
-                    <span className="text-gray-600">Program đầu vào:</span>
+                    <span className="text-gray-600">Khối đầu vào:</span>
                     <span className="ml-2 font-medium">{teacher.programIn}</span>
-                  </div>
-                  <div className="text-xs">
-                    <span className="text-gray-600">Onboard bởi:</span>
-                    <span className="ml-2 font-medium">{teacher.onboardBy}</span>
                   </div>
                   <div className="text-xs">
                     <span className="text-gray-600">Trạng thái hoạt động:</span>
                     <span className={`ml-2 font-medium ${teacher.status === "Active" ? "text-green-600" : "text-gray-600"
-                      }`}>{teacher.status}</span>
+                      }`}>{getVietnameseStatus(teacher.status)}</span>
                   </div>
                 </div>
               </div>
@@ -1154,7 +1157,7 @@ export default function Page1() {
         {/* Score Summary Skeleton */}
         {teacher && !scoresLoaded && (
           <div className="border border-gray-200 rounded-xl p-3 sm:p-4 bg-white">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 items-end">
               {[1, 2, 3, 4].map((i) => (
                 <div key={i}>
                   <div className="h-3 bg-gray-200 rounded w-16 mb-1 animate-pulse"></div>
@@ -1168,7 +1171,7 @@ export default function Page1() {
         {/* Score Summary */}
         {teacher && scoresLoaded && (expertiseData.length > 0 || experienceData.length > 0) && (
           <div className="border border-gray-200 rounded-xl p-3 sm:p-4 animate-fadeIn bg-white" style={{ animationDelay: '0.2s' }}>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 items-end">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Tháng</label>
                 <select
@@ -2112,7 +2115,7 @@ export default function Page1() {
         )}
 
         {/* Floating Feedback Button */}
-        {feedbackEnabled && (
+        {false && feedbackEnabled && (
           <div className="fixed bottom-6 right-6 z-40">
             <button
               onClick={() => {
@@ -2142,7 +2145,7 @@ export default function Page1() {
         )}
 
         {/* If feedback is disabled, show small pill to re-enable it */}
-        {!feedbackEnabled && (
+        {false && !feedbackEnabled && (
           <div className="fixed bottom-6 right-6 z-40">
             <button
               onClick={() => enableFeedback()}
@@ -2158,7 +2161,7 @@ export default function Page1() {
         )}
 
         {/* Feedback Modal */}
-        {feedbackModalOpen && (
+        {false && feedbackModalOpen && (
           <div
             className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
             onClick={(e) => {
@@ -2254,25 +2257,11 @@ export default function Page1() {
                   />
                 </div>
 
-                <div className="flex gap-2 pt-2">
-                  {!isFirstTimeFeedback && (
-                    <button
-                      onClick={() => {
-                        setFeedbackModalOpen(false);
-                        setFeedbackRating(0);
-                        setFeedbackComment("");
-                        setFeedbackFeature("");
-                      }}
-                      className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
-                    >
-                      Hủy
-                    </button>
-                  )}
+                <div className="pt-2">
                   <button
                     onClick={handleFeedbackSubmit}
                     disabled={feedbackSubmitting || feedbackRating === 0}
-                    className={`px-4 py-2.5 bg-[#a1001f] text-white rounded-lg hover:bg-[#870019] disabled:bg-gray-400 disabled:cursor-not-allowed font-medium ${isFirstTimeFeedback ? 'w-full' : 'flex-1'
-                      }`}
+                    className="w-full px-4 py-2.5 bg-[#a1001f] text-white rounded-lg hover:bg-[#870019] disabled:bg-[#d16b7e] disabled:cursor-not-allowed font-medium"
                   >
                     {feedbackSubmitting ? 'Đang gửi...' : 'Gửi phản hồi'}
                   </button>
@@ -2283,7 +2272,7 @@ export default function Page1() {
         )}
 
         {/* Feedback Success Modal */}
-        {feedbackSuccessModalOpen && (
+        {false && feedbackSuccessModalOpen && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full animate-fadeIn">
               <div className="p-6 text-center">

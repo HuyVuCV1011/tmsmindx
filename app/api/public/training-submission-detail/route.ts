@@ -54,9 +54,9 @@ export async function GET(request: NextRequest) {
       success: true,
       submission: {
         ...submission,
-        score: parseFloat(submission.score),
+        score: submission.score != null ? parseFloat(submission.score) : null,
         total_points: parseFloat(submission.total_points),
-        percentage: parseFloat(submission.percentage)
+        percentage: submission.percentage != null ? parseFloat(submission.percentage) : null
       },
       answers: answersResult.rows.map(row => ({
         ...row,

@@ -1,6 +1,59 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { generateSlug } from '@/lib/utils';
+import { v2 as cloudinary } from 'cloudinary';
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Helper to extract Cloudinary public ID from secure URL
+const extractCloudinaryPublicId = (url: string | null) => {
+    if (!url || !url.includes('cloudinary.com')) return null;
+    const parts = url.split('/upload/');
+    if (parts.length !== 2) return null;
+    let path = parts[1];
+    path = path.replace(/^v\d+\//, '');
+    const lastDot = path.lastIndexOf('.');
+    return lastDot !== -1 ? path.substring(0, lastDot) : path;
+};
+
+async function processBase64Images(htmlContent: string): Promise<string> {
+    if (!htmlContent) return htmlContent;
+    
+    const regex = /src=["'](data:image\/[^;]+;base64,[^"']+)["']/g;
+    let newContent = htmlContent;
+    
+    const matches = Array.from(htmlContent.matchAll(regex));
+    if (!matches || matches.length === 0) return htmlContent;
+
+    const uploadPromises = matches.map(async (match) => {
+        const fullMatch = match[0];
+        const base64Data = match[1];
+        
+        try {
+            const uploadRes = await cloudinary.uploader.upload(base64Data, {
+                folder: 'mindx_posts_content',
+                resource_type: 'image'
+            });
+            return { originalStr: fullMatch, newStr: `src="${uploadRes.secure_url}"` };
+        } catch (error) {
+            console.error('Failed to upload base64 image to cloudinary:', error);
+            return { originalStr: fullMatch, newStr: fullMatch };
+        }
+    });
+
+    const replacements = await Promise.all(uploadPromises);
+    
+    for (const { originalStr, newStr } of replacements) {
+        newContent = newContent.replace(originalStr, newStr);
+    }
+    
+    return newContent;
+}
 
 export async function GET(
     request: Request,
@@ -69,8 +122,16 @@ export async function PUT(
             post_type,
             audience,
             status,
-            published_at
+            published_at,
+            thumbnail_position,
         } = body;
+
+        let processedContent = content;
+        try {
+             processedContent = await processBase64Images(content);
+        } catch (err) {
+             console.error("Error processing base64 images in PUT:", err);
+        }
 
         const client = await pool.connect();
         try {
@@ -84,6 +145,17 @@ export async function PUT(
             }
 
             const currentPost = postResult.rows[0];
+            
+            // Check if image changed, prepare to delete old image from Cloudinary
+            let oldFeaturedPublicId = null;
+            if (featured_image && currentPost.featured_image && featured_image !== currentPost.featured_image) {
+                oldFeaturedPublicId = extractCloudinaryPublicId(currentPost.featured_image);
+            }
+
+            let oldBannerPublicId = null;
+            if (banner_image && currentPost.banner_image && banner_image !== currentPost.banner_image) {
+                oldBannerPublicId = extractCloudinaryPublicId(currentPost.banner_image);
+            }
             
             // Generate new slug if title changed
             let newSlug = currentPost.slug;
@@ -104,13 +176,23 @@ export async function PUT(
                 `UPDATE communications SET 
           title = $1, slug = $2, description = $3, content = $4, 
           featured_image = $5, banner_image = $6, post_type = $7, 
-          audience = $8, status = $9, published_at = $10, updated_at = NOW()
-        WHERE id = $11 RETURNING *`,
+          audience = $8, status = $9, published_at = $10,
+          thumbnail_position = $11, updated_at = NOW()
+        WHERE id = $12 RETURNING *`,
                 [
-                    title, newSlug, description, content, featured_image, banner_image,
-                    post_type, audience, status, published_at, currentPost.id
+                    title, newSlug, description, processedContent, featured_image, banner_image,
+                    post_type, audience, status, published_at,
+                    thumbnail_position || '50% 50%', currentPost.id
                 ]
             );
+
+            // Clean up old images silently if update was successful
+            if (oldFeaturedPublicId) {
+                cloudinary.uploader.destroy(oldFeaturedPublicId).catch(err => console.error('Failed to destroy old featured image:', err));
+            }
+            if (oldBannerPublicId && oldBannerPublicId !== oldFeaturedPublicId) {
+                cloudinary.uploader.destroy(oldBannerPublicId).catch(err => console.error('Failed to destroy old banner image:', err));
+            }
 
             return NextResponse.json(result.rows[0]);
         } finally {
@@ -138,6 +220,20 @@ export async function DELETE(
             if (result.rows.length === 0) {
                 return NextResponse.json({ error: 'Post not found' }, { status: 404 });
             }
+
+            const deletedPost = result.rows[0];
+
+            // Clean up Cloudinary images associated with this post
+            const featuredPublicId = extractCloudinaryPublicId(deletedPost.featured_image);
+            if (featuredPublicId) {
+                cloudinary.uploader.destroy(featuredPublicId).catch(err => console.error('Failed to destroy featured image upon post deletion:', err));
+            }
+
+            const bannerPublicId = extractCloudinaryPublicId(deletedPost.banner_image);
+            if (bannerPublicId && bannerPublicId !== featuredPublicId) {
+                cloudinary.uploader.destroy(bannerPublicId).catch(err => console.error('Failed to destroy banner image upon post deletion:', err));
+            }
+
             return NextResponse.json({ message: 'Post deleted successfully' });
         } finally {
             client.release();

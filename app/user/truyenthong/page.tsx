@@ -111,7 +111,7 @@ export default function CommunicationsPage() {
                     </div>
                 </div>
 
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 space-y-12">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 md:py-4 space-y-6">
 
                     {/* Two Column Layout: Main Content + Sidebar */}
                     <div className="flex flex-col lg:flex-row gap-6">
