@@ -64,7 +64,7 @@ export default function Slider({ posts }: SliderProps) {
 
     return (
         <div
-            className="relative w-full h-72 sm:h-90 md:h-120 rounded-3xl overflow-hidden bg-white group shadow-2xl ring-1 ring-black/5"
+            className="relative w-full h-72 sm:h-96 md:h-[480px] lg:h-[560px] rounded-2xl overflow-hidden bg-gray-900 group shadow-xl ring-1 ring-black/5"
             onMouseEnter={() => setAutoPlay(false)}
             onMouseLeave={() => setAutoPlay(true)}
         >
@@ -80,15 +80,15 @@ export default function Slider({ posts }: SliderProps) {
                     >
                         <div className="absolute inset-0 bg-white">
                             {/* Keep image inside a fixed max-width canvas to avoid upscaling on ultra-wide screens */}
-                            <div className="relative h-full w-full max-w-480 mx-auto">
+                            <div className="relative h-full w-full">
                                 <Image
                                     src={post.banner_image || post.featured_image || "/placeholder-banner.jpg"}
                                     alt={post.title}
                                     fill
-                                    className="object-contain object-center"
+                                    className="object-cover object-center"
                                     priority={index === 0}
                                     quality={95}
-                                    sizes="(min-width: 1920px) 1920px, 100vw"
+                                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 100vw, 1920px"
                                 />
 
                                 {/* Contrast Overlay */}
