@@ -199,7 +199,13 @@ function CheckDataSourceContent() {
     return { completed, total, percent };
   }, [onboardingData]);
 
-  const canEnterSystem = !loading && profileCompletion.percent === 100;
+  /** Đã có bất kỳ thông tin GV trong hệ thống là đủ để vào (không cần đủ 8/8 trường). */
+  const hasProfileInfo = useMemo(() => {
+    if (!onboardingData) return false;
+    return Object.values(onboardingData).some((v) => String(v ?? "").trim().length > 0);
+  }, [onboardingData]);
+
+  const canEnterSystem = !loading && hasProfileInfo;
 
   const appendImageFiles = useCallback((files: File[]) => {
     const images = files.filter((f) => f.type.startsWith("image/"));
@@ -475,9 +481,14 @@ function CheckDataSourceContent() {
                   style={{ width: `${profileCompletion.percent}%` }}
                 />
               </div>
-              {!loading && !canEnterSystem && (
+              {!loading && hasProfileInfo && profileCompletion.percent < 100 && (
                 <p className="mt-2 text-xs text-gray-500">
-                  Điền đủ dữ liệu bắt buộc để bật nút <strong>Vào hệ thống</strong>.
+                  Một số mục gợi ý còn trống — bạn vẫn có thể <strong>Vào hệ thống</strong> và cập nhật sau.
+                </p>
+              )}
+              {!loading && !hasProfileInfo && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Khi hệ thống đã có ít nhất một thông tin giáo viên, nút <strong>Vào hệ thống</strong> sẽ bật.
                 </p>
               )}
             </div>
@@ -506,7 +517,7 @@ function CheckDataSourceContent() {
               </div>
             ) : (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-gray-700">
-                Chưa có dữ liệu giáo viên trong hệ thống. Bấm <strong>Vào hệ thống</strong> để tạo hồ sơ mới, hoặc gửi góp ý bên cạnh nếu cần hỗ trợ.
+                Chưa có dữ liệu giáo viên trong hệ thống. Vui lòng gửi góp ý bên cạnh nếu cần hỗ trợ đồng bộ, hoặc liên hệ quản trị để được thêm hồ sơ.
               </div>
             )}
           </section>
