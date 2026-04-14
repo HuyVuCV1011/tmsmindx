@@ -1380,8 +1380,13 @@ export default function ProfessionalEvaluationSchedulePage() {
                               value={schedule.subjectId ?? ""}
                               onChange={(e) => {
                                 const newSubjectId = Number(e.target.value) || null;
+                                // Tạm thời bỏ điều kiện "bộ đề phải có câu hỏi" để phục vụ test.
+                                // const firstValidSet = newSubjectId
+                                //   ? (setsBySubjectId.get(newSubjectId) || []).find(s => s.question_count > 0)
+                                //   : null;
                                 const firstValidSet = newSubjectId
-                                  ? (setsBySubjectId.get(newSubjectId) || []).find(s => s.question_count > 0)
+                                  // ? (setsBySubjectId.get(newSubjectId) || []).find(s => s.question_count > 0)
+                                  ? (setsBySubjectId.get(newSubjectId) || [])[0] ?? null
                                   : null;
                                 const subject = subjectList.find(s => s.id === newSubjectId);
                                 setFormData((previous) => ({
@@ -1415,9 +1420,9 @@ export default function ProfessionalEvaluationSchedulePage() {
                           {schedule.subjectId && (
                             <div className="mt-2">
                               <label className="mb-1 block text-sm font-medium">Bộ đề áp dụng</label>
-                              {(setsBySubjectId.get(schedule.subjectId) || []).filter(s => s.question_count > 0).length === 0 ? (
+                              {(setsBySubjectId.get(schedule.subjectId) || []).length === 0 ? (
                                 <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                                  Môn này chưa có bộ đề nào có câu hỏi.
+                                  Môn này chưa có bộ đề nào.
                                 </div>
                               ) : (
                                 <select
@@ -1435,7 +1440,6 @@ export default function ProfessionalEvaluationSchedulePage() {
                                 >
                                   <option value="">-- Chọn bộ đề --</option>
                                   {(setsBySubjectId.get(schedule.subjectId) || [])
-                                    .filter(s => s.question_count > 0)
                                     .map((s) => (
                                       <option key={s.id} value={s.id}>
                                         {s.set_code}{s.set_name ? ` · ${s.set_name}` : ""} ({s.question_count} câu)

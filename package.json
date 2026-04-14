@@ -12,6 +12,8 @@
     "ngrok": "ngrok http 3000 --pooling-enabled"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1029.0",
+    "@aws-sdk/s3-request-presigner": "^3.1029.0",
     "@ffmpeg/core": "^0.12.10",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
@@ -81,7 +83,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "baseline-browser-mapping": "^2.10.16",
+    "baseline-browser-mapping": "^2.10.18",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
     "ngrok": "^5.0.0-beta.2",

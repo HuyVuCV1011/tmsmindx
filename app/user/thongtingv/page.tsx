@@ -2782,7 +2782,7 @@ export default function Page1() {
         )}
 
         {/* Floating Feedback Button */}
-        {feedbackEnabled && (
+        {false && feedbackEnabled && (
           <div className="fixed bottom-6 right-6 z-40">
             <button
               onClick={() => {
@@ -2829,7 +2829,7 @@ export default function Page1() {
         )}
 
         {/* If feedback is disabled, show small pill to re-enable it */}
-        {!feedbackEnabled && (
+        {false && !feedbackEnabled && (
           <div className="fixed bottom-6 right-6 z-40">
             <button
               onClick={() => enableFeedback()}
@@ -2855,7 +2855,7 @@ export default function Page1() {
         )}
 
         {/* Feedback Modal */}
-        {feedbackModalOpen && (
+        {false && feedbackModalOpen && (
           <div
             className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
             onClick={(e) => {
@@ -2984,7 +2984,7 @@ export default function Page1() {
         )}
 
         {/* Feedback Success Modal */}
-        {feedbackSuccessModalOpen && (
+        {false && feedbackSuccessModalOpen && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full animate-fadeIn">
               <div className="p-6 text-center">
