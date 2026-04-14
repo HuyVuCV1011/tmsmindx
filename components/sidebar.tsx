@@ -454,7 +454,7 @@ export function Sidebar() {
                 className="h-7 w-auto"
                 priority
               />
-              <div className="leading-tight">
+              <div className="flex flex-col justify-center leading-tight">
                 <p className="text-sm font-bold tracking-wide text-[#2c2b2b]">
                   Teaching Portal System
                 </p>
@@ -504,7 +504,7 @@ export function Sidebar() {
       >
         <div className="flex h-full min-h-0 flex-col">
           {/* Header - Solid brand header */}
-          <div className="relative flex h-14 items-center justify-between bg-[#a1001f] px-4 text-white shadow-md">
+          <div className="relative flex h-14 items-center justify-between bg-[#a1001f] px-4 text-white shadow-md py-2">
             <Link
               href={isUserArea ? '/user/truyenthong' : '/admin/truyenthong'}
               onClick={() => setIsOpen(false)}
@@ -520,9 +520,9 @@ export function Sidebar() {
                   priority
                 />
               </div>
-              <div>
+              <div className="flex flex-col justify-center leading-tight">
                 <h2 className="text-sm font-bold tracking-wide">TPS</h2>
-                <p className="text-xs text-white/80">Quản Lý Giảng Dạy</p>
+                <p className="text-[11px] text-white/80">Quản Lý Giảng Dạy</p>
               </div>
             </Link>
             <button

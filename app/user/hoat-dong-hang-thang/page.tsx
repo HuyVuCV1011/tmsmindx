@@ -1756,7 +1756,7 @@ export default function MonthlyActivitiesPage() {
   return (
     <PageContainer title="Các Hoạt Động Hàng Tháng" description="">
       <Card className="overflow-hidden" padding="sm">
-        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 text-center">
+        <div className=" py-3 border-bs text-center">
           <h2 className="text-2xl font-bold text-gray-900">Lịch Sự Kiện</h2>
         </div>
 
@@ -2271,13 +2271,13 @@ export default function MonthlyActivitiesPage() {
 
       {view === 'month' && isMobileViewport && selectedDate && (
         <Card className="mt-4" padding="sm">
-          <div className="border-b border-gray-200 px-4 py-3">
+          <div className="border-b border-gray-200 py-3">
             <h3 className="text-base font-bold text-gray-900">
               Ngày {selectedDate.toLocaleDateString('vi-VN')}
             </h3>
           </div>
 
-          <div className="px-4 py-3">
+          <div className=" py-3">
             <div className="overflow-hidden rounded-lg border border-gray-200">
               <div className="grid grid-cols-[52px_1fr] bg-white">
                 <div className="border-r border-gray-200 bg-gray-50/80">
@@ -2640,7 +2640,7 @@ export default function MonthlyActivitiesPage() {
               )}
             </div>
 
-            <div className="flex justify-end border-t border-gray-200 px-4 py-3">
+            <div className="flex justify-end border-t border-gray-200  py-3">
               <button
                 onClick={() => {
                   setShowParticipantsModal(false)

@@ -1346,8 +1346,8 @@ export default function TeacherAssignmentPage() {
                                     key={optIdx}
                                     className={`flex items-start gap-2 md:gap-3 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${
                                       answers[question.id] === option
-                                        ? 'border-blue-500 bg-blue-50 shadow-sm'
-                                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                                        ? 'border-[#a1001f] bg-[#fff5f7] shadow-sm'
+                                        : 'border-gray-200 hover:border-[#d47a8b] hover:bg-[#fff5f7]'
                                     }`}
                                   >
                                     <input
@@ -1361,7 +1361,7 @@ export default function TeacherAssignmentPage() {
                                           e.target.value,
                                         )
                                       }
-                                      className="w-4 md:w-5 h-4 md:h-5 text-blue-600"
+                                      className="w-4 md:w-5 h-4 md:h-5 text-[#a1001f]"
                                     />
                                     {(() => {
                                       const normalizedOption =
@@ -1397,8 +1397,8 @@ export default function TeacherAssignmentPage() {
                                   key={option}
                                   className={`flex items-center justify-center gap-2 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${
                                     answers[question.id] === option
-                                      ? 'border-blue-500 bg-blue-50 shadow-sm'
-                                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                                      ? 'border-[#a1001f] bg-[#fff5f7] shadow-sm'
+                                      : 'border-gray-200 hover:border-[#d47a8b] hover:bg-[#fff5f7]'
                                   }`}
                                 >
                                   <input
@@ -1412,7 +1412,7 @@ export default function TeacherAssignmentPage() {
                                         e.target.value,
                                       )
                                     }
-                                    className="w-4 md:w-5 h-4 md:h-5 text-blue-600"
+                                    className="w-4 md:w-5 h-4 md:h-5 text-[#a1001f]"
                                   />
                                   <span className="text-sm md:text-base font-semibold text-gray-900">
                                     {option}
@@ -1427,7 +1427,7 @@ export default function TeacherAssignmentPage() {
                                 handleAnswerChange(question.id, e.target.value)
                               }
                               placeholder="Nhập câu trả lời của bạn..."
-                              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-none"
+                              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 transition-all resize-none"
                               rows={question.question_type === 'essay' ? 6 : 3}
                             />
                           )}
@@ -1444,7 +1444,7 @@ export default function TeacherAssignmentPage() {
                   <Button
                     variant="outline"
                     onClick={() => setIsStopConfirmOpen(true)}
-                    className="flex items-center justify-center gap-2 px-4 md:px-6 py-3 font-medium text-gray-700 text-sm md:text-base h-auto"
+                    className="flex items-center justify-center gap-2 px-4 md:px-6 py-3 font-medium text-gray-700 text-sm md:text-base h-auto border-gray-300 hover:bg-gray-50"
                   >
                     <ArrowLeft className="w-4 md:w-5 h-4 md:h-5" />
                     Hủy bài làm
@@ -1464,7 +1464,7 @@ export default function TeacherAssignmentPage() {
                     <Button
                       disabled={isSubmitting}
                       onClick={submitAssignment}
-                      className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 font-semibold shadow-md text-sm md:text-base h-auto"
+                      className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 font-semibold shadow-md text-sm md:text-base h-auto bg-[#a1001f] text-white hover:bg-[#840018]"
                     >
                       <Send className="w-4 md:w-5 h-4 md:h-5" />
                       {isSubmitting ? 'Đang nộp...' : 'Nộp bài'}
@@ -1494,21 +1494,21 @@ export default function TeacherAssignmentPage() {
                     className={`rounded-lg shadow-sm border-2 p-4 ${
                       timeRemaining < 300
                         ? 'bg-red-50 border-red-300'
-                        : 'bg-blue-50 border-blue-300'
+                        : 'bg-[#fff5f7] border-[#f1d1d8]'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <Clock
-                        className={`w-4 h-4 ${timeRemaining < 300 ? 'text-red-600' : 'text-blue-600'}`}
+                        className={`w-4 h-4 ${timeRemaining < 300 ? 'text-red-600' : 'text-[#a1001f]'}`}
                       />
                       <span
-                        className={`text-xs font-semibold ${timeRemaining < 300 ? 'text-red-700' : 'text-blue-700'}`}
+                        className={`text-xs font-semibold ${timeRemaining < 300 ? 'text-red-700' : 'text-[#a1001f]'}`}
                       >
                         Thời gian còn lại
                       </span>
                     </div>
                     <div
-                      className={`font-mono text-2xl font-bold ${timeRemaining < 300 ? 'text-red-700' : 'text-blue-700'}`}
+                      className={`font-mono text-2xl font-bold ${timeRemaining < 300 ? 'text-red-700' : 'text-[#a1001f]'}`}
                     >
                       {formatTime(timeRemaining)}
                     </div>
@@ -1521,13 +1521,13 @@ export default function TeacherAssignmentPage() {
                     <span className="text-xs font-semibold text-gray-700">
                       Tiến độ
                     </span>
-                    <span className="text-xl font-bold text-blue-600">
+                    <span className="text-xl font-bold text-[#a1001f]">
                       {progress}%
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
                     <div
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      className="bg-[#a1001f] h-2 rounded-full transition-all duration-300"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
@@ -1552,7 +1552,7 @@ export default function TeacherAssignmentPage() {
                           flex items-center justify-center text-[10px] font-bold h-7 rounded transition-all duration-200 cursor-pointer
                           ${
                             isAnswered
-                              ? 'bg-green-500 text-white shadow-sm ring-1 ring-green-600'
+                              ? 'bg-[#a1001f] text-white shadow-sm ring-1 ring-[#840018]'
                               : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                           }
                         `}
@@ -1574,8 +1574,8 @@ export default function TeacherAssignmentPage() {
                   </h3>
                   <div className="space-y-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <FileText className="w-4 h-4 text-blue-600" />
+                      <div className="w-8 h-8 bg-[#fde8ec] rounded-lg flex items-center justify-center">
+                        <FileText className="w-4 h-4 text-[#a1001f]" />
                       </div>
                       <div>
                         <p className="text-[10px] text-gray-500">Số câu hỏi</p>
@@ -1586,8 +1586,8 @@ export default function TeacherAssignmentPage() {
                     </div>
 
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                        <Award className="w-4 h-4 text-green-600" />
+                      <div className="w-8 h-8 bg-[#fff1f2] rounded-lg flex items-center justify-center">
+                        <Award className="w-4 h-4 text-[#be123c]" />
                       </div>
                       <div>
                         <p className="text-[10px] text-gray-500">Tổng điểm</p>
@@ -1598,8 +1598,8 @@ export default function TeacherAssignmentPage() {
                     </div>
 
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                        <CheckCircle className="w-4 h-4 text-purple-600" />
+                      <div className="w-8 h-8 bg-[#ffe4e6] rounded-lg flex items-center justify-center">
+                        <CheckCircle className="w-4 h-4 text-[#9f1239]" />
                       </div>
                       <div>
                         <p className="text-[10px] text-gray-500">
@@ -1630,7 +1630,7 @@ export default function TeacherAssignmentPage() {
                   <Button
                     disabled={isSubmitting}
                     onClick={submitAssignment}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-semibold shadow-md h-auto"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-semibold shadow-md h-auto bg-[#a1001f] text-white hover:bg-[#840018]"
                   >
                     <Send className="w-4 h-4" />
                     {isSubmitting ? 'Đang nộp...' : 'Nộp bài'}
@@ -1639,7 +1639,7 @@ export default function TeacherAssignmentPage() {
                   <Button
                     variant="outline"
                     onClick={() => setIsStopConfirmOpen(true)}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-gray-700 h-auto"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-gray-700 h-auto border-gray-300 hover:bg-gray-50"
                   >
                     <ArrowLeft className="w-4 h-4" />
                     Hủy bài làm
@@ -1760,7 +1760,7 @@ export default function TeacherAssignmentPage() {
                 }
               }}
               variant="outline"
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto"
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 font-semibold h-auto border-[#d47a8b] bg-[#fff5f7] text-[#a1001f] hover:bg-[#fde8ec] hover:border-[#a1001f]"
             >
               <ArrowLeft className="w-5 h-5" />
               {startId ? 'Quay lại bài học' : 'Quay lại danh sách'}
@@ -2037,17 +2037,18 @@ export default function TeacherAssignmentPage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <button
                 onClick={() => setShowPassRateModal(true)}
-                className="text-left bg-white rounded-xl shadow-sm border border-gray-200 p-4 transition-all hover:border-blue-300 hover:shadow-md ring-offset-1"
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 transition-all hover:border-blue-300 hover:shadow-md ring-offset-1 text-center sm:text-left"
               >
-                <div className="flex items-center gap-2 mb-2">
+                <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-center sm:items-start sm:justify-start sm:text-left">
                   <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
                     <Award className="w-5 h-5" />
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-700">
+                  <h3 className="w-full text-[13px] font-semibold leading-4 text-gray-700 sm:min-w-0 sm:flex-1 sm:w-auto sm:text-sm sm:leading-5">
                     Tỉ lệ đạt
                   </h3>
-                  <span className="ml-auto text-[10px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded-full font-semibold border border-blue-100">
-                    Xem chi tiết
+                  <span className="mt-1 inline-flex w-full justify-center rounded-full border border-blue-100 bg-blue-50 px-1 py-0.5 text-[8px] font-semibold text-blue-500 sm:mt-0 sm:ml-auto sm:w-auto sm:justify-start sm:px-1.5 sm:text-[10px]">
+                    <span className="sm:hidden">Chi tiết</span>
+                    <span className="hidden sm:inline">Xem chi tiết</span>
                   </span>
                 </div>
                 <p className="text-2xl font-bold text-gray-900">
@@ -2061,19 +2062,19 @@ export default function TeacherAssignmentPage() {
 
               <button
                 onClick={() => toggleStatCard('expertise')}
-                className={`text-left bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 ${activeStatCard === 'expertise' ? 'border-purple-400 ring-2 ring-purple-300' : 'border-gray-200 hover:border-purple-200'}`}
+                className={`bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 text-center sm:text-left ${activeStatCard === 'expertise' ? 'border-purple-400 ring-2 ring-purple-300' : 'border-gray-200 hover:border-purple-200'}`}
               >
-                <div className="flex items-center gap-2 mb-2">
+                <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-center sm:items-start sm:justify-start sm:text-left">
                   <div
                     className={`p-2 rounded-lg ${activeStatCard === 'expertise' ? 'bg-purple-200 text-purple-700' : 'bg-purple-100 text-purple-600'}`}
                   >
                     <BookOpen className="w-5 h-5" />
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-700">
+                  <h3 className="w-full text-[13px] font-semibold leading-4 text-gray-700 sm:min-w-0 sm:flex-1 sm:w-auto sm:text-sm sm:leading-5">
                     TB Chuyên môn
                   </h3>
                   {activeStatCard === 'expertise' && (
-                    <span className="ml-auto text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded-full font-semibold">
+                    <span className="mt-1 inline-flex w-full justify-center rounded-full bg-purple-100 px-1 py-0.5 text-[8px] font-semibold text-purple-600 sm:mt-0 sm:ml-auto sm:w-auto sm:justify-start sm:px-1.5 sm:text-[10px]">
                       Đang lọc
                     </span>
                   )}
@@ -2088,19 +2089,19 @@ export default function TeacherAssignmentPage() {
 
               <button
                 onClick={() => toggleStatCard('experience')}
-                className={`text-left bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 ${activeStatCard === 'experience' ? 'border-green-400 ring-2 ring-green-300' : 'border-gray-200 hover:border-green-200'}`}
+                className={`bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 text-center sm:text-left ${activeStatCard === 'experience' ? 'border-green-400 ring-2 ring-green-300' : 'border-gray-200 hover:border-green-200'}`}
               >
-                <div className="flex items-center gap-2 mb-2">
+                <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-center sm:items-start sm:justify-start sm:text-left">
                   <div
                     className={`p-2 rounded-lg ${activeStatCard === 'experience' ? 'bg-green-200 text-green-700' : 'bg-green-100 text-green-600'}`}
                   >
                     <Trophy className="w-5 h-5" />
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-700">
+                  <h3 className="w-full text-[13px] font-semibold leading-4 text-gray-700 sm:min-w-0 sm:flex-1 sm:w-auto sm:text-sm sm:leading-5">
                     Điểm QT - KN trải nghiệm
                   </h3>
                   {activeStatCard === 'experience' && (
-                    <span className="ml-auto text-[10px] bg-green-100 text-green-600 px-1.5 py-0.5 rounded-full font-semibold">
+                    <span className="mt-1 inline-flex w-full justify-center rounded-full bg-green-100 px-1 py-0.5 text-[8px] font-semibold text-green-600 sm:mt-0 sm:ml-auto sm:w-auto sm:justify-start sm:px-1.5 sm:text-[10px]">
                       Đang lọc
                     </span>
                   )}
@@ -2115,19 +2116,19 @@ export default function TeacherAssignmentPage() {
 
               <button
                 onClick={() => toggleStatCard('missing')}
-                className={`text-left bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 ${activeStatCard === 'missing' ? 'border-amber-400 ring-2 ring-amber-300' : 'border-gray-200 hover:border-amber-200'}`}
+                className={`bg-white rounded-xl shadow-sm border p-4 transition-all ring-offset-1 text-center sm:text-left ${activeStatCard === 'missing' ? 'border-amber-400 ring-2 ring-amber-300' : 'border-gray-200 hover:border-amber-200'}`}
               >
-                <div className="flex items-center gap-2 mb-2">
+                <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-center sm:items-start sm:justify-start sm:text-left">
                   <div
                     className={`p-2 rounded-lg ${activeStatCard === 'missing' ? 'bg-amber-200 text-amber-700' : 'bg-amber-100 text-amber-600'}`}
                   >
                     <AlertCircle className="w-5 h-5" />
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-700">
+                  <h3 className="w-full text-[13px] font-semibold leading-4 text-gray-700 sm:min-w-0 sm:flex-1 sm:w-auto sm:text-sm sm:leading-5">
                     Cần giải trình
                   </h3>
                   {activeStatCard === 'missing' && (
-                    <span className="ml-auto text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full font-semibold">
+                    <span className="mt-1 inline-flex w-full justify-center rounded-full bg-amber-100 px-1 py-0.5 text-[8px] font-semibold text-amber-600 sm:mt-0 sm:ml-auto sm:w-auto sm:justify-start sm:px-1.5 sm:text-[10px]">
                       Đang lọc
                     </span>
                   )}
@@ -2847,7 +2848,7 @@ export default function TeacherAssignmentPage() {
               title="Chi tiết Tỉ lệ đạt"
               subtitle={`${passed} / ${passRateItems.length} bài đạt yêu cầu trong 6 tháng gần nhất`}
               maxWidth="xl"
-              headerColor="bg-red-600"
+              headerColor="bg-[#a1001f]"
               footer={
                 <div className="flex justify-end">
                   <Button

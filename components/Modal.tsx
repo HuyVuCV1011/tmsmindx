@@ -91,12 +91,12 @@ export default function Modal({
 
       {/* Modal Content */}
       <div
-        className={`relative my-0.5 flex h-[calc(100dvh-64px)] w-full flex-col border border-gray-200 bg-white shadow-2xl sm:my-4 sm:h-auto sm:max-h-[95dvh] sm:rounded-xl ${maxWidthClasses[maxWidth]} animate-modal-in ${overflowContent === 'visible' ? 'overflow-visible' : 'overflow-hidden'}`}
+        className={`relative my-0.5 flex h-[calc(100dvh-64px)] w-full flex-col rounded-xl border border-gray-200 bg-white shadow-2xl sm:my-4 sm:h-auto sm:max-h-[95dvh] ${maxWidthClasses[maxWidth]} animate-modal-in ${overflowContent === 'visible' ? 'overflow-visible' : 'overflow-hidden'}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div
-          className={`sticky top-0 ${headerClassName} px-4 sm:px-6 py-4 z-10 sm:rounded-t-xl shrink-0`}
+          className={`sticky top-0 ${headerClassName} z-10 shrink-0 rounded-t-xl px-4 py-4 sm:px-6`}
         >
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0 pr-4">
@@ -140,7 +140,7 @@ export default function Modal({
 
         {/* Footer */}
         {footer && (
-          <div className="px-4 sm:px-6 py-4 bg-gray-50 rounded-b-xl border-t border-gray-200">
+          <div className="rounded-b-xl border-t border-gray-200 bg-gray-50 px-4 py-4 sm:px-6">
             {footer}
           </div>
         )}
