@@ -156,9 +156,56 @@ function getVietnameseStatus(status: string): string {
   return status;
 }
 
+/** Ngày vào (vd. 7/25/2023, 2023-07-25) → dd/MM/yyyy */
+function formatJoinedDate(raw: string): string {
+  const s = String(raw).trim();
+  if (!s) return raw;
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    const [, y, m, d] = iso;
+    return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+  }
+  const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) {
+    const a = parseInt(slash[1], 10);
+    const b = parseInt(slash[2], 10);
+    const y = slash[3];
+    let day: number;
+    let month: number;
+    if (a > 12) {
+      day = a;
+      month = b;
+    } else if (b > 12) {
+      month = a;
+      day = b;
+    } else {
+      month = a;
+      day = b;
+    }
+    return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${y}`;
+  }
+  const t = Date.parse(s);
+  if (!Number.isNaN(t)) {
+    const dt = new Date(t);
+    const d = String(dt.getDate()).padStart(2, "0");
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const y = dt.getFullYear();
+    return `${d}/${m}/${y}`;
+  }
+  return s;
+}
+
+/** Vị trí: TP → giải nghĩa Teacher Part-time */
+function formatRolePosition(raw: string): string {
+  const s = String(raw).trim();
+  if (!s) return raw;
+  if (/^tp$/i.test(s)) return "TP (Teacher Part-time)";
+  return s;
+}
+
 /** Ordered profile fields — DB column → Vietnamese label + icon key. Hidden keys omitted. */
 const PROFILE_FIELDS: { key: string; label: string; icon: string; format?: (v: string) => string; sensitive?: boolean }[] = [
-  { key: "code", label: "Mã giáo viên", icon: "hash" },
+  { key: "code", label: "Mã LMS", icon: "hash" },
   { key: "full_name", label: "Họ và tên", icon: "user" },
   { key: "user_name", label: "Username", icon: "user" },
   { key: "work_email", label: "Email MindX", icon: "mail" },
@@ -166,17 +213,14 @@ const PROFILE_FIELDS: { key: string; label: string; icon: string; format?: (v: s
   { key: "phone_number", label: "Số điện thoại", icon: "phone", format: formatPhone },
   { key: "main_centre", label: "Chi nhánh hiện tại", icon: "mappin" },
   { key: "khoi_final", label: "Khối", icon: "briefcase" },
-  { key: "khoi_check", label: "Khối Check", icon: "briefcase" },
-  { key: "role", label: "Vị trí", icon: "shield" },
+  { key: "role", label: "Vị trí", icon: "shield", format: formatRolePosition },
   { key: "course_line", label: "Course Line", icon: "briefcase" },
-  { key: "rank", label: "Rank", icon: "star" },
-  { key: "joined_date", label: "Ngày vào", icon: "calendar" },
-  { key: "teacher_point", label: "Teacher Point", icon: "star" },
-  { key: "data_hr_raw", label: "Mã HR", icon: "hash" },
+  { key: "joined_date", label: "Ngày vào", icon: "calendar", format: formatJoinedDate },
+  { key: "data_hr_raw", label: "Mã giáo viên", icon: "hash" },
   { key: "status", label: "Trạng thái", icon: "shield" },
   { key: "check_col", label: "CHECK", icon: "shield" },
   { key: "te_quan_ly", label: "TE quản lý", icon: "users" },
-  { key: "leader_quan_ly", label: "Leader quản lý", icon: "users" },
+  { key: "leader_quan_ly", label: "Quản lý trực tiếp", icon: "users" },
   { key: "rate_k12_check", label: "Rate K12", icon: "star", format: formatRateVnd, sensitive: true },
   { key: "rank_k12_check", label: "Rank K12", icon: "star", sensitive: true },
 ];
