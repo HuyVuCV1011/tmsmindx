@@ -32,10 +32,11 @@ const TOUR_VERSION = 1;
 const MASCOT_SIZE = 200;
 const HOLE_PADDING = 8;
 const OVERLAY_Z = 120;
+const LS_KEY_PREFIX = "tps_onboarding_done_v";
 
 // Dev/test override: force onboarding for specific accounts (by email prefix).
 // Keep this list small and remove after testing.
-const FORCE_ONBOARDING_EMAIL_PREFIXES = new Set(["banghh"]);
+const FORCE_ONBOARDING_EMAIL_PREFIXES = new Set<string>([]);
 
 function findStepIndexById(id: string) {
   const idx = TOUR_STEPS.findIndex((s) => s.id === id);
@@ -266,6 +267,11 @@ export default function UserFirstLoginOnboarding() {
       // Prevent re-bootstrap loops when route changes during onboarding.
       if (tourEnabled) return;
 
+      // Fast local check — if user already completed this version, skip entirely.
+      try {
+        if (localStorage.getItem(`${LS_KEY_PREFIX}${TOUR_VERSION}_${user.email}`) === "1") return;
+      } catch {}
+
       const emailPrefix = user.email.split("@")[0]?.toLowerCase() || "";
       const forceOnboarding = FORCE_ONBOARDING_EMAIL_PREFIXES.has(emailPrefix);
 
@@ -283,10 +289,12 @@ export default function UserFirstLoginOnboarding() {
         const data = (await response.json()) as OnboardingStateResponse;
         const completed = Boolean(data?.state?.completed);
         const tourVersion = Number(data?.state?.tour_version || 1);
-        if (!completed || tourVersion < TOUR_VERSION) {
-          setStepIndex(findStepIndexById("sidebar"));
-          setTourEnabled(true);
+        if (completed && tourVersion >= TOUR_VERSION) {
+          try { localStorage.setItem(`${LS_KEY_PREFIX}${TOUR_VERSION}_${user.email}`, "1"); } catch {}
+          return;
         }
+        setStepIndex(findStepIndexById("sidebar"));
+        setTourEnabled(true);
       } catch {
         // Keep the app usable even when onboarding API is unavailable.
       }
@@ -297,6 +305,9 @@ export default function UserFirstLoginOnboarding() {
 
   const persistState = async (completed: boolean, lastSeenStep: string) => {
     if (!user?.email) return;
+    if (completed) {
+      try { localStorage.setItem(`${LS_KEY_PREFIX}${TOUR_VERSION}_${user.email}`, "1"); } catch {}
+    }
     const emailPrefix = user.email.split("@")[0]?.toLowerCase() || "";
     const forceOnboarding = FORCE_ONBOARDING_EMAIL_PREFIXES.has(emailPrefix);
     if (forceOnboarding) return;
@@ -312,7 +323,7 @@ export default function UserFirstLoginOnboarding() {
         }),
       });
     } catch {
-      // Non-blocking sync; user can continue even if API temporarily fails.
+      // Non-blocking; localStorage fallback already saved above.
     }
   };
 
