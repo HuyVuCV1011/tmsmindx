@@ -315,9 +315,17 @@ function CheckDataSourceContent() {
           onboardingData: onboardingData || {},
         }),
       });
-      const data = await response.json();
+      const data = (await response.json()) as {
+        success?: boolean;
+        error?: string;
+        dbUnavailable?: boolean;
+        warning?: string;
+      };
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Không thể lưu xác nhận");
+      }
+      if (data.dbUnavailable && data.warning) {
+        toast(data.warning, { duration: 5500 });
       }
       // Mark profile as done so AppLayout guard allows /user/* access
       localStorage.setItem("tps_profile_check_done_email", userEmail);

@@ -1,40 +1,7 @@
 import pool from '@/lib/db';
+import { isDatabaseUnavailableError } from '@/lib/db-unavailable';
 
-/**
- * True when Postgres/Node indicates the database is unreachable.
- * Shared across all API routes so the check is consistent.
- */
-export function isDatabaseUnavailableError(error: unknown): boolean {
-  const err = error as { code?: string; message?: string };
-  const code = err?.code;
-  const msg = String(err?.message || '').toLowerCase();
-
-  if (
-    code === 'ECONNREFUSED' ||
-    code === 'ETIMEDOUT' ||
-    code === 'ENOTFOUND' ||
-    code === 'ENETUNREACH' ||
-    code === 'EAI_AGAIN' ||
-    code === '08001' ||
-    code === '08006' ||
-    code === '08003' ||
-    code === '57P01' ||
-    code === '57P02' ||
-    code === '57P03' ||
-    code === '28000' ||
-    code === '53300'
-  ) {
-    return true;
-  }
-  return (
-    msg.includes('connection terminated') ||
-    msg.includes('connection closed') ||
-    msg.includes('no pg_hba.conf entry') ||
-    msg.includes('server closed the connection') ||
-    msg.includes('remaining connection slots') ||
-    msg.includes('too many connections')
-  );
-}
+export { isDatabaseUnavailableError };
 
 /**
  * Check whether a teacher record exists in the `teachers` table by work email.
