@@ -42,7 +42,6 @@ const SUBJECT_LIST = [
   '[Trial] Quy Trình Trai nghiệm'
 ];
 
-const STORAGE_KEY = 'teacher_auto_fill_data';
 
 export function ExplanationSection({ compact = false }: ExplanationSectionProps) {
   const { user } = useAuth();
@@ -69,19 +68,6 @@ export function ExplanationSection({ compact = false }: ExplanationSectionProps)
   });
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setFormData(prev => ({ ...prev, ...parsed }));
-        if (parsed.campus) setCampusSearch(parsed.campus);
-      } catch (e) {
-        console.error('Error loading saved data', e);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
     if (teacherProfile) {
       const teacherBranch = teacherProfile.branchIn || teacherProfile.branchCurrent || '';
       const matchedCampus = findMatchingCampus(teacherBranch);
@@ -94,14 +80,6 @@ export function ExplanationSection({ compact = false }: ExplanationSectionProps)
           campus: matchedCampus || prev.campus || '',
           email: teacherProfile.emailMindx || teacherProfile.emailPersonal || prev.email || user?.email || '',
         };
-
-        const dataToSave = {
-          teacher_name: updated.teacher_name,
-          lms_code: updated.lms_code,
-          email: updated.email,
-          campus: updated.campus,
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
 
         return updated;
       });

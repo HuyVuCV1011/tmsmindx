@@ -25,7 +25,6 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-
 type FeedbackItem = {
   id: number
   user_email: string
@@ -126,7 +125,6 @@ function formatScreenTitle(screenPath?: string | null): string {
 
 export default function AdminFeedbackPage() {
   const { user } = useAuth()
-
   const [items, setItems] = useState<FeedbackItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingError, setLoadingError] = useState<string | null>(null)
@@ -142,7 +140,6 @@ export default function AdminFeedbackPage() {
 
   const [previewImages, setPreviewImages] = useState<string[] | null>(null)
   const [previewIndex, setPreviewIndex] = useState(0)
-
   const stats = useMemo(() => {
     return {
       total: items.length,
@@ -209,7 +206,6 @@ export default function AdminFeedbackPage() {
       setLoading(false)
     }
   }
-
   useEffect(() => {
     fetchItems()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -264,7 +260,6 @@ export default function AdminFeedbackPage() {
 
     return uploaded.filter(Boolean)
   }
-
   const handleAdminFiles = async (files: File[]) => {
     if (files.length === 0) return
 
@@ -321,8 +316,7 @@ export default function AdminFeedbackPage() {
       maxWidth="2xl"
       headerActions={
         <button
-          type="button"
-          onClick={fetchItems}
+          type="button"          onClick={fetchItems}
           disabled={loading}
           className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
         >

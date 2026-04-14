@@ -55,7 +55,6 @@ const normalizeText = (value: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]/g, '')
 
-const STORAGE_KEY = 'teacher_auto_fill_data'
 
 export default function GiaiTrinhPage() {
   const { user } = useAuth()
@@ -135,32 +134,6 @@ export default function GiaiTrinhPage() {
     }
   }, [user])
 
-  // Load from local storage on mount
-  useEffect(() => {
-    const savedData = localStorage.getItem(STORAGE_KEY)
-    if (savedData) {
-      try {
-        const parsed = JSON.parse(savedData)
-        // Only update if formData is empty (to avoid overwriting user input if they navigated back)
-        setFormData((prev) => ({
-          ...prev,
-          teacher_name: parsed.teacher_name || prev.teacher_name,
-          lms_code: parsed.lms_code || prev.lms_code,
-          email: parsed.email || prev.email,
-          campus: parsed.campus || prev.campus,
-        }))
-        if (parsed.campus) {
-          setCampusSearch(parsed.campus)
-        }
-      } catch (error) {
-        console.error(
-          'Error loading detailed explanation data from localStorage:',
-          error,
-        )
-      }
-    }
-  }, [])
-
   // Handle center auto-fill
   useEffect(() => {
     if (teacherProfile && centers.length > 0) {
@@ -190,16 +163,6 @@ export default function GiaiTrinhPage() {
           email: newData.email || prev.email,
           campus: newData.campus || prev.campus,
         }
-
-        // Save identity fields to local storage
-        const dataToSave = {
-          teacher_name: updated.teacher_name,
-          lms_code: updated.lms_code,
-          email: updated.email,
-          campus: updated.campus,
-          status: teacherProfile.status || '',
-        }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave))
 
         return updated
       })

@@ -8,7 +8,6 @@ import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-
 type CalendarView = 'day' | 'week' | 'month'
 type EventCategory =
   | 'registration'
@@ -530,6 +529,8 @@ export default function MonthlyActivitiesPage() {
   )
   const [teacherCode, setTeacherCode] = useState('')
   const [teacherCenterCode, setTeacherCenterCode] = useState('')
+  const [teacherInfo, setTeacherInfo] = useState<{ teacher_name?: string; email?: string; lms_code?: string; campus?: string }>({})
+
   const [submitting, setSubmitting] = useState(false)
   const [registeredParticipantsByEvent, setRegisteredParticipantsByEvent] =
     useState<Record<string, RegisteredExamParticipant[]>>({})
@@ -600,14 +601,21 @@ export default function MonthlyActivitiesPage() {
     ;(async () => {
       try {
         const response = await fetch(
-          `/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`,
+          `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
         )
         const data = await response.json()
         if (data?.teacher?.code) {
           setTeacherCode(data.teacher.code)
-          if (data?.teacher?.branchCurrent) {
-            setTeacherCenterCode(String(data.teacher.branchCurrent))
+          const branchCurrent = data?.teacher?.bu_check || data?.teacher?.main_centre || data?.teacher?.centers || ''
+          if (branchCurrent) {
+            setTeacherCenterCode(String(branchCurrent))
           }
+          setTeacherInfo({
+            teacher_name: data.teacher.full_name || user?.displayName || '',
+            email: data.teacher.work_email || user?.email || '',
+            lms_code: data.teacher.code || '',
+            campus: String(branchCurrent),
+          })
           return
         }
       } catch {}
@@ -1503,14 +1511,12 @@ export default function MonthlyActivitiesPage() {
   const resolveValidTeacherCode = async () => {
     if (!user?.email) return ''
 
-    // /api/teachers trả về teacher đã được đối soát với training_teacher_stats.
     try {
       const response = await fetch(
-        `/api/teachers?email=${encodeURIComponent(user.email)}`,
+        `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
       )
       const data = await response.json()
       const resolved = (data?.teacher?.code || '').toString().trim()
-
       if (response.ok && data?.teacher && resolved) {
         if (resolved !== teacherCode) {
           setTeacherCode(resolved)
@@ -1574,22 +1580,7 @@ export default function MonthlyActivitiesPage() {
     const failedOptions: string[] = []
     const failedDetails: string[] = []
 
-    // Read teacher info from localStorage for chuyen_sau_results auto-fill
-    let teacherAutoFillData: {
-      teacher_name?: string
-      email?: string
-      campus?: string
-      lms_code?: string
-    } = {}
-    try {
-      const cached =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('teacher_auto_fill_data')
-          : null
-      if (cached) teacherAutoFillData = JSON.parse(cached)
-    } catch {
-      // ignore localStorage errors
-    }
+    const teacherAutoFillData = teacherInfo
 
     try {
       setSubmitting(true)

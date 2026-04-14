@@ -149,10 +149,10 @@ export default function ExamAssignmentTakingPage() {
 
     (async () => {
       try {
-        const res = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`);
+        const res = await fetch(`/api/teachers/info?email=${encodeURIComponent(user.email)}`);
         const data = await res.json();
-        if (data?.teacher?.code) {
-          setTeacherCode(data.teacher.code);
+        if (data?.success && data?.teacher?.code) {
+          setTeacherCode(String(data.teacher.code).trim());
           return;
         }
       } catch {

@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Reduce file system conflicts on Windows
   experimental: {
-    webpackBuildWorker: false, // Reduce parallel file operations
+    webpackBuildWorker: false,
   },
   serverExternalPackages: ['ffprobe-static'],
   
