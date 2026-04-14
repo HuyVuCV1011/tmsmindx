@@ -227,37 +227,52 @@ export default function TrainingPage() {
     return response.json()
   }, [])
 
-  // Auto-search: extract code from email local-part — no extra API call
+  // Mã LMS: ưu tiên TeacherProvider — chỉ gọi /api/teachers/info khi context không có sau khi load xong
   useEffect(() => {
-    if (user && user.email && !hasAutoSearched && !submitCode) {
-      setHasAutoSearched(true)
-      setIsResolvingCode(true)
+    if (!user?.email || submitCode) return
+    if (isTeacherLoading) return
 
-      ;(async () => {
-        try {
-          const res = await secureFetcher(
-            `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
-          )
-          if (res?.teacher?.code) {
-            setSubmitCode(res.teacher.code)
-            setIsResolvingCode(false)
-            return
-          }
-        } catch (err) {
-          console.warn(
-            'Email-based lookup failed, falling back to code extraction',
-          )
-        }
-
-        const code = extractCodeFromEmail(user.email)
-        if (code) {
-          setSubmitCode(code)
-        }
-
-        setIsResolvingCode(false)
-      })()
+    if (teacherProfile?.code) {
+      setSubmitCode(teacherProfile.code)
+      setIsResolvingCode(false)
+      return
     }
-  }, [user, hasAutoSearched, submitCode, secureFetcher])
+
+    if (hasAutoSearched) return
+    setHasAutoSearched(true)
+    setIsResolvingCode(true)
+
+    ;(async () => {
+      try {
+        const res = await secureFetcher(
+          `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
+        )
+        if (res?.teacher?.code) {
+          setSubmitCode(res.teacher.code)
+          setIsResolvingCode(false)
+          return
+        }
+      } catch (err) {
+        console.warn(
+          'Email-based lookup failed, falling back to code extraction',
+        )
+      }
+
+      const code = extractCodeFromEmail(user.email)
+      if (code) {
+        setSubmitCode(code)
+      }
+
+      setIsResolvingCode(false)
+    })()
+  }, [
+    user,
+    submitCode,
+    isTeacherLoading,
+    teacherProfile,
+    hasAutoSearched,
+    secureFetcher,
+  ])
 
   const { data: teacherData, isLoading: isLoadingTeacher } = useSWR(
     submitCode && user ? `/api/teachers/info?code=${submitCode}` : null,

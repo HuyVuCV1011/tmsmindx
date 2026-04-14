@@ -12,6 +12,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       .toLowerCase();
     const code = String(searchParams.get("code") || "").trim();
     const brief = searchParams.get("brief") === "1";
+    const fast = searchParams.get("fast") === "1";
 
     if (brief) {
       if (!email) {
@@ -31,7 +32,10 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       );
     }
 
-    const bundle = await loadTeacherProfileBundle(pool, email ? { email } : { code });
+    const bundle = await loadTeacherProfileBundle(
+      pool,
+      email ? { email, fast } : { code, fast }
+    );
 
     return NextResponse.json({
       success: true,

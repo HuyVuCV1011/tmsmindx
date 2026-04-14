@@ -12,6 +12,9 @@ interface AppLayoutProps {
   redirectPath?: string
 }
 
+const ADMIN_PERM_REFRESH_MS = 45_000
+const TEACHER_VERIFY_MIN_MS = 120_000
+
 export default function AppLayout({
   children,
   requireAuth = true,
@@ -21,8 +24,11 @@ export default function AppLayout({
   const PROFILE_CHECK_DONE_EMAIL_KEY = "tps_profile_check_done_email";
   const { user, isLoading, refreshPermissions, logout } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
-  const hasRedirected = useRef(false);
+  const pathname = usePathname()
+
+  const hasRedirected = useRef(false)
+  const lastAdminPermRefreshAt = useRef(0);
+  const lastTeacherVerifyAt = useRef(0);
   const [noPermission, setNoPermission] = useState(false);
   const getRoutePermissionAliases = (path: string) => {
     if (path === '/admin/thu-vien-de') {
@@ -34,12 +40,19 @@ export default function AppLayout({
     return [path]
   }
 
-  // Auto-refresh permissions when navigating admin routes
+  // Admin: làm mới quyền khi vào /admin — không gọi /api/check-admin mỗi lần đổi route con (throttle)
   useEffect(() => {
-    if (user && pathname.startsWith('/admin')) {
-      refreshPermissions()
+    if (!user || !pathname.startsWith('/admin')) return;
+    const now = Date.now();
+    if (
+      lastAdminPermRefreshAt.current !== 0 &&
+      now - lastAdminPermRefreshAt.current < ADMIN_PERM_REFRESH_MS
+    ) {
+      return;
     }
-  }, [pathname, user, refreshPermissions])
+    lastAdminPermRefreshAt.current = now;
+    void refreshPermissions();
+  }, [pathname, user, refreshPermissions]);
 
   useEffect(() => {
     if (isLoading) return
@@ -164,6 +177,7 @@ export default function AppLayout({
     pathname,
   ])
 
+  // GV: kiểm tra còn trong bảng teachers — throttle (trước đây mỗi lần đổi route /user/* là 1 request)
   useEffect(() => {
     const verifyTeacherStillExists = async () => {
       if (!user || user.role !== "teacher") return;
@@ -185,7 +199,15 @@ export default function AppLayout({
       }
     };
 
-    verifyTeacherStillExists();
+    const now = Date.now();
+    if (
+      lastTeacherVerifyAt.current !== 0 &&
+      now - lastTeacherVerifyAt.current < TEACHER_VERIFY_MIN_MS
+    ) {
+      return;
+    }
+    lastTeacherVerifyAt.current = now;
+    void verifyTeacherStillExists();
   }, [user, pathname, router, logout]);
 
   // Show skeleton while checking authentication

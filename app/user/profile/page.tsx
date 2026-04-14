@@ -101,7 +101,9 @@ export default function TeacherProfilePage() {
 
   // Fetch teacher info from DB
   const { data: rawTeacherData } = useSWR(
-    user?.email ? `/api/teachers/info?email=${user.email}` : null,
+    user?.email
+      ? `/api/teachers/info?email=${encodeURIComponent(user.email)}`
+      : null,
     fetcher,
   )
 

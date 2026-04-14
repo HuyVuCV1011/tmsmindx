@@ -7,7 +7,7 @@ import { Briefcase, Calendar, Clock, Eye, EyeOff, Hash, Mail, MapPin, Phone, Sea
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from 'react-hot-toast';
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 
 // Cache for processed data
 const dataCache = new Map();
@@ -259,6 +259,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 
 export default function Page1() {
   const { user } = useAuth();
+  const { mutate: globalMutate } = useSWRConfig();
   const router = useRouter();
   const [searchCode, setSearchCode] = useState("");
   const [submitCode, setSubmitCode] = useState("");
@@ -396,12 +397,13 @@ export default function Page1() {
     }
   }, [user, hasAutoSearched]);
 
+  /** Bundle nhanh: teacher + chứng chỉ + training (không chờ CSV/query điểm chuyên sâu–trải nghiệm). */
   const profileUrl =
     user?.email
       ? `${PROFILE_API_ORIGIN}/api/checkdatasource/status?${
           submitCode.trim()
-            ? `code=${encodeURIComponent(submitCode.trim())}`
-            : `email=${encodeURIComponent(user.email)}`
+            ? `code=${encodeURIComponent(submitCode.trim())}&fast=1`
+            : `email=${encodeURIComponent(user.email)}&fast=1`
         }`
       : null;
 
@@ -422,6 +424,48 @@ export default function Page1() {
     }
   );
 
+  const teacherLmsCode = useMemo(() => {
+    if (!profileBundle?.exists || !profileBundle.teacher) return null;
+    const t = profileBundle.teacher as Record<string, unknown>;
+    const c = String(t.code ?? "").trim();
+    return c || null;
+  }, [profileBundle]);
+
+  const scoresUrl =
+    !isLoadingProfile &&
+    user?.email &&
+    profileBundle &&
+    (profileBundle as { success?: boolean }).success !== false &&
+    profileBundle.exists &&
+    teacherLmsCode
+      ? `${PROFILE_API_ORIGIN}/api/checkdatasource/scores?code=${encodeURIComponent(teacherLmsCode)}`
+      : null;
+
+  const { data: scoresBundle, isLoading: isLoadingScores } = useSWR(
+    scoresUrl,
+    secureFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 300000,
+      shouldRetryOnError: false,
+      revalidateIfStale: false,
+    }
+  );
+
+  const mergedProfileBundle = useMemo(() => {
+    if (!profileBundle) return undefined;
+    const s = scoresBundle as
+      | { success?: boolean; expertise?: unknown; experience?: unknown }
+      | undefined;
+    if (!s?.success) return profileBundle;
+    return {
+      ...profileBundle,
+      expertise: s.expertise ?? profileBundle.expertise,
+      experience: s.experience ?? profileBundle.experience,
+    };
+  }, [profileBundle, scoresBundle]);
+
   const teacherInfoData =
     profileBundle && profileBundle.exists && profileBundle.teacher
       ? { success: true as const, teacher: profileBundle.teacher }
@@ -441,23 +485,27 @@ export default function Page1() {
     scoresLoaded,
     isLoadingTraining,
   } = useMemo(() => {
-    const certificates = profileBundle?.certificates?.data ?? [];
-    const trainingStat = profileBundle?.training?.data?.[0] ?? null;
+    const bundle = mergedProfileBundle;
+    const certificates = bundle?.certificates?.data ?? [];
+    const trainingStat = bundle?.training?.data?.[0] ?? null;
     const trainingData = trainingStat as TrainingData | null;
-    const expertiseData = profileBundle?.expertise?.monthlyData ?? [];
-    const experienceData = profileBundle?.experience?.monthlyData ?? [];
-    const scoresLoaded =
-      !isLoadingProfile && profileBundle !== undefined && profileBundle !== null;
+    const expertiseData = bundle?.expertise?.monthlyData ?? [];
+    const experienceData = bundle?.experience?.monthlyData ?? [];
+    const scoresReady =
+      !isLoadingProfile &&
+      bundle !== undefined &&
+      bundle !== null &&
+      (!teacherLmsCode || !isLoadingScores);
     const isLoadingTraining = isLoadingProfile;
     return {
       certificates,
       trainingData,
       expertiseData,
       experienceData,
-      scoresLoaded,
+      scoresLoaded: scoresReady,
       isLoadingTraining,
     };
-  }, [profileBundle, isLoadingProfile]);
+  }, [mergedProfileBundle, isLoadingProfile, isLoadingScores, teacherLmsCode]);
 
 
   // Show feedback modal 30 seconds after successful teacher search
@@ -517,7 +565,9 @@ export default function Page1() {
   // Load availability AFTER scores are loaded - filter by teacher name on server side
   // This allows UI to render first, then load availability data later
   const { data: availabilityDataRes, isLoading: isLoadingAvailabilityData } = useSWR(
-    (teacher && scoresLoaded) ? `/api/availability?fromDate=${availabilityFromDate}&toDate=${availabilityToDate}&teacherName=${encodeURIComponent(teacher.name || '')}` : null,
+    teacher && !isLoadingProfile
+      ? `/api/availability?fromDate=${availabilityFromDate}&toDate=${availabilityToDate}&teacherName=${encodeURIComponent(teacher.name || '')}`
+      : null,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -536,14 +586,6 @@ export default function Page1() {
       const nameMatch = t.name?.toLowerCase().includes(teacher.name?.toLowerCase()) ||
         teacher.name?.toLowerCase().includes(t.name?.toLowerCase());
       return emailMatch || nameMatch;
-    });
-
-    console.log('🔍 Availability Records:', {
-      totalTeachers: availabilityDataRes.teachers.length,
-      filteredRecords: records.length,
-      teacherEmail: teacher.emailMindx,
-      teacherName: teacher.name,
-      sampleRecord: records[0]
     });
 
     return records;
@@ -587,7 +629,8 @@ export default function Page1() {
                   localStorage.setItem('token', newIdToken);
                   if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
                   // Revalidate teacher data
-                  if (profileUrl) await mutateProfile(profileUrl);
+                  if (profileUrl) await mutateProfile();
+                  if (scoresUrl) await globalMutate(scoresUrl);
                   return;
                 }
               }
@@ -618,7 +661,18 @@ export default function Page1() {
         setNotFoundModalOpen(true);
       }
     })();
-  }, [teacherInfoData, teacher, submitCode, isLoadingProfile, profileError, profileBundle, profileUrl, mutateProfile]);
+  }, [
+    teacherInfoData,
+    teacher,
+    submitCode,
+    isLoadingProfile,
+    profileError,
+    profileBundle,
+    profileUrl,
+    scoresUrl,
+    mutateProfile,
+    globalMutate,
+  ]);
 
   // Handle not found modal confirm
   const handleNotFoundConfirm = useCallback(() => {
