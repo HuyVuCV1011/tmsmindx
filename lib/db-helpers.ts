@@ -1,7 +1,7 @@
 import pool from '@/lib/db';
-import { isDatabaseUnavailableError } from '@/lib/db-unavailable';
+import { isDatabaseUnavailableError, isDegradedDatabaseQueryError } from '@/lib/db-unavailable';
 
-export { isDatabaseUnavailableError };
+export { isDatabaseUnavailableError, isDegradedDatabaseQueryError };
 
 /**
  * Check whether a teacher record exists in the `teachers` table by work email.

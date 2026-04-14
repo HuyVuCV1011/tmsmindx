@@ -33,3 +33,15 @@ export function isDatabaseUnavailableError(error: unknown): boolean {
     msg.includes('too many connections')
   );
 }
+
+/**
+ * Kết nối được nhưng query không chạy được an toàn (bảng chưa migrate, v.v.).
+ * Trả empty thay vì 500 cho các API đọc dữ liệu.
+ */
+export function isDegradedDatabaseQueryError(error: unknown): boolean {
+  if (isDatabaseUnavailableError(error)) return true;
+  const err = error as { code?: string; message?: string };
+  if (err?.code === '42P01') return true;
+  const msg = String(err?.message || '').toLowerCase();
+  return msg.includes('relation') && msg.includes('does not exist');
+}
