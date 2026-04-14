@@ -151,7 +151,18 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({ success: true, data: result.rows, count: result.rows.length });
-  } catch (error) {
+  } catch (error: unknown) {
+    const pgErr = error as { code?: string; message?: string };
+    if (pgErr?.code === '53300') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Hệ thống đang bận (quá nhiều kết nối DB). Vui lòng thử lại sau vài giây.',
+          code: 'DB_CONNECTION_LIMIT',
+        },
+        { status: 503 },
+      );
+    }
     console.error('Error fetching registrations:', error);
     return NextResponse.json({ success: false, error: 'Failed to fetch registrations' }, { status: 500 });
   }

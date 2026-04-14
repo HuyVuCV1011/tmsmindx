@@ -11,6 +11,16 @@ import toast from "react-hot-toast";
 
 type OnboardingData = Record<string, string>;
 const HIDDEN_ONBOARDING_FIELDS = new Set(["No", "Course line", "Rank", "Teacher point"]);
+const REQUIRED_PROFILE_FIELDS = [
+  "Code",
+  "Full name",
+  "Work email",
+  "Centers",
+  "Khối final",
+  "Role",
+  "Status check",
+  "BU check",
+] as const;
 
 function formatPhoneNumber(raw: string): string {
   const digits = String(raw || "").replace(/\D/g, "");
@@ -132,6 +142,7 @@ function mapTeacherToOnboardingData(t: Record<string, unknown>): OnboardingData 
 }
 
 const MAX_FEEDBACK_IMAGES = 6;
+const API_SECRET_KEY = process.env.NEXT_PUBLIC_API_SECRET || "mindx-teaching-internal-2025";
 
 function FeedbackImageThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -176,6 +187,19 @@ function CheckDataSourceContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const userEmail = useMemo(() => (user?.email || "").trim().toLowerCase(), [user?.email]);
+  const profileCompletion = useMemo(() => {
+    if (!onboardingData) return { completed: 0, total: REQUIRED_PROFILE_FIELDS.length, percent: 0 };
+
+    const completed = REQUIRED_PROFILE_FIELDS.filter((field) => {
+      const value = onboardingData[field];
+      return !!String(value || "").trim();
+    }).length;
+    const total = REQUIRED_PROFILE_FIELDS.length;
+    const percent = Math.round((completed / total) * 100);
+    return { completed, total, percent };
+  }, [onboardingData]);
+
+  const canEnterSystem = !loading && profileCompletion.percent === 100;
 
   const appendImageFiles = useCallback((files: File[]) => {
     const images = files.filter((f) => f.type.startsWith("image/"));
@@ -228,31 +252,42 @@ function CheckDataSourceContent() {
     const fetchTeacherByEmail = async () => {
       setLoading(true);
       try {
-        // Primary: fetch from Google Sheets (source of truth for sync)
-        const sheetRes = await fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=true`);
-        if (sheetRes.ok) {
-          const sheetData = await sheetRes.json();
-          // onboardingData is the raw Sheet row (column names as keys)
+        const headers: HeadersInit = { "x-api-key": API_SECRET_KEY };
+
+        // Run both requests in parallel:
+        // - DB first for reliability after user has been synced.
+        // - Sheets to support onboarding sync source when available.
+        const [dbResult, sheetResult] = await Promise.allSettled([
+          fetch(`/api/teachers/info?email=${encodeURIComponent(user.email)}`, { headers }),
+          fetch(`/api/teachers?email=${encodeURIComponent(user.email)}&basic=true`, { headers }),
+        ]);
+
+        let dbData: any = null;
+        if (dbResult.status === "fulfilled" && dbResult.value.ok) {
+          dbData = await dbResult.value.json().catch(() => null);
+          if (dbData?.success && dbData?.teacher) {
+            setOnboardingData(
+              mapTeacherRecordToOnboardingData(dbData.teacher as Record<string, unknown>)
+            );
+            return;
+          }
+        }
+
+        if (sheetResult.status === "fulfilled" && sheetResult.value.ok) {
+          const sheetData = await sheetResult.value.json().catch(() => null);
           if (sheetData?.onboardingData && Object.keys(sheetData.onboardingData).length > 0) {
             setOnboardingData(sheetData.onboardingData as OnboardingData);
             return;
           }
-          // Sheet found teacher but no onboarding row — map legacy Teacher object
           if (sheetData?.teacher) {
-            const mapped = mapTeacherToOnboardingData(sheetData.teacher as Record<string, unknown>);
+            const mapped = mapTeacherToOnboardingData(
+              sheetData.teacher as Record<string, unknown>
+            );
             if (Object.keys(mapped).length > 0) {
               setOnboardingData(mapped);
               return;
             }
           }
-        }
-
-        // Fallback: DB (already synced teachers)
-        const dbRes = await fetch(`/api/teachers/info?email=${encodeURIComponent(user.email)}`);
-        const dbData = await dbRes.json();
-        if (dbRes.ok && dbData?.success && dbData?.teacher) {
-          setOnboardingData(mapTeacherRecordToOnboardingData(dbData.teacher as Record<string, unknown>));
-          return;
         }
 
         setOnboardingData(null);
@@ -391,7 +426,12 @@ function CheckDataSourceContent() {
             <button
               type="button"
               onClick={continueToApp}
-              className="w-full touch-manipulation rounded-lg bg-[#a1001f] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#870019] sm:w-auto sm:py-2 sm:text-xs"
+              disabled={!canEnterSystem}
+              className={`w-full touch-manipulation rounded-lg px-4 py-2.5 text-sm font-semibold text-white sm:w-auto sm:py-2 sm:text-xs transition-colors ${
+                canEnterSystem
+                  ? "bg-[#a1001f] hover:bg-[#870019]"
+                  : "bg-gray-300 cursor-not-allowed"
+              }`}
             >
               Vào hệ thống
             </button>
@@ -414,6 +454,25 @@ function CheckDataSourceContent() {
               "lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
             )}
           >
+            <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="mb-2 flex items-center justify-between text-xs">
+                <span className="font-medium text-gray-700">Mức độ hoàn thiện hồ sơ</span>
+                <span className="font-semibold text-[#a1001f]">
+                  {profileCompletion.percent}% ({profileCompletion.completed}/{profileCompletion.total})
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                <div
+                  className="h-full rounded-full bg-linear-to-r from-[#a1001f] to-[#d83f63] transition-all duration-500"
+                  style={{ width: `${profileCompletion.percent}%` }}
+                />
+              </div>
+              {!loading && !canEnterSystem && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Điền đủ dữ liệu bắt buộc để bật nút <strong>Vào hệ thống</strong>.
+                </p>
+              )}
+            </div>
             {loading ? (
               <div className="grid auto-rows-min grid-cols-1 gap-2 min-[400px]:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
                 {Array.from({ length: 20 }).map((_, idx) => (
