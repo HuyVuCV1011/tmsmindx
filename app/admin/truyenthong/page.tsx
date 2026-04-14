@@ -155,7 +155,7 @@ export default function TruyenthongDashboardPage() {
                     </div>
                 ) : (
                     <ul className="divide-y divide-gray-100">
-                        {posts.map((post) => {
+                        {posts.map((post, index) => {
                             const typeLabel  = TYPE_LABELS[post.post_type]  ?? post.post_type
                             const audienceLabel = AUDIENCE_LABELS[post.audience] ?? post.audience
                             const date = post.published_at
@@ -163,7 +163,7 @@ export default function TruyenthongDashboardPage() {
                                 : null
 
                             return (
-                                <li key={post.id} className="group hover:bg-gray-50 transition-colors">
+                                <li key={`${post.id || post.slug || 'post'}-${index}`} className="group hover:bg-gray-50 transition-colors">
                                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4">
 
                                         {/* Left – title + meta */}

@@ -2,11 +2,11 @@
 
 import { Card } from '@/components/Card'
 import Modal from '@/components/Modal'
-import { sPageContainer as PageContainer } from '@/components/PageContainer'
+import { PageContainer } from '@/components/PageContainer'
 import { useAuth } from '@/lib/auth-context'
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 type CalendarView = 'day' | 'week' | 'month'
 type EventCategory =
@@ -515,6 +515,7 @@ function buildCalendarCells(focusDate: Date, view: CalendarView) {
 export default function MonthlyActivitiesPage() {
   const { user } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [view, setView] = useState<CalendarView>('month')
   const [focusDate, setFocusDate] = useState(new Date())
   const [events, setEvents] = useState<EvaluationEvent[]>([])
@@ -557,8 +558,32 @@ export default function MonthlyActivitiesPage() {
   const [registeredScheduleIds, setRegisteredScheduleIds] = useState<
     Set<string>
   >(new Set())
+  const registerHintShownRef = useRef(false)
   const [selectedWeekDateKeys, setSelectedWeekDateKeys] = useState<string[]>([])
   const [isMobileViewport, setIsMobileViewport] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('showRegisterHint') !== '1' || registerHintShownRef.current) {
+      return
+    }
+
+    registerHintShownRef.current = true
+
+    toast('Bấm vào lịch để có thể đăng ký.', {
+      id: 'register-hint-toast',
+      duration: 2000,
+    })
+
+    const nextParams = new URLSearchParams(searchParams.toString())
+    nextParams.delete('showRegisterHint')
+    const nextQuery = nextParams.toString()
+    router.replace(
+      nextQuery
+        ? `/user/hoat-dong-hang-thang?${nextQuery}`
+        : '/user/hoat-dong-hang-thang',
+      { scroll: false },
+    )
+  }, [router, searchParams])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -652,6 +677,13 @@ export default function MonthlyActivitiesPage() {
 
         const available = new Set<string>()
         Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
+          // "Kiểm tra quy trình - kỹ năng trải nghiệm" (experience) không phụ thuộc bộ đề chuyên môn
+          // nên vẫn cho phép đăng ký theo lịch nếu có event-schedule.
+          if (mapped.exam_type === "experience") {
+            available.add(option);
+            return;
+          }
+
           const hasDefaultSet = mapped.subjectCodeCandidates.some((candidate) =>
             subjectWithDefaultSet.has(
               `${mapped.block_code}::${normalize(candidate)}`,
@@ -886,33 +918,13 @@ export default function MonthlyActivitiesPage() {
   }, [events])
 
   const visibleEventsByDateKey = useMemo(() => {
-    const normalizeStr = (v: string) =>
-      v
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim()
     const map = new Map<string, EvaluationEvent[]>()
     eventsByDateKey.forEach((dayEvents, key) => {
-      const visible = dayEvents.filter((event) => {
-        if (event.eventType !== 'exam' && event.eventType !== 'thi') return true
-        // Nếu user đã đăng ký lịch thi này (id_su_kien khớp) và chưa hết giờ → luôn hiển thị
-        if (registeredScheduleIds.has(event.id) && !isPastEvent(event))
-          return true
-        return Object.entries(REGISTER_OPTION_MAP).some(([option, mapped]) => {
-          if (!userRegisteredSubjects.has(option)) return false
-          const specialty = normalizeStr(event.specialty || '')
-          const title = normalizeStr(event.title || '')
-          return mapped.specialtyAliases.some((alias) => {
-            const a = normalizeStr(alias)
-            return specialty.includes(a) || title.includes(a)
-          })
-        })
-      })
+      const visible = dayEvents.filter(() => true)
       map.set(key, visible)
     })
     return map
-  }, [eventsByDateKey, userRegisteredSubjects, registeredScheduleIds])
+  }, [eventsByDateKey])
 
   const upcomingExamEventsByOption = useMemo(() => {
     const now = new Date()
@@ -1595,11 +1607,14 @@ export default function MonthlyActivitiesPage() {
           continue
         }
 
-        const hasActiveSetForOption = availableOptions.has(option)
-        if (!hasActiveSetForOption) {
-          failedOptions.push(option)
-          failedDetails.push(`${option}: chưa có bộ đề active`)
-          continue
+        // Experience test (quy trình/kỹ năng trải nghiệm) không cần bộ đề chuyên môn
+        if (mapped.exam_type !== 'experience') {
+          const hasActiveSetForOption = availableOptions.has(option)
+          if (!hasActiveSetForOption) {
+            failedOptions.push(option)
+            failedDetails.push(`${option}: chưa có bộ đề active`)
+            continue
+          }
         }
 
         const examEventId = selectedExamEventByOption[option]
@@ -2704,12 +2719,16 @@ export default function MonthlyActivitiesPage() {
           </div>
 
           <div className="space-y-3">
-            {REGISTER_OPTIONS.filter(
-              (option) =>
-                (upcomingExamEventsByOption[option] || []).length > 0 &&
-                availableOptions.has(option),
-            ).map((option) => {
-              const isAvailable = availableOptions.has(option)
+            {REGISTER_OPTIONS.filter((option) => {
+              const mapped = REGISTER_OPTION_MAP[option]
+              const hasExamEvents =
+                (upcomingExamEventsByOption[option] || []).length > 0
+              const isExperience = mapped?.exam_type === 'experience'
+              return hasExamEvents && (isExperience || availableOptions.has(option))
+            }).map((option) => {
+              const mapped = REGISTER_OPTION_MAP[option]
+              const isExperience = mapped?.exam_type === 'experience'
+              const isAvailable = isExperience ? true : availableOptions.has(option)
               const isSelected = selectedOptions.includes(option)
               const examEvents = upcomingExamEventsByOption[option] || []
               const hasExamEvents = examEvents.length > 0
