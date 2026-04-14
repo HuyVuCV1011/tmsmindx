@@ -6,8 +6,11 @@ const isBuildPhase =
   process.env.npm_lifecycle_event === 'build';
 
 function buildPoolConfig(): PoolConfig {
+  // Keep conservative defaults to avoid exhausting Postgres slots (Aiven hobby tiers are tiny).
+  // Raise DB_POOL_MAX in .env if local dev needs more parallel queries.
+  // Non-Vercel `next start` shares Aiven with dev tools — default 2 to leave headroom for superuser slots.
   const defaultPoolMax =
-    process.env.NODE_ENV === 'development' ? '10' : process.env.VERCEL ? '5' : '8';
+    process.env.NODE_ENV === 'development' ? '1' : process.env.VERCEL ? '5' : '2';
   const max = Math.max(1, parseInt(process.env.DB_POOL_MAX || defaultPoolMax, 10));
   const connectionTimeoutMillis = Math.max(
     2000,
@@ -61,7 +64,7 @@ function buildPoolConfig(): PoolConfig {
     max,
     idleTimeoutMillis,
     connectionTimeoutMillis,
-    allowExitOnIdle: false,
+    allowExitOnIdle: process.env.NODE_ENV === 'development',
     keepAlive: true,
     application_name: process.env.DB_APPLICATION_NAME || 'tps-next',
   };

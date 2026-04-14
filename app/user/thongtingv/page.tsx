@@ -7,7 +7,7 @@ import { Briefcase, Calendar, Clock, Eye, EyeOff, Hash, Mail, MapPin, Phone, Sea
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from 'react-hot-toast';
-import useSWR, { mutate } from "swr";
+import useSWR, { useSWRConfig } from "swr";
 
 // Cache for processed data
 const dataCache = new Map();
@@ -115,6 +115,9 @@ InfoItem.displayName = 'InfoItem';
 // API Secret Key for internal requests
 const API_SECRET_KEY = process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025';
 
+/** Gốc API (vd. https://www.tpsmindx.com). Để trống = gọi /api cùng origin (khuyến nghị khi deploy cùng domain). */
+const PROFILE_API_ORIGIN = (process.env.NEXT_PUBLIC_TPS_PROFILE_API_ORIGIN ?? '').replace(/\/$/, '');
+
 // Optimized fetcher with better caching and compression
 const fetcher = async (url: string) => {
   // Check cache first
@@ -146,12 +149,6 @@ const fetcher = async (url: string) => {
   return data;
 };
 
-// Function to extract teacher code from email
-function extractCodeFromEmail(email: string): string {
-  const match = email.match(/^([^@]+)@/);
-  return match ? match[1] : '';
-}
-
 function getVietnameseStatus(status: string): string {
   const normalized = (status || '').trim().toLowerCase();
   if (normalized === 'active') return 'Đang hoạt động';
@@ -159,31 +156,71 @@ function getVietnameseStatus(status: string): string {
   return status;
 }
 
+/** Ngày vào (vd. 7/25/2023, 2023-07-25) → dd/MM/yyyy */
+function formatJoinedDate(raw: string): string {
+  const s = String(raw).trim();
+  if (!s) return raw;
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    const [, y, m, d] = iso;
+    return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+  }
+  const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) {
+    const a = parseInt(slash[1], 10);
+    const b = parseInt(slash[2], 10);
+    const y = slash[3];
+    let day: number;
+    let month: number;
+    if (a > 12) {
+      day = a;
+      month = b;
+    } else if (b > 12) {
+      month = a;
+      day = b;
+    } else {
+      month = a;
+      day = b;
+    }
+    return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${y}`;
+  }
+  const t = Date.parse(s);
+  if (!Number.isNaN(t)) {
+    const dt = new Date(t);
+    const d = String(dt.getDate()).padStart(2, "0");
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const y = dt.getFullYear();
+    return `${d}/${m}/${y}`;
+  }
+  return s;
+}
+
+/** Vị trí: TP → giải nghĩa Teacher Part-time */
+function formatRolePosition(raw: string): string {
+  const s = String(raw).trim();
+  if (!s) return raw;
+  if (/^tp$/i.test(s)) return "TP (Teacher Part-time)";
+  return s;
+}
+
 /** Ordered profile fields — DB column → Vietnamese label + icon key. Hidden keys omitted. */
 const PROFILE_FIELDS: { key: string; label: string; icon: string; format?: (v: string) => string; sensitive?: boolean }[] = [
-  { key: "code", label: "Mã giáo viên", icon: "hash" },
+  { key: "code", label: "Mã LMS", icon: "hash" },
   { key: "full_name", label: "Họ và tên", icon: "user" },
   { key: "user_name", label: "Username", icon: "user" },
   { key: "work_email", label: "Email MindX", icon: "mail" },
   { key: "personal_email", label: "Email cá nhân", icon: "mail" },
   { key: "phone_number", label: "Số điện thoại", icon: "phone", format: formatPhone },
-  { key: "centers", label: "Chi nhánh đầu vào", icon: "mappin" },
   { key: "main_centre", label: "Chi nhánh hiện tại", icon: "mappin" },
-  { key: "bu_check", label: "BU Check", icon: "mappin" },
   { key: "khoi_final", label: "Khối", icon: "briefcase" },
-  { key: "khoi_check", label: "Khối Check", icon: "briefcase" },
-  { key: "role", label: "Vị trí", icon: "shield" },
+  { key: "role", label: "Vị trí", icon: "shield", format: formatRolePosition },
   { key: "course_line", label: "Course Line", icon: "briefcase" },
-  { key: "rank", label: "Rank", icon: "star" },
-  { key: "joined_date", label: "Ngày vào", icon: "calendar" },
-  { key: "teacher_point", label: "Teacher Point", icon: "star" },
-  { key: "data_hr_raw", label: "Mã HR", icon: "hash" },
-  { key: "status_update", label: "Trạng thái (cập nhật)", icon: "shield" },
-  { key: "status_check", label: "Trạng thái check", icon: "shield" },
+  { key: "joined_date", label: "Ngày vào", icon: "calendar", format: formatJoinedDate },
+  { key: "data_hr_raw", label: "Mã giáo viên", icon: "hash" },
   { key: "status", label: "Trạng thái", icon: "shield" },
   { key: "check_col", label: "CHECK", icon: "shield" },
   { key: "te_quan_ly", label: "TE quản lý", icon: "users" },
-  { key: "leader_quan_ly", label: "Leader quản lý", icon: "users" },
+  { key: "leader_quan_ly", label: "Quản lý trực tiếp", icon: "users" },
   { key: "rate_k12_check", label: "Rate K12", icon: "star", format: formatRateVnd, sensitive: true },
   { key: "rank_k12_check", label: "Rank K12", icon: "star", sensitive: true },
 ];
@@ -222,6 +259,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 
 export default function Page1() {
   const { user } = useAuth();
+  const { mutate: globalMutate } = useSWRConfig();
   const router = useRouter();
   const [searchCode, setSearchCode] = useState("");
   const [submitCode, setSubmitCode] = useState("");
@@ -345,15 +383,10 @@ export default function Page1() {
     return response.json();
   }, []);
 
-  // Auto-search: extract teacher code from email local-part — no extra API call
+  // Tải profile: mặc định theo email đăng nhập; có nhập mã thì ?code= (một endpoint /api/checkdatasource/status)
   useEffect(() => {
-    if (user?.email && !hasAutoSearched && !submitCode) {
+    if (user?.email && !hasAutoSearched) {
       setHasAutoSearched(true);
-      const code = extractCodeFromEmail(user.email);
-      if (code) {
-        setSearchCode(code);
-        setSubmitCode(code);
-      }
     }
 
     if (!hasAutoSearched) {
@@ -362,70 +395,117 @@ export default function Page1() {
       const disabled = localStorage.getItem('feedbackDisabled');
       if (disabled === 'true') setFeedbackEnabled(false);
     }
-  }, [user, hasAutoSearched, submitCode]);
+  }, [user, hasAutoSearched]);
 
-  // Single SWR: fetch raw DB row from /api/teachers/info, map to Teacher + keep raw for profile grid
-  const { data: teacherInfoData, isLoading: isLoadingTeacher, error: teacherError } = useSWR(
-    submitCode && user ? `/api/teachers/info?code=${encodeURIComponent(submitCode)}` : null,
+  /** Bundle nhanh: teacher + chứng chỉ + training (không chờ CSV/query điểm chuyên sâu–trải nghiệm). */
+  const profileUrl =
+    user?.email
+      ? `${PROFILE_API_ORIGIN}/api/checkdatasource/status?${
+          submitCode.trim()
+            ? `code=${encodeURIComponent(submitCode.trim())}&fast=1`
+            : `email=${encodeURIComponent(user.email)}&fast=1`
+        }`
+      : null;
+
+  const {
+    data: profileBundle,
+    isLoading: isLoadingProfile,
+    error: profileError,
+    mutate: mutateProfile,
+  } = useSWR(
+    profileUrl,
     secureFetcher,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       dedupingInterval: 300000,
       shouldRetryOnError: false,
-      revalidateIfStale: false
+      revalidateIfStale: false,
     }
   );
 
-  const dbRow: TeacherDbRow | null = teacherInfoData?.success && teacherInfoData?.teacher ? teacherInfoData.teacher : null;
+  const teacherLmsCode = useMemo(() => {
+    if (!profileBundle?.exists || !profileBundle.teacher) return null;
+    const t = profileBundle.teacher as Record<string, unknown>;
+    const c = String(t.code ?? "").trim();
+    return c || null;
+  }, [profileBundle]);
+
+  const scoresUrl =
+    !isLoadingProfile &&
+    user?.email &&
+    profileBundle &&
+    (profileBundle as { success?: boolean }).success !== false &&
+    profileBundle.exists &&
+    teacherLmsCode
+      ? `${PROFILE_API_ORIGIN}/api/checkdatasource/scores?code=${encodeURIComponent(teacherLmsCode)}`
+      : null;
+
+  const { data: scoresBundle, isLoading: isLoadingScores } = useSWR(
+    scoresUrl,
+    secureFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 300000,
+      shouldRetryOnError: false,
+      revalidateIfStale: false,
+    }
+  );
+
+  const mergedProfileBundle = useMemo(() => {
+    if (!profileBundle) return undefined;
+    const s = scoresBundle as
+      | { success?: boolean; expertise?: unknown; experience?: unknown }
+      | undefined;
+    if (!s?.success) return profileBundle;
+    return {
+      ...profileBundle,
+      expertise: s.expertise ?? profileBundle.expertise,
+      experience: s.experience ?? profileBundle.experience,
+    };
+  }, [profileBundle, scoresBundle]);
+
+  const teacherInfoData =
+    profileBundle && profileBundle.exists && profileBundle.teacher
+      ? { success: true as const, teacher: profileBundle.teacher }
+      : profileBundle
+        ? { success: false as const }
+        : undefined;
+
+  const dbRow: TeacherDbRow | null =
+    profileBundle?.exists && profileBundle.teacher ? (profileBundle.teacher as TeacherDbRow) : null;
   const teacher: Teacher | null = dbRow ? mapTeachersDbRowToTeacher(dbRow) : null;
 
-  // Parallel loading of score data - start immediately after teacher is found
-  const { data: expertiseDataRes, isLoading: isLoadingExpertise } = useSWR(
-    teacher && user ? `/api/rawdata?code=${submitCode}` : null,
-    secureFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 300000,
-      shouldRetryOnError: false,
-      revalidateIfStale: false
-    }
-  );
-
-  const { data: experienceDataRes, isLoading: isLoadingExperience } = useSWR(
-    teacher && user ? `/api/rawdata-experience?code=${submitCode}` : null,
-    secureFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 300000,
-      shouldRetryOnError: false,
-      revalidateIfStale: false
-    }
-  );
-
-  // Load certificates data
-  const { data: certificatesRes } = useSWR(
-    teacher && user ? `/api/teacher-certificates?email=${encodeURIComponent(teacher.emailMindx)}` : null,
-    secureFetcher,
-    { revalidateOnFocus: false, revalidateOnReconnect: false, dedupingInterval: 300000, shouldRetryOnError: false, revalidateIfStale: false }
-  );
-
-  // Load detailed training stats
-  const { data: trainingStatsRes, isLoading: isLoadingTraining } = useSWR(
-    teacher && user ? `/api/training-teacher-stats?teacher_code=${submitCode}` : null,
-    secureFetcher,
-    { revalidateOnFocus: false, revalidateOnReconnect: false, dedupingInterval: 300000, shouldRetryOnError: false, revalidateIfStale: false }
-  );
-
-  const certificates = certificatesRes?.data || [];
-  const trainingStat = trainingStatsRes?.data?.[0] || null;
-  const trainingData = trainingStat as TrainingData | null;
-
-  const expertiseData = expertiseDataRes?.monthlyData || [];
-  const experienceData = experienceDataRes?.monthlyData || [];
-  const scoresLoaded = !isLoadingExpertise && !isLoadingExperience;
+  const {
+    certificates,
+    trainingData,
+    expertiseData,
+    experienceData,
+    scoresLoaded,
+    isLoadingTraining,
+  } = useMemo(() => {
+    const bundle = mergedProfileBundle;
+    const certificates = bundle?.certificates?.data ?? [];
+    const trainingStat = bundle?.training?.data?.[0] ?? null;
+    const trainingData = trainingStat as TrainingData | null;
+    const expertiseData = bundle?.expertise?.monthlyData ?? [];
+    const experienceData = bundle?.experience?.monthlyData ?? [];
+    const scoresReady =
+      !isLoadingProfile &&
+      bundle !== undefined &&
+      bundle !== null &&
+      (!teacherLmsCode || !isLoadingScores);
+    const isLoadingTraining = isLoadingProfile;
+    return {
+      certificates,
+      trainingData,
+      expertiseData,
+      experienceData,
+      scoresLoaded: scoresReady,
+      isLoadingTraining,
+    };
+  }, [mergedProfileBundle, isLoadingProfile, isLoadingScores, teacherLmsCode]);
 
 
   // Show feedback modal 30 seconds after successful teacher search
@@ -485,7 +565,9 @@ export default function Page1() {
   // Load availability AFTER scores are loaded - filter by teacher name on server side
   // This allows UI to render first, then load availability data later
   const { data: availabilityDataRes, isLoading: isLoadingAvailabilityData } = useSWR(
-    (teacher && scoresLoaded) ? `/api/availability?fromDate=${availabilityFromDate}&toDate=${availabilityToDate}&teacherName=${encodeURIComponent(teacher.name || '')}` : null,
+    teacher && !isLoadingProfile
+      ? `/api/availability?fromDate=${availabilityFromDate}&toDate=${availabilityToDate}&teacherName=${encodeURIComponent(teacher.name || '')}`
+      : null,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -504,14 +586,6 @@ export default function Page1() {
       const nameMatch = t.name?.toLowerCase().includes(teacher.name?.toLowerCase()) ||
         teacher.name?.toLowerCase().includes(t.name?.toLowerCase());
       return emailMatch || nameMatch;
-    });
-
-    console.log('🔍 Availability Records:', {
-      totalTeachers: availabilityDataRes.teachers.length,
-      filteredRecords: records.length,
-      teacherEmail: teacher.emailMindx,
-      teacherName: teacher.name,
-      sampleRecord: records[0]
     });
 
     return records;
@@ -533,9 +607,9 @@ export default function Page1() {
   // Handle teacher data errors
   useEffect(() => {
     (async () => {
-      if (teacherError) {
+      if (profileError) {
         // If unauthorized, try silent refresh and revalidate once
-        const status = (teacherError as any)?.status;
+        const status = (profileError as any)?.status;
         if (status === 401) {
           const refreshToken = localStorage.getItem('refreshToken');
           if (refreshToken) {
@@ -555,7 +629,8 @@ export default function Page1() {
                   localStorage.setItem('token', newIdToken);
                   if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
                   // Revalidate teacher data
-                  await mutate(`/api/teachers/info?code=${encodeURIComponent(submitCode)}`);
+                  if (profileUrl) await mutateProfile();
+                  if (scoresUrl) await globalMutate(scoresUrl);
                   return;
                 }
               }
@@ -577,11 +652,27 @@ export default function Page1() {
       } else if (teacher) {
         setError("");
         setNotFoundModalOpen(false);
-      } else if (submitCode && !isLoadingTeacher && teacherInfoData && !teacher) {
+      } else if (
+        submitCode.trim() &&
+        !isLoadingProfile &&
+        profileBundle &&
+        !profileBundle.exists
+      ) {
         setNotFoundModalOpen(true);
       }
     })();
-  }, [teacherInfoData, teacher, submitCode, isLoadingTeacher, teacherError]);
+  }, [
+    teacherInfoData,
+    teacher,
+    submitCode,
+    isLoadingProfile,
+    profileError,
+    profileBundle,
+    profileUrl,
+    scoresUrl,
+    mutateProfile,
+    globalMutate,
+  ]);
 
   // Handle not found modal confirm
   const handleNotFoundConfirm = useCallback(() => {
@@ -1003,7 +1094,7 @@ export default function Page1() {
         <div className="border-b border-gray-200 pb-2 sm:pb-3">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Thông Tin Của Tôi</h1>
           <div className="text-xs text-gray-600 mt-1">
-            {isLoadingTeacher ? (
+            {isLoadingProfile ? (
               <span className="inline-flex items-center gap-2">
                 <div className="w-3 h-1 bg-gray-300 rounded overflow-hidden">
                   <div className="w-full h-full bg-blue-500 animate-pulse"></div>
@@ -1024,8 +1115,8 @@ export default function Page1() {
           </div>
         )}
 
-        {/* Empty State */}
-        {!submitCode && !error && !isLoadingTeacher && (
+        {/* Empty State — chưa có GV (kể cả sau khi tải theo email) */}
+        {!submitCode && !teacher && !error && !isLoadingProfile && (
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 sm:p-12 text-center">
             <div className="flex flex-col items-center gap-3">
               <div className="w-16 h-16 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center">
@@ -1040,7 +1131,7 @@ export default function Page1() {
         )}
 
         {/* Teacher Info Skeleton */}
-        {(isLoadingTeacher && submitCode) && (
+        {isLoadingProfile && !teacher && (
           <div className="border border-gray-200 rounded-xl overflow-hidden">
             {/* Header Skeleton */}
             <div className="bg-[#a1001f] text-white p-3 sm:p-4">
@@ -1072,7 +1163,7 @@ export default function Page1() {
         )}
 
         {/* Teacher Profile — unified from DB */}
-        {teacher && dbRow && !isLoadingTeacher && (
+        {teacher && dbRow && !isLoadingProfile && (
           <div className="border border-gray-200 rounded-xl overflow-hidden animate-fadeIn" style={{ animationDelay: '0.1s' }}>
             {/* Header */}
             <div className="bg-[#a1001f] text-white p-3 sm:p-4">

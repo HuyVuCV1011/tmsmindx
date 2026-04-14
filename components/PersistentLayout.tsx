@@ -1,23 +1,24 @@
 "use client";
 
-import UserFirstLoginOnboarding from "@/components/onboarding/UserFirstLoginOnboarding";
-import { Sidebar } from "@/components/sidebar";
-import { useAuth } from "@/lib/auth-context";
-import { SidebarProvider, useSidebar } from "@/lib/sidebar-context";
-import { usePathname } from "next/navigation";
-import { Suspense } from "react";
+import UserFirstLoginOnboarding from '@/components/onboarding/UserFirstLoginOnboarding'
+import { Sidebar } from '@/components/sidebar'
+import { useAuth } from '@/lib/auth-context'
+import { SidebarProvider, useSidebar } from '@/lib/sidebar-context'
+import { usePathname } from 'next/navigation'
+import { Suspense } from 'react'
 
 function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { isOpen } = useSidebar();
   const { user } = useAuth();
 
-  // Don't show sidebar on login/root/checkdatasource pages
+  // Don't show sidebar on login/root/checkdatasource/maintenance pages
   const noSidebarPaths =
-    pathname.startsWith("/login") ||
-    pathname === "/" ||
-    pathname.startsWith("/checkdatasource");
-  let shouldShowSidebar = !noSidebarPaths;
+    pathname.startsWith('/login') ||
+    pathname === '/' ||
+    pathname.startsWith('/checkdatasource') ||
+    pathname.startsWith('/bao-tri')
+  let shouldShowSidebar = !noSidebarPaths
 
   // Hide sidebar if admin user has no permissions
   if (shouldShowSidebar && pathname.startsWith("/admin")) {
@@ -68,7 +69,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </main>
-      <UserFirstLoginOnboarding />
+      {!pathname.startsWith('/bao-tri') && <UserFirstLoginOnboarding />}
     </div>
   );
 }

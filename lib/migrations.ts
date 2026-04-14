@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { isDatabaseUnavailableError } from './db-unavailable';
 
 // ============================================================
 // Hệ thống Migration tự động cho TPS
@@ -1241,33 +1242,8 @@ const migrations: Migration[] = [
     `,
   },
   {
-    name: 'V51_user_onboarding_states',
+    name: 'V51_recreate_teachers_full',
     version: 51,
-    sql: `
-      CREATE TABLE IF NOT EXISTS user_onboarding_states (
-        email VARCHAR(255) PRIMARY KEY,
-        tour_version INTEGER NOT NULL DEFAULT 1,
-        completed BOOLEAN NOT NULL DEFAULT false,
-        completed_at TIMESTAMP,
-        last_seen_step VARCHAR(100),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_user_onboarding_states_completed
-        ON user_onboarding_states(completed);
-
-      DROP TRIGGER IF EXISTS trg_user_onboarding_states_updated_at
-        ON user_onboarding_states;
-      CREATE TRIGGER trg_user_onboarding_states_updated_at
-      BEFORE UPDATE ON user_onboarding_states
-      FOR EACH ROW
-      EXECUTE FUNCTION update_updated_at_column();
-    `,
-  },
-  {
-    name: 'V52_recreate_teachers_full',
-    version: 52,
     sql: `
       CREATE TABLE IF NOT EXISTS teachers (
         code VARCHAR(50) PRIMARY KEY,
@@ -1307,6 +1283,31 @@ const migrations: Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_teachers_work_email ON teachers (work_email);
       CREATE INDEX IF NOT EXISTS idx_teachers_personal_email ON teachers (personal_email);
+    `,
+  },
+  {
+    name: 'V52_user_onboarding_states',
+    version: 52,
+    sql: `
+      CREATE TABLE IF NOT EXISTS user_onboarding_states (
+        email VARCHAR(255) PRIMARY KEY,
+        tour_version INTEGER NOT NULL DEFAULT 1,
+        completed BOOLEAN NOT NULL DEFAULT false,
+        completed_at TIMESTAMP,
+        last_seen_step VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_user_onboarding_states_completed
+        ON user_onboarding_states(completed);
+
+      DROP TRIGGER IF EXISTS trg_user_onboarding_states_updated_at
+        ON user_onboarding_states;
+      CREATE TRIGGER trg_user_onboarding_states_updated_at
+      BEFORE UPDATE ON user_onboarding_states
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
     `,
   },
 ];
@@ -1353,7 +1354,13 @@ export async function runMigrations(pool: Pool): Promise<{ success: boolean; app
       client.release();
     }
   } catch (err: any) {
-    console.error('❌ Migration system error:', err.message);
+    if (isDatabaseUnavailableError(err)) {
+      console.warn(
+        '⚠️ Migrations skipped: database quá tải kết nối hoặc hết slot (thử giảm DB_POOL_MAX hoặc đóng kết nối khác).'
+      );
+    } else {
+      console.error('❌ Migration system error:', err.message);
+    }
     return { success: false, applied, errors: [err.message] };
   }
 }
@@ -1363,13 +1370,17 @@ export async function initDatabase(pool: Pool): Promise<void> {
   migrationRan = true;
   console.log('\n🔄 Running database migrations...');
   const result = await runMigrations(pool);
-  if (result.applied.length === 0) {
-    console.log('✅ Database is up to date. No new migrations.\n');
-  } else {
+  if (result.applied.length > 0) {
     console.log(`✅ Applied ${result.applied.length} migration(s).\n`);
   }
   if (result.errors.length > 0) {
-    console.warn(`⚠️ ${result.errors.length} migration(s) had errors.\n`);
+    const onlyConn =
+      result.errors.length === 1 && isDatabaseUnavailableError({ message: result.errors[0] });
+    if (!onlyConn) {
+      console.warn(`⚠️ ${result.errors.length} migration(s) had errors.\n`);
+    }
+  } else if (result.applied.length === 0) {
+    console.log('✅ Database is up to date. No new migrations.\n');
   }
 }
 

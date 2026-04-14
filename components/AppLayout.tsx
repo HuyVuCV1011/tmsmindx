@@ -3,7 +3,7 @@
 import { useAuth } from '@/lib/auth-context'
 import { ArrowLeft, Mail, MessageCircle, ShieldAlert } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -11,6 +11,9 @@ interface AppLayoutProps {
   requireAdmin?: boolean
   redirectPath?: string
 }
+
+const ADMIN_PERM_REFRESH_MS = 45_000
+const TEACHER_VERIFY_MIN_MS = 120_000
 
 export default function AppLayout({
   children,
@@ -21,9 +24,82 @@ export default function AppLayout({
   const PROFILE_CHECK_DONE_EMAIL_KEY = "tps_profile_check_done_email";
   const { user, isLoading, refreshPermissions, logout } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
-  const hasRedirected = useRef(false);
+  const pathname = usePathname()
+
+  const hasRedirected = useRef(false)
+  const lastAdminPermRefreshAt = useRef(0);
+  const lastTeacherVerifyAt = useRef(0);
+  const lastTeacherVerifyPathname = useRef<string | null>(null);
   const [noPermission, setNoPermission] = useState(false);
+  /** DB tạm không trả lời — cho qua cổng (không kẹt skeleton), không coi là đã xác nhận trong teachers. */
+  const [teacherGateAllowUnknown, setTeacherGateAllowUnknown] = useState(false);
+
+  useEffect(() => {
+    if (!user) setTeacherGateAllowUnknown(false);
+  }, [user]);
+
+  useEffect(() => {
+    if (!pathname.startsWith('/user')) setTeacherGateAllowUnknown(false);
+  }, [pathname]);
+
+  /** GV vào /user: cần localStorage khớp HOẶC xác nhận có trong bảng teachers (không ép qua /checkdatasource nếu đã có DB). */
+  const needsTeacherDbCheck = useMemo(() => {
+    if (!user || user.role !== 'teacher' || !pathname.startsWith('/user')) return false;
+    if (teacherGateAllowUnknown) return false;
+    if (typeof window === 'undefined') return false;
+    const checked = localStorage
+      .getItem(PROFILE_CHECK_DONE_EMAIL_KEY)
+      ?.trim()
+      .toLowerCase();
+    const cur = (user.email || '').trim().toLowerCase();
+    return !(checked && checked === cur);
+  }, [user, pathname, teacherGateAllowUnknown]);
+
+  const [teacherGateBlocking, setTeacherGateBlocking] = useState(false);
+
+  useEffect(() => {
+    if (!needsTeacherDbCheck) {
+      setTeacherGateBlocking(false);
+      return;
+    }
+    setTeacherGateBlocking(true);
+    let cancelled = false;
+    const cur = (user!.email || '').trim().toLowerCase();
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/checkdatasource/status?email=${encodeURIComponent(user!.email)}&brief=1`,
+          { cache: 'no-store' },
+        );
+        const data = (await res.json()) as {
+          success?: boolean;
+          exists?: boolean;
+          dbUnavailable?: boolean;
+        };
+        if (cancelled) return;
+        if (res.ok && data.success && data.exists === true) {
+          try {
+            localStorage.setItem(PROFILE_CHECK_DONE_EMAIL_KEY, cur);
+          } catch {
+            /* ignore */
+          }
+          setTeacherGateBlocking(false);
+          return;
+        }
+        if (res.ok && data.success && data.dbUnavailable) {
+          setTeacherGateAllowUnknown(true);
+          setTeacherGateBlocking(false);
+          return;
+        }
+        router.replace('/checkdatasource');
+      } catch {
+        if (!cancelled) router.replace('/checkdatasource');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [needsTeacherDbCheck, user?.email, router]);
   const getRoutePermissionAliases = (path: string) => {
     if (path === '/admin/thu-vien-de') {
       return ['/admin/thu-vien-de', '/admin/page4/thu-vien-de']
@@ -34,12 +110,19 @@ export default function AppLayout({
     return [path]
   }
 
-  // Auto-refresh permissions when navigating admin routes
+  // Admin: làm mới quyền khi vào /admin — không gọi /api/check-admin mỗi lần đổi route con (throttle)
   useEffect(() => {
-    if (user && pathname.startsWith('/admin')) {
-      refreshPermissions()
+    if (!user || !pathname.startsWith('/admin')) return;
+    const now = Date.now();
+    if (
+      lastAdminPermRefreshAt.current !== 0 &&
+      now - lastAdminPermRefreshAt.current < ADMIN_PERM_REFRESH_MS
+    ) {
+      return;
     }
-  }, [pathname, user, refreshPermissions])
+    lastAdminPermRefreshAt.current = now;
+    void refreshPermissions();
+  }, [pathname, user, refreshPermissions]);
 
   useEffect(() => {
     if (isLoading) return
@@ -135,19 +218,7 @@ export default function AppLayout({
       }
     }
 
-    // Teacher users must complete datasource setup before entering /user area.
-    // Admin/super_admin/manager are excluded from this guard.
-    if (!requireAdmin && user && pathname.startsWith('/user') && user.role === 'teacher') {
-      const checkedEmail = localStorage.getItem(PROFILE_CHECK_DONE_EMAIL_KEY)?.trim().toLowerCase();
-      const currentEmail = (user.email || '').trim().toLowerCase();
-      if (!checkedEmail || checkedEmail !== currentEmail) {
-        if (!hasRedirected.current) {
-          hasRedirected.current = true;
-          router.replace('/checkdatasource');
-        }
-        return;
-      }
-    }
+    // Teacher /user gate: xử lý bởi effect teacherGateBlocking + API brief=1 (không redirect /checkdatasource đồng bộ ở đây).
 
     // Reset redirect flag when user logs in
     if (user) {
@@ -164,19 +235,30 @@ export default function AppLayout({
     pathname,
   ])
 
+  // GV: mỗi lần đổi route trong /user/* xác minh lại còn trong bảng teachers; throttle chỉ khi cùng pathname (tránh gọi trùng khi re-render).
   useEffect(() => {
     const verifyTeacherStillExists = async () => {
       if (!user || user.role !== "teacher") return;
       if (!pathname.startsWith("/user")) return;
 
       try {
-        const response = await fetch(`/api/checkdatasource/status?email=${encodeURIComponent(user.email)}`, {
-          cache: "no-store",
-        });
-        const data = await response.json();
-        // Only act on a definitive "not exists" answer, not on DB errors.
-        if (response.ok && data.success && data.exists === false && !data.dbUnavailable) {
+        const response = await fetch(
+          `/api/checkdatasource/status?email=${encodeURIComponent(user.email)}&brief=1`,
+          { cache: "no-store" }
+        );
+        const data = (await response.json()) as {
+          success?: boolean;
+          exists?: boolean;
+          dbUnavailable?: boolean;
+        };
+        if (
+          response.ok &&
+          data.success &&
+          data.exists === false &&
+          !data.dbUnavailable
+        ) {
           localStorage.removeItem(PROFILE_CHECK_DONE_EMAIL_KEY);
+          setTeacherGateAllowUnknown(false);
           router.replace("/checkdatasource");
         }
       } catch {
@@ -184,8 +266,21 @@ export default function AppLayout({
       }
     };
 
-    verifyTeacherStillExists();
-  }, [user, pathname, router, logout]);
+    const pathChanged = lastTeacherVerifyPathname.current !== pathname;
+    if (pathChanged) {
+      lastTeacherVerifyPathname.current = pathname;
+    } else {
+      const now = Date.now();
+      if (
+        lastTeacherVerifyAt.current !== 0 &&
+        now - lastTeacherVerifyAt.current < TEACHER_VERIFY_MIN_MS
+      ) {
+        return;
+      }
+    }
+    lastTeacherVerifyAt.current = Date.now();
+    void verifyTeacherStillExists();
+  }, [user, pathname, router]);
 
   // Show skeleton while checking authentication
   if (isLoading) {
@@ -196,6 +291,25 @@ export default function AppLayout({
             <div className="h-10 w-10 bg-gray-300 rounded-full"></div>
             <div className="h-6 bg-gray-300 rounded w-32"></div>
           </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="h-64 bg-gray-300 rounded"></div>
+            <div className="md:col-span-3 h-64 bg-gray-300 rounded"></div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // GV: đang kiểm tra DB trước khi render /user (tránh nháy /checkdatasource)
+  if (teacherGateBlocking) {
+    return (
+      <div className="min-h-screen bg-white p-4">
+        <div className="animate-pulse space-y-6">
+          <div className="flex items-center space-x-4">
+            <div className="h-10 w-10 bg-gray-300 rounded-full"></div>
+            <div className="h-6 bg-gray-300 rounded w-40"></div>
+          </div>
+          <p className="text-sm text-gray-500">Đang xác thực hồ sơ giáo viên…</p>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="h-64 bg-gray-300 rounded"></div>
             <div className="md:col-span-3 h-64 bg-gray-300 rounded"></div>

@@ -1,5 +1,6 @@
 import { withApiProtection } from "@/lib/api-protection";
 import pool from "@/lib/db";
+import { isDatabaseUnavailableError } from "@/lib/db-helpers";
 import { NextRequest, NextResponse } from "next/server";
 
 export const POST = withApiProtection(async (request: NextRequest) => {
@@ -107,8 +108,18 @@ export const POST = withApiProtection(async (request: NextRequest) => {
       ]
     );
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, persisted: true });
   } catch (error: unknown) {
+    if (isDatabaseUnavailableError(error)) {
+      // Cho phép client coi như thành công để user vẫn vào được app; đồng bộ DB khi slot trở lại.
+      return NextResponse.json({
+        success: true,
+        persisted: false,
+        dbUnavailable: true,
+        warning:
+          "Máy chủ database đang quá tải. Bạn vẫn có thể vào hệ thống; dữ liệu xác nhận sẽ được lưu khi kết nối ổn định.",
+      });
+    }
     const message = error instanceof Error ? error.message : "Không thể lưu xác nhận datasource";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }

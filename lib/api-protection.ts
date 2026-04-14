@@ -5,12 +5,30 @@ import { NextRequest, NextResponse } from 'next/server';
  * Chỉ cho phép request từ giao diện ứng dụng, không cho truy cập trực tiếp
  */
 
-const ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'https://tmsmindx.vercel.app',
-  process.env.NEXT_PUBLIC_APP_URL || '',
-].filter(Boolean);
+/** Strip trailing slashes; Origin header never includes a trailing slash. */
+function normalizeAppOrigin(url: string): string {
+  return url.trim().replace(/\/+$/, '');
+}
+
+/** NEXT_PUBLIC_APP_URL có thể là một hoặc nhiều URL, phân tách bằng dấu phẩy hoặc chấm phẩy (vd: https://a.com,https://b.com). */
+function parseAppUrlsFromEnv(raw: string | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(/[,;\s]+/)
+    .map((s) => normalizeAppOrigin(s))
+    .filter(Boolean);
+}
+
+const ALLOWED_ORIGINS = Array.from(
+  new Set<string>([
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'https://tmsmindx.vercel.app',
+    'https://www.tpsmindx.com',
+    'https://tpsmindx.com',
+    ...parseAppUrlsFromEnv(process.env.NEXT_PUBLIC_APP_URL),
+  ])
+);
 
 // Secret key để validate request từ client
 const API_SECRET_KEY = process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025';

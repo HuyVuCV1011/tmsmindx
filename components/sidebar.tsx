@@ -114,6 +114,10 @@ export function Sidebar() {
       label: 'Đào tạo đầu vào',
       icon: Users,
       submenu: [
+        { href: '/admin/page1', label: 'Hồ sơ Giáo viên' },
+        { href: '/admin/page4/quan-ly-lich-lam-viec', label: 'Quản lý lịch làm việc' },
+        { href: '/admin/page4/lich-danh-gia', label: 'Lịch sự kiện' },
+        { href: '/admin/xin-nghi-mot-buoi', label: 'Tiếp nhận xin nghỉ 1 buổi' },
         {
           href: '/admin/hr-candidates/gen-planner?region=south',
           label: 'Miền Nam (HCM + Tỉnh Nam)',
@@ -425,8 +429,8 @@ export function Sidebar() {
           })
         }
       }
-    })
-  }, [menuItems, pathname, searchParams, expandedMenus, hasActiveDescendant, isOnboardingActive])
+    });
+  }, [menuItems, pathname, searchParams, expandedMenus, hasActiveDescendant, isOnboardingActive]);
 
   useEffect(() => {
     closeSidebarOnMobile()
@@ -477,7 +481,6 @@ export function Sidebar() {
     if (path === "/user/truyenthong") return "tour-nav-truyenthong";
     if (path === "/user/thong-tin-giao-vien") return "tour-nav-thongtin";
     if (path === "/user/hoat-dong-hang-thang") return "tour-nav-hoatdong";
-    if (path === "/user/dang-ky-lich-lam-viec") return "tour-nav-dangky-lichlamviec";
     if (path === "/user/xin-nghi-mot-buoi") return "tour-nav-xinnghi";
     if (path === "/user/nhan-lop-1-buoi") return "tour-nav-nhanlop";
     if (path === "/user/dao-tao-nang-cao") return "tour-nav-training";

@@ -1,16 +1,15 @@
 'use client'
 
-import { Card } from "@/components/Card";
-import Modal from "@/components/Modal";
-import { PageContainer } from "@/components/PageContainer";
-import { useAuth } from "@/lib/auth-context";
-import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import toast from "react-hot-toast";
+import { Card } from '@/components/Card'
+import Modal from '@/components/Modal'
+import { PageContainer } from '@/components/PageContainer'
+import { useAuth } from '@/lib/auth-context'
+import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import toast from 'react-hot-toast'
 
 type RegistrationTemplate = 'official' | 'supplement'
-
 type EventCategory =
   | 'registration'
   | 'exam'
@@ -515,61 +514,81 @@ function buildCalendarCells(focusDate: Date, view: CalendarView) {
 }
 
 export default function MonthlyActivitiesPage() {
-  const { user } = useAuth();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [view, setView] = useState<CalendarView>("month");
-  const [focusDate, setFocusDate] = useState(new Date());
-  const [events, setEvents] = useState<EvaluationEvent[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedRegistrationEvent, setSelectedRegistrationEvent] = useState<EvaluationEvent | null>(null);
-  const [showDayEventsModal, setShowDayEventsModal] = useState(false);
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
-  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-  const [availableOptions, setAvailableOptions] = useState<Set<string>>(new Set());
-  const [teacherCode, setTeacherCode] = useState("");
-  const [teacherCenterCode, setTeacherCenterCode] = useState("");
-  const [teacherInfo, setTeacherInfo] = useState<{ teacher_name: string; email: string; lms_code: string; campus: string } | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [registeredParticipantsByEvent, setRegisteredParticipantsByEvent] = useState<Record<string, RegisteredExamParticipant[]>>({});
-  const [showParticipantsModal, setShowParticipantsModal] = useState(false);
-  const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [participantsForEvent, setParticipantsForEvent] = useState<RegisteredExamParticipant[]>([]);
-  const [participantsEvent, setParticipantsEvent] = useState<EvaluationEvent | null>(null);
-  const [userRegisteredSubjects, setUserRegisteredSubjects] = useState<Set<string>>(new Set());
-  const [registeredScheduleTimesByOption, setRegisteredScheduleTimesByOption] = useState<Record<string, string[]>>({});
-  const [registeredExamEventIdsByOption, setRegisteredExamEventIdsByOption] = useState<Record<string, string[]>>({});
-  const [selectedExamEventByOption, setSelectedExamEventByOption] = useState<Record<string, string>>({});
-  const [examAssignments, setExamAssignments] = useState<CalendarExamAssignment[]>([]);
-  const [registeredScheduleIds, setRegisteredScheduleIds] = useState<Set<string>>(new Set());
-  const registerHintShownRef = useRef(false);
-  const [selectedWeekDateKeys, setSelectedWeekDateKeys] = useState<string[]>([]);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const { user } = useAuth()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [view, setView] = useState<CalendarView>('month')
+  const [focusDate, setFocusDate] = useState(new Date())
+  const [events, setEvents] = useState<EvaluationEvent[]>([])
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [selectedRegistrationEvent, setSelectedRegistrationEvent] =
+    useState<EvaluationEvent | null>(null)
+  const [showDayEventsModal, setShowDayEventsModal] = useState(false)
+  const [showRegisterModal, setShowRegisterModal] = useState(false)
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([])
+  const [availableOptions, setAvailableOptions] = useState<Set<string>>(
+    new Set(),
+  )
+  const [teacherCode, setTeacherCode] = useState('')
+  const [teacherCenterCode, setTeacherCenterCode] = useState('')
+  const [teacherInfo, setTeacherInfo] = useState<{ teacher_name?: string; email?: string; lms_code?: string; campus?: string }>({})
+
+  const [submitting, setSubmitting] = useState(false)
+  const [registeredParticipantsByEvent, setRegisteredParticipantsByEvent] =
+    useState<Record<string, RegisteredExamParticipant[]>>({})
+  const [showParticipantsModal, setShowParticipantsModal] = useState(false)
+  const [participantsLoading, setParticipantsLoading] = useState(false)
+  const [participantsForEvent, setParticipantsForEvent] = useState<
+    RegisteredExamParticipant[]
+  >([])
+  const [participantsEvent, setParticipantsEvent] =
+    useState<EvaluationEvent | null>(null)
+  const [userRegisteredSubjects, setUserRegisteredSubjects] = useState<
+    Set<string>
+  >(new Set())
+  const [registeredScheduleTimesByOption, setRegisteredScheduleTimesByOption] =
+    useState<Record<string, string[]>>({})
+  const [registeredExamEventIdsByOption, setRegisteredExamEventIdsByOption] =
+    useState<Record<string, string[]>>({})
+  const [selectedExamEventByOption, setSelectedExamEventByOption] = useState<
+    Record<string, string>
+  >({})
+  const [examAssignments, setExamAssignments] = useState<
+    CalendarExamAssignment[]
+  >([])
+  const [registeredScheduleIds, setRegisteredScheduleIds] = useState<
+    Set<string>
+  >(new Set())
+  const registerHintShownRef = useRef(false)
+  const [selectedWeekDateKeys, setSelectedWeekDateKeys] = useState<string[]>([])
+  const [isMobileViewport, setIsMobileViewport] = useState(false)
 
   useEffect(() => {
-    if (searchParams.get("showRegisterHint") !== "1" || registerHintShownRef.current) {
-      return;
+    if (searchParams.get('showRegisterHint') !== '1' || registerHintShownRef.current) {
+      return
     }
 
-    registerHintShownRef.current = true;
+    registerHintShownRef.current = true
 
-    toast("Bấm vào lịch để có thể đăng ký.", {
-      id: "register-hint-toast",
+    toast('Bấm vào lịch để có thể đăng ký.', {
+      id: 'register-hint-toast',
       duration: 2000,
-    });
+    })
 
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.delete("showRegisterHint");
-    const nextQuery = nextParams.toString();
+    const nextParams = new URLSearchParams(searchParams.toString())
+    nextParams.delete('showRegisterHint')
+    const nextQuery = nextParams.toString()
     router.replace(
-      nextQuery ? `/user/hoat-dong-hang-thang?${nextQuery}` : "/user/hoat-dong-hang-thang",
-      { scroll: false }
-    );
-  }, [router, searchParams]);
+      nextQuery
+        ? `/user/hoat-dong-hang-thang?${nextQuery}`
+        : '/user/hoat-dong-hang-thang',
+      { scroll: false },
+    )
+  }, [router, searchParams])
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
+    if (typeof window === 'undefined') {
+      return
     }
 
     const mediaQuery = window.matchMedia('(max-width: 1023px)')
@@ -900,17 +919,13 @@ export default function MonthlyActivitiesPage() {
   }, [events])
 
   const visibleEventsByDateKey = useMemo(() => {
-    const map = new Map<string, EvaluationEvent[]>();
+    const map = new Map<string, EvaluationEvent[]>()
     eventsByDateKey.forEach((dayEvents, key) => {
-      const visible = dayEvents.filter((event) => {
-        // Luôn hiển thị tất cả lịch thi/admin đã set để user có thể xem trước.
-        // Quyền "Làm bài" sẽ được kiểm soát theo assignment/can_take (chỉ khi đã đăng ký).
-        return true;
-      });
-      map.set(key, visible);
-    });
-    return map;
-  }, [eventsByDateKey, userRegisteredSubjects, registeredScheduleIds]);
+      const visible = dayEvents.filter(() => true)
+      map.set(key, visible)
+    })
+    return map
+  }, [eventsByDateKey])
 
   const upcomingExamEventsByOption = useMemo(() => {
     const now = new Date()
@@ -1594,12 +1609,12 @@ export default function MonthlyActivitiesPage() {
         }
 
         // Experience test (quy trình/kỹ năng trải nghiệm) không cần bộ đề chuyên môn
-        if (mapped.exam_type !== "experience") {
-          const hasActiveSetForOption = availableOptions.has(option);
+        if (mapped.exam_type !== 'experience') {
+          const hasActiveSetForOption = availableOptions.has(option)
           if (!hasActiveSetForOption) {
-            failedOptions.push(option);
-            failedDetails.push(`${option}: chưa có bộ đề active`);
-            continue;
+            failedOptions.push(option)
+            failedDetails.push(`${option}: chưa có bộ đề active`)
+            continue
           }
         }
 

@@ -1,4 +1,5 @@
 import pool from "@/lib/db";
+import { isDatabaseUnavailableError } from "@/lib/db-helpers";
 import { NextRequest, NextResponse } from "next/server";
 
 function normalizeEmail(value: string) {
@@ -6,13 +7,13 @@ function normalizeEmail(value: string) {
 }
 
 export async function GET(request: NextRequest) {
-  try {
-    const email = request.nextUrl.searchParams.get("email");
-    if (!email) {
-      return NextResponse.json({ error: "Thiếu email" }, { status: 400 });
-    }
+  const email = request.nextUrl.searchParams.get("email");
+  if (!email) {
+    return NextResponse.json({ error: "Thiếu email" }, { status: 400 });
+  }
+  const normalizedEmail = normalizeEmail(email);
 
-    const normalizedEmail = normalizeEmail(email);
+  try {
     const result = await pool.query(
       `SELECT email, tour_version, completed, completed_at, last_seen_step
        FROM user_onboarding_states
@@ -36,6 +37,19 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, state: result.rows[0] });
   } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return NextResponse.json({
+        success: true,
+        dbUnavailable: true,
+        state: {
+          email: normalizedEmail,
+          tour_version: 1,
+          completed: false,
+          completed_at: null,
+          last_seen_step: null,
+        },
+      });
+    }
     console.error("Failed to get onboarding state:", error);
     return NextResponse.json(
       { error: "Không thể lấy trạng thái onboarding" },
@@ -46,7 +60,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const rawBody = await request.text();
+    let body: Record<string, unknown> = {};
+    if (rawBody.trim()) {
+      try {
+        body = JSON.parse(rawBody) as Record<string, unknown>;
+      } catch {
+        return NextResponse.json({ error: "Body JSON không hợp lệ" }, { status: 400 });
+      }
+    }
     const email = String(body?.email || "").trim();
     const completed = Boolean(body?.completed);
     const lastSeenStep = body?.last_seen_step ? String(body.last_seen_step) : null;
@@ -72,6 +94,16 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, state: result.rows[0] });
   } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return NextResponse.json(
+        {
+          success: false,
+          dbUnavailable: true,
+          error: "Database tạm thời quá tải hoặc không kết nối được",
+        },
+        { status: 503 }
+      );
+    }
     console.error("Failed to update onboarding state:", error);
     return NextResponse.json(
       { error: "Không thể cập nhật trạng thái onboarding" },

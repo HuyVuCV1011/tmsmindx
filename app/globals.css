@@ -1883,3 +1883,217 @@ input[type='reset'] {
 .post-content-renderer .image-wrapper:hover img {
   filter: brightness(0.92);
 }
+
+/* —— Trang /bao-tri: mascot & typography —— */
+@keyframes bao-tri-mascot-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-14px) rotate(2deg);
+  }
+}
+
+@keyframes bao-tri-mascot-jump {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  35% {
+    transform: translateY(-22px) scale(1.06);
+  }
+  55% {
+    transform: translateY(-6px) scale(1.02);
+  }
+  75% {
+    transform: translateY(-12px) scale(1.04);
+  }
+}
+
+@keyframes bao-tri-mascot-sway {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(4deg);
+  }
+}
+
+@keyframes bao-tri-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+@keyframes bao-tri-glow-pulse {
+  0%,
+  100% {
+    text-shadow:
+      0 0 20px rgba(161, 0, 31, 0.35),
+      0 0 40px rgba(161, 0, 31, 0.15);
+  }
+  50% {
+    text-shadow:
+      0 0 28px rgba(248, 113, 113, 0.45),
+      0 0 56px rgba(161, 0, 31, 0.25);
+  }
+}
+
+@keyframes bao-tri-badge-pulse {
+  0%,
+  100% {
+    opacity: 0.95;
+    letter-spacing: 0.25em;
+  }
+  50% {
+    opacity: 1;
+    letter-spacing: 0.32em;
+  }
+}
+
+@keyframes bao-tri-fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bao-tri-line-shine {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateX(200%);
+    opacity: 0;
+  }
+}
+
+.bao-tri-mascot-wrap {
+  will-change: transform;
+}
+
+.bao-tri-mascot-wrap--a {
+  animation: bao-tri-mascot-float 2.8s ease-in-out infinite;
+}
+
+.bao-tri-mascot-wrap--b {
+  animation: bao-tri-mascot-jump 2.5s ease-in-out infinite;
+  animation-delay: 0.15s;
+}
+
+.bao-tri-mascot-wrap--c {
+  animation: bao-tri-mascot-sway 3.2s ease-in-out infinite;
+  animation-delay: 0.08s;
+}
+
+.bao-tri-mascot-wrap img {
+  filter: drop-shadow(0 12px 24px rgba(161, 0, 31, 0.35));
+  transition: filter 0.3s ease;
+}
+
+.bao-tri-gradient-title {
+  background: linear-gradient(
+    90deg,
+    #ffffff 0%,
+    #fecdd3 22%,
+    #ffffff 45%,
+    #fda4af 68%,
+    #ffffff 100%
+  );
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: bao-tri-shimmer 7s linear infinite;
+}
+
+.bao-tri-closing {
+  animation: bao-tri-glow-pulse 3.5s ease-in-out infinite;
+}
+
+.bao-tri-badge-animated {
+  animation: bao-tri-badge-pulse 4s ease-in-out infinite;
+}
+
+.bao-tri-fade-rise {
+  opacity: 0;
+  animation: bao-tri-fade-rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.bao-tri-fade-delay-1 {
+  animation-delay: 0.12s;
+}
+.bao-tri-fade-delay-2 {
+  animation-delay: 0.26s;
+}
+.bao-tri-fade-delay-3 {
+  animation-delay: 0.4s;
+}
+.bao-tri-fade-delay-4 {
+  animation-delay: 0.54s;
+}
+
+.bao-tri-eyebrow-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.bao-tri-eyebrow-glow::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 35%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.35),
+    transparent
+  );
+  animation: bao-tri-line-shine 3.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bao-tri-mascot-wrap--a,
+  .bao-tri-mascot-wrap--b,
+  .bao-tri-mascot-wrap--c {
+    animation: none;
+  }
+
+  .bao-tri-gradient-title {
+    animation: none;
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+    color: #ffffff;
+  }
+
+  .bao-tri-closing,
+  .bao-tri-badge-animated {
+    animation: none;
+  }
+
+  .bao-tri-fade-rise {
+    opacity: 1;
+    animation: none;
+    transform: none;
+  }
+
+  .bao-tri-eyebrow-glow::after {
+    display: none;
+  }
+}
