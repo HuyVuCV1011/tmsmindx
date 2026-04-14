@@ -1,5 +1,5 @@
 import { withApiProtection } from "@/lib/api-protection";
-import { checkTeacherExistsByEmail } from "@/lib/db-helpers";
+import { checkTeacherExistsByEmailDetailed } from "@/lib/db-helpers";
 import pool from "@/lib/db";
 import { loadTeacherProfileBundle } from "@/lib/teacher-profile-bundle";
 import { NextRequest, NextResponse } from "next/server";
@@ -21,8 +21,10 @@ export const GET = withApiProtection(async (request: NextRequest) => {
           { status: 400 }
         );
       }
-      const exists = await checkTeacherExistsByEmail(email);
-      return NextResponse.json({ success: true, exists });
+      const { exists, dbUnavailable } = await checkTeacherExistsByEmailDetailed(
+        email,
+      );
+      return NextResponse.json({ success: true, exists, dbUnavailable });
     }
 
     if (!email && !code) {

@@ -272,9 +272,13 @@ function CheckDataSourceContent() {
         if (dbResult.status === "fulfilled" && dbResult.value.ok) {
           dbData = await dbResult.value.json().catch(() => null);
           if (dbData?.success && dbData?.teacher) {
-            setOnboardingData(
-              mapTeacherRecordToOnboardingData(dbData.teacher as Record<string, unknown>)
-            );
+            // Đã có hồ sơ trong bảng teachers → không cần xem màn check nữa, vào Truyền thông luôn
+            try {
+              localStorage.setItem("tps_profile_check_done_email", userEmail);
+            } catch {
+              /* ignore */
+            }
+            router.replace("/user/truyenthong");
             return;
           }
         }
@@ -305,7 +309,7 @@ function CheckDataSourceContent() {
     };
 
     fetchTeacherByEmail();
-  }, [user, router, logout]);
+  }, [user, router, logout, userEmail]);
 
   const continueToApp = async () => {
     if (!user?.email) return;
