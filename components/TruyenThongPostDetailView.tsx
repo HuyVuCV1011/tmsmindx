@@ -91,6 +91,9 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
                 const data = await res.json()
                 setPost(data)
                 setLiked(!!data.isLiked)
+                if (data.reaction) {
+                    setCurrentReaction(data.reaction)
+                }
 
                 if (mode === 'user') {
                     fetch(`/api/truyenthong/posts/${params.slug}/view`, { method: 'POST' })
@@ -271,10 +274,18 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
 
     return (
         <div>
-            
+            {/* Nút quay lại — hiển thị cho cả user và admin */}
+            <div className="max-w-7xl mx-auto px-4 lg:px-6 pt-4 pb-2">
+                <Link href={backHref}>
+                    <Button variant="ghost" size="sm" className="gap-2 hover:bg-gray-100 transition-all hover:-translate-x-0.5 text-gray-600">
+                        <ArrowLeft className="w-4 h-4" />
+                        Quay lại
+                    </Button>
+                </Link>
+            </div>
 
-            <main className="mt-3 max-w-7xl mx-auto px-4 lg:px-6">
-                <div className="relative w-full h-72 md:h-96 rounded-xl overflow-hidden mb-5 shadow-lg">
+            <main className="mt-1 max-w-7xl mx-auto px-4 lg:px-6">
+                <div className="relative w-full rounded-xl overflow-hidden mb-5 shadow-lg" style={{ height: 'clamp(200px, 40vw, calc(var(--spacing) * 130))' }}>
                     <CroppedImage
                         src={post.featured_image || '/placeholder.svg'}
                         alt={post.title}
@@ -391,7 +402,7 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
                     </div>
 
                     <aside>
-                        <div className="sticky top-20 overflow-hidden rounded-xl border border-[#e6b8c2] bg-white shadow-sm">
+                        <div className="overflow-hidden rounded-xl border border-[#e6b8c2] bg-white shadow-sm">
                             <div className="border-b border-[#e6b8c2] bg-[#f9ebef] px-4 py-3">
                                 <h3 className="text-sm font-bold text-gray-900">Thông tin bài viết</h3>
                             </div>

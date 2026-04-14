@@ -560,7 +560,13 @@ function CommentItem({
           )}
 
           {/* Nested Replies */}
-          {comment.replies && comment.replies.length > 0 && (
+          {comment.replies && comment.replies.length > 0 && (() => {
+            // User thường chỉ thấy replies không bị ẩn
+            const visibleReplies = isAdmin
+              ? comment.replies
+              : comment.replies.filter((r) => !r.hidden)
+            if (visibleReplies.length === 0) return null
+            return (
             <div className="mt-2">
               {/* Show Replies Button */}
               {visibleRepliesCount === 0 ? (
@@ -571,12 +577,12 @@ function CommentItem({
                   className="-ml-2 cursor-pointer text-xs font-medium text-[#a1001f] hover:text-[#870019]"
                 >
                   <ChevronDown className="w-3 h-3 mr-1" />
-                  Xem {comment.replies.length} câu trả lời
+                  Xem {visibleReplies.length} câu trả lời
                 </Button>
               ) : (
                 <>
                   {/* Rendered Replies */}
-                  {comment.replies
+                  {visibleReplies
                     .slice(0, visibleRepliesCount)
                     .map((reply) => (
                       <CommentItem
@@ -595,23 +601,20 @@ function CommentItem({
                     ))}
 
                   {/* Load More Replies Button */}
-                  {visibleRepliesCount < comment.replies.length && (
+                  {visibleRepliesCount < visibleReplies.length && (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() =>
                         setVisibleRepliesCount((prev) =>
-                          Math.min(prev + 2, comment.replies.length),
+                          Math.min(prev + 2, visibleReplies.length),
                         )
                       }
                       className="-ml-2 mt-2 cursor-pointer text-xs font-medium text-[#a1001f] hover:text-[#870019]"
                     >
                       <ChevronDown className="w-3 h-3 mr-1" />
                       Xem thêm{' '}
-                      {Math.min(
-                        2,
-                        comment.replies.length - visibleRepliesCount,
-                      )}{' '}
+                      {Math.min(2, visibleReplies.length - visibleRepliesCount)}{' '}
                       câu trả lời
                     </Button>
                   )}
@@ -630,7 +633,8 @@ function CommentItem({
                 </>
               )}
             </div>
-          )}
+            )
+          })()}
         </div>
       </div>
 
