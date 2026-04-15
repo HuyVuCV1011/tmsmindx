@@ -1,5 +1,4 @@
 import { Pool } from 'pg';
-import { isDatabaseUnavailableError } from './db-unavailable';
 
 // ============================================================
 // Hệ thống Migration tự động cho TPS
@@ -110,47 +109,30 @@ const migrations: Migration[] = [
       );
       ALTER TABLE teaching_leaders ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Active';
 
-      -- 3. Teacher Core Table (matches onboarding sheet, skip "No"/stt)
+      -- 3. Teacher Core Tables (Dữ liệu từ Google Sheet)
       CREATE TABLE IF NOT EXISTS teachers (
         code VARCHAR(50) PRIMARY KEY,
-        full_name VARCHAR(255),
-        user_name VARCHAR(100),
-        work_email VARCHAR(255),
-        personal_email VARCHAR(255),
-        phone_number VARCHAR(50),
-        status_update VARCHAR(100),
-        centers VARCHAR(255),
-        khoi_final VARCHAR(100),
-        role VARCHAR(100),
-        course_line VARCHAR(100),
-        rank VARCHAR(100),
-        joined_date VARCHAR(50),
-        teacher_point VARCHAR(50),
-        data_hr_raw TEXT,
-        status_check VARCHAR(100),
-        bu_check VARCHAR(100),
-        khoi_check VARCHAR(100),
-        check_col VARCHAR(100),
-        te_quan_ly VARCHAR(255),
-        leader_quan_ly VARCHAR(255),
-        rate_k12_check VARCHAR(100),
-        rank_k12_check VARCHAR(100),
-        -- legacy quoted columns (kept for backward compatibility)
         "Full name" VARCHAR(255),
         "User name" VARCHAR(100),
         "Work email" VARCHAR(255),
         "Main centre" VARCHAR(255),
         "Status" VARCHAR(50) DEFAULT 'Active',
         "Course Line" VARCHAR(100),
-        -- extra
+        full_name VARCHAR(255),
+        user_name VARCHAR(100),
+        work_email VARCHAR(255),
         main_centre VARCHAR(255),
+        course_line VARCHAR(100),
         status VARCHAR(50),
-        onboarding_snapshot JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-      CREATE INDEX IF NOT EXISTS idx_teachers_work_email ON teachers (work_email);
-      CREATE INDEX IF NOT EXISTS idx_teachers_personal_email ON teachers (personal_email);
+      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "Full name" VARCHAR(255);
+      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "User name" VARCHAR(100);
+      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "Work email" VARCHAR(255);
+      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "Main centre" VARCHAR(255);
+      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "Status" VARCHAR(50) DEFAULT 'Active';
+      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS "Course Line" VARCHAR(100);
 
       -- 4. Content & Training Tables
       CREATE TABLE IF NOT EXISTS communications (
@@ -1241,73 +1223,31 @@ const migrations: Migration[] = [
       ADD COLUMN IF NOT EXISTS admin_image_urls JSONB NOT NULL DEFAULT '[]'::jsonb;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V48: Add user_name + reaction to communication_likes
+  // ═══════════════════════════════════════════════════════
   {
-    name: 'V51_recreate_teachers_full',
-    version: 51,
+    name: 'V48_communication_likes_user_name_reaction',
+    version: 48,
     sql: `
-      CREATE TABLE IF NOT EXISTS teachers (
-        code VARCHAR(50) PRIMARY KEY,
-        full_name VARCHAR(255),
-        user_name VARCHAR(100),
-        work_email VARCHAR(255),
-        personal_email VARCHAR(255),
-        phone_number VARCHAR(50),
-        status_update VARCHAR(100),
-        centers VARCHAR(255),
-        khoi_final VARCHAR(100),
-        role VARCHAR(100),
-        course_line VARCHAR(100),
-        rank VARCHAR(100),
-        joined_date VARCHAR(50),
-        teacher_point VARCHAR(50),
-        data_hr_raw TEXT,
-        status_check VARCHAR(100),
-        bu_check VARCHAR(100),
-        khoi_check VARCHAR(100),
-        check_col VARCHAR(100),
-        te_quan_ly VARCHAR(255),
-        leader_quan_ly VARCHAR(255),
-        rate_k12_check VARCHAR(100),
-        rank_k12_check VARCHAR(100),
-        "Full name" VARCHAR(255),
-        "User name" VARCHAR(100),
-        "Work email" VARCHAR(255),
-        "Main centre" VARCHAR(255),
-        "Status" VARCHAR(50) DEFAULT 'Active',
-        "Course Line" VARCHAR(100),
-        main_centre VARCHAR(255),
-        status VARCHAR(50),
-        onboarding_snapshot JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_teachers_work_email ON teachers (work_email);
-      CREATE INDEX IF NOT EXISTS idx_teachers_personal_email ON teachers (personal_email);
+      ALTER TABLE communication_likes
+        ADD COLUMN IF NOT EXISTS reaction VARCHAR(20) DEFAULT 'like',
+        ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V49: Add birthday columns to teachers
+  // ═══════════════════════════════════════════════════════
   {
-    name: 'V52_user_onboarding_states',
-    version: 52,
+    name: 'V49_teachers_birthday',
+    version: 49,
     sql: `
-      CREATE TABLE IF NOT EXISTS user_onboarding_states (
-        email VARCHAR(255) PRIMARY KEY,
-        tour_version INTEGER NOT NULL DEFAULT 1,
-        completed BOOLEAN NOT NULL DEFAULT false,
-        completed_at TIMESTAMP,
-        last_seen_step VARCHAR(100),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_user_onboarding_states_completed
-        ON user_onboarding_states(completed);
-
-      DROP TRIGGER IF EXISTS trg_user_onboarding_states_updated_at
-        ON user_onboarding_states;
-      CREATE TRIGGER trg_user_onboarding_states_updated_at
-      BEFORE UPDATE ON user_onboarding_states
-      FOR EACH ROW
-      EXECUTE FUNCTION update_updated_at_column();
+      ALTER TABLE teachers
+        ADD COLUMN IF NOT EXISTS birthday VARCHAR(10),
+        ADD COLUMN IF NOT EXISTS birth_day INTEGER,
+        ADD COLUMN IF NOT EXISTS birth_month INTEGER;
     `,
   },
 ];
@@ -1354,13 +1294,7 @@ export async function runMigrations(pool: Pool): Promise<{ success: boolean; app
       client.release();
     }
   } catch (err: any) {
-    if (isDatabaseUnavailableError(err)) {
-      console.warn(
-        '⚠️ Migrations skipped: database quá tải kết nối hoặc hết slot (thử giảm DB_POOL_MAX hoặc đóng kết nối khác).'
-      );
-    } else {
-      console.error('❌ Migration system error:', err.message);
-    }
+    console.error('❌ Migration system error:', err.message);
     return { success: false, applied, errors: [err.message] };
   }
 }
@@ -1370,17 +1304,13 @@ export async function initDatabase(pool: Pool): Promise<void> {
   migrationRan = true;
   console.log('\n🔄 Running database migrations...');
   const result = await runMigrations(pool);
-  if (result.applied.length > 0) {
+  if (result.applied.length === 0) {
+    console.log('✅ Database is up to date. No new migrations.\n');
+  } else {
     console.log(`✅ Applied ${result.applied.length} migration(s).\n`);
   }
   if (result.errors.length > 0) {
-    const onlyConn =
-      result.errors.length === 1 && isDatabaseUnavailableError({ message: result.errors[0] });
-    if (!onlyConn) {
-      console.warn(`⚠️ ${result.errors.length} migration(s) had errors.\n`);
-    }
-  } else if (result.applied.length === 0) {
-    console.log('✅ Database is up to date. No new migrations.\n');
+    console.warn(`⚠️ ${result.errors.length} migration(s) had errors.\n`);
   }
 }
 
