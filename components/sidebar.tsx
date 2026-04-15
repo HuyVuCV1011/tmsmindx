@@ -25,7 +25,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 
 export function Sidebar() {
-  const { isOpen, setIsOpen } = useSidebar()
+  const { isOpen, setIsOpen, requestExpandLabels } = useSidebar()
   const [expandedMenus, setExpandedMenus] = useState<string[]>([])
   const { user, logout } = useAuth()
   const pathname = usePathname()
@@ -114,10 +114,6 @@ export function Sidebar() {
       label: 'Đào tạo đầu vào',
       icon: Users,
       submenu: [
-        { href: '/admin/page1', label: 'Hồ sơ Giáo viên' },
-        { href: '/admin/page4/quan-ly-lich-lam-viec', label: 'Quản lý lịch làm việc' },
-        { href: '/admin/page4/lich-danh-gia', label: 'Lịch sự kiện' },
-        { href: '/admin/xin-nghi-mot-buoi', label: 'Tiếp nhận xin nghỉ 1 buổi' },
         {
           href: '/admin/hr-candidates/gen-planner?region=south',
           label: 'Miền Nam (HCM + Tỉnh Nam)',
@@ -133,6 +129,7 @@ export function Sidebar() {
       icon: Users,
       submenu: [
         { href: '/admin/page1', label: 'Hồ sơ Giáo viên' },
+        { href: '/admin/page4/quan-ly-lich-lam-viec', label: 'Quản lý lịch làm việc' },
         { href: '/admin/page4/lich-danh-gia', label: 'Lịch sự kiện' },
         {
           href: '/admin/xin-nghi-mot-buoi',
@@ -229,6 +226,7 @@ export function Sidebar() {
       icon: CalendarDays,
       submenu: [
         { href: '/user/hoat-dong-hang-thang', label: 'Hoạt động hàng tháng' },
+        { href: '/user/dang-ky-lich-lam-viec', label: 'Đăng ký lịch làm việc' },
         { href: '/user/xin-nghi-mot-buoi', label: 'Tạo yêu cầu xin nghỉ' },
         { href: '/user/nhan-lop-1-buoi', label: 'Danh sách nhận lớp 1 buổi' },
       ],
@@ -435,6 +433,15 @@ export function Sidebar() {
     closeSidebarOnMobile()
   }, [pathname, closeSidebarOnMobile])
 
+  // Onboarding: tự động mở submenu khi được yêu cầu
+  useEffect(() => {
+    if (!requestExpandLabels || requestExpandLabels.length === 0) return;
+    setExpandedMenus((prev) => {
+      const next = Array.from(new Set([...prev, ...requestExpandLabels]));
+      return next;
+    });
+  }, [requestExpandLabels])
+
   const toggleSubmenu = (label: string) => {
     setExpandedMenus((prev) => {
       const updated = prev.includes(label)
@@ -469,14 +476,15 @@ export function Sidebar() {
     if (!href) return undefined;
     const path = href.split("?")[0];
     if (path === "/user/truyenthong") return "tour-nav-truyenthong";
-    if (path === "/user/thongtingv") return "tour-nav-thongtin";
+    if (path === "/user/thong-tin-giao-vien") return "tour-nav-thongtin";
     if (path === "/user/hoat-dong-hang-thang") return "tour-nav-hoatdong";
     if (path === "/user/xin-nghi-mot-buoi") return "tour-nav-xinnghi";
     if (path === "/user/nhan-lop-1-buoi") return "tour-nav-nhanlop";
-    if (path === "/user/training") return "tour-nav-training";
+    if (path === "/user/dao-tao-nang-cao") return "tour-nav-training";
     if (path === "/user/assignments") return "tour-nav-assignments";
     if (path === "/user/giaitrinh") return "tour-nav-giaitrinh";
-    if (path === "/user/page2") return "tour-nav-quytrinh";
+    if (path === "/user/quy-trinh-quy-dinh") return "tour-nav-quytrinh";
+    if (path === "/user/quan-ly-phan-hoi") return "tour-nav-quanlyphanho";
     return undefined;
   };
 

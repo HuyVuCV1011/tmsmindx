@@ -6,12 +6,16 @@ interface SidebarContextType {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   toggle: () => void;
+  // Dùng cho onboarding: yêu cầu sidebar mở rộng các submenu chứa label này
+  requestExpandLabels: string[];
+  setRequestExpandLabels: (labels: string[]) => void;
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(true);
+  const [requestExpandLabels, setRequestExpandLabels] = useState<string[]>([]);
 
   // Auto-collapse on mobile with debounce
   useEffect(() => {
@@ -52,7 +56,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const toggle = () => setIsOpen(!isOpen);
 
   return (
-    <SidebarContext.Provider value={{ isOpen, setIsOpen, toggle }}>
+    <SidebarContext.Provider value={{ isOpen, setIsOpen, toggle, requestExpandLabels, setRequestExpandLabels }}>
       {children}
     </SidebarContext.Provider>
   );
