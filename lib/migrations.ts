@@ -1223,6 +1223,33 @@ const migrations: Migration[] = [
       ADD COLUMN IF NOT EXISTS admin_image_urls JSONB NOT NULL DEFAULT '[]'::jsonb;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V48: Add user_name + reaction to communication_likes
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V48_communication_likes_user_name_reaction',
+    version: 48,
+    sql: `
+      ALTER TABLE communication_likes
+        ADD COLUMN IF NOT EXISTS reaction VARCHAR(20) DEFAULT 'like',
+        ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // V49: Add birthday columns to teachers
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V49_teachers_birthday',
+    version: 49,
+    sql: `
+      ALTER TABLE teachers
+        ADD COLUMN IF NOT EXISTS birthday VARCHAR(10),
+        ADD COLUMN IF NOT EXISTS birth_day INTEGER,
+        ADD COLUMN IF NOT EXISTS birth_month INTEGER;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

@@ -49,6 +49,7 @@ interface Comment {
   reaction_count: number
   reactions: Reaction[]
   replies: Comment[]
+  _replyToName?: string  // tên người được reply (dùng cho flatten)
 }
 
 interface CommentItemProps {
@@ -62,6 +63,10 @@ interface CommentItemProps {
   onDelete: (commentId: number) => void
   onToggleHide?: (commentId: number, hidden: boolean) => void
   depth?: number
+  /** ID của comment depth=1 (root của thread replies) — dùng để flatten reply từ depth≥2 */
+  threadRootId?: number
+  /** Tên người được reply (để hiển thị @tag khi depth≥2) */
+  replyToName?: string
 }
 
 interface ConfirmDialogState {
@@ -91,6 +96,8 @@ function CommentItem({
   onDelete,
   onToggleHide,
   depth = 0,
+  threadRootId,
+  replyToName,
 }: CommentItemProps) {
   const [showReplyBox, setShowReplyBox] = useState(false)
   const [replyContent, setReplyContent] = useState('')
@@ -142,7 +149,10 @@ function CommentItem({
 
   const handleReply = () => {
     if (replyContent.trim()) {
-      onReply(comment.id, replyContent)
+      // depth >= 1: reply vào threadRootId để flatten về tầng 2
+      // depth 0: reply vào comment.id bình thường
+      const targetId = depth >= 1 && threadRootId ? threadRootId : comment.id
+      onReply(targetId, replyContent)
       setReplyContent('')
       setShowReplyBox(false)
     }
@@ -283,21 +293,21 @@ function CommentItem({
   }
 
   return (
-    <div
-      className={`transition-all duration-300 ${depth > 0 ? 'mt-2 ml-4 border-l-2 border-[#e6b8c2] pl-3' : 'mt-3'} ${depth > 2 ? 'ml-2' : ''} ${isHidden && !isAdmin ? 'hidden' : ''} ${isHidden && isAdmin ? 'opacity-50' : ''} ${isDeleting ? 'pointer-events-none opacity-30' : ''} ${isHiding ? 'opacity-70' : ''}`}
-    >
+    <div className={`${depth > 0 ? 'mt-2' : 'mt-3'} ${isHidden && !isAdmin ? 'hidden' : ''} ${isHidden && isAdmin ? 'opacity-50' : ''} ${isDeleting ? 'pointer-events-none opacity-30' : ''} ${isHiding ? 'opacity-70' : ''}`}>
       <div className="flex gap-2">
-        {/* Avatar */}
-        <div className="shrink-0">
-          <div
-            className={`flex h-8 w-8 items-center justify-center rounded-full bg-[#a1001f] text-sm font-semibold text-white ${isHidden ? 'opacity-50' : ''}`}
-          >
+        {/* Cột trái: avatar + đường dọc */}
+        <div className="shrink-0 flex flex-col items-center">
+          <div className={`flex items-center justify-center rounded-full bg-[#a1001f] font-semibold text-white shrink-0 ${depth > 0 ? 'h-7 w-7 text-xs' : 'h-8 w-8 text-sm'} ${isHidden ? 'opacity-50' : ''}`}>
             {comment.user_name.charAt(0).toUpperCase()}
           </div>
+          {/* Đường dọc — chỉ hiện khi có replies đang mở */}
+          {depth < 2 && comment.replies && comment.replies.filter(r => isAdmin || !r.hidden).length > 0 && visibleRepliesCount > 0 && (
+            <div className="w-0.5 bg-gray-300 flex-1 mt-1" />
+          )}
         </div>
 
-        {/* Comment Content */}
-        <div className="flex-1">
+        {/* Cột phải: content + actions + replies */}
+        <div className="flex-1 min-w-0">
           {isHidden && isAdmin && (
             <div className="mb-2">
               <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-500 text-white text-xs font-bold rounded">
@@ -306,12 +316,8 @@ function CommentItem({
               </span>
             </div>
           )}
-          <Card
-            className={`border-none bg-muted/50 p-2 ${isHidden && isAdmin ? 'border border-dashed border-gray-400' : ''}`}
-          >
-            <div className="font-semibold text-sm text-foreground">
-              {comment.user_name}
-            </div>
+          <Card className={`border-none bg-muted/50 p-2 min-w-0 ${isHidden && isAdmin ? 'border border-dashed border-gray-400' : ''}`}>
+            <div className="font-semibold text-sm text-foreground">{comment.user_name}</div>
             {isEditing ? (
               <div className="mt-1 space-y-2">
                 <div className="relative">
@@ -321,9 +327,7 @@ function CommentItem({
                     className="min-h-20 resize-none rounded-lg border-2 border-[#e6b8c2] p-2 text-sm transition-colors focus:border-[#a1001f]"
                     placeholder="Chỉnh sửa bình luận của bạn..."
                   />
-                  <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
-                    {editContent.length} ký tự
-                  </div>
+                  <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">{editContent.length} ký tự</div>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-[#e6b8c2] bg-[#fdf2f5] p-2">
                   <span className="flex items-center gap-1 text-xs font-medium text-[#a1001f]">
@@ -331,48 +335,28 @@ function CommentItem({
                     Đang chỉnh sửa bình luận
                   </span>
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setIsEditing(false)
-                        setEditContent(comment.content)
-                      }}
-                      className="cursor-pointer h-8 hover:bg-gray-200 text-gray-700"
-                    >
-                      Hủy
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleEdit}
-                      disabled={
-                        !editContent.trim() || editContent === comment.content
-                      }
-                      className="h-8 cursor-pointer bg-[#a1001f] text-white hover:bg-[#870019]"
-                    >
-                      <Edit className="w-3 h-3 mr-1" />
-                      Lưu thay đổi
+                    <Button size="sm" variant="ghost" onClick={() => { setIsEditing(false); setEditContent(comment.content) }} className="cursor-pointer h-8 hover:bg-gray-200 text-gray-700">Hủy</Button>
+                    <Button size="sm" onClick={handleEdit} disabled={!editContent.trim() || editContent === comment.content} className="h-8 cursor-pointer bg-[#a1001f] text-white hover:bg-[#870019]">
+                      <Edit className="w-3 h-3 mr-1" />Lưu thay đổi
                     </Button>
                   </div>
                 </div>
               </div>
             ) : (
               <>
-                <p className="text-sm text-foreground whitespace-pre-wrap">
+                <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+                  {(replyToName || comment._replyToName) && depth >= 1 && (
+                    <span className="text-[#a1001f] font-semibold mr-1">{replyToName || comment._replyToName}</span>
+                  )}
                   {comment.content}
                 </p>
-                {isEdited && (
-                  <span className="text-xs text-muted-foreground italic mt-0.5 block">
-                    Đã chỉnh sửa
-                  </span>
-                )}
+                {isEdited && <span className="text-xs text-muted-foreground italic mt-0.5 block">Đã chỉnh sửa</span>}
               </>
             )}
           </Card>
 
           {/* Actions */}
-          <div className="flex items-center gap-3 mt-1 px-1">
-            {/* Reactions Display */}
+          <div className="flex flex-wrap items-center gap-3 mt-1 px-1">
             {Object.keys(reactionCounts || {}).length > 0 && (
               <div className="flex items-center gap-1 text-xs">
                 {Object.entries(reactionCounts || {}).map(([type, count]) => {
@@ -388,38 +372,19 @@ function CommentItem({
                 })}
               </div>
             )}
-
-            {/* React Button */}
-            <div
-              ref={reactionsRef}
-              className="relative"
-              onMouseEnter={() => setShowReactions(true)}
-            >
+            <div ref={reactionsRef} className="relative" onMouseEnter={() => setShowReactions(true)}>
               <button
-                className={`cursor-pointer text-xs font-semibold transition-all duration-200 ${
-                  userReaction
-                    ? 'text-[#a1001f]'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+                onClick={() => { if (userReaction) { handleReact(userReaction.type) } else { setShowReactions(prev => !prev) } }}
+                className={`cursor-pointer text-xs font-semibold transition-all duration-200 ${userReaction ? 'text-[#a1001f]' : 'text-muted-foreground hover:text-foreground'}`}
               >
-                {userReaction
-                  ? REACTIONS.find((r) => r.type === userReaction.type)?.label
-                  : 'Thích'}
+                {userReaction ? REACTIONS.find((r) => r.type === userReaction.type)?.label : 'Thích'}
               </button>
-
-              {/* Reactions Popup */}
               {showReactions && (
                 <div className="absolute bottom-full left-0 z-10 mb-2 flex gap-1 rounded-full border border-[#e6b8c2] bg-white/95 p-1.5 shadow-2xl backdrop-blur-sm animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
                   {REACTIONS.map((reaction, index) => {
                     const Icon = reaction.icon
                     return (
-                      <button
-                        key={reaction.type}
-                        onClick={() => handleReact(reaction.type)}
-                        className={`cursor-pointer rounded-full p-1.5 transition-all duration-200 hover:-translate-y-1 hover:scale-125 hover:bg-[#fdf2f5] transform ${reaction.color} animate-in fade-in-0 zoom-in-50`}
-                        style={{ animationDelay: `${index * 30}ms` }}
-                        title={reaction.label}
-                      >
+                      <button key={reaction.type} onClick={() => handleReact(reaction.type)} className={`cursor-pointer rounded-full p-1.5 transition-all duration-200 hover:-translate-y-1 hover:scale-125 hover:bg-[#fdf2f5] transform ${reaction.color} animate-in fade-in-0 zoom-in-50`} style={{ animationDelay: `${index * 30}ms` }} title={reaction.label}>
                         <Icon className="w-6 h-6 drop-shadow-sm" />
                       </button>
                     )
@@ -427,358 +392,150 @@ function CommentItem({
                 </div>
               )}
             </div>
-
-            {/* Reply Button */}
-            {depth < 3 && (
-              <button
-                onClick={() => setShowReplyBox(!showReplyBox)}
-                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              >
-                Trả lời
-              </button>
-            )}
-
-            {/* Edit Button (owner only) */}
+            <button onClick={() => setShowReplyBox(!showReplyBox)} className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer">Trả lời</button>
             {isOwner && !isEditing && (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 cursor-pointer"
-              >
-                <Edit className="w-3 h-3" />
-                Sửa
+              <button onClick={() => setIsEditing(true)} className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 cursor-pointer">
+                <Edit className="w-3 h-3" />Sửa
               </button>
             )}
-
-            {/* Delete Button (owner only) */}
             {isOwner && (
-              <button
-                onClick={handleDelete}
-                className="text-xs font-semibold text-muted-foreground hover:text-red-600 transition-colors flex items-center gap-1 cursor-pointer"
-              >
-                <Trash2 className="w-3 h-3" />
-                Xóa
+              <button onClick={handleDelete} className="text-xs font-semibold text-muted-foreground hover:text-red-600 transition-colors flex items-center gap-1 cursor-pointer">
+                <Trash2 className="w-3 h-3" />Xóa
               </button>
             )}
-
-            <span className="text-xs text-muted-foreground">
-              {timeAgo(comment.created_at)}
-            </span>
+            <span className="text-xs text-muted-foreground">{timeAgo(comment.created_at)}</span>
           </div>
 
-          {/* Admin Control Buttons - Separate Section */}
           {isAdmin && (
             <div className="mt-2 flex gap-2 ml-1">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleAdminHide}
-                disabled={isHiding || isDeleting}
-                className={`h-7 px-2 transition-all shadow-sm cursor-pointer ${
-                  isHidden
-                    ? 'border-green-500 text-green-600 hover:bg-green-50 hover:text-green-700 hover:border-green-600'
-                    : 'border-orange-500 text-orange-600 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-600'
-                }`}
-              >
+              <Button size="sm" variant="outline" onClick={handleAdminHide} disabled={isHiding || isDeleting} className={`h-7 px-2 transition-all shadow-sm cursor-pointer ${isHidden ? 'border-green-500 text-green-600 hover:bg-green-50' : 'border-orange-500 text-orange-600 hover:bg-orange-50'}`}>
                 <Shield className="w-3.5 h-3.5 mr-1.5" />
-                {isHiding ? (
-                  <div className="w-3 h-3 bg-gray-400 rounded-full mr-1.5 animate-pulse"></div>
-                ) : (
-                  <EyeOff className="w-3.5 h-3.5 mr-1.5" />
-                )}
-                <span className="text-xs font-semibold">
-                  {isHiding
-                    ? 'Đang xử lý...'
-                    : isHidden
-                      ? 'Hiện bình luận'
-                      : 'Ẩn bình luận'}
-                </span>
-                <span
-                  className={`ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded ${
-                    isHidden
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-orange-100 text-orange-700'
-                  }`}
-                >
-                  ADMIN
-                </span>
+                <EyeOff className="w-3.5 h-3.5 mr-1.5" />
+                <span className="text-xs font-semibold">{isHiding ? 'Đang xử lý...' : isHidden ? 'Hiện bình luận' : 'Ẩn bình luận'}</span>
+                <span className={`ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded ${isHidden ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>ADMIN</span>
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleAdminDelete}
-                disabled={isDeleting || isHiding}
-                className="h-7 px-2 border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-600 transition-all shadow-sm cursor-pointer"
-              >
+              <Button size="sm" variant="outline" onClick={handleAdminDelete} disabled={isDeleting || isHiding} className="h-7 px-2 border-red-500 text-red-600 hover:bg-red-50 transition-all shadow-sm cursor-pointer">
                 <Shield className="w-3.5 h-3.5 mr-1.5" />
-                {isDeleting ? (
-                  <div className="w-3 h-3 bg-gray-400 rounded-full mr-1.5 animate-pulse"></div>
-                ) : (
-                  <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                )}
-                <span className="text-xs font-semibold">
-                  {isDeleting ? 'Đang xóa...' : 'Xóa bình luận'}
-                </span>
-                <span className="ml-2 px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded">
-                  ADMIN
-                </span>
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                <span className="text-xs font-semibold">{isDeleting ? 'Đang xóa...' : 'Xóa bình luận'}</span>
+                <span className="ml-2 px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded">ADMIN</span>
               </Button>
-              {isOwner && (
-                <span className="text-xs text-muted-foreground self-center ml-2">
-                  (Bình luận của bạn)
-                </span>
-              )}
             </div>
           )}
 
-          {/* Reply Box */}
           {showReplyBox && (
             <div className="mt-2 ml-1">
-              <Textarea
-                value={replyContent}
-                onChange={(e) => setReplyContent(e.target.value)}
-                placeholder="Viết trả lời..."
-                className="min-h-12 text-sm"
-              />
+              <Textarea value={replyContent} onChange={(e) => setReplyContent(e.target.value)} placeholder="Viết trả lời..." className="min-h-12 text-sm" />
               <div className="flex gap-2 mt-2">
-                <Button
-                  size="sm"
-                  onClick={handleReply}
-                  className="cursor-pointer"
-                >
-                  Gửi
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowReplyBox(false)}
-                  className="cursor-pointer"
-                >
-                  Hủy
-                </Button>
+                <Button size="sm" onClick={handleReply} className="cursor-pointer">Gửi</Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowReplyBox(false)} className="cursor-pointer">Hủy</Button>
               </div>
             </div>
           )}
 
-          {/* Nested Replies */}
-          {comment.replies && comment.replies.length > 0 && (() => {
-            // User thường chỉ thấy replies không bị ẩn
-            const visibleReplies = isAdmin
-              ? comment.replies
-              : comment.replies.filter((r) => !r.hidden)
+          {/* Replies — render bên dưới content, không indent thêm */}
+          {depth < 2 && comment.replies && comment.replies.length > 0 && (() => {
+            const visibleReplies = isAdmin ? comment.replies : comment.replies.filter((r) => !r.hidden)
             if (visibleReplies.length === 0) return null
+            const shownReplies = visibleReplies.slice(0, visibleRepliesCount)
             return (
-            <div className="mt-2">
-              {/* Show Replies Button */}
-              {visibleRepliesCount === 0 ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setVisibleRepliesCount(2)}
-                  className="-ml-2 cursor-pointer text-xs font-medium text-[#a1001f] hover:text-[#870019]"
-                >
-                  <ChevronDown className="w-3 h-3 mr-1" />
-                  Xem {visibleReplies.length} câu trả lời
-                </Button>
-              ) : (
-                <>
-                  {/* Rendered Replies */}
-                  {visibleReplies
-                    .slice(0, visibleRepliesCount)
-                    .map((reply) => (
-                      <CommentItem
-                        key={reply.id}
-                        comment={reply}
-                        currentUserId={currentUserId}
-                        currentUserEmail={currentUserEmail}
-                        isAdmin={isAdmin}
-                        onReply={onReply}
-                        onReact={onReact}
-                        onEdit={onEdit}
-                        onDelete={onDelete}
-                        onToggleHide={onToggleHide}
-                        depth={depth + 1}
-                      />
-                    ))}
-
-                  {/* Load More Replies Button */}
-                  {visibleRepliesCount < visibleReplies.length && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setVisibleRepliesCount((prev) =>
-                          Math.min(prev + 2, visibleReplies.length),
+              <div className="mt-2">
+                {visibleRepliesCount === 0 ? (
+                  <Button variant="ghost" size="sm" onClick={() => setVisibleRepliesCount(2)} className="-ml-2 cursor-pointer text-xs font-medium text-[#a1001f] hover:text-[#870019]">
+                    <ChevronDown className="w-3 h-3 mr-1" />
+                    Xem {visibleReplies.length} câu trả lời
+                  </Button>
+                ) : (
+                  <>
+                    {/* Replies */}
+                    <div className="relative">
+                      {shownReplies.map((reply, idx) => {
+                        return (
+                          <div key={reply.id} className="relative mt-2">
+                            {/* Đường cong mượt (└) nối từ nhánh dọc chính vào avatar của reply */}
+                            <div
+                              className="absolute rounded-bl-xl border-l-[2px] border-b-[2px] border-gray-300"
+                              style={{
+                                height: '24px', // Kéo dài lên trên 24px để đè chặt nét thẳng lên line dọc phía trên
+                                width: depth === 0 ? '25px' : '23px', // Bù thêm 1px để mét trái khớp hoàn hảo (che đúng 2px line dọc)
+                                left: depth === 0 ? '-25px' : '-23px', 
+                                top: '-9px', // Trượt lên -9px -> Đáy của box = -9 + 24 = 15px. Border bottom 2px nằm từ 13px -> 15px, trung tâm là 14px (khớp y xì tâm avatar con h-7)
+                              }}
+                            />
+                            {/* Cột phải: Content của reply */}
+                            <div className="w-full min-w-0">
+                              <CommentItem
+                                comment={reply}
+                                currentUserId={currentUserId}
+                                currentUserEmail={currentUserEmail}
+                                isAdmin={isAdmin}
+                                onReply={onReply}
+                                onReact={onReact}
+                                onEdit={onEdit}
+                                onDelete={onDelete}
+                                onToggleHide={onToggleHide}
+                                depth={1}
+                                threadRootId={depth === 0 ? comment.id : (threadRootId ?? comment.id)}
+                                replyToName={undefined}
+                              />
+                            </div>
+                          </div>
                         )
-                      }
-                      className="-ml-2 mt-2 cursor-pointer text-xs font-medium text-[#a1001f] hover:text-[#870019]"
-                    >
-                      <ChevronDown className="w-3 h-3 mr-1" />
-                      Xem thêm{' '}
-                      {Math.min(2, visibleReplies.length - visibleRepliesCount)}{' '}
-                      câu trả lời
-                    </Button>
-                  )}
-
-                  {/* Hide Replies Button */}
-                  {visibleRepliesCount > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setVisibleRepliesCount(0)}
-                      className="text-xs text-muted-foreground hover:text-foreground font-medium mt-2 -ml-2 cursor-pointer"
-                    >
-                      Ẩn câu trả lời
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
+                      })}
+                    </div>
+                    {visibleRepliesCount < visibleReplies.length && (
+                      <Button variant="ghost" size="sm" onClick={() => setVisibleRepliesCount(prev => Math.min(prev + 2, visibleReplies.length))} className="-ml-2 mt-1 cursor-pointer text-xs font-medium text-[#a1001f] hover:text-[#870019]">
+                        <ChevronDown className="w-3 h-3 mr-1" />
+                        Xem thêm {Math.min(2, visibleReplies.length - visibleRepliesCount)} câu trả lời
+                      </Button>
+                    )}
+                    {visibleRepliesCount > 0 && (
+                      <Button variant="ghost" size="sm" onClick={() => setVisibleRepliesCount(0)} className="text-xs text-muted-foreground hover:text-foreground font-medium mt-1 -ml-2 cursor-pointer">
+                        Ẩn câu trả lời
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
             )
           })()}
         </div>
       </div>
 
-      {/* Confirm Dialog */}
-      <Dialog
-        open={confirmDialog.open}
-        onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
-      >
+      {/* ConfirmDialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}>
         <DialogContent className="sm:max-w-120 p-0 gap-0 overflow-hidden rounded-2xl shadow-2xl border-0">
-          {/* Header with Icon */}
-          <div
-            className={`p-6 pb-5 relative overflow-hidden ${
-              confirmDialog.variant === 'delete'
-                ? 'bg-linear-to-br from-red-50 via-red-100 to-red-50'
-                : confirmDialog.variant === 'hide'
-                  ? 'bg-linear-to-br from-orange-50 via-orange-100 to-orange-50'
-                  : confirmDialog.variant === 'unhide'
-                    ? 'bg-linear-to-br from-green-50 via-green-100 to-green-50'
-                    : 'bg-linear-to-br from-gray-50 via-gray-100 to-gray-50'
-            }`}
-          >
-            {/* Decorative blur circles */}
-            <div
-              className={`absolute -top-10 -right-10 w-32 h-32 rounded-full blur-3xl opacity-30 ${
-                confirmDialog.variant === 'delete'
-                  ? 'bg-red-400'
-                  : confirmDialog.variant === 'hide'
-                    ? 'bg-orange-400'
-                    : confirmDialog.variant === 'unhide'
-                      ? 'bg-green-400'
-                      : 'bg-gray-400'
-              }`}
-            />
-            <div
-              className={`absolute -bottom-10 -left-10 w-32 h-32 rounded-full blur-3xl opacity-20 ${
-                confirmDialog.variant === 'delete'
-                  ? 'bg-red-300'
-                  : confirmDialog.variant === 'hide'
-                    ? 'bg-orange-300'
-                    : confirmDialog.variant === 'unhide'
-                      ? 'bg-green-300'
-                      : 'bg-gray-300'
-              }`}
-            />
-
+          <div className={`p-6 pb-5 relative overflow-hidden ${confirmDialog.variant === 'delete' ? 'bg-linear-to-br from-red-50 via-red-100 to-red-50' : confirmDialog.variant === 'hide' ? 'bg-linear-to-br from-orange-50 via-orange-100 to-orange-50' : 'bg-linear-to-br from-green-50 via-green-100 to-green-50'}`}>
+            <div className={`absolute -top-8 -right-8 w-32 h-32 rounded-full opacity-20 ${confirmDialog.variant === 'delete' ? 'bg-red-400' : confirmDialog.variant === 'hide' ? 'bg-orange-400' : 'bg-green-300'}`} />
             <div className="flex items-start gap-4 relative z-10">
-              {/* Icon with animation */}
-              <div
-                className={`shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center animate-pulse shadow-2xl ${
-                  confirmDialog.variant === 'delete'
-                    ? 'bg-linear-to-br from-red-500 to-red-700 shadow-red-500/50'
-                    : confirmDialog.variant === 'hide'
-                      ? 'bg-linear-to-br from-orange-500 to-orange-700 shadow-orange-500/50'
-                      : confirmDialog.variant === 'unhide'
-                        ? 'bg-linear-to-br from-green-500 to-green-700 shadow-green-500/50'
-                        : 'bg-linear-to-br from-gray-500 to-gray-700 shadow-gray-500/50'
-                }`}
-              >
-                {confirmDialog.variant === 'delete' && (
-                  <AlertTriangle className="w-7 h-7 text-white drop-shadow-lg" />
-                )}
-                {confirmDialog.variant === 'hide' && (
-                  <EyeOff className="w-7 h-7 text-white drop-shadow-lg" />
-                )}
-                {confirmDialog.variant === 'unhide' && (
-                  <Eye className="w-7 h-7 text-white drop-shadow-lg" />
-                )}
+              <div className={`shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center animate-pulse shadow-2xl ${confirmDialog.variant === 'delete' ? 'bg-linear-to-br from-red-500 to-red-700 shadow-red-500/50' : confirmDialog.variant === 'hide' ? 'bg-linear-to-br from-orange-500 to-orange-700 shadow-orange-500/50' : 'bg-linear-to-br from-green-500 to-green-700 shadow-green-500/50'}`}>
+                {confirmDialog.variant === 'delete' && <AlertTriangle className="w-7 h-7 text-white drop-shadow-lg" />}
+                {confirmDialog.variant === 'hide' && <EyeOff className="w-7 h-7 text-white drop-shadow-lg" />}
+                {confirmDialog.variant === 'unhide' && <Eye className="w-7 h-7 text-white drop-shadow-lg" />}
               </div>
-
-              {/* Title */}
               <div className="flex-1 pt-1.5">
                 <DialogTitle className="text-2xl font-extrabold bg-linear-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent leading-tight mb-2">
-                  {confirmDialog.variant === 'delete'
-                    ? 'Xóa bình luận'
-                    : confirmDialog.variant === 'hide'
-                      ? 'Ẩn bình luận'
-                      : confirmDialog.variant === 'unhide'
-                        ? 'Hiện bình luận'
-                        : 'Xác nhận'}
+                  {confirmDialog.variant === 'delete' ? 'Xóa bình luận' : confirmDialog.variant === 'hide' ? 'Ẩn bình luận' : confirmDialog.variant === 'unhide' ? 'Hiện bình luận' : 'Xác nhận'}
                 </DialogTitle>
-                <div
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                    confirmDialog.variant === 'delete'
-                      ? 'bg-red-200/80 text-red-900'
-                      : confirmDialog.variant === 'hide'
-                        ? 'bg-orange-200/80 text-orange-900'
-                        : confirmDialog.variant === 'unhide'
-                          ? 'bg-green-200/80 text-green-900'
-                          : 'bg-gray-200/80 text-gray-900'
-                  }`}
-                >
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${confirmDialog.variant === 'delete' ? 'bg-red-200/80 text-red-900' : confirmDialog.variant === 'hide' ? 'bg-orange-200/80 text-orange-900' : 'bg-green-200/80 text-green-900'}`}>
                   <Shield className="w-3 h-3" />
                   {isAdmin ? 'Admin Action' : 'Xác nhận'}
                 </div>
               </div>
             </div>
           </div>
-
-          {/* Description */}
           <div className="px-6 py-5 bg-white">
-            <DialogDescription className="text-base text-gray-700 leading-relaxed font-normal">
-              {confirmDialog.description}
-            </DialogDescription>
+            <DialogDescription className="text-base text-gray-700 leading-relaxed font-normal">{confirmDialog.description}</DialogDescription>
           </div>
-
-          {/* Footer Buttons */}
           <div className="px-6 pb-6 pt-2 bg-linear-to-b from-white to-gray-50">
             <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setConfirmDialog((prev) => ({ ...prev, open: false }))
-                }
-                className="flex-1 h-12 font-bold text-base cursor-pointer bg-white hover:bg-gray-50 transition-all border-2 border-gray-300 hover:border-gray-400 rounded-xl shadow-sm hover:shadow-md"
-              >
+              <Button variant="outline" onClick={() => setConfirmDialog((prev) => ({ ...prev, open: false }))} className="flex-1 h-12 font-bold text-base cursor-pointer bg-white hover:bg-gray-50 transition-all border-2 border-gray-300 hover:border-gray-400 rounded-xl shadow-sm hover:shadow-md">
                 <span className="mr-2">✕</span> Hủy bỏ
               </Button>
-              <Button
-                onClick={confirmDialog.onConfirm}
-                className={`flex-1 h-12 font-bold text-base cursor-pointer transition-all rounded-xl shadow-lg hover:shadow-xl text-white border-0 hover:scale-105 ${
-                  confirmDialog.variant === 'delete'
-                    ? 'bg-linear-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800'
-                    : confirmDialog.variant === 'hide'
-                      ? 'bg-linear-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800'
-                      : confirmDialog.variant === 'unhide'
-                        ? 'bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800'
-                        : 'bg-linear-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800'
-                }`}
-              >
-                {confirmDialog.variant === 'delete' && (
-                  <>
-                    <Trash2 className="w-5 h-5 mr-2" /> Xóa ngay
-                  </>
-                )}
-                {confirmDialog.variant === 'hide' && (
-                  <>
-                    <EyeOff className="w-5 h-5 mr-2" /> Ẩn ngay
-                  </>
-                )}
-                {confirmDialog.variant === 'unhide' && (
-                  <>
-                    <Eye className="w-5 h-5 mr-2" /> Hiện ngay
-                  </>
-                )}
+              <Button onClick={confirmDialog.onConfirm} className={`flex-1 h-12 font-bold text-base cursor-pointer transition-all rounded-xl shadow-lg hover:shadow-xl text-white border-0 hover:scale-105 ${confirmDialog.variant === 'delete' ? 'bg-linear-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800' : confirmDialog.variant === 'hide' ? 'bg-linear-to-r from-orange-600 to-orange-700' : 'bg-linear-to-r from-green-600 to-green-700'}`}>
+                {confirmDialog.variant === 'delete' && <><Trash2 className="w-5 h-5 mr-2" /> Xóa ngay</>}
+                {confirmDialog.variant === 'hide' && <><EyeOff className="w-5 h-5 mr-2" /> Ẩn ngay</>}
+                {confirmDialog.variant === 'unhide' && <><Eye className="w-5 h-5 mr-2" /> Hiện ngay</>}
               </Button>
             </div>
           </div>
@@ -828,8 +585,62 @@ export default function Comments({
     try {
       const res = await fetch(`/api/truyenthong/posts/${postSlug}/comments`)
       if (res.ok) {
-        const data = await res.json()
-        setComments(data)
+        const data: Comment[] = await res.json()
+
+        // Flatten comment tree: tối đa 2 tầng (depth 0 và depth 1)
+        // Replies sâu hơn được gắn vào tầng 1 với replyToName
+        const flattenReplies = (comment: Comment): Comment => {
+          if (!comment.replies || comment.replies.length === 0) return comment
+
+          const allReplies: Comment[] = []
+          const collectReplies = (replies: Comment[], parentName: string, currentDepth: number) => {
+            replies.forEach(reply => {
+              if (currentDepth <= 1) {
+                // Tầng 1 và 2: giữ nguyên cấu trúc, chỉ flatten replies sâu hơn
+                const enriched = {
+                  ...reply,
+                  _replyToName: currentDepth >= 1 ? parentName : undefined,
+                  replies: reply.replies && reply.replies.length > 0
+                    ? flattenDeep(reply.replies, reply.user_name)
+                    : [],
+                }
+                allReplies.push(enriched)
+              } else {
+                // Tầng 3+: flatten về tầng 2
+                const enriched = {
+                  ...reply,
+                  _replyToName: parentName,
+                  replies: [],
+                }
+                allReplies.push(enriched)
+                if (reply.replies && reply.replies.length > 0) {
+                  collectReplies(reply.replies, reply.user_name, currentDepth)
+                }
+              }
+            })
+          }
+
+          // Flatten tất cả replies sâu hơn tầng 2 về tầng 2
+          const flattenDeep = (replies: Comment[], parentName: string): Comment[] => {
+            const result: Comment[] = []
+            replies.forEach(reply => {
+              result.push({
+                ...reply,
+                _replyToName: parentName,
+                replies: [],
+              })
+              if (reply.replies && reply.replies.length > 0) {
+                result.push(...flattenDeep(reply.replies, reply.user_name))
+              }
+            })
+            return result
+          }
+
+          collectReplies(comment.replies, comment.user_name, 0)
+          return { ...comment, replies: allReplies }
+        }
+
+        setComments(data.map(flattenReplies))
       }
     } catch (error) {
       console.error('Error loading comments:', error)
