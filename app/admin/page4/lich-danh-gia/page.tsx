@@ -719,11 +719,12 @@ export default function ProfessionalEvaluationSchedulePage() {
         return;
       }
 
-      const hasNoSet = formData.examSchedules.some((s) => !s.selectedSetId);
-      if (hasNoSet) {
-        toast.error("Vui lòng chọn bộ đề cho tất cả lịch kiểm tra");
-        return;
-      }
+      // TODO: Bật lại khi cần bắt buộc chọn bộ đề
+      // const hasNoSet = formData.examSchedules.some((s) => !s.selectedSetId);
+      // if (hasNoSet) {
+      //   toast.error("Vui lòng chọn bộ đề cho tất cả lịch kiểm tra");
+      //   return;
+      // }
 
       const hasInvalidTimeRange = formData.examSchedules.some((schedule) => {
         const startAt = combineDateAndTime(formData.examDate, schedule.startTime);

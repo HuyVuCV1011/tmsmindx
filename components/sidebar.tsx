@@ -114,10 +114,6 @@ export function Sidebar() {
       label: 'Đào tạo đầu vào',
       icon: Users,
       submenu: [
-        { href: '/admin/page1', label: 'Hồ sơ Giáo viên' },
-        { href: '/admin/page4/quan-ly-lich-lam-viec', label: 'Quản lý lịch làm việc' },
-        { href: '/admin/page4/lich-danh-gia', label: 'Lịch sự kiện' },
-        { href: '/admin/xin-nghi-mot-buoi', label: 'Tiếp nhận xin nghỉ 1 buổi' },
         {
           href: '/admin/hr-candidates/gen-planner?region=south',
           label: 'Miền Nam (HCM + Tỉnh Nam)',
@@ -133,6 +129,7 @@ export function Sidebar() {
       icon: Users,
       submenu: [
         { href: '/admin/page1', label: 'Hồ sơ Giáo viên' },
+        { href: '/admin/page4/quan-ly-lich-lam-viec', label: 'Quản lý lịch làm việc' },
         { href: '/admin/page4/lich-danh-gia', label: 'Lịch sự kiện' },
         {
           href: '/admin/xin-nghi-mot-buoi',
