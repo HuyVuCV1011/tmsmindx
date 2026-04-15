@@ -4,6 +4,7 @@ import Modal from '@/components/Modal';
 import { Button } from '@/components/ui/button';
 import { StepItem, Stepper } from '@/components/ui/stepper';
 import { useAuth } from '@/lib/auth-context';
+import { parseLegacyTeacherFromInfoJson } from '@/lib/teacher-db-mapper';
 import { Award, ChevronDown, CheckCircle, DollarSign, FileText, Info, MessageSquare, Plus, Search, Send, TrendingDown, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -201,17 +202,18 @@ export default function DealLuongPage() {
     setTeacherLookupError('');
 
     try {
-      const res = await fetch(`/api/teachers?code=${encodeURIComponent(code)}`);
+      const res = await fetch(`/api/teachers/info?code=${encodeURIComponent(code)}`);
       const data = await res.json();
+      const legacy = parseLegacyTeacherFromInfoJson(data);
 
-      if (!res.ok || !data?.teacher) {
-        const err = data?.error || 'Không tìm thấy giáo viên theo codename';
+      if (!res.ok || !legacy?.teacher) {
+        const err = (data as { error?: string })?.error || 'Không tìm thấy giáo viên theo codename';
         setTeacherLookupError(err);
         setForm(prev => ({ ...prev, teacher_name: '', teacher_email: '' }));
         return;
       }
 
-      const teacher = data.teacher;
+      const teacher = legacy.teacher;
       setForm(prev => ({
         ...prev,
         teacher_name: teacher.name || '',

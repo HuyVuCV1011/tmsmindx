@@ -1,5 +1,6 @@
-'use client'
+"use client";
 
+import UserFirstLoginOnboarding from '@/components/onboarding/UserFirstLoginOnboarding'
 import { Sidebar } from '@/components/sidebar'
 import { useAuth } from '@/lib/auth-context'
 import { SidebarProvider, useSidebar } from '@/lib/sidebar-context'
@@ -7,26 +8,31 @@ import { usePathname } from 'next/navigation'
 import { Suspense } from 'react'
 
 function Layout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
-  const { isOpen } = useSidebar()
-  const { user } = useAuth()
+  const pathname = usePathname();
+  const { isOpen } = useSidebar();
+  const { user } = useAuth();
 
-  // Don't show sidebar on login page or root page
-  let shouldShowSidebar = !pathname.startsWith('/login') && pathname !== '/'
+  // Don't show sidebar on login/root/checkdatasource/maintenance pages
+  const noSidebarPaths =
+    pathname.startsWith('/login') ||
+    pathname === '/' ||
+    pathname.startsWith('/checkdatasource') ||
+    pathname.startsWith('/bao-tri')
+  let shouldShowSidebar = !noSidebarPaths
 
   // Hide sidebar if admin user has no permissions
-  if (shouldShowSidebar && pathname.startsWith('/admin')) {
-    const isSuperAdmin = user?.role === 'super_admin'
+  if (shouldShowSidebar && pathname.startsWith("/admin")) {
+    const isSuperAdmin = user?.role === "super_admin";
     const isAdminUser =
       user?.isAdmin ||
-      ['super_admin', 'admin', 'manager'].includes(user?.role || '')
+      ["super_admin", "admin", "manager"].includes(user?.role || "");
 
     if (
       isAdminUser &&
       !isSuperAdmin &&
       (!user?.permissions || user.permissions.length === 0)
     ) {
-      shouldShowSidebar = false
+      shouldShowSidebar = false;
     }
   }
 
@@ -38,6 +44,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         </Suspense>
       )}
       <main
+        data-tour="tour-content"
         className={`
           transition-all duration-500 ease-in-out min-h-screen will-change-transform
           ${
@@ -62,8 +69,9 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </main>
+      {!pathname.startsWith('/bao-tri') && <UserFirstLoginOnboarding />}
     </div>
-  )
+  );
 }
 
 export function PersistentLayout({ children }: { children: React.ReactNode }) {
@@ -71,5 +79,5 @@ export function PersistentLayout({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <Layout>{children}</Layout>
     </SidebarProvider>
-  )
+  );
 }

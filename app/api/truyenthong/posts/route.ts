@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { isDegradedDatabaseQueryError } from '@/lib/db-unavailable';
 import { generateSlug } from '@/lib/utils';
 import { v2 as cloudinary } from 'cloudinary';
 
@@ -94,6 +95,14 @@ WHERE 1=1`;
             client.release();
         }
     } catch (error) {
+        if (isDegradedDatabaseQueryError(error)) {
+            return NextResponse.json([], {
+                headers: {
+                    'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59',
+                    'X-DB-Unavailable': '1',
+                },
+            });
+        }
         console.error('Error fetching posts:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } });
     }

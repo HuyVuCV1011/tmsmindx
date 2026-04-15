@@ -23,6 +23,7 @@ import {
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import { parseLegacyTeacherFromInfoJson } from '@/lib/teacher-db-mapper'
 import useSWR from 'swr'
 
 interface Certificate {
@@ -98,20 +99,17 @@ export default function TeacherProfilePage() {
     fetcher,
   )
 
-  // Fetch teacher info from API to get teaching level
-  const { data: teacherData } = useSWR(
-    user?.email ? `/api/teachers?email=${user.email}` : null,
+  // Fetch teacher info from DB
+  const { data: rawTeacherData } = useSWR(
+    user?.email
+      ? `/api/teachers/info?email=${encodeURIComponent(user.email)}`
+      : null,
     fetcher,
   )
 
   const certificates = certificatesData?.data || []
   const privacySettings = privacyData?.data
-  const teacherInfo = teacherData?.teacher // API returns { teacher: {...} }
-
-  // Debug log to check teacher data
-  console.log('Teacher Data:', teacherData)
-  console.log('Teacher Info:', teacherInfo)
-  console.log('Program Current:', teacherInfo?.programCurrent)
+  const teacherInfo = parseLegacyTeacherFromInfoJson(rawTeacherData)?.teacher || null
 
   // Handle privacy setting toggle
   const handlePrivacyToggle = async (
@@ -288,8 +286,7 @@ export default function TeacherProfilePage() {
       setIsUploadingCert(false)
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
-      }
-    }
+      }    }
   }
 
   // Handle delete certificate

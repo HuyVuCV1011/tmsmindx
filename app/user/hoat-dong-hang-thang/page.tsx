@@ -2,14 +2,14 @@
 
 import { Card } from '@/components/Card'
 import Modal from '@/components/Modal'
-import { sPageContainer as PageContainer } from '@/components/PageContainer'
+import { PageContainer } from '@/components/PageContainer'
 import { useAuth } from '@/lib/auth-context'
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
-type CalendarView = 'day' | 'week' | 'month'
+type RegistrationTemplate = 'official' | 'supplement'
 type EventCategory =
   | 'registration'
   | 'exam'
@@ -19,7 +19,7 @@ type EventCategory =
   | 'advanced_training_release'
   | 'holiday'
 
-type RegistrationTemplate = 'official' | 'supplement'
+type CalendarView = 'month' | 'week' | 'day'
 
 interface EvaluationEvent {
   id: string
@@ -215,6 +215,7 @@ const REGISTER_OPTIONS = [
   '[COD] Python (PT)',
   '[COD] Web (JS)',
   '[COD] Computer Science (CS)',
+  '[COD] App Producer',
   '[ROB] Lego 4+',
   '[ROB] Vex Go',
   '[ROB] Vex IQ',
@@ -278,6 +279,18 @@ const REGISTER_OPTION_MAP: Record<string, RegisterPayload> = {
       '[COD] Computer Science (CS)',
       '[COD] ComputerScience',
       'COMPUTERSCIENCE',
+    ],
+  },
+  '[COD] App Producer': {
+    exam_type: 'expertise',
+    block_code: 'CODING',
+    subject_code: '[COD] App Producer',
+    optionLabel: '[COD] App Producer',
+    specialtyAliases: ['App Producer', 'AppProducer', 'Coding - App Producer'],
+    subjectCodeCandidates: [
+      '[COD] App Producer',
+      '[COD] AppProducer',
+      'APPPRODUCER',
     ],
   },
   '[ROB] Lego 4+': {
@@ -516,6 +529,7 @@ function buildCalendarCells(focusDate: Date, view: CalendarView) {
 export default function MonthlyActivitiesPage() {
   const { user } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [view, setView] = useState<CalendarView>('month')
   const [focusDate, setFocusDate] = useState(new Date())
   const [events, setEvents] = useState<EvaluationEvent[]>([])
@@ -530,6 +544,8 @@ export default function MonthlyActivitiesPage() {
   )
   const [teacherCode, setTeacherCode] = useState('')
   const [teacherCenterCode, setTeacherCenterCode] = useState('')
+  const [teacherInfo, setTeacherInfo] = useState<{ teacher_name?: string; email?: string; lms_code?: string; campus?: string }>({})
+
   const [submitting, setSubmitting] = useState(false)
   const [registeredParticipantsByEvent, setRegisteredParticipantsByEvent] =
     useState<Record<string, RegisteredExamParticipant[]>>({})
@@ -556,8 +572,32 @@ export default function MonthlyActivitiesPage() {
   const [registeredScheduleIds, setRegisteredScheduleIds] = useState<
     Set<string>
   >(new Set())
+  const registerHintShownRef = useRef(false)
   const [selectedWeekDateKeys, setSelectedWeekDateKeys] = useState<string[]>([])
   const [isMobileViewport, setIsMobileViewport] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('showRegisterHint') !== '1' || registerHintShownRef.current) {
+      return
+    }
+
+    registerHintShownRef.current = true
+
+    toast('Bấm vào lịch để có thể đăng ký.', {
+      id: 'register-hint-toast',
+      duration: 2000,
+    })
+
+    const nextParams = new URLSearchParams(searchParams.toString())
+    nextParams.delete('showRegisterHint')
+    const nextQuery = nextParams.toString()
+    router.replace(
+      nextQuery
+        ? `/user/hoat-dong-hang-thang?${nextQuery}`
+        : '/user/hoat-dong-hang-thang',
+      { scroll: false },
+    )
+  }, [router, searchParams])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -600,14 +640,21 @@ export default function MonthlyActivitiesPage() {
     ;(async () => {
       try {
         const response = await fetch(
-          `/api/teachers?email=${encodeURIComponent(user.email)}&basic=1`,
+          `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
         )
         const data = await response.json()
         if (data?.teacher?.code) {
           setTeacherCode(data.teacher.code)
-          if (data?.teacher?.branchCurrent) {
-            setTeacherCenterCode(String(data.teacher.branchCurrent))
+          const branchCurrent = data?.teacher?.bu_check || data?.teacher?.main_centre || data?.teacher?.centers || ''
+          if (branchCurrent) {
+            setTeacherCenterCode(String(branchCurrent))
           }
+          setTeacherInfo({
+            teacher_name: data.teacher.full_name || user?.displayName || '',
+            email: data.teacher.work_email || user?.email || '',
+            lms_code: data.teacher.code || '',
+            campus: String(branchCurrent),
+          })
           return
         }
       } catch {}
@@ -644,6 +691,13 @@ export default function MonthlyActivitiesPage() {
 
         const available = new Set<string>()
         Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
+          // "Kiểm tra quy trình - kỹ năng trải nghiệm" (experience) không phụ thuộc bộ đề chuyên môn
+          // nên vẫn cho phép đăng ký theo lịch nếu có event-schedule.
+          if (mapped.exam_type === "experience") {
+            available.add(option);
+            return;
+          }
+
           const hasDefaultSet = mapped.subjectCodeCandidates.some((candidate) =>
             subjectWithDefaultSet.has(
               `${mapped.block_code}::${normalize(candidate)}`,
@@ -878,33 +932,13 @@ export default function MonthlyActivitiesPage() {
   }, [events])
 
   const visibleEventsByDateKey = useMemo(() => {
-    const normalizeStr = (v: string) =>
-      v
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim()
     const map = new Map<string, EvaluationEvent[]>()
     eventsByDateKey.forEach((dayEvents, key) => {
-      const visible = dayEvents.filter((event) => {
-        if (event.eventType !== 'exam' && event.eventType !== 'thi') return true
-        // Nếu user đã đăng ký lịch thi này (id_su_kien khớp) và chưa hết giờ → luôn hiển thị
-        if (registeredScheduleIds.has(event.id) && !isPastEvent(event))
-          return true
-        return Object.entries(REGISTER_OPTION_MAP).some(([option, mapped]) => {
-          if (!userRegisteredSubjects.has(option)) return false
-          const specialty = normalizeStr(event.specialty || '')
-          const title = normalizeStr(event.title || '')
-          return mapped.specialtyAliases.some((alias) => {
-            const a = normalizeStr(alias)
-            return specialty.includes(a) || title.includes(a)
-          })
-        })
-      })
+      const visible = dayEvents.filter(() => true)
       map.set(key, visible)
     })
     return map
-  }, [eventsByDateKey, userRegisteredSubjects, registeredScheduleIds])
+  }, [eventsByDateKey])
 
   const upcomingExamEventsByOption = useMemo(() => {
     const now = new Date()
@@ -921,6 +955,18 @@ export default function MonthlyActivitiesPage() {
         .filter((e) => {
           const specialty = normalizeStr(e.specialty || '')
           const title = normalizeStr(e.title || '')
+
+          // 1. Match trực tiếp với subject_code hoặc subjectCodeCandidates
+          const directMatch = [
+            mapped.subject_code,
+            ...mapped.subjectCodeCandidates,
+          ].some((code) => {
+            const c = normalizeStr(code)
+            return specialty === c || title === c || specialty.includes(c) || title.includes(c)
+          })
+          if (directMatch) return true
+
+          // 2. Match qua specialtyAliases (fallback)
           return mapped.specialtyAliases.some((alias) => {
             const a = normalizeStr(alias)
             return specialty.includes(a) || title.includes(a)
@@ -1503,14 +1549,12 @@ export default function MonthlyActivitiesPage() {
   const resolveValidTeacherCode = async () => {
     if (!user?.email) return ''
 
-    // /api/teachers trả về teacher đã được đối soát với training_teacher_stats.
     try {
       const response = await fetch(
-        `/api/teachers?email=${encodeURIComponent(user.email)}`,
+        `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
       )
       const data = await response.json()
       const resolved = (data?.teacher?.code || '').toString().trim()
-
       if (response.ok && data?.teacher && resolved) {
         if (resolved !== teacherCode) {
           setTeacherCode(resolved)
@@ -1574,22 +1618,7 @@ export default function MonthlyActivitiesPage() {
     const failedOptions: string[] = []
     const failedDetails: string[] = []
 
-    // Read teacher info from localStorage for chuyen_sau_results auto-fill
-    let teacherAutoFillData: {
-      teacher_name?: string
-      email?: string
-      campus?: string
-      lms_code?: string
-    } = {}
-    try {
-      const cached =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('teacher_auto_fill_data')
-          : null
-      if (cached) teacherAutoFillData = JSON.parse(cached)
-    } catch {
-      // ignore localStorage errors
-    }
+    const teacherAutoFillData = teacherInfo
 
     try {
       setSubmitting(true)
@@ -1604,11 +1633,14 @@ export default function MonthlyActivitiesPage() {
           continue
         }
 
-        const hasActiveSetForOption = availableOptions.has(option)
-        if (!hasActiveSetForOption) {
-          failedOptions.push(option)
-          failedDetails.push(`${option}: chưa có bộ đề active`)
-          continue
+        // Experience test (quy trình/kỹ năng trải nghiệm) không cần bộ đề chuyên môn
+        if (mapped.exam_type !== 'experience') {
+          const hasActiveSetForOption = availableOptions.has(option)
+          if (!hasActiveSetForOption) {
+            failedOptions.push(option)
+            failedDetails.push(`${option}: chưa có bộ đề active`)
+            continue
+          }
         }
 
         const examEventId = selectedExamEventByOption[option]
@@ -2686,7 +2718,8 @@ export default function MonthlyActivitiesPage() {
           </div>
         }
       >
-        <div className="space-y-4">
+        <div className="space-y-6">
+          <div className="space-y-4">
           {selectedRegistrationEvent && (
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
               <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
@@ -2711,36 +2744,32 @@ export default function MonthlyActivitiesPage() {
               <li>Tick môn muốn đăng ký rồi bấm Gửi đăng ký.</li>
             </ol>
           </div>
-
-          <div className="space-y-3">
-            {REGISTER_OPTIONS.filter(
-              (option) =>
-                (upcomingExamEventsByOption[option] || []).length > 0 &&
-                availableOptions.has(option),
-            ).map((option) => {
-              const isAvailable = availableOptions.has(option)
-              const isSelected = selectedOptions.includes(option)
-              const examEvents = upcomingExamEventsByOption[option] || []
-              const hasExamEvents = examEvents.length > 0
-              const selectedEventId = selectedExamEventByOption[option] || ''
-              const selectedExamEvent =
-                (selectedEventId
-                  ? examEvents.find((event) => event.id === selectedEventId)
-                  : null) ||
-                examEvents[0] ||
-                null
-              const effectiveSelectedEventId =
-                selectedEventId || selectedExamEvent?.id || ''
-              const hasAnyRegistration = userRegisteredSubjects.has(option)
-              const isAlreadyRegisteredForSelectedEvent =
-                !!effectiveSelectedEventId &&
-                (registeredExamEventIdsByOption[option] || []).includes(
-                  effectiveSelectedEventId,
-                )
-              const isDisabled =
-                !isAvailable ||
-                !hasExamEvents ||
-                isAlreadyRegisteredForSelectedEvent
+          </div>
+            <div className="space-y-4">
+              {REGISTER_OPTIONS.filter((option) => {
+                const mapped = REGISTER_OPTION_MAP[option];
+                const hasExamEvents = (upcomingExamEventsByOption[option] || []).length > 0;
+                const isExperience = mapped?.exam_type === "experience";
+                // Hiển thị tất cả option có lịch thi, không phụ thuộc bộ đề
+                return hasExamEvents;
+              }).map((option) => {
+                const mapped = REGISTER_OPTION_MAP[option];
+                const isExperience = mapped?.exam_type === "experience";
+                const isAvailable = true; // Cho phép đăng ký tự do theo lịch admin set
+                const isSelected = selectedOptions.includes(option);
+                const examEvents = upcomingExamEventsByOption[option] || [];
+                const hasExamEvents = examEvents.length > 0;
+                const selectedEventId = selectedExamEventByOption[option] || "";
+                const selectedExamEvent =
+                  (selectedEventId ? examEvents.find((event) => event.id === selectedEventId) : null) ||
+                  examEvents[0] ||
+                  null;
+                const effectiveSelectedEventId = selectedEventId || selectedExamEvent?.id || "";
+                const hasAnyRegistration = userRegisteredSubjects.has(option);
+                const isAlreadyRegisteredForSelectedEvent =
+                  !!effectiveSelectedEventId &&
+                  (registeredExamEventIdsByOption[option] || []).includes(effectiveSelectedEventId);
+                const isDisabled = !isAvailable || !hasExamEvents || isAlreadyRegisteredForSelectedEvent;
 
               return (
                 <div
@@ -2828,7 +2857,7 @@ export default function MonthlyActivitiesPage() {
             })}
           </div>
         </div>
-      </Modal>
-    </PageContainer>
-  )
-}
+        </Modal>
+      </PageContainer>
+    );
+  }

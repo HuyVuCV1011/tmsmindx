@@ -35,7 +35,6 @@ const getFallbackPageTitle = (path: string) => {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
-
 export default function UserFeedbackWidget() {
   const { user } = useAuth()
   const pathname = usePathname()
@@ -69,7 +68,6 @@ export default function UserFeedbackWidget() {
 
   useEffect(() => {
     if (!open && !previewImages) return
-
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         if (previewImages) {
@@ -153,6 +151,7 @@ export default function UserFeedbackWidget() {
       <div className="fixed bottom-6 right-6 z-40">
         <button
           onClick={() => setOpen(true)}
+          data-tour="tour-feedback-button"
           className="h-14 w-14 rounded-full bg-[#a1001f] text-white shadow-lg hover:bg-[#870019] transition-colors flex items-center justify-center"
           title="Feedback"
         >
@@ -295,8 +294,7 @@ export default function UserFeedbackWidget() {
                           src={URL.createObjectURL(file)}
                           alt={file.name}
                           className="w-24 h-24 object-cover"
-                        />
-                        <button
+                        />                        <button
                           type="button"
                           onClick={() =>
                             setImages((prev) =>

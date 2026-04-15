@@ -1,5 +1,6 @@
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
+import { isDegradedDatabaseQueryError } from '@/lib/db-unavailable';
 import { NextRequest, NextResponse } from 'next/server';
 
 const EVENT_TYPES = [
@@ -118,12 +119,18 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       data: result.rows.map(serializeEventScheduleRow),
       count: result.rows.length,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    if (isDegradedDatabaseQueryError(error)) {
+      return NextResponse.json({
+        success: true,
+        data: [],
+        count: 0,
+        dbUnavailable: true,
+      });
+    }
+    const message = error instanceof Error ? error.message : 'Failed to fetch event schedules';
     console.error('Error fetching event schedules:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to fetch event schedules' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 });
 

@@ -30,17 +30,18 @@ interface Post {
   created_at: string
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+async function fetchPostsArray(url: string): Promise<Post[]> {
+    const res = await fetch(url)
+    const data: unknown = await res.json().catch(() => null)
+    return Array.isArray(data) ? (data as Post[]) : []
+}
 
 export default function CommunicationsPage() {
-  const searchParams = useSearchParams()
-  const { data: posts = [], isLoading } = useSWR<Post[]>(
-    '/api/truyenthong/posts?status=published',
-    fetcher,
-  )
-  const [selectedFilter, setSelectedFilter] = useState<string>('all')
-  const [searchQuery, setSearchQuery] = useState('')
-
+    const searchParams = useSearchParams()
+    const { data: rawPosts, isLoading } = useSWR<Post[]>('/api/truyenthong/posts?status=published', fetchPostsArray, { revalidateOnFocus: false, dedupingInterval: 120000 })
+    const posts = Array.isArray(rawPosts) ? rawPosts : []
+    const [selectedFilter, setSelectedFilter] = useState<string>('all')
+    const [searchQuery, setSearchQuery] = useState('')
   // Handle URL filter parameter
   useEffect(() => {
     const filterParam = searchParams.get('filter')
@@ -152,8 +153,8 @@ export default function CommunicationsPage() {
                   </div>
                 ) : filteredPosts.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-500">
-                    {filteredPosts.map((post) => (
-                      <div key={post.id}>
+                    {filteredPosts.map((post, index) => (
+                      <div key={`${post.id || post.slug || 'post'}-${index}`}>
                         <PostCard post={post} />
                       </div>
                     ))}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { isDatabaseUnavailableError } from '@/lib/db-helpers'
 import { withApiProtection } from '@/lib/api-protection'
 
 export const dynamic = 'force-dynamic'
@@ -30,6 +31,14 @@ async function handleGet(req: NextRequest) {
             count: result.rows.length,
         })
     } catch (error) {
+        if (isDatabaseUnavailableError(error)) {
+            return NextResponse.json({
+                success: true,
+                data: [],
+                count: 0,
+                dbUnavailable: true,
+            })
+        }
         console.error('Error fetching certificates:', error)
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         return NextResponse.json(
@@ -86,6 +95,16 @@ async function handlePost(req: NextRequest) {
             data: result.rows[0],
         })
     } catch (error) {
+        if (isDatabaseUnavailableError(error)) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: 'Database tạm thời quá tải hoặc không kết nối được',
+                    dbUnavailable: true,
+                },
+                { status: 503 }
+            )
+        }
         console.error('Error adding certificate:', error)
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         return NextResponse.json(
@@ -130,6 +149,16 @@ async function handleDelete(req: NextRequest) {
             data: result.rows[0],
         })
     } catch (error) {
+        if (isDatabaseUnavailableError(error)) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: 'Database tạm thời quá tải hoặc không kết nối được',
+                    dbUnavailable: true,
+                },
+                { status: 503 }
+            )
+        }
         console.error('Error deleting certificate:', error)
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         return NextResponse.json(
