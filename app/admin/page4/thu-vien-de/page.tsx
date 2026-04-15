@@ -723,20 +723,54 @@ export default function ProfessionalAssignmentLibraryPage() {
       })();
 
       if (existingMonthlyTemplates.length > 0) {
-        setPlannedEvents(existingMonthlyTemplates);
-        toast.success("Đã nạp lịch tháng cũ từ event_schedules để bạn chỉnh sửa");
+        // Merge: giữ lịch cũ + thêm các môn chưa có lịch
+        const existingSubjectIds = new Set(
+          existingMonthlyTemplates
+            .filter(e => e.eventKind === "exam")
+            .map(e => e.subjectId)
+        );
+
+        const allExamSubjects = subjectConfigs.filter(
+          s => s.examType === "expertise" || s.examType === "experience"
+        );
+
+        const missingSubjects = allExamSubjects.filter(s => !existingSubjectIds.has(s.id));
+
+        const missingEvents: PlannedEvent[] = missingSubjects.map(s => ({
+          id: s.id,
+          subjectId: s.id,
+          label: s.label,
+          eventKind: "exam" as const,
+          durationMinutes: getEffectiveDurationMinutes(s.id),
+          startDate: startDateForCreate,
+          endDate: endDateForCreate,
+          startTime: "19:00",
+          endTime: addMinutesToTime("19:00", getEffectiveDurationMinutes(s.id)),
+          registrationTemplate: "official" as const,
+          flowRound: 0,
+          selectedSetId: monthlyDefaults[s.id]?.setId
+            ?? (activeSetsBySubjectId.get(s.id) || []).find(set => Number(set.question_count) > 0)?.id
+            ?? null,
+          isGeneratedSupplement: false,
+          sourceEventId: null,
+        }));
+
+        setPlannedEvents([...existingMonthlyTemplates, ...missingEvents]);
+        toast.success(
+          missingEvents.length > 0
+            ? `Đã nạp lịch tháng cũ + thêm ${missingEvents.length} môn mới`
+            : "Đã nạp lịch tháng cũ từ event_schedules để bạn chỉnh sửa"
+        );
         return;
       }
 
-      // Điều kiện: môn expertise/experience VÀ (có bộ đề tháng ĐÃ chọn HOẶC có ít nhất 1 bộ đề active có câu hỏi)
-      const eligibleExamSubjects = subjectConfigs.filter((s) => {
-        if (s.examType !== "expertise" && s.examType !== "experience") return false;
-        if (monthlyDefaults[s.id]) return true;
-        return (activeSetsBySubjectId.get(s.id) || []).some(set => Number(set.question_count) > 0);
-      });
+      // Tất cả môn expertise/experience đều được phép đặt lịch
+      const eligibleExamSubjects = subjectConfigs.filter(
+        s => s.examType === "expertise" || s.examType === "experience"
+      );
 
       if (eligibleExamSubjects.length === 0) {
-        toast.error("Không có môn đủ điều kiện: cần có ít nhất 1 bộ đề active có câu hỏi.");
+        toast.error("Không có môn nào trong hệ thống. Vui lòng thêm môn học trước.");
         setPlannedEvents([]);
         return;
       }
