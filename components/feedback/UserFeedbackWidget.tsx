@@ -151,6 +151,7 @@ export default function UserFeedbackWidget() {
       <div className="fixed bottom-6 right-6 z-40">
         <button
           onClick={() => setOpen(true)}
+          data-tour="tour-feedback-button"
           className="h-14 w-14 rounded-full bg-[#a1001f] text-white shadow-lg hover:bg-[#870019] transition-colors flex items-center justify-center"
           title="Feedback"
         >
