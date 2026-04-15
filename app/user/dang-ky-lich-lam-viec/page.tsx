@@ -7,7 +7,16 @@ import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
-const CO_SO_LIST = ['TK', 'PXL', 'PVT', 'TL', 'TT', 'TC', 'LBB']
+const CO_SO_LIST = ['TL', 'TT', 'TC', 'LBB', 'PXL', 'PVT', 'TK']
+const CO_SO_LABELS: Record<string, string> = {
+  TK: 'Tô Ký',
+  TC: 'Trường Chinh',
+  PVT: 'Phan Văn Trị',
+  TL: 'Tên Lửa',
+  TT: 'Tây Thạnh',
+  PXL: 'Phan Xích Long',
+  LBB: 'Lũy Bán Bích',
+}
 const HOUR_OPTIONS = Array.from({length: 15}, (_, i) => `${String(i+7).padStart(2,'0')}:00`)
 const LS_KEY = 'tps_lich_ranh'
 
@@ -248,51 +257,47 @@ export default function DangKyLichLamViecPage() {
                 </select>
               </div>
 
-              {/* Cơ sở ưu tiên — 3 cột */}
+              {/* Cơ sở ưu tiên — 2 cột checkbox */}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-2">Cơ sở ưu tiên</label>
-                <p className="text-[11px] text-gray-400 mb-2">Ưu tiên chọn cơ sở thuận tiện để đảm bảo di chuyển kịp thời giữa các ca dạy liền kề.</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {CO_SO_LIST.map(cs => {
+                <p className="text-[11px] text-gray-400 mb-3">Ưu tiên chọn cơ sở thuận tiện để đảm bảo di chuyển kịp thời giữa các ca dạy liền kề.</p>
+                <div className="grid grid-rows-4 grid-flow-col gap-x-4 gap-y-3">
+                  {CO_SO_LIST.map((cs) => {
                     const disabledByLinhHoat = coSoLinhHoat.includes(cs)
                     return (
-                      <button key={cs} type="button"
-                        disabled={disabledByLinhHoat}
-                        onClick={() => toggleCoSo(cs)}
-                        className={`rounded-lg border py-2 text-xs font-semibold transition-colors
-                          ${coSoChon.includes(cs)
-                            ? 'border-[#a1001f] bg-[#a1001f] text-white'
-                            : disabledByLinhHoat
-                              ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-300 bg-white text-gray-700 hover:border-[#a1001f] hover:text-[#a1001f]'
-                          }`}>
-                        {cs}
-                      </button>
+                      <label key={cs} className={`flex items-center gap-2.5 select-none ${disabledByLinhHoat ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
+                        <input
+                          type="checkbox"
+                          checked={coSoChon.includes(cs)}
+                          disabled={disabledByLinhHoat}
+                          onChange={() => toggleCoSo(cs)}
+                          className="h-4 w-4 rounded border-gray-300 text-[#a1001f] focus:ring-[#a1001f] cursor-pointer flex-shrink-0"
+                        />
+                        <span className="text-sm text-gray-800">{CO_SO_LABELS[cs]}</span>
+                      </label>
                     )
                   })}
                 </div>
               </div>
 
-              {/* Cơ sở linh hoạt — 3 cột */}
+              {/* Cơ sở linh hoạt — 2 cột checkbox */}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Cơ sở linh hoạt</label>
-                <p className="text-[11px] text-gray-400 mb-2">Cơ sở bạn có thể hỗ trợ nếu cần.</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {CO_SO_LIST.map(cs => {
+                <p className="text-[11px] text-gray-400 mb-3">Cơ sở bạn có thể hỗ trợ nếu cần.</p>
+                <div className="grid grid-rows-4 grid-flow-col gap-x-4 gap-y-3">
+                  {CO_SO_LIST.map((cs) => {
                     const disabledByUuTien = coSoChon.includes(cs)
                     return (
-                      <button key={cs} type="button"
-                        disabled={disabledByUuTien}
-                        onClick={() => toggleCoSoLinhHoat(cs)}
-                        className={`rounded-lg border py-2 text-xs font-semibold transition-colors
-                          ${coSoLinhHoat.includes(cs)
-                            ? 'border-blue-500 bg-blue-500 text-white'
-                            : disabledByUuTien
-                              ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-300 bg-white text-gray-700 hover:border-blue-500 hover:text-blue-500'
-                          }`}>
-                        {cs}
-                      </button>
+                      <label key={cs} className={`flex items-center gap-2.5 select-none ${disabledByUuTien ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
+                        <input
+                          type="checkbox"
+                          checked={coSoLinhHoat.includes(cs)}
+                          disabled={disabledByUuTien}
+                          onChange={() => toggleCoSoLinhHoat(cs)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500 cursor-pointer flex-shrink-0"
+                        />
+                        <span className="text-sm text-gray-800">{CO_SO_LABELS[cs]}</span>
+                      </label>
                     )
                   })}
                 </div>
