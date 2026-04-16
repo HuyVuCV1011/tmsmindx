@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import UserFirstLoginOnboarding from '@/components/onboarding/UserFirstLoginOnboarding'
 import { Sidebar } from '@/components/sidebar'
@@ -8,9 +8,9 @@ import { usePathname } from 'next/navigation'
 import { Suspense } from 'react'
 
 function Layout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
-  const { isOpen } = useSidebar()
-  const { user } = useAuth()
+  const pathname = usePathname();
+  const { isOpen } = useSidebar();
+  const { user } = useAuth();
 
   // Don't show sidebar on login/root/checkdatasource/maintenance pages
   const noSidebarPaths =
@@ -21,18 +21,18 @@ function Layout({ children }: { children: React.ReactNode }) {
   let shouldShowSidebar = !noSidebarPaths
 
   // Hide sidebar if admin user has no permissions
-  if (shouldShowSidebar && pathname.startsWith('/admin')) {
-    const isSuperAdmin = user?.role === 'super_admin'
+  if (shouldShowSidebar && pathname.startsWith("/admin")) {
+    const isSuperAdmin = user?.role === "super_admin";
     const isAdminUser =
       user?.isAdmin ||
-      ['super_admin', 'admin', 'manager'].includes(user?.role || '')
+      ["super_admin", "admin", "manager"].includes(user?.role || "");
 
     if (
       isAdminUser &&
       !isSuperAdmin &&
       (!user?.permissions || user.permissions.length === 0)
     ) {
-      shouldShowSidebar = false
+      shouldShowSidebar = false;
     }
   }
 
@@ -71,7 +71,7 @@ function Layout({ children }: { children: React.ReactNode }) {
       </main>
       {!pathname.startsWith('/bao-tri') && <UserFirstLoginOnboarding />}
     </div>
-  )
+  );
 }
 
 export function PersistentLayout({ children }: { children: React.ReactNode }) {
@@ -79,5 +79,5 @@ export function PersistentLayout({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <Layout>{children}</Layout>
     </SidebarProvider>
-  )
+  );
 }

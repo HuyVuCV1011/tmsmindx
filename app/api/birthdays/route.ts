@@ -92,8 +92,8 @@ function parseBirthdayRecord(record: Record<string, unknown>, id: number, fallba
 
     const teachingLevel = String(
         record.boPhan || record.teachingLevel || record.department ||
-        record.programCurrent || record.KhoiGiangDay || 'Chưa phân bổ'
-    )
+        record.programCurrent || record.KhoiGiangDay || ''
+    ).trim() || null
 
     return {
         id,
@@ -101,38 +101,65 @@ function parseBirthdayRecord(record: Record<string, unknown>, id: number, fallba
         date: `${day} Tháng ${month}`,
         month,
         day,
-        teachingLevel,
+        teachingLevel: teachingLevel || '',
         email: String(record.emailCongViec || record.email || record.Email || ''),
         username: String(record.usernameLms || record.username || ''),
     }
 }
 
-// Fetch leader.area của một giáo viên qua username  
+// Query sinh nhật từ bảng teachers trong DB
+async function getBirthdaysFromDB(month: number): Promise<Record<string, unknown>[]> {
+    try {
+        const result = await pool.query(
+            `SELECT
+                code AS "usernameLms",
+                full_name AS "hoVaTen",
+                work_email AS "emailCongViec",
+                COALESCE(NULLIF(course_line, ''), NULLIF(khoi_final, '')) AS "boPhan",
+                main_centre AS area,
+                birth_day AS "ngaySinhTrongThang",
+                birth_month AS month
+             FROM teachers
+             WHERE birth_month = $1
+               AND birth_day IS NOT NULL
+               AND birth_day > 0
+               AND status = 'Active'
+             ORDER BY birth_day ASC`,
+            [month]
+        )
+        return result.rows
+    } catch (err) {
+        console.error('[Birthdays DB] Query failed:', err)
+        return []
+    }
+}
+
+// Fetch leader.area của một giáo viên — từ DB (nhanh hơn GAS)
 async function fetchTeacherArea(username: string): Promise<string | null> {
     if (!username) return null
     try {
-        const res = await fetch(
-            `${BIRTHDAY_GAS_URL}?username=${encodeURIComponent(username)}`,
-            { cache: 'no-store' }
+        const result = await pool.query(
+            'SELECT main_centre FROM teachers WHERE code = $1 LIMIT 1',
+            [username]
         )
-        if (!res.ok) return null
-        const json = await res.json()
-        return json?.data?.leader?.area ||
-               json?.data?.khuVucLamViec ||
-               null
+        return result.rows[0]?.main_centre || null
     } catch {
         return null
     }
 }
 
-// Mask tên: giữ từ đầu (họ), viết tắt các từ còn lại
-// Ví dụ: "Nguyễn Thị Hương" → "Nguyễn T. H."
-function maskName(fullName: string): string {
-    const parts = fullName.trim().split(/\s+/)
-    if (parts.length <= 1) return parts[0][0] + '.'
-    const lastName = parts[0]
-    const initials = parts.slice(1).map(w => w[0].toUpperCase() + '.').join(' ')
-    return `${lastName} ${initials}`
+// Resolve usernameLms từ email — từ DB (nhanh hơn GAS)
+async function resolveUsernameFromEmail(email: string): Promise<string | null> {
+    if (!email) return null
+    try {
+        const result = await pool.query(
+            'SELECT code FROM teachers WHERE work_email ILIKE $1 LIMIT 1',
+            [email.trim()]
+        )
+        return result.rows[0]?.code || null
+    } catch {
+        return null
+    }
 }
 
 // Lấy danh sách email đã tắt show_birthday từ DB
@@ -147,32 +174,13 @@ async function fetchHiddenBirthdayEmails(): Promise<Set<string>> {
     }
 }
 
-// Resolve usernameLms từ email đăng nhập dựa trên action=list&status=Đang làm
-async function resolveUsernameFromEmail(email: string): Promise<string | null> {
-    if (!email) return null
-
-    try {
-        const normalizedEmail = email.trim().toLowerCase()
-        const response = await fetch(
-            `${BIRTHDAY_GAS_URL}?action=list&status=${encodeURIComponent('Đang làm')}`,
-            { cache: 'no-store' }
-        )
-
-        if (!response.ok) return null
-
-        const data = await response.json()
-        const records: TeacherListRecord[] = Array.isArray(data?.data) ? data.data : []
-
-        const matchedTeacher = records.find(record => {
-            const workEmail = String(record.emailCongViec || '').trim().toLowerCase()
-            return workEmail === normalizedEmail
-        })
-
-        const username = String(matchedTeacher?.usernameLms || '').trim()
-        return username || null
-    } catch {
-        return null
-    }
+// Mask tên: giữ họ, viết tắt các từ còn lại. Vd: "Nguyễn Thị Hương" → "Nguyễn T. H."
+function maskName(fullName: string): string {
+    const parts = fullName.trim().split(/\s+/)
+    if (parts.length <= 1) return parts[0][0] + '.'
+    const lastName = parts[0]
+    const initials = parts.slice(1).map(w => w[0].toUpperCase() + '.').join(' ')
+    return `${lastName} ${initials}`
 }
 
 export async function GET(request: Request) {
@@ -194,23 +202,36 @@ export async function GET(request: Request) {
         const currentWeek = getCurrentWeek(currentDay)
         const weekRange = getWeekRange(currentWeek, currentYear, currentMonth)
 
-        // Fetch user's leader.area once (outside cache logic)
-        const userArea = username ? await fetchTeacherArea(username) : null
+        // Không cần fetch userArea nữa — hiển thị toàn bộ không lọc khu vực
+        const userArea = null
 
         const cacheKey = getCacheKey(currentMonth, currentYear)
         const cachedEntry = getCacheEntry(cacheKey)
         const isCached = cachedEntry && isCacheValid(cachedEntry)
 
-        // Fetch data: nếu cache valid thì dùng cache, nếu không thì fetch mới
+        console.log(`[Birthdays API] Cache check - key: ${cacheKey}, valid: ${isCached}`)
+
+        // Fetch data: ưu tiên DB, fallback GAS nếu DB không có data
         let birthdayRecords: Record<string, unknown>[]
         let hiddenEmails: Set<string>
 
-        if (isCached) {
-            // Use cached data
+        // Thử lấy từ DB trước
+        const dbRecords = await getBirthdaysFromDB(currentMonth)
+        const useDB = dbRecords.length > 0
+
+        if (useDB) {
+            console.log(`[Birthdays API] Using DB data - ${dbRecords.length} records`)
+            birthdayRecords = dbRecords
+            hiddenEmails = await fetchHiddenBirthdayEmails()
+        } else if (isCached) {
+            // Use cached GAS data
+            console.log(`[Birthdays API] Using cached GAS data`)
             birthdayRecords = cachedEntry!.birthdayData
-            // Luôn lấy privacy mới nhất để tránh stale khi user vừa bật/tắt show_birthday.
+            hiddenEmails = await fetchHiddenBirthdayEmails()
             hiddenEmails = await fetchHiddenBirthdayEmails()
         } else {
+            console.log(`[Birthdays API] Fetching data from Vercel cache + DB`)
+            
             // Fetch birthday list và hidden emails song song (userArea đã fetch ở trên)
             const [cachedBirthdayRecords, fetchedHiddenEmails] = await Promise.all([
                 getBirthdayRecordsFromDataCache(currentMonth, currentYear),
@@ -222,6 +243,7 @@ export async function GET(request: Request) {
             hiddenEmails = fetchedHiddenEmails
 
             // Update cache
+            console.log(`[Birthdays API] Saved to cache - key: ${cacheKey}, records: ${birthdayRecords.length}, hidden: ${hiddenEmails.size}`)
             setCacheEntry(cacheKey, {
                 timestamp: Date.now(),
                 birthdayData: birthdayRecords
@@ -258,19 +280,11 @@ export async function GET(request: Request) {
             )
         }
         
+        console.log(`[Birthdays API] Privacy applied - total: ${weekBirthdays.length}, masked: ${maskedCount}`)
+
         let birthdays = weekBirthdays
 
-        // Nếu có username → filter theo leader.area
-        if (userArea) {
-            // Fetch area của từng giáo viên sinh nhật trong tuần song song
-            const areasResult = await Promise.all(
-                weekBirthdays.map(b => fetchTeacherArea(b.username || ''))
-            )
-
-            birthdays = weekBirthdays
-                .map((b, i) => ({ ...b, area: areasResult[i] || '' }))
-                .filter(b => b.area === userArea)
-        }
+        console.log(`[Birthdays API] Response - count: ${birthdays.length}, fromCache: ${isCached}`)
 
         return NextResponse.json({
             success: true,

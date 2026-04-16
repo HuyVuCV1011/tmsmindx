@@ -8,7 +8,8 @@ import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-type CalendarView = 'day' | 'week' | 'month'
+
+type RegistrationTemplate = 'official' | 'supplement'
 type EventCategory =
   | 'registration'
   | 'exam'
@@ -18,7 +19,7 @@ type EventCategory =
   | 'advanced_training_release'
   | 'holiday'
 
-type RegistrationTemplate = 'official' | 'supplement'
+type CalendarView = 'month' | 'week' | 'day'
 
 interface EvaluationEvent {
   id: string
@@ -214,6 +215,7 @@ const REGISTER_OPTIONS = [
   '[COD] Python (PT)',
   '[COD] Web (JS)',
   '[COD] Computer Science (CS)',
+  '[COD] App Producer',
   '[ROB] Lego 4+',
   '[ROB] Vex Go',
   '[ROB] Vex IQ',
@@ -277,6 +279,18 @@ const REGISTER_OPTION_MAP: Record<string, RegisterPayload> = {
       '[COD] Computer Science (CS)',
       '[COD] ComputerScience',
       'COMPUTERSCIENCE',
+    ],
+  },
+  '[COD] App Producer': {
+    exam_type: 'expertise',
+    block_code: 'CODING',
+    subject_code: '[COD] App Producer',
+    optionLabel: '[COD] App Producer',
+    specialtyAliases: ['App Producer', 'AppProducer', 'Coding - App Producer'],
+    subjectCodeCandidates: [
+      '[COD] App Producer',
+      '[COD] AppProducer',
+      'APPPRODUCER',
     ],
   },
   '[ROB] Lego 4+': {
@@ -967,6 +981,23 @@ export default function MonthlyActivitiesPage() {
         .filter((e) => {
           const specialty = normalizeStr(e.specialty || '')
           const title = normalizeStr(e.title || '')
+
+          // 1. Match trực tiếp với subject_code hoặc subjectCodeCandidates
+          const directMatch = [
+            mapped.subject_code,
+            ...mapped.subjectCodeCandidates,
+          ].some((code) => {
+            const c = normalizeStr(code)
+            return (
+              specialty === c ||
+              title === c ||
+              specialty.includes(c) ||
+              title.includes(c)
+            )
+          })
+          if (directMatch) return true
+
+          // 2. Match qua specialtyAliases (fallback)
           return mapped.specialtyAliases.some((alias) => {
             const a = normalizeStr(alias)
             return specialty.includes(a) || title.includes(a)
@@ -2748,47 +2779,45 @@ export default function MonthlyActivitiesPage() {
           </div>
         }
       >
-        <div className="space-y-4">
-          {selectedRegistrationEvent && (
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+        <div className="space-y-6">
+          <div className="space-y-4">
+            {selectedRegistrationEvent && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
+                  Đợt đăng ký đang chọn
+                </p>
+                <p className="mt-2 whitespace-pre-line text-base font-semibold text-gray-900">
+                  {selectedRegistrationEvent.title}
+                </p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Thời gian: {formatDateTime(selectedRegistrationEvent.startAt)}{' '}
+                  - {formatDateTime(selectedRegistrationEvent.endAt)}
+                </p>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
-                Đợt đăng ký đang chọn
+                Thứ tự thao tác
               </p>
-              <p className="mt-2 whitespace-pre-line text-base font-semibold text-gray-900">
-                {selectedRegistrationEvent.title}
-              </p>
-              <p className="mt-1 text-sm text-gray-600">
-                Thời gian: {formatDateTime(selectedRegistrationEvent.startAt)} -{' '}
-                {formatDateTime(selectedRegistrationEvent.endAt)}
-              </p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-gray-700">
+                <li>Chọn lịch thi theo từng môn trước.</li>
+                <li>Tick môn muốn đăng ký rồi bấm Gửi đăng ký.</li>
+              </ol>
             </div>
-          )}
-
-          <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
-              Thứ tự thao tác
-            </p>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-gray-700">
-              <li>Chọn lịch thi theo từng môn trước.</li>
-              <li>Tick môn muốn đăng ký rồi bấm Gửi đăng ký.</li>
-            </ol>
           </div>
-
-          <div className="space-y-3">
+          <div className="space-y-4">
             {REGISTER_OPTIONS.filter((option) => {
               const mapped = REGISTER_OPTION_MAP[option]
               const hasExamEvents =
                 (upcomingExamEventsByOption[option] || []).length > 0
               const isExperience = mapped?.exam_type === 'experience'
-              return (
-                hasExamEvents && (isExperience || availableOptions.has(option))
-              )
+              // Hiển thị tất cả option có lịch thi, không phụ thuộc bộ đề
+              return hasExamEvents
             }).map((option) => {
               const mapped = REGISTER_OPTION_MAP[option]
               const isExperience = mapped?.exam_type === 'experience'
-              const isAvailable = isExperience
-                ? true
-                : availableOptions.has(option)
+              const isAvailable = true // Cho phép đăng ký tự do theo lịch admin set
               const isSelected = selectedOptions.includes(option)
               const examEvents = upcomingExamEventsByOption[option] || []
               const hasExamEvents = examEvents.length > 0

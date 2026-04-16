@@ -79,6 +79,7 @@ export async function GET(
             const post = result.rows[0];
             let isLiked = false;
             let reaction: string | null = null;
+            let reaction_counts: Record<string, number> = {};
 
             if (userId) {
                 const likeCheck = await client.query(
@@ -89,6 +90,19 @@ export async function GET(
                 reaction = likeCheck.rows[0]?.reaction || null;
             }
 
+            // Lấy breakdown reaction counts
+            const reactionCountsResult = await client.query(
+                `SELECT reaction, COUNT(*) as count
+                 FROM communication_likes
+                 WHERE post_id = $1 AND reaction IS NOT NULL
+                 GROUP BY reaction
+                 ORDER BY count DESC`,
+                [post.id]
+            );
+            reactionCountsResult.rows.forEach((r: any) => {
+                reaction_counts[r.reaction] = parseInt(r.count);
+            });
+
             // Fetch related posts (same type, published, exclude current)
             const relatedResult = await client.query(
                 `SELECT * FROM communications 
@@ -98,7 +112,7 @@ export async function GET(
             );
             const relatedPosts = relatedResult.rows;
 
-            return NextResponse.json({ ...post, isLiked, reaction, relatedPosts });
+            return NextResponse.json({ ...post, isLiked, reaction, reaction_counts, relatedPosts });
         } finally {
             client.release();
         }
