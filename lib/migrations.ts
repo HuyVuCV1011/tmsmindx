@@ -1250,6 +1250,15 @@ const migrations: Migration[] = [
         ADD COLUMN IF NOT EXISTS birth_month INTEGER;
     `,
   },
+
+  {
+    name: 'V52_chuyen_sau_results_lich_thi_dk',
+    version: 52,
+    sql: `
+      ALTER TABLE chuyen_sau_results
+        ADD COLUMN IF NOT EXISTS lich_thi_dk TIMESTAMP;
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========

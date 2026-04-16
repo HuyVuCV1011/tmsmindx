@@ -26,6 +26,33 @@ export async function GET(request: NextRequest) {
     const resultId = searchParams.get('result_id');
     const thangDk = searchParams.get('thang_dk');
     const namDk = searchParams.get('nam_dk');
+    /** YYYY-MM — lọc theo tháng/năm đăng ký (thang_dk / nam_dk) */
+    const monthYm = searchParams.get('month');
+    const subjectQ = searchParams.get('subject_q')?.trim();
+    const blockQ = searchParams.get('block_q')?.trim();
+    const xuLyFilter = searchParams.get('xu_ly_diem')?.trim();
+    const registrationType = searchParams.get('registration_type')?.trim();
+    const hasScore = searchParams.get('has_score')?.trim();
+
+    /** Phân trang (tùy chọn): chỉ áp dụng khi có `limit` — không gửi `limit` thì trả toàn bộ (tương thích user / xuất CSV). */
+    const limitRaw = searchParams.get('limit');
+    const pageRaw = searchParams.get('page');
+    const offsetRaw = searchParams.get('offset');
+    let paginateLimit: number | null = null;
+    let paginateOffset = 0;
+    if (limitRaw != null && limitRaw !== '') {
+      const l = parseInt(limitRaw, 10);
+      if (Number.isFinite(l) && l > 0) {
+        paginateLimit = Math.min(l, 500);
+        if (offsetRaw != null && offsetRaw !== '') {
+          const o = parseInt(offsetRaw, 10);
+          if (Number.isFinite(o) && o >= 0) paginateOffset = o;
+        } else {
+          const pg = Math.max(1, parseInt(pageRaw || '1', 10) || 1);
+          paginateOffset = (pg - 1) * paginateLimit;
+        }
+      }
+    }
 
     const conditions: string[] = [];
     const values: unknown[] = [];
@@ -46,24 +73,98 @@ export async function GET(request: NextRequest) {
       conditions.push(`LOWER(TRIM(COALESCE(r.dia_chi_email, ''))) = LOWER(TRIM($${values.length + 1}))`);
       values.push(email);
     }
-    if (subjectCode) {
+    if (subjectQ) {
+      const i = values.length + 1;
+      conditions.push(
+        `(POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ma_mon, ''))) > 0 OR POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ten_mon, ''))) > 0)`,
+      );
+      values.push(subjectQ);
+    } else if (subjectCode) {
       conditions.push(`mh.ma_mon = $${values.length + 1}`);
       values.push(subjectCode);
     }
-    if (blockCode) {
+    if (blockQ) {
+      const i = values.length + 1;
+      conditions.push(
+        `(POSITION(LOWER($${i}) IN LOWER(COALESCE(r.khoi_giang_day, ''))) > 0 OR POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ma_khoi, ''))) > 0)`,
+      );
+      values.push(blockQ);
+    } else if (blockCode) {
       conditions.push(`mh.ma_khoi = $${values.length + 1}`);
       values.push(blockCode);
     }
-    if (thangDk) {
+
+    let monthFromParam = false;
+    if (monthYm && /^\d{4}-\d{2}$/.test(monthYm)) {
+      const [yStr, mStr] = monthYm.split('-');
+      const yi = parseInt(yStr, 10);
+      const mi = parseInt(mStr, 10);
+      if (Number.isFinite(yi) && mi >= 1 && mi <= 12) {
+        conditions.push(`r.nam_dk = $${values.length + 1}`);
+        values.push(yi);
+        conditions.push(`r.thang_dk = $${values.length + 1}`);
+        values.push(mi);
+        monthFromParam = true;
+      }
+    }
+    if (!monthFromParam && thangDk) {
       conditions.push(`r.thang_dk = $${values.length + 1}`);
       values.push(thangDk);
     }
-    if (namDk) {
+    if (!monthFromParam && namDk) {
       conditions.push(`r.nam_dk = $${values.length + 1}`);
       values.push(namDk);
     }
 
+    if (xuLyFilter && xuLyFilter !== 'all') {
+      conditions.push(`LOWER(TRIM(COALESCE(r.xu_ly_diem, ''))) = LOWER(TRIM($${values.length + 1}))`);
+      values.push(xuLyFilter);
+    }
+
+    if (registrationType === 'official') {
+      conditions.push(`NOT (
+        LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) LIKE '%b%sung%'
+        OR LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) LIKE '%bo%'
+        OR LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) = 'additional'
+      )`);
+    } else if (registrationType === 'additional') {
+      conditions.push(`(
+        LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) LIKE '%b%sung%'
+        OR LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) LIKE '%bo%'
+        OR LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) = 'additional'
+      )`);
+    }
+
+    if (hasScore === '1') {
+      conditions.push(`r.diem IS NOT NULL`);
+    } else if (hasScore === '0') {
+      conditions.push(`r.diem IS NULL`);
+    }
+
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const fromJoins = `
+       FROM chuyen_sau_results r
+       LEFT JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
+       LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
+       LEFT JOIN chuyen_sau_bode bode ON bode.id = r.id_de_thi
+    `;
+
+    let totalCount: number | undefined;
+    if (paginateLimit != null) {
+      const countRes = await pool.query(
+        `SELECT COUNT(*)::int AS c ${fromJoins} ${where}`,
+        values
+      );
+      totalCount = countRes.rows[0]?.c ?? 0;
+    }
+
+    const limitClause =
+      paginateLimit != null
+        ? `LIMIT $${values.length + 1} OFFSET $${values.length + 2}`
+        : '';
+    const dataValues =
+      paginateLimit != null ? [...values, paginateLimit, paginateOffset] : values;
 
     const result = await pool.query(
       `SELECT
@@ -99,9 +200,9 @@ export async function GET(request: NextRequest) {
          COALESCE(mh.loai_ky_thi, 'expertise')                        AS exam_type,
          mh.thoi_gian_thi_phut                                         AS duration_minutes,
          es.ten                                                        AS schedule_name,
-         es.bat_dau_luc                                                AS open_at,
+         COALESCE(es.bat_dau_luc, r.lich_thi_dk)                       AS open_at,
          es.ket_thuc_luc                                               AS close_at,
-         COALESCE(es.bat_dau_luc, r.tao_luc)                          AS scheduled_at,
+         COALESCE(es.bat_dau_luc, r.lich_thi_dk, r.tao_luc)             AS scheduled_at,
          es.loai_su_kien,
          -- registration_type: map hinh_thuc → official/additional
          CASE
@@ -142,16 +243,25 @@ export async function GET(request: NextRequest) {
          bode.ten_de                                                   AS set_name,
          bode.tong_diem                                                AS total_points,
          bode.diem_dat                                                 AS passing_score
-       FROM chuyen_sau_results r
-       LEFT JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
-       LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
-       LEFT JOIN chuyen_sau_bode bode ON bode.id = r.id_de_thi
+       ${fromJoins}
        ${where}
-       ORDER BY r.tao_luc DESC`,
-      values
+       ORDER BY r.tao_luc DESC
+       ${limitClause}`,
+      dataValues
     );
 
-    return NextResponse.json({ success: true, data: result.rows, count: result.rows.length });
+    return NextResponse.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length,
+      ...(paginateLimit != null && totalCount !== undefined
+        ? {
+            total: totalCount,
+            page: Math.floor(paginateOffset / paginateLimit) + 1,
+            pageSize: paginateLimit,
+          }
+        : {}),
+    });
   } catch (error: unknown) {
     const pgErr = error as { code?: string; message?: string };
     if (pgErr?.code === '53300') {

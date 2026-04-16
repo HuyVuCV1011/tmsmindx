@@ -124,10 +124,11 @@ export async function GET(request: NextRequest) {
           ELSE 'assigned'
         END AS assignment_status,
         csr.diem::numeric                                        AS score,
+        -- Có điểm trong DB → luôn coi là đã có điểm (kể cả chờ giải trình điểm); tránh score_status='null' khiến UI user tính TB = 0
         CASE
-          WHEN LOWER(TRIM(COALESCE(csr.xu_ly_diem, ''))) = 'đã hoàn thành' THEN 'graded'
-          WHEN csr.diem IS NULL OR csr.xu_ly_diem = 'chờ giải trình'        THEN 'null'
-          ELSE 'graded'
+          WHEN csr.diem IS NOT NULL THEN 'graded'
+          WHEN LOWER(TRIM(COALESCE(csr.xu_ly_diem, ''))) IN ('đã hoàn thành', 'da thi') THEN 'graded'
+          ELSE 'null'
         END AS score_status,
         COALESCE(csr.xu_ly_diem, '')::text                       AS score_handling_note,
         COALESCE(csr.cau_dung, 0)::int                           AS correct_answers,

@@ -14,9 +14,10 @@ import {
 } from '@/components/ui/table'
 import { useAuth } from '@/lib/auth-context'
 import { CAMPUS_LIST, findMatchingCampus } from '@/lib/campus-data'
+import { isExamInCurrentVietnamMonth } from '@/lib/giaitrinh-eligibility'
 import { useTeacher } from '@/lib/teacher-context'
 import { Plus } from 'lucide-react'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 
@@ -58,6 +59,8 @@ interface RegisteredExam {
 export default function GiaiTrinhPage() {
   const { user } = useAuth()
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher()
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [explanations, setExplanations] = useState<Explanation[]>([])
   const [loading, setLoading] = useState(true)
@@ -219,6 +222,14 @@ export default function GiaiTrinhPage() {
   useEffect(() => {
     if (!user?.email || !prefillAssignmentId) return
 
+    if (prefillTestDate && !isExamInCurrentVietnamMonth(prefillTestDate)) {
+      toast.error(
+        'Chỉ được gửi giải trình cho bài thi trong tháng hiện tại (giờ Việt Nam). Các tháng khác không chấp nhận.',
+      )
+      router.replace(pathname)
+      return
+    }
+
     const normalizedDate = prefillTestDate
       ? new Date(prefillTestDate).toISOString().slice(0, 10)
       : ''
@@ -242,6 +253,8 @@ export default function GiaiTrinhPage() {
     prefillSubject,
     prefillCampus,
     prefillTestDate,
+    pathname,
+    router,
   ])
 
   // Fetch registered exams when modal opens
@@ -258,6 +271,12 @@ export default function GiaiTrinhPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (formData.test_date && !isExamInCurrentVietnamMonth(formData.test_date)) {
+      toast.error(
+        'Chỉ được gửi giải trình trong tháng hiện tại (giờ Việt Nam).',
+      )
+      return
+    }
     setSubmitting(true)
 
     try {
