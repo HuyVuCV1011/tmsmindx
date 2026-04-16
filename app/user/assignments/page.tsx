@@ -107,6 +107,8 @@ interface ExamAssignment {
   score_handling_note?: string
   explanation_status?: 'pending' | 'accepted' | 'rejected'
   explanation_id?: number | null
+  /** Đã gửi giải trình (cờ trên chuyen_sau_results) */
+  da_giai_thich?: boolean
   admin_note?: string
   is_open?: boolean
   can_take?: boolean
@@ -855,6 +857,13 @@ export default function TeacherAssignmentPage() {
 
     if (item.explanation_status === 'accepted') {
       return false
+    }
+
+    // Đã gửi ticket giải trình, chờ admin duyệt — hiện trạng thái, không nút «Giải trình» lần nữa
+    if (item.explanation_status === 'pending') {
+      if (hasLinkedExplanation || item.da_giai_thich) {
+        return false
+      }
     }
 
     if (isPendingWithoutLinkedExplanation) {
