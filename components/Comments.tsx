@@ -149,10 +149,8 @@ function CommentItem({
 
   const handleReply = () => {
     if (replyContent.trim()) {
-      // depth >= 1: reply vào threadRootId để flatten về tầng 2
-      // depth 0: reply vào comment.id bình thường
-      const targetId = depth >= 1 && threadRootId ? threadRootId : comment.id
-      onReply(targetId, replyContent)
+      // Luôn reply vào comment.id hiện tại — giữ đúng parent_id
+      onReply(comment.id, replyContent)
       setReplyContent('')
       setShowReplyBox(false)
     }
