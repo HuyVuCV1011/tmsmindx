@@ -886,6 +886,24 @@ export default function MonthlyActivitiesPage() {
     return map
   }, [events, REGISTER_OPTION_MAP])
 
+  /** Lịch đang chọn để đăng ký: ưu tiên lịch chưa đăng ký (không chọn nhầm slot đã đăng ký). */
+  const resolveSelectedExamEventIdForOption = useCallback(
+    (option: string) => {
+      const examEvents = upcomingExamEventsByOption[option] || []
+      const regIds = new Set(registeredExamEventIdsByOption[option] || [])
+      const raw = selectedExamEventByOption[option] || ''
+      if (raw && !regIds.has(raw)) return raw
+      return (
+        examEvents.find((e) => !regIds.has(e.id))?.id || examEvents[0]?.id || ''
+      )
+    },
+    [
+      upcomingExamEventsByOption,
+      registeredExamEventIdsByOption,
+      selectedExamEventByOption,
+    ],
+  )
+
   const periodLabel = useMemo(() => {
     if (view === 'day') {
       return focusDate.toLocaleDateString('vi-VN', {
@@ -1277,14 +1295,27 @@ export default function MonthlyActivitiesPage() {
       const next: Record<string, string> = {}
       REGISTER_OPTIONS.forEach((option) => {
         const examEvents = upcomingExamEventsByOption[option] || []
-        next[option] =
-          prev[option] && examEvents.some((e) => e.id === prev[option])
-            ? prev[option]
-            : examEvents[0]?.id || ''
+        const regIds = registeredExamEventIdsByOption[option] || []
+        const regSet = new Set(regIds)
+        const prevId = prev[option]
+        const prevStillValid =
+          !!prevId && examEvents.some((e) => e.id === prevId)
+        const prevIsStillSelectable = !!prevId && !regSet.has(prevId)
+        if (prevStillValid && prevIsStillSelectable) {
+          next[option] = prevId
+        } else {
+          const firstOpen = examEvents.find((e) => !regSet.has(e.id))
+          next[option] = firstOpen?.id || examEvents[0]?.id || ''
+        }
       })
       return next
     })
-  }, [upcomingExamEventsByOption, showRegisterModal])
+  }, [
+    upcomingExamEventsByOption,
+    showRegisterModal,
+    registeredExamEventIdsByOption,
+    REGISTER_OPTIONS,
+  ])
 
   useEffect(() => {
     const hasOpenModal =
@@ -1519,6 +1550,7 @@ export default function MonthlyActivitiesPage() {
 
     const submittedOptions: string[] = []
     const submittedSlots: Array<{ option: string; scheduledAt: string }> = []
+    const submittedEventIdsByOption: Record<string, string> = {}
     const failedOptions: string[] = []
     const failedDetails: string[] = []
 
@@ -1548,7 +1580,7 @@ export default function MonthlyActivitiesPage() {
         //   }
         // }
 
-        const examEventId = selectedExamEventByOption[option]
+        const examEventId = resolveSelectedExamEventIdForOption(option)
         const matchedExamEvent =
           (examEventId
             ? events.find((e) => e.id === examEventId) || null
@@ -1597,6 +1629,7 @@ export default function MonthlyActivitiesPage() {
         if (response.ok && data.success) {
           submittedOptions.push(option)
           submittedSlots.push({ option, scheduledAt: matchedExamEvent.startAt })
+          submittedEventIdsByOption[option] = targetEventId
         } else {
           const errMsg = data?.error || 'lỗi không xác định'
           failedOptions.push(option)
@@ -1638,7 +1671,7 @@ export default function MonthlyActivitiesPage() {
       setRegisteredExamEventIdsByOption((prev) => {
         const next: Record<string, string[]> = { ...prev }
         submittedOptions.forEach((option) => {
-          const selectedEventId = selectedExamEventByOption[option] || ''
+          const selectedEventId = submittedEventIdsByOption[option] || ''
           if (!selectedEventId) {
             return
           }
@@ -1658,7 +1691,7 @@ export default function MonthlyActivitiesPage() {
 
       const firstSubmittedOption = submittedOptions[0]
       const firstSubmittedExamEventId =
-        selectedExamEventByOption[firstSubmittedOption]
+        submittedEventIdsByOption[firstSubmittedOption] || ''
       const firstSubmittedExamEvent = events.find(
         (event) => event.id === firstSubmittedExamEventId,
       )
@@ -2695,21 +2728,16 @@ export default function MonthlyActivitiesPage() {
               const isSelected = selectedOptions.includes(option)
               const examEvents = upcomingExamEventsByOption[option] || []
               const hasExamEvents = examEvents.length > 0
-              const selectedEventId = selectedExamEventByOption[option] || ''
-              const selectedExamEvent =
-                (selectedEventId
-                  ? examEvents.find((event) => event.id === selectedEventId)
-                  : null) ||
-                examEvents[0] ||
-                null
-              const effectiveSelectedEventId =
-                selectedEventId || selectedExamEvent?.id || ''
+              const registeredEventIdsForOption =
+                registeredExamEventIdsByOption[option] || []
+              const registeredEventIdSet = new Set(registeredEventIdsForOption)
+              const selectControlledId =
+                resolveSelectedExamEventIdForOption(option)
+
               const hasAnyRegistration = userRegisteredSubjects.has(option)
               const isAlreadyRegisteredForSelectedEvent =
-                !!effectiveSelectedEventId &&
-                (registeredExamEventIdsByOption[option] || []).includes(
-                  effectiveSelectedEventId,
-                )
+                !!selectControlledId &&
+                registeredEventIdSet.has(selectControlledId)
               const isDisabled =
                 !isAvailable ||
                 !hasExamEvents ||
@@ -2744,29 +2772,102 @@ export default function MonthlyActivitiesPage() {
                     {!hasExamEvents ? (
                       <p className="text-sm text-gray-500">Chưa có lịch thi</p>
                     ) : examEvents.length === 1 ? (
-                      <p className="text-sm font-medium text-gray-900">
-                        {formatDateTime(examEvents[0].startAt)} —{' '}
-                        {formatDateTime(examEvents[0].endAt)}
-                      </p>
-                    ) : (
-                      <select
-                        value={selectedEventId}
-                        onChange={(e) =>
-                          setSelectedExamEventByOption((prev) => ({
-                            ...prev,
-                            [option]: e.target.value,
-                          }))
-                        }
-                        disabled={!hasExamEvents}
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20"
-                      >
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-900">
+                          {formatDateTime(examEvents[0].startAt)} —{' '}
+                          {formatDateTime(examEvents[0].endAt)}
+                        </p>
+                        {registeredEventIdSet.has(examEvents[0].id) ? (
+                          <p className="text-xs font-semibold text-amber-800">
+                            Đã đăng ký lịch này — không thể đăng ký trùng.
+                          </p>
+                        ) : (
+                          <p className="text-xs text-emerald-800">
+                            Còn đăng ký được lịch này.
+                          </p>
+                        )}
+                      </div>
+                    ) : examEvents.every((e) => registeredEventIdSet.has(e.id)) ? (
+                      <ul className="space-y-2">
                         {examEvents.map((event) => (
-                          <option key={event.id} value={event.id}>
-                            {formatDateTime(event.startAt)} —{' '}
-                            {formatDateTime(event.endAt)}
-                          </option>
+                          <li
+                            key={event.id}
+                            className="flex flex-wrap items-center gap-2 text-sm text-gray-800"
+                          >
+                            <span className="font-medium">
+                              {formatDateTime(event.startAt)} —{' '}
+                              {formatDateTime(event.endAt)}
+                            </span>
+                            <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                              Đã đăng ký
+                            </span>
+                          </li>
                         ))}
-                      </select>
+                      </ul>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs text-gray-600">
+                          Tất cả khung giờ của môn — chọn một lịch còn trống để đăng ký.
+                        </p>
+                        <div className="space-y-2">
+                          {examEvents.map((event) => {
+                            const slotRegistered =
+                              registeredEventIdSet.has(event.id)
+                            const isActiveSlot = selectControlledId === event.id
+                            return (
+                              <label
+                                key={event.id}
+                                className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                                  slotRegistered
+                                    ? 'cursor-not-allowed border-gray-200 bg-white/80'
+                                    : isActiveSlot
+                                      ? 'border-[#a1001f]/35 bg-white shadow-sm ring-1 ring-[#a1001f]/15'
+                                      : 'border-gray-200 bg-white hover:border-gray-300'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`exam-schedule-${option}`}
+                                  value={event.id}
+                                  checked={isActiveSlot}
+                                  disabled={slotRegistered}
+                                  onChange={() =>
+                                    setSelectedExamEventByOption((prev) => ({
+                                      ...prev,
+                                      [option]: event.id,
+                                    }))
+                                  }
+                                  className="mt-0.5 h-4 w-4 shrink-0 border-gray-300 text-[#a1001f] focus:ring-[#a1001f] disabled:cursor-not-allowed disabled:opacity-50"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium text-gray-900">
+                                    {formatDateTime(event.startAt)} —{' '}
+                                    {formatDateTime(event.endAt)}
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                                    {slotRegistered ? (
+                                      <span className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                                        Đã đăng ký
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                                        Còn đăng ký
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </label>
+                            )
+                          })}
+                        </div>
+                        {examEvents.some((e) => registeredEventIdSet.has(e.id)) &&
+                          examEvents.some((e) => !registeredEventIdSet.has(e.id)) && (
+                            <p className="text-xs text-gray-500">
+                              Khung «Đã đăng ký» không chọn được; chỉ đăng ký được
+                              khung «Còn đăng ký».
+                            </p>
+                          )}
+                      </div>
                     )}
                   </div>
 

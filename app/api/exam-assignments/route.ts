@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     const giaitrinh_join = hasGiaitrinh
       ? `
       LEFT JOIN LATERAL (
-        SELECT csg.tru_diem, csg.xu_ly_giai_trinh
+        SELECT csg.id, csg.tru_diem, csg.xu_ly_giai_trinh
         FROM chuyen_sau_giaitrinh csg
         WHERE csg.id_ket_qua = csr.id
         ORDER BY csg.tao_luc DESC
@@ -63,6 +63,10 @@ export async function GET(request: NextRequest) {
           ELSE NULL
         END::text AS explanation_status,`
       : `NULL::text AS explanation_status,`;
+
+    const giaitrinh_explanation_id = hasGiaitrinh
+      ? `csg.id::int AS explanation_id,`
+      : `NULL::int AS explanation_id,`;
 
     let query = `
       SELECT
@@ -151,6 +155,7 @@ export async function GET(request: NextRequest) {
         ) AS has_questions,
         -- Explanation status from chuyen_sau_giaitrinh.xu_ly_diem
         ${giaitrinh_explanation_status}
+        ${giaitrinh_explanation_id}
         NULL::text AS admin_note,
         csr.tao_luc  AS created_at,
         csr.tao_luc  AS updated_at
