@@ -87,11 +87,11 @@ const LEAVE_SESSION_OPTIONS = Array.from(
 )
 
 const SELECT_BASE_CLASS =
-  'w-full min-h-11 appearance-none rounded-lg border border-gray-300 bg-white px-3 py-3 pr-10 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm'
+  'w-full min-w-0 max-w-full min-h-11 appearance-none rounded-lg border border-gray-300 bg-white px-3 py-3 pr-10 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm'
 const INPUT_BASE_CLASS =
-  'w-full min-h-11 rounded-lg border border-gray-300 px-3 py-3 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm'
+  'w-full min-w-0 max-w-full min-h-11 rounded-lg border border-gray-300 px-3 py-3 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm'
 const TEXTAREA_BASE_CLASS =
-  'w-full rounded-lg border border-gray-300 px-3 py-2.5 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm'
+  'w-full min-w-0 max-w-full rounded-lg border border-gray-300 px-3 py-2.5 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm'
 const MIN_ADVANCE_HOURS = 72
 
 function getStatusMeta(status: LeaveRequest['status']): {
@@ -541,13 +541,14 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
     <div className="min-h-screen bg-white p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl space-y-5">
         <PageHeader
-          title="Xin nghỉ 1 buổi dạy"
-          description="Tạo mail xin nghỉ và theo dõi quy trình 4 bước xuyên suốt User - Admin - User."
+          title="Xin Nghỉ Một Buổi Dạy"
           actions={
             <div className="flex gap-2">
               <Button
+                size="lg"
                 variant="outline"
                 onClick={() => fetchLeaveRequests(true)}
+                className="h-10 border-[#f3b4bd] text-[#a1001f] shadow-sm hover:bg-[#a1001f]/5"
               >
                 <RefreshCcw className="mr-1.5 h-4 w-4" />
                 Làm mới
@@ -589,15 +590,15 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
         </div>
 
         {/* Bộ lọc nâng cao */}
-        <div className="mb-4 flex flex-wrap gap-3 items-end">
-          <div className="relative">
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end">
+          <div className="relative w-full md:w-auto">
             <label className="block text-xs font-semibold text-gray-600 mb-1">
               Cơ sở
             </label>
             <button
               type="button"
               onClick={() => setShowCampusDropdown(!showCampusDropdown)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-45 text-left flex items-center justify-between bg-white hover:bg-gray-50"
+              className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-left text-sm hover:bg-gray-50 md:min-w-45"
             >
               <span className="truncate">
                 {campusFilter.length === 0
@@ -619,7 +620,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
               </svg>
             </button>
             {showCampusDropdown && (
-              <div className="absolute z-10 mt-1 w-full min-w-60 bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-hidden flex flex-col">
+              <div className="absolute left-0 right-0 z-10 mt-1 flex max-h-80 w-full flex-col overflow-hidden rounded-lg border border-gray-300 bg-white shadow-lg md:left-auto md:right-auto md:min-w-60">
                 <div className="p-2 border-b border-gray-200">
                   <input
                     type="text"
@@ -679,25 +680,25 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
               </div>
             )}
           </div>
-          <div>
+          <div className="w-fit md:w-auto">
             <label className="block text-xs font-semibold text-gray-600 mb-1">
               Từ ngày
             </label>
             <input
               type="date"
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm md:w-auto"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
               max={toDate || undefined}
             />
           </div>
-          <div>
+          <div className="w-fit md:w-auto">
             <label className="block text-xs font-semibold text-gray-600 mb-1">
               Đến ngày
             </label>
             <input
               type="date"
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm md:w-auto"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
               min={fromDate || undefined}
@@ -835,7 +836,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
         title="Tạo mail xin nghỉ 1 buổi"
         maxWidth="4xl"
       >
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5 pb-2 sm:pb-3">
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <p className="font-semibold">Quy định nhanh</p>
             <div className="mt-2 space-y-1 text-[13px]">
@@ -854,7 +855,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 [&>div]:min-w-0">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
                 Ngày xin nghỉ *
@@ -864,7 +865,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
                 type="date"
                 value={formData.leave_date}
                 onChange={(e) => handleChange('leave_date', e.target.value)}
-                className={INPUT_BASE_CLASS}
+                className={`${INPUT_BASE_CLASS} appearance-none`}
               />
             </div>
             <div className="md:col-span-2">
@@ -1081,6 +1082,9 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
         {selectedRequest && (
           <div className="space-y-4">
             <div className="border-b border-gray-200 pb-4">
+              <h3 className="mb-3 text-sm font-semibold text-gray-900 sm:text-base">
+                Chi tiết yêu cầu xin nghỉ
+              </h3>
               <Stepper steps={getWorkflowSteps(selectedRequest.status)} />
             </div>
 
