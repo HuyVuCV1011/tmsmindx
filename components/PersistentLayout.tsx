@@ -46,7 +46,7 @@ function Layout({ children }: { children: React.ReactNode }) {
       <main
         data-tour="tour-content"
         className={`
-          transition-all duration-500 ease-in-out min-h-screen will-change-transform
+          transition-all duration-500 ease-in-out min-h-screen lg:will-change-transform
           ${
             shouldShowSidebar
               ? isOpen
@@ -57,8 +57,8 @@ function Layout({ children }: { children: React.ReactNode }) {
           ${shouldShowSidebar ? 'relative' : ''}
         `}
       >
-        <div className="w-full h-screen">
-          <div className="h-full overflow-y-auto custom-scrollbar">
+        <div className="w-full min-h-screen lg:h-screen">
+          <div className="min-h-screen lg:h-full lg:overflow-y-auto custom-scrollbar">
             <div
               className={`w-full px-0 py-1.25 sm:px-[1.5%] sm:py-2 lg:px-[2%] lg:py-3 xl:px-[2.5%] xl:py-3 ${
                 shouldShowSidebar && !isOpen ? 'pt-14 sm:pt-16 lg:pt-3' : ''

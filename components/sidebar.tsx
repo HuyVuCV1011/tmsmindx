@@ -97,7 +97,8 @@ export function Sidebar() {
   }, [])
 
   const isOnboardingActive =
-    typeof document !== "undefined" && document.documentElement.dataset.onboarding === "1";
+    typeof document !== 'undefined' &&
+    document.documentElement.dataset.onboarding === '1'
 
   // Determine menu items based on current path (admin or user)
   const isUserArea = pathname.startsWith('/user')
@@ -129,7 +130,10 @@ export function Sidebar() {
       icon: Users,
       submenu: [
         { href: '/admin/page1', label: 'Hồ sơ Giáo viên' },
-        { href: '/admin/page4/quan-ly-lich-lam-viec', label: 'Quản lý lịch làm việc' },
+        {
+          href: '/admin/page4/quan-ly-lich-lam-viec',
+          label: 'Quản lý lịch làm việc',
+        },
         { href: '/admin/page4/lich-danh-gia', label: 'Lịch sự kiện' },
         {
           href: '/admin/xin-nghi-mot-buoi',
@@ -201,13 +205,17 @@ export function Sidebar() {
       label: 'Cấu Hình Hệ Thống',
       icon: Settings,
       submenu: [
-        { href: "/admin/user-management", label: "Quản lý tài khoản"},
-        { href: "/admin/feedback", label: "Feedback Manager"},
-        { href: "/admin/feedback?source=datasource", label: "Feedback Datasource Manager"},
-        { href: "/admin/database", label: "Database Manager"},
-        { href: "/admin/cloudinary", label: "Cloudinary Manager"},
-        { href: "/admin/s3-supabase-manager", label: "S3 Supabase Manager"},
-      ]    },
+        { href: '/admin/user-management', label: 'Quản lý tài khoản' },
+        { href: '/admin/feedback', label: 'Feedback Manager' },
+        {
+          href: '/admin/feedback?source=datasource',
+          label: 'Feedback Datasource Manager',
+        },
+        { href: '/admin/database', label: 'Database Manager' },
+        { href: '/admin/cloudinary', label: 'Cloudinary Manager' },
+        { href: '/admin/s3-supabase-manager', label: 'S3 Supabase Manager' },
+      ],
+    },
   ]
 
   const userMenuItems = [
@@ -228,7 +236,7 @@ export function Sidebar() {
         { href: '/user/hoat-dong-hang-thang', label: 'Hoạt động hàng tháng' },
         { href: '/user/dang-ky-lich-lam-viec', label: 'Đăng ký lịch làm việc' },
         { href: '/user/xin-nghi-mot-buoi', label: 'Tạo yêu cầu xin nghỉ' },
-        { href: '/user/nhan-lop-1-buoi', label: 'Danh sách nhận lớp 1 buổi' },
+        { href: '/user/nhan-lop-1-buoi', label: 'Danh sách nhận lớp dạy thay' },
       ],
     },
     {
@@ -403,16 +411,19 @@ export function Sidebar() {
     if (isOnboardingActive) {
       const labelsToExpand = menuItems
         .filter((item: any) => item?.submenu && Array.isArray(item.submenu))
-        .map((item: any) => item.label);
+        .map((item: any) => item.label)
       setExpandedMenus((prev) => {
-        const next = Array.from(new Set([...prev, ...labelsToExpand]));
+        const next = Array.from(new Set([...prev, ...labelsToExpand]))
         // Avoid infinite loops by not updating when unchanged.
-        if (next.length === prev.length && next.every((v, i) => v === prev[i])) {
-          return prev;
+        if (
+          next.length === prev.length &&
+          next.every((v, i) => v === prev[i])
+        ) {
+          return prev
         }
-        return next;
-      });
-      return;
+        return next
+      })
+      return
     }
 
     menuItems.forEach((item) => {
@@ -426,8 +437,15 @@ export function Sidebar() {
           })
         }
       }
-    });
-  }, [menuItems, pathname, searchParams, expandedMenus, hasActiveDescendant, isOnboardingActive]);
+    })
+  }, [
+    menuItems,
+    pathname,
+    searchParams,
+    expandedMenus,
+    hasActiveDescendant,
+    isOnboardingActive,
+  ])
 
   useEffect(() => {
     closeSidebarOnMobile()
@@ -435,11 +453,11 @@ export function Sidebar() {
 
   // Onboarding: tự động mở submenu khi được yêu cầu
   useEffect(() => {
-    if (!requestExpandLabels || requestExpandLabels.length === 0) return;
+    if (!requestExpandLabels || requestExpandLabels.length === 0) return
     setExpandedMenus((prev) => {
-      const next = Array.from(new Set([...prev, ...requestExpandLabels]));
-      return next;
-    });
+      const next = Array.from(new Set([...prev, ...requestExpandLabels]))
+      return next
+    })
   }, [requestExpandLabels])
 
   const toggleSubmenu = (label: string) => {
@@ -473,20 +491,20 @@ export function Sidebar() {
   }
 
   const getTourTargetForHref = (href?: string) => {
-    if (!href) return undefined;
-    const path = href.split("?")[0];
-    if (path === "/user/truyenthong") return "tour-nav-truyenthong";
-    if (path === "/user/thong-tin-giao-vien") return "tour-nav-thongtin";
-    if (path === "/user/hoat-dong-hang-thang") return "tour-nav-hoatdong";
-    if (path === "/user/xin-nghi-mot-buoi") return "tour-nav-xinnghi";
-    if (path === "/user/nhan-lop-1-buoi") return "tour-nav-nhanlop";
-    if (path === "/user/dao-tao-nang-cao") return "tour-nav-training";
-    if (path === "/user/assignments") return "tour-nav-assignments";
-    if (path === "/user/giaitrinh") return "tour-nav-giaitrinh";
-    if (path === "/user/quy-trinh-quy-dinh") return "tour-nav-quytrinh";
-    if (path === "/user/quan-ly-phan-hoi") return "tour-nav-quanlyphanho";
-    return undefined;
-  };
+    if (!href) return undefined
+    const path = href.split('?')[0]
+    if (path === '/user/truyenthong') return 'tour-nav-truyenthong'
+    if (path === '/user/thong-tin-giao-vien') return 'tour-nav-thongtin'
+    if (path === '/user/hoat-dong-hang-thang') return 'tour-nav-hoatdong'
+    if (path === '/user/xin-nghi-mot-buoi') return 'tour-nav-xinnghi'
+    if (path === '/user/nhan-lop-1-buoi') return 'tour-nav-nhanlop'
+    if (path === '/user/dao-tao-nang-cao') return 'tour-nav-training'
+    if (path === '/user/assignments') return 'tour-nav-assignments'
+    if (path === '/user/giaitrinh') return 'tour-nav-giaitrinh'
+    if (path === '/user/quy-trinh-quy-dinh') return 'tour-nav-quytrinh'
+    if (path === '/user/quan-ly-phan-hoi') return 'tour-nav-quanlyphanho'
+    return undefined
+  }
 
   return (
     <>
@@ -734,7 +752,9 @@ export function Sidebar() {
                                         <Link
                                           key={nestedItem.href}
                                           href={nestedItem.href}
-                                          data-tour={getTourTargetForHref(nestedItem.href)}
+                                          data-tour={getTourTargetForHref(
+                                            nestedItem.href,
+                                          )}
                                           onClick={closeSidebarOnMobile}
                                           className={cn(
                                             'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium tracking-wide transition-all duration-300 hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-1',

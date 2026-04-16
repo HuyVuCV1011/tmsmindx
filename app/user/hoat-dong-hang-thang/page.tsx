@@ -467,6 +467,20 @@ function mapEventToRegisterPayloads(event: EvaluationEvent) {
   )
 }
 
+function getEventTagAndSpecialty(event: EvaluationEvent): string {
+  const payloads = mapEventToRegisterPayloads(event)
+  if (payloads && payloads.length > 0) {
+    const firstPayload = payloads[0]
+    // Extract tag from optionLabel (e.g., "[COD]" from "[COD] Scratch (S)")
+    const optionLabel = firstPayload.optionLabel || ''
+    const tagMatch = optionLabel.match(/\[(.*?)\]/)
+    const tag = tagMatch ? `[${tagMatch[1]}]` : ''
+    const specialty = event.specialty || ''
+    return tag ? `${tag} ${specialty}`.trim() : specialty
+  }
+  return event.specialty || ''
+}
+
 function resolveExamActionStatus(assignment: CalendarExamAssignment | null) {
   if (!assignment) {
     return 'Chưa có bài thi cho lịch này'
@@ -544,7 +558,12 @@ export default function MonthlyActivitiesPage() {
   )
   const [teacherCode, setTeacherCode] = useState('')
   const [teacherCenterCode, setTeacherCenterCode] = useState('')
-  const [teacherInfo, setTeacherInfo] = useState<{ teacher_name?: string; email?: string; lms_code?: string; campus?: string }>({})
+  const [teacherInfo, setTeacherInfo] = useState<{
+    teacher_name?: string
+    email?: string
+    lms_code?: string
+    campus?: string
+  }>({})
 
   const [submitting, setSubmitting] = useState(false)
   const [registeredParticipantsByEvent, setRegisteredParticipantsByEvent] =
@@ -577,7 +596,10 @@ export default function MonthlyActivitiesPage() {
   const [isMobileViewport, setIsMobileViewport] = useState(false)
 
   useEffect(() => {
-    if (searchParams.get('showRegisterHint') !== '1' || registerHintShownRef.current) {
+    if (
+      searchParams.get('showRegisterHint') !== '1' ||
+      registerHintShownRef.current
+    ) {
       return
     }
 
@@ -645,7 +667,11 @@ export default function MonthlyActivitiesPage() {
         const data = await response.json()
         if (data?.teacher?.code) {
           setTeacherCode(data.teacher.code)
-          const branchCurrent = data?.teacher?.bu_check || data?.teacher?.main_centre || data?.teacher?.centers || ''
+          const branchCurrent =
+            data?.teacher?.bu_check ||
+            data?.teacher?.main_centre ||
+            data?.teacher?.centers ||
+            ''
           if (branchCurrent) {
             setTeacherCenterCode(String(branchCurrent))
           }
@@ -693,9 +719,9 @@ export default function MonthlyActivitiesPage() {
         Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
           // "Kiểm tra quy trình - kỹ năng trải nghiệm" (experience) không phụ thuộc bộ đề chuyên môn
           // nên vẫn cho phép đăng ký theo lịch nếu có event-schedule.
-          if (mapped.exam_type === "experience") {
-            available.add(option);
-            return;
+          if (mapped.exam_type === 'experience') {
+            available.add(option)
+            return
           }
 
           const hasDefaultSet = mapped.subjectCodeCandidates.some((candidate) =>
@@ -962,7 +988,12 @@ export default function MonthlyActivitiesPage() {
             ...mapped.subjectCodeCandidates,
           ].some((code) => {
             const c = normalizeStr(code)
-            return specialty === c || title === c || specialty.includes(c) || title.includes(c)
+            return (
+              specialty === c ||
+              title === c ||
+              specialty.includes(c) ||
+              title.includes(c)
+            )
           })
           if (directMatch) return true
 
@@ -1852,7 +1883,7 @@ export default function MonthlyActivitiesPage() {
                 onClick={() => setView(option.value)}
                 className={`rounded-md border px-3 py-1.5 text-sm font-semibold ${
                   view === option.value
-                    ? 'bg-blue-600 text-white border-blue-600'
+                    ? 'bg-[#a1001f] text-white border-[#a1001f]'
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                 }`}
               >
@@ -1884,43 +1915,57 @@ export default function MonthlyActivitiesPage() {
               </div>
 
               <div
-                className="relative"
-                style={{ height: `${dayTimelineGridHeight}px` }}
+                className="relative grow flex flex-col"
+                style={{ minHeight: `${dayTimelineGridHeight}px` }}
               >
                 {dayTimelineHours.map((hour) => {
                   const hourEvents = dayTimelineEventsByHour[hour] || []
+                  const eventCount = hourEvents.length
+                  const expandedHeight =
+                    eventCount > 0
+                      ? Math.max(
+                          DAY_TIMELINE_ROW_HEIGHT,
+                          eventCount * 32 + (eventCount - 1) * 6 + 12,
+                        )
+                      : DAY_TIMELINE_ROW_HEIGHT
 
                   return (
                     <div
                       key={`slot-${hour}`}
-                      className="h-16 border-t border-gray-200 px-2 py-1.5 overflow-hidden"
-                      style={{ height: `${DAY_TIMELINE_ROW_HEIGHT}px` }}
+                      className="border-t border-gray-200 px-2 py-1.5"
+                      style={{ minHeight: `${expandedHeight}px` }}
                     >
                       <div className="space-y-1.5">
                         {hourEvents.map((event) => {
                           const calendarEventStyle = getCalendarEventStyle(
                             event.eventType,
                           )
+                          const tagAndSpecialty = getEventTagAndSpecialty(event)
 
                           return (
                             <button
                               key={event.id}
                               type="button"
-                              className={`w-full overflow-hidden rounded-xl border-l-4 px-3 py-2 text-left shadow-sm hover:shadow-md transition ${getTimelineEventContainerClass(event.eventType)}`}
+                              className={`w-full rounded-xl border-l-4 px-2 py-1.5 text-left shadow-sm hover:shadow-md transition flex flex-col ${getTimelineEventContainerClass(event.eventType)}`}
                               onClick={() =>
                                 handleDayEventClick(focusDate, event)
                               }
-                              title={event.title.replace(/\n/g, ' ')}
+                              title={`${event.title}${tagAndSpecialty}`}
                             >
-                              <p className="text-sm font-bold leading-5 line-clamp-1">
-                                {event.title}
-                              </p>
                               <p
-                                className={`mt-0.5 text-xs font-semibold ${calendarEventStyle.timeClassName}`}
+                                className={`text-[10px] font-semibold leading-3 ${calendarEventStyle.timeClassName}`}
                               >
                                 {formatEventTimeRange(
                                   event.startAt,
                                   event.endAt,
+                                )}
+                              </p>
+                              <p className="text-xs font-bold leading-4 mt-0.5">
+                                {event.title}
+                                {tagAndSpecialty && (
+                                  <span className="whitespace-nowrap">
+                                    {tagAndSpecialty}
+                                  </span>
                                 )}
                               </p>
                             </button>
@@ -2006,43 +2051,59 @@ export default function MonthlyActivitiesPage() {
                   return (
                     <div
                       key={`week-col-${dateKey}`}
-                      className="relative border-r border-gray-200"
-                      style={{ height: `${dayTimelineGridHeight}px` }}
+                      className="relative border-r border-gray-200 grow flex flex-col"
                     >
                       {dayTimelineHours.map((hour) => {
                         const hourEvents =
                           weekTimelineEventsByDateHour[dateKey]?.[hour] || []
+                        const eventCount = hourEvents.length
+                        const expandedHeight =
+                          eventCount > 0
+                            ? Math.max(
+                                DAY_TIMELINE_ROW_HEIGHT,
+                                eventCount * 28 + (eventCount - 1) * 4 + 8,
+                              )
+                            : DAY_TIMELINE_ROW_HEIGHT
 
                         return (
                           <div
                             key={`${dateKey}-${hour}`}
-                            className="h-16 border-t border-gray-200 px-1.5 py-1 overflow-hidden"
-                            style={{ height: `${DAY_TIMELINE_ROW_HEIGHT}px` }}
+                            className="border-t border-gray-200 px-1.5 py-1"
+                            style={{
+                              minHeight: `${expandedHeight}px`,
+                            }}
                           >
                             <div className="space-y-1">
                               {hourEvents.map((event) => {
                                 const calendarEventStyle =
                                   getCalendarEventStyle(event.eventType)
+                                const tagAndSpecialty =
+                                  getEventTagAndSpecialty(event)
 
                                 return (
                                   <button
                                     key={event.id}
                                     type="button"
-                                    className={`w-full overflow-hidden rounded-lg border-l-4 px-2 py-1.5 text-left shadow-sm hover:shadow-md transition ${getTimelineEventContainerClass(event.eventType)}`}
+                                    className={`w-full overflow-hidden rounded-lg border-l-4 px-1.5 py-1 text-left shadow-sm hover:shadow-md transition flex flex-col text-xs ${getTimelineEventContainerClass(event.eventType)}`}
                                     onClick={() =>
                                       handleDayEventClick(date, event)
                                     }
-                                    title={event.title.replace(/\n/g, ' ')}
+                                    title={`${event.title}${tagAndSpecialty}`}
                                   >
-                                    <p className="text-xs font-bold leading-4 line-clamp-1">
-                                      {event.title}
-                                    </p>
                                     <p
-                                      className={`mt-0.5 text-[11px] font-semibold ${calendarEventStyle.timeClassName}`}
+                                      className={`text-[9px] font-semibold leading-2 ${calendarEventStyle.timeClassName}`}
                                     >
                                       {formatEventTimeRange(
                                         event.startAt,
                                         event.endAt,
+                                      )}
+                                    </p>
+                                    <p className="mt-0.5 line-clamp-3 wrap-break-word text-[10px] font-bold leading-3">
+                                      {event.title}
+                                      {tagAndSpecialty && (
+                                        <span className="ml-0.5 wrap-break-word">
+                                          {tagAndSpecialty}
+                                        </span>
                                       )}
                                     </p>
                                   </button>
@@ -2258,20 +2319,20 @@ export default function MonthlyActivitiesPage() {
                           <button
                             type="button"
                             key={event.id}
-                            className="flex w-full items-start gap-1 text-left"
+                            className="w-full text-left"
                             onClick={(e) => {
                               e.stopPropagation()
                               handleDayEventClick(date, event)
                             }}
                             title={event.title.replace(/\n/g, ' ')}
                           >
-                            <div
-                              className={`w-18 shrink-0 text-[11px] font-semibold leading-4 ${calendarEventStyle.timeClassName}`}
+                            <p
+                              className={`text-[11px] font-semibold leading-4 ${calendarEventStyle.timeClassName}`}
                             >
                               {formatEventTimeRange(event.startAt, event.endAt)}
-                            </div>
+                            </p>
                             <div
-                              className={`flex-1 rounded-sm px-1 py-1 text-[11px] leading-4 font-semibold text-center ${calendarEventStyle.titleClassName}`}
+                              className={`mt-0.5 rounded-sm px-1 py-1 text-[11px] leading-4 font-semibold text-center ${calendarEventStyle.titleClassName}`}
                             >
                               {event.title}
                             </div>
@@ -2720,56 +2781,65 @@ export default function MonthlyActivitiesPage() {
       >
         <div className="space-y-6">
           <div className="space-y-4">
-          {selectedRegistrationEvent && (
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
-                Đợt đăng ký đang chọn
-              </p>
-              <p className="mt-2 whitespace-pre-line text-base font-semibold text-gray-900">
-                {selectedRegistrationEvent.title}
-              </p>
-              <p className="mt-1 text-sm text-gray-600">
-                Thời gian: {formatDateTime(selectedRegistrationEvent.startAt)} -{' '}
-                {formatDateTime(selectedRegistrationEvent.endAt)}
-              </p>
-            </div>
-          )}
+            {selectedRegistrationEvent && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
+                  Đợt đăng ký đang chọn
+                </p>
+                <p className="mt-2 whitespace-pre-line text-base font-semibold text-gray-900">
+                  {selectedRegistrationEvent.title}
+                </p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Thời gian: {formatDateTime(selectedRegistrationEvent.startAt)}{' '}
+                  - {formatDateTime(selectedRegistrationEvent.endAt)}
+                </p>
+              </div>
+            )}
 
-          <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
-              Thứ tự thao tác
-            </p>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-gray-700">
-              <li>Chọn lịch thi theo từng môn trước.</li>
-              <li>Tick môn muốn đăng ký rồi bấm Gửi đăng ký.</li>
-            </ol>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
+                Thứ tự thao tác
+              </p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-gray-700">
+                <li>Chọn lịch thi theo từng môn trước.</li>
+                <li>Tick môn muốn đăng ký rồi bấm Gửi đăng ký.</li>
+              </ol>
+            </div>
           </div>
-          </div>
-            <div className="space-y-4">
-              {REGISTER_OPTIONS.filter((option) => {
-                const mapped = REGISTER_OPTION_MAP[option];
-                const hasExamEvents = (upcomingExamEventsByOption[option] || []).length > 0;
-                const isExperience = mapped?.exam_type === "experience";
-                // Hiển thị tất cả option có lịch thi, không phụ thuộc bộ đề
-                return hasExamEvents;
-              }).map((option) => {
-                const mapped = REGISTER_OPTION_MAP[option];
-                const isExperience = mapped?.exam_type === "experience";
-                const isAvailable = true; // Cho phép đăng ký tự do theo lịch admin set
-                const isSelected = selectedOptions.includes(option);
-                const examEvents = upcomingExamEventsByOption[option] || [];
-                const hasExamEvents = examEvents.length > 0;
-                const selectedEventId = selectedExamEventByOption[option] || "";
-                const selectedExamEvent =
-                  (selectedEventId ? examEvents.find((event) => event.id === selectedEventId) : null) ||
-                  examEvents[0] ||
-                  null;
-                const effectiveSelectedEventId = selectedEventId || selectedExamEvent?.id || "";
-                const hasAnyRegistration = userRegisteredSubjects.has(option);
-                const isAlreadyRegisteredForSelectedEvent =
-                  !!effectiveSelectedEventId &&
-                  (registeredExamEventIdsByOption[option] || []).includes(effectiveSelectedEventId);
-                const isDisabled = !isAvailable || !hasExamEvents || isAlreadyRegisteredForSelectedEvent;
+          <div className="space-y-4">
+            {REGISTER_OPTIONS.filter((option) => {
+              const mapped = REGISTER_OPTION_MAP[option]
+              const hasExamEvents =
+                (upcomingExamEventsByOption[option] || []).length > 0
+              const isExperience = mapped?.exam_type === 'experience'
+              // Hiển thị tất cả option có lịch thi, không phụ thuộc bộ đề
+              return hasExamEvents
+            }).map((option) => {
+              const mapped = REGISTER_OPTION_MAP[option]
+              const isExperience = mapped?.exam_type === 'experience'
+              const isAvailable = true // Cho phép đăng ký tự do theo lịch admin set
+              const isSelected = selectedOptions.includes(option)
+              const examEvents = upcomingExamEventsByOption[option] || []
+              const hasExamEvents = examEvents.length > 0
+              const selectedEventId = selectedExamEventByOption[option] || ''
+              const selectedExamEvent =
+                (selectedEventId
+                  ? examEvents.find((event) => event.id === selectedEventId)
+                  : null) ||
+                examEvents[0] ||
+                null
+              const effectiveSelectedEventId =
+                selectedEventId || selectedExamEvent?.id || ''
+              const hasAnyRegistration = userRegisteredSubjects.has(option)
+              const isAlreadyRegisteredForSelectedEvent =
+                !!effectiveSelectedEventId &&
+                (registeredExamEventIdsByOption[option] || []).includes(
+                  effectiveSelectedEventId,
+                )
+              const isDisabled =
+                !isAvailable ||
+                !hasExamEvents ||
+                isAlreadyRegisteredForSelectedEvent
 
               return (
                 <div
@@ -2857,7 +2927,7 @@ export default function MonthlyActivitiesPage() {
             })}
           </div>
         </div>
-        </Modal>
-      </PageContainer>
-    );
-  }
+      </Modal>
+    </PageContainer>
+  )
+}

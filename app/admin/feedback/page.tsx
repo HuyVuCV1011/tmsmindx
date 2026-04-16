@@ -104,7 +104,7 @@ function formatScreenTitle(screenPath?: string | null): string {
     '/user/thong-tin-giao-vien': 'Thông tin của tôi',
     '/user/hoat-dong-hang-thang': 'Hoạt động hàng tháng',
     '/user/xin-nghi-mot-buoi': 'Tạo yêu cầu xin nghỉ',
-    '/user/nhan-lop-1-buoi': 'Danh sách nhận lớp 1 buổi',
+    '/user/nhan-lop-1-buoi': 'Danh sách nhận lớp dạy thay',
     '/user/dao-tao-nang-cao': 'Đào tạo nâng cao',
     '/user/assignments': 'Quản lý kiểm tra',
     '/user/giaitrinh': 'Giải trình điểm kiểm tra',
@@ -311,16 +311,17 @@ export default function AdminFeedbackPage() {
 
   return (
     <PageContainer
-      title="Quản lý phản hồi"
+      title="Quản Lý Phản Hồi"
       description="Theo dõi, phân loại và phản hồi các ý kiến từ người dùng"
       maxWidth="2xl"
       headerActions={
         <button
-          type="button"          onClick={fetchItems}
+          type="button"
+          onClick={fetchItems}
           disabled={loading}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#f3b4bd] bg-white px-4 text-sm font-medium text-[#a1001f] shadow-sm hover:bg-[#a1001f]/5 disabled:opacity-60"
         >
-          <RefreshCcw className="h-4 w-4" />
+          <RefreshCcw className="mr-1.5 h-4 w-4" />
           Làm mới
         </button>
       }
@@ -728,7 +729,7 @@ export default function AdminFeedbackPage() {
       </Modal>
 
       {previewImages && previewImages.length > 0 && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4">
+        <div className="fixed inset-0 z-1100 flex items-center justify-center bg-black/80 p-4">
           <div className="relative w-full max-w-5xl">
             <button
               type="button"
