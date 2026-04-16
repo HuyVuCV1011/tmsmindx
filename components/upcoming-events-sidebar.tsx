@@ -481,7 +481,7 @@ export function UpcomingEventsSidebar() {
                                     person.masked ? 'italic text-white/70' : ''
                                 }`}>{person.name}</div>
                                 <div className="text-xs text-white/80 font-medium mt-0.5">
-                                    {person.date} • {person.masked ? 'Đã ẩn thông tin' : person.teachingLevel}
+                                    {person.date}{person.masked ? ' • Đã ẩn thông tin' : person.teachingLevel ? ` • ${person.teachingLevel}` : ''}
                                 </div>
                             </div>
                         </div>

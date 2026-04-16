@@ -7,7 +7,7 @@ export async function POST(
 ) {
     try {
         const { id } = await params;
-        const { userId, reaction } = await request.json();
+        const { userId, reaction, userName } = await request.json();
 
         if (!userId) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
@@ -64,8 +64,8 @@ export async function POST(
                 }
             } else {
                 await client.query(
-                    'INSERT INTO communication_likes (post_id, user_id, reaction) VALUES ($1, $2, $3)',
-                    [postId, userId, reaction || 'like']
+                    'INSERT INTO communication_likes (post_id, user_id, reaction, user_name) VALUES ($1, $2, $3, $4)',
+                    [postId, userId, reaction || 'like', userName || null]
                 );
                 await client.query(
                     'UPDATE communications SET like_count = like_count + 1 WHERE id = $1',
@@ -78,16 +78,29 @@ export async function POST(
 
             await client.query('COMMIT');
 
-            // Get updated like count
+            // Get updated like count + reaction breakdown
             const result = await client.query(
                 'SELECT like_count FROM communications WHERE id = $1',
                 [postId]
             );
 
+            const reactionCountsResult = await client.query(
+                `SELECT reaction, COUNT(*) as count
+                 FROM communication_likes
+                 WHERE post_id = $1 AND reaction IS NOT NULL
+                 GROUP BY reaction ORDER BY count DESC`,
+                [postId]
+            );
+            const reaction_counts: Record<string, number> = {};
+            reactionCountsResult.rows.forEach((r: any) => {
+                reaction_counts[r.reaction] = parseInt(r.count);
+            });
+
             return NextResponse.json({
                 like_count: result.rows[0].like_count,
                 isLiked,
                 reaction: savedReaction,
+                reaction_counts,
                 action
             });
 
