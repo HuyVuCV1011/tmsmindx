@@ -32,13 +32,6 @@ interface EvaluationEvent {
   registrationTemplate?: RegistrationTemplate
 }
 
-interface ExamSetAvailability {
-  status: 'active' | 'inactive'
-  block_code: string
-  subject_code: string
-  default_set_id?: number | null
-}
-
 interface RegisteredExamParticipant {
   id: number
   teacher_code: string
@@ -209,20 +202,8 @@ function getTimelineEventContainerClass(eventType: EventCategory | undefined) {
   }
 }
 
-const REGISTER_OPTIONS = [
-  '[COD] Scratch (S)',
-  '[COD] GameMaker (G)',
-  '[COD] Python (PT)',
-  '[COD] Web (JS)',
-  '[COD] Computer Science (CS)',
-  '[COD] App Producer',
-  '[ROB] Lego 4+',
-  '[ROB] Vex Go',
-  '[ROB] Vex IQ',
-  '[ART] Arts',
-  'Kiểm tra quy trình & kỹ năng trải nghiệm',
-]
-
+// REGISTER_OPTIONS và REGISTER_OPTION_MAP được build động từ DB (chuyen_sau_monhoc)
+// Các constant dưới đây chỉ là fallback khi DB chưa load xong
 type RegisterPayload = {
   exam_type: 'expertise' | 'experience'
   block_code: string
@@ -230,128 +211,6 @@ type RegisterPayload = {
   optionLabel: string
   specialtyAliases: string[]
   subjectCodeCandidates: string[]
-}
-
-const REGISTER_OPTION_MAP: Record<string, RegisterPayload> = {
-  '[COD] Scratch (S)': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] Scratch (S)',
-    optionLabel: '[COD] Scratch (S)',
-    specialtyAliases: ['Coding - Scratch', 'Scratch'],
-    subjectCodeCandidates: ['[COD] Scratch (S)', '[COD] Scratch', 'SCRATCH'],
-  },
-  '[COD] GameMaker (G)': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] GameMaker (G)',
-    optionLabel: '[COD] GameMaker (G)',
-    specialtyAliases: ['Coding - Game', 'GameMaker', 'Coding - Gamemaker'],
-    subjectCodeCandidates: [
-      '[COD] GameMaker (G)',
-      '[COD] GameMaker',
-      'GAMEMAKER',
-    ],
-  },
-  '[COD] Python (PT)': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] Python (PT)',
-    optionLabel: '[COD] Python (PT)',
-    specialtyAliases: ['Coding - Python', 'Python'],
-    subjectCodeCandidates: ['[COD] Python (PT)', '[COD] Python', 'PYTHON'],
-  },
-  '[COD] Web (JS)': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] Web (JS)',
-    optionLabel: '[COD] Web (JS)',
-    specialtyAliases: ['Coding - Web', 'Web'],
-    subjectCodeCandidates: ['[COD] Web (JS)', '[COD] Web', 'WEB'],
-  },
-  '[COD] Computer Science (CS)': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] Computer Science (CS)',
-    optionLabel: '[COD] Computer Science (CS)',
-    specialtyAliases: ['Computer Science', 'ComputerScience'],
-    subjectCodeCandidates: [
-      '[COD] Computer Science (CS)',
-      '[COD] ComputerScience',
-      'COMPUTERSCIENCE',
-    ],
-  },
-  '[COD] App Producer': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] App Producer',
-    optionLabel: '[COD] App Producer',
-    specialtyAliases: ['App Producer', 'AppProducer', 'Coding - App Producer'],
-    subjectCodeCandidates: [
-      '[COD] App Producer',
-      '[COD] AppProducer',
-      'APPPRODUCER',
-    ],
-  },
-  '[ROB] Lego 4+': {
-    exam_type: 'expertise',
-    block_code: 'ROBOTICS',
-    subject_code: '[ROB] Lego 4+',
-    optionLabel: '[ROB] Lego 4+',
-    specialtyAliases: ['Robotics Lego Spike 4+', 'Lego', 'Lego Spike'],
-    subjectCodeCandidates: ['[ROB] Lego 4+', '[ROB] Lego Spike', 'LEGO'],
-  },
-  '[ROB] Vex Go': {
-    exam_type: 'expertise',
-    block_code: 'ROBOTICS',
-    subject_code: '[ROB] Vex Go',
-    optionLabel: '[ROB] Vex Go',
-    specialtyAliases: ['Robotics VexGo', 'VexGo', 'Robotics - VexGo'],
-    subjectCodeCandidates: ['[ROB] Vex Go', '[ROB] VexGo', 'VEXGO'],
-  },
-  '[ROB] Vex IQ': {
-    exam_type: 'expertise',
-    block_code: 'ROBOTICS',
-    subject_code: '[ROB] Vex IQ',
-    optionLabel: '[ROB] Vex IQ',
-    specialtyAliases: [
-      'Robotics Vex IQ',
-      'VexIQ',
-      'Vex IQ',
-      'Robotics - VexIQ',
-    ],
-    subjectCodeCandidates: ['[ROB] Vex IQ', '[ROB] VexIQ', 'VEXIQ'],
-  },
-  '[ART] Arts': {
-    exam_type: 'expertise',
-    block_code: 'ART',
-    subject_code: '[ART] Arts',
-    optionLabel: '[ART] Arts',
-    specialtyAliases: ['Art', 'Test chuyên sâu', 'Arts'],
-    subjectCodeCandidates: [
-      '[ART] Arts',
-      '[ART] Test chuyên sâu',
-      'TEST_CHUY_N_S_U',
-      '[ART]',
-    ],
-  },
-  'Kiểm tra quy trình & kỹ năng trải nghiệm': {
-    exam_type: 'experience',
-    block_code: 'PROCESS',
-    subject_code: 'Kiểm tra quy trình & kỹ năng trải nghiệm',
-    optionLabel: 'Kiểm tra quy trình & kỹ năng trải nghiệm',
-    specialtyAliases: [
-      'Quy trình quy định',
-      'Quy trình - kỹ năng trải nghiệm',
-      'Kiểm tra quy trình - kỹ năng trải nghiệm bổ sung',
-    ],
-    subjectCodeCandidates: [
-      'Kiểm tra quy trình & kỹ năng trải nghiệm',
-      '[Trial] Quy Trình Trai nghiệm',
-      'QUY_TR_NH_TRAI_NGHI_M',
-      'quytrinh',
-    ],
-  },
 }
 
 function startOfDay(date: Date) {
@@ -445,33 +304,38 @@ function toMonthValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
-function mapEventToRegisterPayloads(event: EvaluationEvent) {
-  const eventTitle = normalizeSearchString(event.title || '')
-  const eventSpecialty = normalizeSearchString(event.specialty || '')
-  const eventText = `${eventTitle} ${eventSpecialty}`.trim()
+function mapEventToRegisterPayloads(
+  event: EvaluationEvent,
+  registerOptionMap: Record<string, RegisterPayload>,
+) {
+  const eventSpecialty = (event.specialty || '').trim()
+  const eventTitle = (event.title || '').trim()
+  const normalize = (v: string) =>
+    v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+  const nSpecialty = normalize(eventSpecialty)
+  const nTitle = normalize(eventTitle)
 
-  return Object.values(REGISTER_OPTION_MAP).filter((mapped) =>
-    [
-      ...mapped.specialtyAliases,
-      mapped.subject_code,
-      mapped.optionLabel,
-      ...mapped.subjectCodeCandidates,
-    ].some((alias) => {
-      const normalizedAlias = normalizeSearchString(alias || '')
-      return (
-        normalizedAlias &&
-        (eventText.includes(normalizedAlias) ||
-          normalizedAlias.includes(eventText))
-      )
-    }),
-  )
+  return Object.values(registerOptionMap).filter((mapped) => {
+    // Match trực tiếp specialty với subject_code (cách admin lưu vào DB)
+    if (normalize(mapped.subject_code) === nSpecialty) return true
+    if (normalize(mapped.subject_code) === nTitle) return true
+    // Fallback: match qua aliases
+    return [...mapped.specialtyAliases, ...mapped.subjectCodeCandidates].some(
+      (alias) => {
+        const a = normalize(alias)
+        return a && (nSpecialty.includes(a) || nTitle.includes(a) || a.includes(nSpecialty))
+      },
+    )
+  })
 }
 
-function getEventTagAndSpecialty(event: EvaluationEvent): string {
-  const payloads = mapEventToRegisterPayloads(event)
+function getEventTagAndSpecialty(
+  event: EvaluationEvent,
+  registerOptionMap: Record<string, RegisterPayload>,
+): string {
+  const payloads = mapEventToRegisterPayloads(event, registerOptionMap)
   if (payloads && payloads.length > 0) {
     const firstPayload = payloads[0]
-    // Extract tag from optionLabel (e.g., "[COD]" from "[COD] Scratch (S)")
     const optionLabel = firstPayload.optionLabel || ''
     const tagMatch = optionLabel.match(/\[(.*?)\]/)
     const tag = tagMatch ? `[${tagMatch[1]}]` : ''
@@ -547,15 +411,20 @@ export default function MonthlyActivitiesPage() {
   const [view, setView] = useState<CalendarView>('month')
   const [focusDate, setFocusDate] = useState(new Date())
   const [events, setEvents] = useState<EvaluationEvent[]>([])
+  const [examSubjects, setExamSubjects] = useState<Array<{
+    id: number
+    exam_type: 'expertise' | 'experience'
+    block_code: string
+    subject_code: string
+    subject_name: string
+    default_set_id?: number | null
+  }>>([])
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedRegistrationEvent, setSelectedRegistrationEvent] =
     useState<EvaluationEvent | null>(null)
   const [showDayEventsModal, setShowDayEventsModal] = useState(false)
   const [showRegisterModal, setShowRegisterModal] = useState(false)
   const [selectedOptions, setSelectedOptions] = useState<string[]>([])
-  const [availableOptions, setAvailableOptions] = useState<Set<string>>(
-    new Set(),
-  )
   const [teacherCode, setTeacherCode] = useState('')
   const [teacherCenterCode, setTeacherCenterCode] = useState('')
   const [teacherInfo, setTeacherInfo] = useState<{
@@ -636,6 +505,46 @@ export default function MonthlyActivitiesPage() {
     return () => mediaQuery.removeEventListener('change', updateViewport)
   }, [])
 
+  // Build REGISTER_OPTIONS và REGISTER_OPTION_MAP động từ examSubjects (chuyen_sau_monhoc)
+  const { REGISTER_OPTIONS, REGISTER_OPTION_MAP } = useMemo(() => {
+    if (examSubjects.length === 0) {
+      return { REGISTER_OPTIONS: [] as string[], REGISTER_OPTION_MAP: {} as Record<string, RegisterPayload> }
+    }
+
+    const options: string[] = []
+    const map: Record<string, RegisterPayload> = {}
+
+    examSubjects.forEach((subject) => {
+      const key = subject.subject_name || subject.subject_code
+      options.push(key)
+      map[key] = {
+        exam_type: subject.exam_type,
+        block_code: subject.block_code,
+        subject_code: subject.subject_code,
+        optionLabel: key,
+        // specialtyAliases: match trực tiếp với subject_code và subject_name
+        // (admin lưu chuyen_nganh = subject_code khi tạo lịch)
+        specialtyAliases: [subject.subject_name, subject.subject_code].filter(Boolean),
+        subjectCodeCandidates: [subject.subject_code, subject.subject_name].filter(Boolean),
+      }
+    })
+
+    return { REGISTER_OPTIONS: options, REGISTER_OPTION_MAP: map }
+  }, [examSubjects])
+
+  // availableOptions: build từ examSubjects (chuyen_sau_monhoc)
+  // Môn có default_set_id (đã set đề mặc định) hoặc exam_type=experience thì available
+  const availableOptions = useMemo(() => {
+    const available = new Set<string>()
+    examSubjects.forEach((subject) => {
+      const key = subject.subject_name || subject.subject_code
+      if (subject.exam_type === 'experience' || subject.default_set_id != null) {
+        available.add(key)
+      }
+    })
+    return available
+  }, [examSubjects])
+
   const resolveExamEventIdByOptionAndSchedule = useCallback(
     (option: string, scheduledAt: string) => {
       const scheduledStamp = toMinuteStamp(scheduledAt)
@@ -648,13 +557,13 @@ export default function MonthlyActivitiesPage() {
           return false
         }
 
-        const mappedPayloads = mapEventToRegisterPayloads(event)
+        const mappedPayloads = mapEventToRegisterPayloads(event, REGISTER_OPTION_MAP)
         return mappedPayloads.some((mapped) => mapped.optionLabel === option)
       })
 
       return matched?.id || ''
     },
-    [events],
+    [events, REGISTER_OPTION_MAP],
   )
 
   useEffect(() => {
@@ -690,51 +599,15 @@ export default function MonthlyActivitiesPage() {
     })()
   }, [user?.email, user?.displayName])
 
+  // Fetch danh sách môn học từ DB (chuyen_sau_monhoc)
   useEffect(() => {
     ;(async () => {
       try {
-        const response = await fetch('/api/exam-sets')
-        const data = await response.json()
-        if (!response.ok || !data?.success) return
-
-        const rows: ExamSetAvailability[] = data.data || []
-        const normalize = (value: string) =>
-          value
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .toUpperCase()
-            .trim()
-
-        // Chỉ coi subject hợp lệ nếu có default_set_id được cấu hình
-        const subjectWithDefaultSet = new Set<string>()
-        rows
-          .filter((item) => item.default_set_id != null)
-          .forEach((item) => {
-            subjectWithDefaultSet.add(
-              `${item.block_code}::${normalize(item.subject_code)}`,
-            )
-          })
-
-        const available = new Set<string>()
-        Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
-          // "Kiểm tra quy trình - kỹ năng trải nghiệm" (experience) không phụ thuộc bộ đề chuyên môn
-          // nên vẫn cho phép đăng ký theo lịch nếu có event-schedule.
-          if (mapped.exam_type === 'experience') {
-            available.add(option)
-            return
-          }
-
-          const hasDefaultSet = mapped.subjectCodeCandidates.some((candidate) =>
-            subjectWithDefaultSet.has(
-              `${mapped.block_code}::${normalize(candidate)}`,
-            ),
-          )
-          if (hasDefaultSet) {
-            available.add(option)
-          }
-        })
-
-        setAvailableOptions(available)
+        const res = await fetch('/api/exam-subjects')
+        const data = await res.json()
+        if (res.ok && data.success) {
+          setExamSubjects(data.data || [])
+        }
       } catch {}
     })()
   }, [])
@@ -1011,7 +884,7 @@ export default function MonthlyActivitiesPage() {
         )
     })
     return map
-  }, [events])
+  }, [events, REGISTER_OPTION_MAP])
 
   const periodLabel = useMemo(() => {
     if (view === 'day') {
@@ -1245,7 +1118,7 @@ export default function MonthlyActivitiesPage() {
         return
       }
 
-      const mappedPayloads = mapEventToRegisterPayloads(event)
+      const mappedPayloads = mapEventToRegisterPayloads(event, REGISTER_OPTION_MAP)
       if (mappedPayloads.length === 0) {
         next[event.id] = null
         return
@@ -1370,7 +1243,7 @@ export default function MonthlyActivitiesPage() {
         const next: Record<string, RegisteredExamParticipant[]> = {}
 
         relevantEvents.forEach((event) => {
-          const matchedMappings = mapEventToRegisterPayloads(event)
+          const matchedMappings = mapEventToRegisterPayloads(event, REGISTER_OPTION_MAP)
 
           const subjectCodes = new Set(
             matchedMappings.map((mapped) => mapped.subject_code),
@@ -1665,14 +1538,15 @@ export default function MonthlyActivitiesPage() {
         }
 
         // Experience test (quy trình/kỹ năng trải nghiệm) không cần bộ đề chuyên môn
-        if (mapped.exam_type !== 'experience') {
-          const hasActiveSetForOption = availableOptions.has(option)
-          if (!hasActiveSetForOption) {
-            failedOptions.push(option)
-            failedDetails.push(`${option}: chưa có bộ đề active`)
-            continue
-          }
-        }
+        // Cho phép đăng ký tự do theo lịch admin set (không check bộ đề)
+        // if (mapped.exam_type !== 'experience') {
+        //   const hasActiveSetForOption = availableOptions.has(option)
+        //   if (!hasActiveSetForOption) {
+        //     failedOptions.push(option)
+        //     failedDetails.push(`${option}: chưa có bộ đề active`)
+        //     continue
+        //   }
+        // }
 
         const examEventId = selectedExamEventByOption[option]
         const matchedExamEvent =
@@ -1940,7 +1814,7 @@ export default function MonthlyActivitiesPage() {
                           const calendarEventStyle = getCalendarEventStyle(
                             event.eventType,
                           )
-                          const tagAndSpecialty = getEventTagAndSpecialty(event)
+                          const tagAndSpecialty = getEventTagAndSpecialty(event, REGISTER_OPTION_MAP)
 
                           return (
                             <button
@@ -2078,7 +1952,7 @@ export default function MonthlyActivitiesPage() {
                                 const calendarEventStyle =
                                   getCalendarEventStyle(event.eventType)
                                 const tagAndSpecialty =
-                                  getEventTagAndSpecialty(event)
+                                  getEventTagAndSpecialty(event, REGISTER_OPTION_MAP)
 
                                 return (
                                   <button
