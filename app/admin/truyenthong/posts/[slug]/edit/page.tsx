@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import ThumbnailCropper from '@/components/ThumbnailCropper'
 import CroppedImage from '@/components/CroppedImage'
+import { normalizeStorageUrl } from '@/lib/storage-url'
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
@@ -77,7 +78,7 @@ export default function EditPostPage() {
             contentRef.current = postData.content || ''
             // Set preview images from existing data
             if (postData.featured_image) {
-                setThumbnailPreview(postData.featured_image)
+                setThumbnailPreview(normalizeStorageUrl(postData.featured_image))
             }
             if (postData.thumbnail_position) {
                 setThumbnailPosition(postData.thumbnail_position)
@@ -193,6 +194,9 @@ export default function EditPostPage() {
             // Upload new images if selected
             if (files.thumbnail) {
                 featured_image = await uploadImage(files.thumbnail)
+            } else if (!thumbnailPreview) {
+                // User clicked 'x' to delete thumbnail
+                featured_image = null
             }
 
             const payload = {

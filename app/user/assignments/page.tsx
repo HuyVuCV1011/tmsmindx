@@ -1316,7 +1316,8 @@ export default function TeacherAssignmentPage() {
                         {/* Question Image */}
                         {question.image_url && (
                           <div className="mb-3 md:mb-4 ml-11 md:ml-14">
-                            <NextImage
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
                               src={question.image_url}
                               alt="Question"
                               width={400}

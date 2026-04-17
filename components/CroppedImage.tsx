@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { parseCrop } from './ThumbnailCropper'
+import { normalizeStorageUrl } from '@/lib/storage-url'
 
 interface CroppedImageProps {
   src: string
@@ -44,9 +45,10 @@ export default function CroppedImage({ src, alt, cropData, className = '', style
 
   useEffect(() => {
     if (!src) return
+    const normalizedSrc = normalizeStorageUrl(src)
     const img = new window.Image()
     img.onload = () => setImgNatural({ w: img.naturalWidth, h: img.naturalHeight })
-    img.src = src
+    img.src = normalizedSrc
   }, [src])
 
   const imgStyle = React.useMemo((): React.CSSProperties => {
@@ -105,8 +107,9 @@ export default function CroppedImage({ src, alt, cropData, className = '', style
     }
 
     // Offset: dịch ảnh để vùng crop.x/y nằm ở góc trên trái container
-    const offsetX = -crop.x * finalW
-    const offsetY = -crop.y * finalH
+    // Thêm phần bù để căn giữa vùng crop nếu vùng đó lớn hơn container (do tỷ lệ khác nhau)
+    const offsetX = -crop.x * finalW + (containerSize.w - crop.w * finalW) / 2
+    const offsetY = -crop.y * finalH + (containerSize.h - crop.h * finalH) / 2
 
     return {
       position: 'absolute',
@@ -118,6 +121,8 @@ export default function CroppedImage({ src, alt, cropData, className = '', style
       userSelect: 'none',
       pointerEvents: 'none',
       objectFit: 'fill',
+      maxWidth: 'none',
+      maxHeight: 'none',
     }
   }, [crop, containerSize, imgNatural])
 
@@ -129,7 +134,7 @@ export default function CroppedImage({ src, alt, cropData, className = '', style
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={src || '/placeholder.svg'}
+        src={normalizeStorageUrl(src) || '/placeholder.svg'}
         alt={alt}
         draggable={false}
         style={imgStyle}

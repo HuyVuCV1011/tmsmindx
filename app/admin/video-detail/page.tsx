@@ -432,42 +432,42 @@ function VideoDetailContent() {
             return;
           }
 
-          // Xóa trên Cloudinary cho tất cả video đã bị xóa (không block nếu lỗi)
-          const extractPublicId = (url: string): string | null => {
+          // Xóa file trên Storage cho tất cả video đã bị xóa (không block nếu lỗi)
+          const deletedVideos: Array<{ video_link: string; thumbnail_url: string }> = data.deleted_videos || [];
+          const storageDeletes: Promise<void>[] = [];
+
+          const extractS3Key = (url: string): { key: string; bucket: string } | null => {
             if (!url) return null;
-            try {
-              const match = url.match(/\/(?:video|image|raw)\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/);
-              return match ? match[1] : null;
-            } catch { return null; }
+            // Supabase public URL: /storage/v1/object/public/<bucket>/<key>
+            const supabaseMatch = url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+            if (supabaseMatch) return { bucket: supabaseMatch[1], key: supabaseMatch[2] };
+            return null;
           };
 
-          const deletedVideos: Array<{ video_link: string; thumbnail_url: string }> = data.deleted_videos || [];
-          const cloudinaryDeletes: Promise<void>[] = [];
-
           for (const v of deletedVideos) {
-            const videoPublicId = extractPublicId(v.video_link);
-            if (videoPublicId && v.video_link?.includes('cloudinary.com')) {
-              cloudinaryDeletes.push(
+            const videoParsed = extractS3Key(v.video_link);
+            if (videoParsed) {
+              storageDeletes.push(
                 fetch('/api/admin/cloudinary', {
                   method: 'DELETE',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ public_id: videoPublicId, resource_type: 'video' })
-                }).then(() => {}).catch(e => console.warn('Cloudinary video delete warn:', e))
+                  body: JSON.stringify({ key: videoParsed.key, bucket: videoParsed.bucket })
+                }).then(() => {}).catch(e => console.warn('S3 video delete warn:', e))
               );
             }
-            const thumbPublicId = extractPublicId(v.thumbnail_url);
-            if (thumbPublicId && v.thumbnail_url?.includes('cloudinary.com')) {
-              cloudinaryDeletes.push(
+            const thumbParsed = extractS3Key(v.thumbnail_url);
+            if (thumbParsed) {
+              storageDeletes.push(
                 fetch('/api/admin/cloudinary', {
                   method: 'DELETE',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ public_id: thumbPublicId, resource_type: 'image' })
-                }).then(() => {}).catch(e => console.warn('Cloudinary thumb delete warn:', e))
+                  body: JSON.stringify({ key: thumbParsed.key, bucket: thumbParsed.bucket })
+                }).then(() => {}).catch(e => console.warn('S3 thumb delete warn:', e))
               );
             }
           }
 
-          await Promise.allSettled(cloudinaryDeletes);
+          await Promise.allSettled(storageDeletes);
 
           toast.success('Đã xóa video thành công!');
           setTimeout(() => router.push('/admin/page5'), 500);

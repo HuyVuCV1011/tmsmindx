@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Crop, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { normalizeStorageUrl } from '@/lib/storage-url'
 
 // ─── Kiểu dữ liệu crop ───────────────────────────────────────────────────────
 export interface CropData {
@@ -77,7 +78,7 @@ export default function ThumbnailCropper({
   useEffect(() => {
     const img = new window.Image()
     img.onload = () => setImgNatural({ w: img.naturalWidth, h: img.naturalHeight })
-    img.src = src
+    img.src = normalizeStorageUrl(src)
   }, [src])
 
   // Đo canvas
@@ -272,7 +273,7 @@ export default function ThumbnailCropper({
             {/* Ảnh gốc — contain */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={src}
+              src={normalizeStorageUrl(src)}
               alt="Original"
               draggable={false}
               style={{

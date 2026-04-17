@@ -24,6 +24,7 @@ interface Post {
   content: string
   featured_image: string
   banner_image: string
+  thumbnail_position?: string
   post_type: string
   published_at: string
   view_count: number
