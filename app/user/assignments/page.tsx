@@ -31,7 +31,7 @@ import NextImage from 'next/image'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 interface Assignment {
   id: number

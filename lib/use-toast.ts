@@ -1,85 +1,35 @@
 "use client";
 
-import toast from 'react-hot-toast';
-
 /**
- * Custom hook để sử dụng toast notification thống nhất trong toàn bộ ứng dụng
- * Sử dụng react-hot-toast với các cấu hình và style đồng bộ
+ * Hook + helper — cùng style với `@/lib/app-toast` (card trắng, border trái).
  */
 
-export const useToast = () => {
-  return {
-    success: (message: string) => toast.success(message, {
-      duration: 4000,
-      icon: '✅',
-    }),
-    
-    error: (message: string) => toast.error(message, {
-      duration: 5000,
-      icon: '❌',
-    }),
-    
-    warning: (message: string) => toast(message, {
-      duration: 4000,
-      icon: '⚠️',
-      style: {
-        background: '#f59e0b',
-        color: '#fff',
-      },
-    }),
-    
-    info: (message: string) => toast(message, {
-      duration: 4000,
-      icon: 'ℹ️',
-      style: {
-        background: '#3b82f6',
-        color: '#fff',
-      },
-    }),
-    
-    loading: (message: string) => toast.loading(message),
-    
-    promise: <T,>(
-      promise: Promise<T>,
-      messages: {
-        loading: string;
-        success: string;
-        error: string;
-      }
-    ) => toast.promise(promise, messages),
-    
-    // Dismiss all toasts
-    dismiss: () => toast.dismiss(),
-  };
+import { toast } from "@/lib/app-toast";
+import type { ToastOptions } from "react-hot-toast";
+
+type OptToast = ToastOptions & { message?: string };
+
+export const useToast = () => ({
+  success: (message: string, opts?: OptToast) => toast.success(message, opts),
+
+  error: (message: string, opts?: OptToast) => toast.error(message, opts),
+
+  warning: (message: string, opts?: OptToast) => toast.warning(message, opts),
+
+  info: (message: string, opts?: OptToast) => toast.info(message, opts),
+
+  loading: toast.loading,
+
+  promise: toast.promise,
+
+  dismiss: toast.dismiss,
+});
+
+export const showToast = {
+  success: (message: string, opts?: OptToast) => toast.success(message, opts),
+  error: (message: string, opts?: OptToast) => toast.error(message, opts),
+  warning: (message: string, opts?: OptToast) => toast.warning(message, opts),
+  info: (message: string, opts?: OptToast) => toast.info(message, opts),
 };
 
-// Export các function trực tiếp để dùng mà không cần hook
-export const showToast = {
-  success: (message: string) => toast.success(message, {
-    duration: 4000,
-    icon: '✅',
-  }),
-  
-  error: (message: string) => toast.error(message, {
-    duration: 5000,
-    icon: '❌',
-  }),
-  
-  warning: (message: string) => toast(message, {
-    duration: 4000,
-    icon: '⚠️',
-    style: {
-      background: '#f59e0b',
-      color: '#fff',
-    },
-  }),
-  
-  info: (message: string) => toast(message, {
-    duration: 4000,
-    icon: 'ℹ️',
-    style: {
-      background: '#3b82f6',
-      color: '#fff',
-    },
-  }),
-};
+export { toast };

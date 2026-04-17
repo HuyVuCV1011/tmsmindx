@@ -14,7 +14,7 @@ import {
 import { useAuth } from '@/lib/auth-context'
 import { useTeacher } from '@/lib/teacher-context'
 import { useEffect, useMemo, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 interface Explanation {
   id: number

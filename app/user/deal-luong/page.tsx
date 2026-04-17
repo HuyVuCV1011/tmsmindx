@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { Award, ChevronDown, DollarSign, FileText, Info, Plus, Send, TrendingDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 // ─── Types ───────────────────────────────────────────
 interface SalaryDeal {

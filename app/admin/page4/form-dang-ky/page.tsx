@@ -5,7 +5,7 @@ import { PageContainer } from "@/components/PageContainer";
 import { ClipboardCheck, Copy, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 
 interface RegistrationTemplate {
   id: string;

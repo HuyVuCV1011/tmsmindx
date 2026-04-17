@@ -6,7 +6,7 @@ import { Question, QuestionFormData } from '@/types/assignment';
 import { Eye, EyeOff, Image as ImageIcon, Plus, Trash2, X } from 'lucide-react';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 interface QuestionBuilderProps {
   onSave: (question: Partial<Question>) => Promise<void> | void;

@@ -45,7 +45,7 @@ import {
   useState,
   type ChangeEvent,
 } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -1142,7 +1142,7 @@ export default function ExamRegistrationListPage() {
     <>
       {importing ? (
         <div
-          className="group fixed right-2 top-2 z-[9980] w-[min(calc(100vw-1rem),14rem)]"
+          className="group fixed bottom-4 right-4 z-[9980] w-[min(calc(100vw-1rem),14rem)]"
           role="progressbar"
           aria-valuenow={importProgress}
           aria-valuemin={0}
@@ -1174,7 +1174,7 @@ export default function ExamRegistrationListPage() {
           <div
             role="log"
             aria-live="polite"
-            className="pointer-events-none invisible absolute right-0 top-full z-[9981] mt-0 max-h-52 w-[min(calc(100vw-1rem),22rem)] overflow-hidden rounded-lg border border-gray-200 bg-white p-2 opacity-0 shadow-xl transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100"
+            className="pointer-events-none invisible absolute bottom-full right-0 z-[9981] mb-1 max-h-52 w-[min(calc(100vw-1rem),22rem)] overflow-hidden rounded-lg border border-gray-200 bg-white p-2 opacity-0 shadow-xl transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100"
           >
             <p className="mb-1 border-b border-gray-100 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
               Nhật ký import

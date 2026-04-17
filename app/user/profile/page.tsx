@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 import { parseLegacyTeacherFromInfoJson } from '@/lib/teacher-db-mapper'
 import useSWR from 'swr'
 

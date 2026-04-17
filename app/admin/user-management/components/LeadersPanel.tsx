@@ -1,7 +1,7 @@
 "use client";
 import { Edit2, Filter, Loader2, MapPin, Plus, Save, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 import ConfirmDialog from "./ConfirmDialog";
 
 interface Leader { code: string; full_name: string; role_code: string; role_name: string; center: string; courses: string; area: string; status: string; joined_date: string; }

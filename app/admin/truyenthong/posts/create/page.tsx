@@ -10,7 +10,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import React, { useEffect, useState } from "react"
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 // Dynamic import for RichTextEditor to avoid SSR issues
 const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), {

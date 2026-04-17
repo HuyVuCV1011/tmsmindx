@@ -10,7 +10,7 @@ import { CAMPUS_LIST, findMatchingCampus } from '@/lib/campus-data';
 import { isExamInCurrentVietnamMonth } from '@/lib/giaitrinh-eligibility';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 interface Explanation {
   id: number;

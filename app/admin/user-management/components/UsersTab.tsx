@@ -2,7 +2,7 @@
 import { useAuth } from "@/lib/auth-context";
 import { Check, Eye, EyeOff, Key, Loader2, Lock, Plus, Save, Trash2, UserCheck, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 import ConfirmDialog from "./ConfirmDialog";
 
 interface AppUser {

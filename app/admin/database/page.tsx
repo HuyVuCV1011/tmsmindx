@@ -3,7 +3,7 @@
 import { PageContainer } from '@/components/PageContainer';
 import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Columns, Copy, Database, Download, Eye, Hash, Key, Link2, Play, Plus, RefreshCw, Search, Terminal, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 interface TableInfo { name: string; size: string; column_count: number; row_count: number; }
 interface ColumnInfo { column_name: string; data_type: string; is_nullable: string; column_default: string | null; character_maximum_length: number | null; }

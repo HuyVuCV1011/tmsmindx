@@ -6,7 +6,7 @@ import { Question } from '@/types/assignment';
 import { ArrowLeft, Download, Eye, FileText, HelpCircle, Upload, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 type DbDifficulty = 'easy' | 'medium' | 'hard';
 

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 import { motion, AnimatePresence } from 'framer-motion'
 import GenTrackingTab from '../components/GenTrackingTab'
 import GenSchedulingTab from '../components/GenSchedulingTab'

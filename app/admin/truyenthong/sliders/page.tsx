@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { ArrowLeft, Clock, Edit2, Eye, EyeOff, GripVertical, Image as ImageIcon, List, Plus, Settings, Trash2, X } from 'lucide-react'
 import Link from 'next/link'
 import React, { useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 interface Slider {
     id: string

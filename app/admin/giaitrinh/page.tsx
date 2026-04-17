@@ -14,7 +14,7 @@ import { useAuth } from '@/lib/auth-context';
 import { CheckCircle, Eye, FileText, Search, Filter, XCircle } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import Select from 'react-select';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 interface Explanation {
   id: number;

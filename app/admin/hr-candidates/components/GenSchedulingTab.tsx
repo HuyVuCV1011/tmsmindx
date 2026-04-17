@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 import { 
   Calendar, 
   Clock, 
