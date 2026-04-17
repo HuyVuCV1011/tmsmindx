@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
     webpackBuildWorker: false,
     /** Keeps dev server bundles from emitting extra server source maps (can reduce noisy logs). */
     serverSourceMaps: false,
+    // @ts-ignore - experimental feature in Next.js 16
+    proxyClientMaxBodySize: '1gb',
   },
   serverExternalPackages: ['ffprobe-static'],
 
@@ -21,6 +23,10 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'res.cloudinary.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.supabase.co',
       },
     ],
   },

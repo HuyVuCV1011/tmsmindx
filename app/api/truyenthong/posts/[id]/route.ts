@@ -1,261 +1,334 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { generateSlug } from '@/lib/utils';
-import { v2 as cloudinary } from 'cloudinary';
+import {
+  createSupabaseS3Client,
+  deleteObject,
+  isSupabaseS3Configured,
+  parsePublicUrl,
+} from '@/lib/supabase-s3';
+import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const BUCKET_NAME = 'mindx-posts-content';
 
-// Helper to extract Cloudinary public ID from secure URL
-const extractCloudinaryPublicId = (url: string | null) => {
-    if (!url || !url.includes('cloudinary.com')) return null;
-    const parts = url.split('/upload/');
-    if (parts.length !== 2) return null;
-    let path = parts[1];
-    path = path.replace(/^v\d+\//, '');
-    const lastDot = path.lastIndexOf('.');
-    return lastDot !== -1 ? path.substring(0, lastDot) : path;
-};
+async function ensureBucket() {
+  if (!isSupabaseS3Configured()) return;
+  const client = createSupabaseS3Client();
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: BUCKET_NAME }));
+  } catch {
+    await client.send(new CreateBucketCommand({ Bucket: BUCKET_NAME }));
+  }
+}
+
+function makeProxyUrl(bucket: string, key: string): string {
+  return `/api/storage-image?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
+}
+
+async function uploadBase64ToS3(base64Data: string): Promise<string> {
+  if (!isSupabaseS3Configured()) return base64Data;
+
+  const match = base64Data.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return base64Data;
+
+  const mimeType = match[1];
+  const buffer = Buffer.from(match[2], 'base64');
+  const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+
+  const client = createSupabaseS3Client();
+  const key = `post-images/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: buffer,
+      ContentType: mimeType,
+    })
+  );
+
+  return makeProxyUrl(BUCKET_NAME, key);
+}
 
 async function processBase64Images(htmlContent: string): Promise<string> {
-    if (!htmlContent) return htmlContent;
-    
-    const regex = /src=["'](data:image\/[^;]+;base64,[^"']+)["']/g;
-    let newContent = htmlContent;
-    
-    const matches = Array.from(htmlContent.matchAll(regex));
-    if (!matches || matches.length === 0) return htmlContent;
+  if (!htmlContent) return htmlContent;
 
-    const uploadPromises = matches.map(async (match) => {
-        const fullMatch = match[0];
-        const base64Data = match[1];
-        
-        try {
-            const uploadRes = await cloudinary.uploader.upload(base64Data, {
-                folder: 'mindx_posts_content',
-                resource_type: 'image'
-            });
-            return { originalStr: fullMatch, newStr: `src="${uploadRes.secure_url}"` };
-        } catch (error) {
-            console.error('Failed to upload base64 image to cloudinary:', error);
-            return { originalStr: fullMatch, newStr: fullMatch };
-        }
-    });
+  const regex = /src=["'](data:image\/[^;]+;base64,[^"']+)["']/g;
+  let newContent = htmlContent;
 
-    const replacements = await Promise.all(uploadPromises);
-    
-    for (const { originalStr, newStr } of replacements) {
-        newContent = newContent.replace(originalStr, newStr);
+  const matches = Array.from(htmlContent.matchAll(regex));
+  if (!matches || matches.length === 0) return htmlContent;
+
+  const uploadPromises = matches.map(async (match) => {
+    const fullMatch = match[0];
+    const base64Data = match[1];
+    try {
+      const newUrl = await uploadBase64ToS3(base64Data);
+      return { originalStr: fullMatch, newStr: `src="${newUrl}"` };
+    } catch (error) {
+      console.error('Failed to upload base64 image to S3:', error);
+      return { originalStr: fullMatch, newStr: fullMatch };
     }
-    
-    return newContent;
+  });
+
+  const replacements = await Promise.all(uploadPromises);
+  for (const { originalStr, newStr } of replacements) {
+    newContent = newContent.replace(originalStr, newStr);
+  }
+  return newContent;
+}
+
+/**
+ * Trích xuất tất cả các URL ảnh từ nội dung HTML.
+ * Decode HTML entities (&amp; → &) để so sánh URL chính xác.
+ */
+function extractImageUrls(htmlContent: string): string[] {
+  if (!htmlContent) return [];
+  const urls: string[] = [];
+  const regex = /src=["']([^"']+)["']/g;
+  let match;
+  while ((match = regex.exec(htmlContent)) !== null) {
+    // Decode HTML entities để tránh mismatch khi so sánh
+    const url = match[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+    urls.push(url);
+  }
+  return urls;
+}
+
+/**
+ * Xóa ảnh khỏi S3 (chỉ xóa nếu là URL Supabase, bỏ qua Cloudinary cũ).
+ */
+function deleteImageSilently(url: string | null) {
+  if (!url) return;
+  const parsed = parsePublicUrl(url);
+  if (!parsed) return; // URL Cloudinary cũ hoặc không phải S3 → bỏ qua
+  deleteObject(parsed.bucket, parsed.key).catch((err) =>
+    console.error('Failed to delete S3 image:', err)
+  );
+}
+
+/**
+ * So sánh 2 nội dung HTML và xóa những ảnh không còn tồn tại trong nội dung mới.
+ */
+async function cleanupOrphanedImages(oldHtml: string, newHtml: string) {
+  const oldUrls = extractImageUrls(oldHtml);
+  const newUrls = new Set(extractImageUrls(newHtml));
+
+  for (const url of oldUrls) {
+    if (!newUrls.has(url)) {
+      deleteImageSilently(url);
+    }
+  }
 }
 
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ id: string }> }
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
+    const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+
+    const client = await pool.connect();
     try {
-        const { id } = await params;
-        const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('userId');
+      let result = await client.query('SELECT * FROM communications WHERE slug = $1', [id]);
+      if (result.rows.length === 0) {
+        result = await client.query('SELECT * FROM communications WHERE id = $1', [id]);
+      }
+      if (result.rows.length === 0) {
+        return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+      }
 
-        const client = await pool.connect();
-        try {
-            // Try to find by slug first, fallback to id for backward compatibility
-            let result = await client.query('SELECT * FROM communications WHERE slug = $1', [id]);
-            if (result.rows.length === 0) {
-                result = await client.query('SELECT * FROM communications WHERE id = $1', [id]);
-            }
-            
-            if (result.rows.length === 0) {
-                return NextResponse.json({ error: 'Post not found' }, { status: 404 });
-            }
+      const post = result.rows[0];
+      let isLiked = false;
+      let reaction: string | null = null;
+      let reaction_counts: Record<string, number> = {};
 
-            const post = result.rows[0];
-            let isLiked = false;
-            let reaction: string | null = null;
-            let reaction_counts: Record<string, number> = {};
+      if (userId) {
+        const likeCheck = await client.query(
+          'SELECT reaction FROM communication_likes WHERE post_id = $1 AND user_id = $2',
+          [post.id, userId]
+        );
+        isLiked = likeCheck.rows.length > 0;
+        reaction = likeCheck.rows[0]?.reaction || null;
+      }
 
-            if (userId) {
-                const likeCheck = await client.query(
-                    'SELECT reaction FROM communication_likes WHERE post_id = $1 AND user_id = $2',
-                    [post.id, userId]
-                );
-                isLiked = likeCheck.rows.length > 0;
-                reaction = likeCheck.rows[0]?.reaction || null;
-            }
+      const reactionCountsResult = await client.query(
+        `SELECT reaction, COUNT(*) as count
+         FROM communication_likes
+         WHERE post_id = $1 AND reaction IS NOT NULL
+         GROUP BY reaction
+         ORDER BY count DESC`,
+        [post.id]
+      );
+      reactionCountsResult.rows.forEach((r: any) => {
+        reaction_counts[r.reaction] = parseInt(r.count);
+      });
 
-            // Lấy breakdown reaction counts
-            const reactionCountsResult = await client.query(
-                `SELECT reaction, COUNT(*) as count
-                 FROM communication_likes
-                 WHERE post_id = $1 AND reaction IS NOT NULL
-                 GROUP BY reaction
-                 ORDER BY count DESC`,
-                [post.id]
-            );
-            reactionCountsResult.rows.forEach((r: any) => {
-                reaction_counts[r.reaction] = parseInt(r.count);
-            });
+      const relatedResult = await client.query(
+        `SELECT * FROM communications
+         WHERE post_type = $1 AND status = 'published' AND id != $2
+         ORDER BY created_at DESC LIMIT 3`,
+        [post.post_type, post.id]
+      );
 
-            // Fetch related posts (same type, published, exclude current)
-            const relatedResult = await client.query(
-                `SELECT * FROM communications 
-                 WHERE post_type = $1 AND status = 'published' AND id != $2 
-                 ORDER BY created_at DESC LIMIT 3`,
-                [post.post_type, post.id]
-            );
-            const relatedPosts = relatedResult.rows;
-
-            return NextResponse.json({ ...post, isLiked, reaction, reaction_counts, relatedPosts });
-        } finally {
-            client.release();
-        }
-    } catch (error) {
-        console.error('Error fetching post:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+      return NextResponse.json({
+        ...post,
+        isLiked,
+        reaction,
+        reaction_counts,
+        relatedPosts: relatedResult.rows,
+      });
+    } finally {
+      client.release();
     }
+  } catch (error) {
+    console.error('Error fetching post:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
 }
 
 export async function PUT(
-    request: Request,
-    { params }: { params: Promise<{ id: string }> }
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const {
+      title,
+      description,
+      content,
+      featured_image,
+      banner_image,
+      post_type,
+      audience,
+      status,
+      published_at,
+      thumbnail_position,
+    } = body;
+
+    await ensureBucket();
+
+    let processedContent = content;
     try {
-        const { id } = await params;
-        const body = await request.json();
-        const {
-            title,
-            description,
-            content,
-            featured_image,
-            banner_image,
-            post_type,
-            audience,
-            status,
-            published_at,
-            thumbnail_position,
-        } = body;
+      processedContent = await processBase64Images(content);
+    } catch (err) {
+      console.error('Error processing base64 images in PUT:', err);
+    }
 
-        let processedContent = content;
-        try {
-             processedContent = await processBase64Images(content);
-        } catch (err) {
-             console.error("Error processing base64 images in PUT:", err);
+    const client = await pool.connect();
+    try {
+      let postResult = await client.query('SELECT * FROM communications WHERE slug = $1', [id]);
+      if (postResult.rows.length === 0) {
+        postResult = await client.query('SELECT * FROM communications WHERE id = $1', [id]);
+      }
+      if (postResult.rows.length === 0) {
+        return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+      }
+
+      const currentPost = postResult.rows[0];
+
+      // Lưu URL cũ để xóa sau khi update thành công (chỉ xóa nếu URL thực sự thay đổi)
+      const oldFeaturedImage = (featured_image !== currentPost.featured_image) ? currentPost.featured_image : null;
+      const oldBannerImage = (banner_image !== currentPost.banner_image) ? currentPost.banner_image : null;
+
+      let newSlug = currentPost.slug;
+      if (title !== currentPost.title) {
+        newSlug = generateSlug(title);
+        let slugExists = await client.query(
+          'SELECT 1 FROM communications WHERE slug = $1 AND id != $2',
+          [newSlug, currentPost.id]
+        );
+        let counter = 1;
+        while (slugExists.rows.length > 0) {
+          newSlug = `${generateSlug(title)}-${counter}`;
+          slugExists = await client.query(
+            'SELECT 1 FROM communications WHERE slug = $1 AND id != $2',
+            [newSlug, currentPost.id]
+          );
+          counter++;
         }
+      }
 
-        const client = await pool.connect();
-        try {
-            // Find post by slug or id
-            let postResult = await client.query('SELECT * FROM communications WHERE slug = $1', [id]);
-            if (postResult.rows.length === 0) {
-                postResult = await client.query('SELECT * FROM communications WHERE id = $1', [id]);
-            }
-            if (postResult.rows.length === 0) {
-                return NextResponse.json({ error: 'Post not found' }, { status: 404 });
-            }
-
-            const currentPost = postResult.rows[0];
-            
-            // Check if image changed, prepare to delete old image from Cloudinary
-            let oldFeaturedPublicId = null;
-            if (featured_image && currentPost.featured_image && featured_image !== currentPost.featured_image) {
-                oldFeaturedPublicId = extractCloudinaryPublicId(currentPost.featured_image);
-            }
-
-            let oldBannerPublicId = null;
-            if (banner_image && currentPost.banner_image && banner_image !== currentPost.banner_image) {
-                oldBannerPublicId = extractCloudinaryPublicId(currentPost.banner_image);
-            }
-            
-            // Generate new slug if title changed
-            let newSlug = currentPost.slug;
-            if (title !== currentPost.title) {
-                newSlug = generateSlug(title);
-                
-                // Ensure new slug is unique
-                let slugExists = await client.query('SELECT 1 FROM communications WHERE slug = $1 AND id != $2', [newSlug, currentPost.id]);
-                let counter = 1;
-                while (slugExists.rows.length > 0) {
-                    newSlug = `${generateSlug(title)}-${counter}`;
-                    slugExists = await client.query('SELECT 1 FROM communications WHERE slug = $1 AND id != $2', [newSlug, currentPost.id]);
-                    counter++;
-                }
-            }
-
-            const result = await client.query(
-                `UPDATE communications SET 
-          title = $1, slug = $2, description = $3, content = $4, 
-          featured_image = $5, banner_image = $6, post_type = $7, 
+      const result = await client.query(
+        `UPDATE communications SET
+          title = $1, slug = $2, description = $3, content = $4,
+          featured_image = $5, banner_image = $6, post_type = $7,
           audience = $8, status = $9, published_at = $10,
           thumbnail_position = $11, updated_at = NOW()
         WHERE id = $12 RETURNING *`,
-                [
-                    title, newSlug, description, processedContent, featured_image, banner_image,
-                    post_type, audience, status, published_at,
-                    thumbnail_position || '50% 50%', currentPost.id
-                ]
-            );
+        [
+          title, newSlug, description, processedContent, featured_image, banner_image,
+          post_type, audience, status, published_at,
+          thumbnail_position || '50% 50%', currentPost.id,
+        ]
+      );
 
-            // Clean up old images silently if update was successful
-            if (oldFeaturedPublicId) {
-                cloudinary.uploader.destroy(oldFeaturedPublicId).catch(err => console.error('Failed to destroy old featured image:', err));
-            }
-            if (oldBannerPublicId && oldBannerPublicId !== oldFeaturedPublicId) {
-                cloudinary.uploader.destroy(oldBannerPublicId).catch(err => console.error('Failed to destroy old banner image:', err));
-            }
+      // Xóa ảnh cũ trên S3 (chỉ xóa S3, bỏ qua Cloudinary cũ)
+      // 1. Xóa thumbnail/banner cũ nếu thay đổi
+      if (oldFeaturedImage) deleteImageSilently(oldFeaturedImage);
+      if (oldBannerImage && oldBannerImage !== oldFeaturedImage && oldBannerImage !== banner_image) {
+        deleteImageSilently(oldBannerImage);
+      }
 
-            return NextResponse.json(result.rows[0]);
-        } finally {
-            client.release();
-        }
-    } catch (error) {
-        console.error('Error updating post:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+      // 2. Xóa các ảnh trong nội dung bài viết đã bị gỡ bỏ
+      cleanupOrphanedImages(currentPost.content, processedContent);
+
+      return NextResponse.json(result.rows[0]);
+    } finally {
+      client.release();
     }
+  } catch (error) {
+    console.error('Error updating post:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
 }
 
 export async function DELETE(
-    request: Request,
-    { params }: { params: Promise<{ id: string }> }
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
+    const { id } = await params;
+    const client = await pool.connect();
     try {
-        const { id } = await params;
-        const client = await pool.connect();
-        try {
-            // Try to delete by slug first, fallback to id
-            let result = await client.query('DELETE FROM communications WHERE slug = $1 RETURNING *', [id]);
-            if (result.rows.length === 0) {
-                result = await client.query('DELETE FROM communications WHERE id = $1 RETURNING *', [id]);
-            }
-            if (result.rows.length === 0) {
-                return NextResponse.json({ error: 'Post not found' }, { status: 404 });
-            }
+      let result = await client.query(
+        'DELETE FROM communications WHERE slug = $1 RETURNING *',
+        [id]
+      );
+      if (result.rows.length === 0) {
+        result = await client.query(
+          'DELETE FROM communications WHERE id = $1 RETURNING *',
+          [id]
+        );
+      }
+      if (result.rows.length === 0) {
+        return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+      }
 
-            const deletedPost = result.rows[0];
+      const deletedPost = result.rows[0];
 
-            // Clean up Cloudinary images associated with this post
-            const featuredPublicId = extractCloudinaryPublicId(deletedPost.featured_image);
-            if (featuredPublicId) {
-                cloudinary.uploader.destroy(featuredPublicId).catch(err => console.error('Failed to destroy featured image upon post deletion:', err));
-            }
+      // Xóa tất cả ảnh liên quan trên S3 (chỉ xóa S3, bỏ qua Cloudinary cũ)
+      // 1. Xóa thumbnail & banner
+      deleteImageSilently(deletedPost.featured_image);
+      if (deletedPost.banner_image !== deletedPost.featured_image) {
+        deleteImageSilently(deletedPost.banner_image);
+      }
 
-            const bannerPublicId = extractCloudinaryPublicId(deletedPost.banner_image);
-            if (bannerPublicId && bannerPublicId !== featuredPublicId) {
-                cloudinary.uploader.destroy(bannerPublicId).catch(err => console.error('Failed to destroy banner image upon post deletion:', err));
-            }
+      // 2. Xóa tất cả ảnh trong nội dung bài viết
+      const contentUrls = extractImageUrls(deletedPost.content);
+      for (const url of contentUrls) {
+        deleteImageSilently(url);
+      }
 
-            return NextResponse.json({ message: 'Post deleted successfully' });
-        } finally {
-            client.release();
-        }
-    } catch (error) {
-        console.error('Error deleting post:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+      return NextResponse.json({ message: 'Post deleted successfully' });
+    } finally {
+      client.release();
     }
+  } catch (error) {
+    console.error('Error deleting post:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
 }

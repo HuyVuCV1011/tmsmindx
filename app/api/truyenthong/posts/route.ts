@@ -2,56 +2,93 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { isDegradedDatabaseQueryError } from '@/lib/db-unavailable';
 import { generateSlug } from '@/lib/utils';
-import { v2 as cloudinary } from 'cloudinary';
+import { createSupabaseS3Client, isSupabaseS3Configured, parsePublicUrl } from '@/lib/supabase-s3';
+import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const BUCKET_NAME = 'mindx-posts-content';
+
+async function ensureBucket() {
+  if (!isSupabaseS3Configured()) return;
+  const client = createSupabaseS3Client();
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: BUCKET_NAME }));
+  } catch {
+    await client.send(new CreateBucketCommand({ Bucket: BUCKET_NAME }));
+  }
+}
+
+function makeProxyUrl(bucket: string, key: string): string {
+  return `/api/storage-image?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
+}
+
+/**
+ * Upload base64 image lên Supabase S3 và trả về proxy URL.
+ */
+async function uploadBase64ToS3(base64Data: string): Promise<string> {
+  if (!isSupabaseS3Configured()) return base64Data;
+
+  // Parse data URI: data:image/png;base64,<data>
+  const match = base64Data.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return base64Data;
+
+  const mimeType = match[1];
+  const buffer = Buffer.from(match[2], 'base64');
+  const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+
+  const client = createSupabaseS3Client();
+  const key = `post-images/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: buffer,
+      ContentType: mimeType,
+    })
+  );
+
+  return makeProxyUrl(BUCKET_NAME, key);
+}
 
 async function processBase64Images(htmlContent: string): Promise<string> {
-    if (!htmlContent) return htmlContent;
-    
-    const regex = /src=["'](data:image\/[^;]+;base64,[^"']+)["']/g;
-    let newContent = htmlContent;
-    
-    const matches = Array.from(htmlContent.matchAll(regex));
-    if (!matches || matches.length === 0) return htmlContent;
+  if (!htmlContent) return htmlContent;
 
-    const uploadPromises = matches.map(async (match) => {
-        const fullMatch = match[0];
-        const base64Data = match[1];
-        
-        try {
-            const uploadRes = await cloudinary.uploader.upload(base64Data, {
-                folder: 'mindx_posts_content',
-                resource_type: 'image'
-            });
-            return { originalStr: fullMatch, newStr: `src="${uploadRes.secure_url}"` };
-        } catch (error) {
-            console.error('Failed to upload base64 image to cloudinary:', error);
-            return { originalStr: fullMatch, newStr: fullMatch };
-        }
-    });
+  const regex = /src=["'](data:image\/[^;]+;base64,[^"']+)["']/g;
+  let newContent = htmlContent;
 
-    const replacements = await Promise.all(uploadPromises);
-    
-    for (const { originalStr, newStr } of replacements) {
-        newContent = newContent.replace(originalStr, newStr);
+  const matches = Array.from(htmlContent.matchAll(regex));
+  if (!matches || matches.length === 0) return htmlContent;
+
+  const uploadPromises = matches.map(async (match) => {
+    const fullMatch = match[0];
+    const base64Data = match[1];
+
+    try {
+      const newUrl = await uploadBase64ToS3(base64Data);
+      return { originalStr: fullMatch, newStr: `src="${newUrl}"` };
+    } catch (error) {
+      console.error('Failed to upload base64 image to S3:', error);
+      return { originalStr: fullMatch, newStr: fullMatch };
     }
-    
-    return newContent;
+  });
+
+  const replacements = await Promise.all(uploadPromises);
+
+  for (const { originalStr, newStr } of replacements) {
+    newContent = newContent.replace(originalStr, newStr);
+  }
+
+  return newContent;
 }
 
 export async function GET(request: Request) {
-    try {
-        const { searchParams } = new URL(request.url);
-        const type = searchParams.get('type');
-        const status = searchParams.get('status');
-        const search = searchParams.get('search');
+  try {
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type');
+    const status = searchParams.get('status');
+    const search = searchParams.get('search');
 
-        let queryText = `
+    let queryText = `
 SELECT c.*,
   COALESCE(tt.comment_count, 0)::int AS comment_count,
   COALESCE(tt.hidden_comment_count, 0)::int AS hidden_comment_count
@@ -64,118 +101,120 @@ LEFT JOIN (
   GROUP BY post_slug
 ) tt ON tt.post_slug = c.slug
 WHERE 1=1`;
-        const queryParams: any[] = [];
-        let paramIndex = 1;
+    const queryParams: any[] = [];
+    let paramIndex = 1;
 
-        if (type && type !== 'all') {
-            queryText += ` AND c.post_type = $${paramIndex}`;
-            queryParams.push(type);
-            paramIndex++;
-        }
-
-        if (status && status !== 'all') {
-            queryText += ` AND c.status = $${paramIndex}`;
-            queryParams.push(status);
-            paramIndex++;
-        }
-
-        if (search) {
-            queryText += ` AND (c.title ILIKE $${paramIndex} OR c.description ILIKE $${paramIndex})`;
-            queryParams.push(`%${search}%`);
-            paramIndex++;
-        }
-
-        queryText += ' ORDER BY c.created_at DESC';
-
-        const client = await pool.connect();
-        try {
-            const result = await client.query(queryText, queryParams);
-            return NextResponse.json(result.rows, { headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } });
-        } finally {
-            client.release();
-        }
-    } catch (error) {
-        if (isDegradedDatabaseQueryError(error)) {
-            return NextResponse.json([], {
-                headers: {
-                    'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59',
-                    'X-DB-Unavailable': '1',
-                },
-            });
-        }
-        console.error('Error fetching posts:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } });
+    if (type && type !== 'all') {
+      queryText += ` AND c.post_type = $${paramIndex}`;
+      queryParams.push(type);
+      paramIndex++;
     }
+
+    if (status && status !== 'all') {
+      queryText += ` AND c.status = $${paramIndex}`;
+      queryParams.push(status);
+      paramIndex++;
+    }
+
+    if (search) {
+      queryText += ` AND (c.title ILIKE $${paramIndex} OR c.description ILIKE $${paramIndex})`;
+      queryParams.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    queryText += ' ORDER BY c.created_at DESC';
+
+    const client = await pool.connect();
+    try {
+      const result = await client.query(queryText, queryParams);
+      return NextResponse.json(result.rows, {
+        headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' },
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    if (isDegradedDatabaseQueryError(error)) {
+      return NextResponse.json([], {
+        headers: {
+          'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59',
+          'X-DB-Unavailable': '1',
+        },
+      });
+    }
+    console.error('Error fetching posts:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error' },
+      { status: 500, headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } }
+    );
+  }
 }
 
 export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const {
+      title,
+      description,
+      content,
+      featured_image,
+      banner_image,
+      post_type,
+      audience,
+      status,
+      published_at,
+      thumbnail_position,
+    } = body;
+
+    // Đảm bảo bucket tồn tại trước khi xử lý ảnh
+    await ensureBucket();
+
+    let processedContent = content;
     try {
-        const body = await request.json();
-        const {
-            title,
-            description,
-            content,
-            featured_image,
-            banner_image,
-            post_type,
-            audience,
-            status,
-            published_at,
-            thumbnail_position,
-        } = body;
+      processedContent = await processBase64Images(content);
+    } catch (err) {
+      console.error('Error processing base64 images in POST:', err);
+    }
 
-        let processedContent = content;
-        try {
-             processedContent = await processBase64Images(content);
-        } catch (err) {
-             console.error("Error processing base64 images in POST:", err);
-             // fallback to original if parsing fails catastrophically
-        }
+    const client = await pool.connect();
+    try {
+      const duplicateCheck = await client.query('SELECT 1 FROM communications WHERE title = $1', [title]);
+      if (duplicateCheck.rows.length > 0) {
+        return NextResponse.json({ error: 'Tiêu đề bài viết đã tồn tại' }, { status: 409 });
+      }
 
-        const client = await pool.connect();
-        try {
-            // Check for duplicate title
-            const duplicateCheck = await client.query(
-                'SELECT 1 FROM communications WHERE title = $1',
-                [title]
-            );
+      let slug = generateSlug(title);
+      let slugExists = await client.query('SELECT 1 FROM communications WHERE slug = $1', [slug]);
+      let counter = 1;
+      while (slugExists.rows.length > 0) {
+        slug = `${generateSlug(title)}-${counter}`;
+        slugExists = await client.query('SELECT 1 FROM communications WHERE slug = $1', [slug]);
+        counter++;
+      }
 
-            if (duplicateCheck.rows.length > 0) {
-                return NextResponse.json(
-                    { error: 'Tiêu đề bài viết đã tồn tại' },
-                    { status: 409 }
-                );
-            }
-
-            // Generate slug from title
-            let slug = generateSlug(title);
-            
-            // Ensure slug is unique by appending number if needed
-            let slugExists = await client.query('SELECT 1 FROM communications WHERE slug = $1', [slug]);
-            let counter = 1;
-            while (slugExists.rows.length > 0) {
-                slug = `${generateSlug(title)}-${counter}`;
-                slugExists = await client.query('SELECT 1 FROM communications WHERE slug = $1', [slug]);
-                counter++;
-            }
-
-            const result = await client.query(
-                `INSERT INTO communications (
-          title, slug, description, content, featured_image, banner_image, 
+      const result = await client.query(
+        `INSERT INTO communications (
+          title, slug, description, content, featured_image, banner_image,
           post_type, audience, status, published_at, thumbnail_position
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-                [
-                    title, slug, description, processedContent, featured_image, banner_image,
-                    post_type, audience, status, published_at || new Date(),
-                    thumbnail_position || '50% 50%'
-                ]
-            );
-            return NextResponse.json(result.rows[0], { status: 201, headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } });
-        } finally {
-            client.release();
-        }
-    } catch (error) {
-        console.error('Error creating post:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } });
+        [
+          title, slug, description, processedContent, featured_image, banner_image,
+          post_type, audience, status, published_at || new Date(),
+          thumbnail_position || '50% 50%',
+        ]
+      );
+      return NextResponse.json(result.rows[0], {
+        status: 201,
+        headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' },
+      });
+    } finally {
+      client.release();
     }
+  } catch (error) {
+    console.error('Error creating post:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error' },
+      { status: 500, headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } }
+    );
+  }
 }
