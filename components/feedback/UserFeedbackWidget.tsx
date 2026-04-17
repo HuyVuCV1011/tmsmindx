@@ -12,7 +12,7 @@ import {
 import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 const FEEDBACK_PAGE_OPTIONS = [
   { path: '/user/home', title: 'Trang chủ' },

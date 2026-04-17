@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context'
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 type RegistrationTemplate = 'official' | 'supplement'
 type EventCategory =

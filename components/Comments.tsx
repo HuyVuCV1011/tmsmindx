@@ -30,7 +30,7 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 interface Reaction {
   type: string

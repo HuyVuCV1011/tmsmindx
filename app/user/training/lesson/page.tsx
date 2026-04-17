@@ -15,7 +15,7 @@ import {
   useCallback,
 } from 'react'
 import { Loader2 } from 'lucide-react'
-import hotToast from 'react-hot-toast'
+import { toast as flatToast } from '@/lib/app-toast'
 
 interface Question {
   id: number
@@ -306,39 +306,13 @@ function LessonContent() {
         setIsPlaying(false)
         isPlayingRef.current = false
         playbackAllowedRef.current = false
-        hotToast.error('🚫 Gian lận bị phát hiện. Video đã bị tạm dừng.', {
+        flatToast.error('🚫 Gian lận bị phát hiện. Video đã bị tạm dừng.', {
           duration: 6000,
-          style: {
-            background: '#fff',
-            color: '#dc2626',
-            border: '2px solid #dc2626',
-            borderRadius: '12px',
-            fontWeight: '700',
-            fontSize: '13px',
-            padding: '14px 16px',
-            boxShadow:
-              '0 8px 32px rgba(220,38,38,0.20), 0 2px 8px rgba(0,0,0,0.10)',
-            maxWidth: '340px',
-          },
-          iconTheme: { primary: '#dc2626', secondary: '#fff' },
         })
       } else {
         // Lần 1-2: chỉ reset tốc độ về 1x, cảnh báo
-        hotToast.error('⚠️ Phát hiện tốc độ bất thường! Đã đặt lại về 1x.', {
+        flatToast.error('⚠️ Phát hiện tốc độ bất thường! Đã đặt lại về 1x.', {
           duration: 4000,
-          style: {
-            background: '#fff',
-            color: '#b91c1c',
-            border: '1.5px solid #f87171',
-            borderRadius: '12px',
-            fontWeight: '600',
-            fontSize: '13px',
-            padding: '14px 16px',
-            boxShadow:
-              '0 4px 20px rgba(220,38,38,0.12), 0 2px 6px rgba(0,0,0,0.08)',
-            maxWidth: '340px',
-          },
-          iconTheme: { primary: '#ef4444', secondary: '#fff' },
         })
       }
     },

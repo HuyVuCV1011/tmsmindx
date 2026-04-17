@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Database, CheckCircle, XCircle, Loader2 } from 'lucide-react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 export default function DatabaseMigrationPage() {
     const [loading, setLoading] = useState(false)

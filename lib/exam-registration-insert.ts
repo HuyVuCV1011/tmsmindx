@@ -1,9 +1,40 @@
 import type { Pool } from "pg";
+import { parseNgayDangKyImportFormat } from "./csv-registration-import";
 
 function num(v: unknown): number | undefined {
   if (v === null || v === undefined || v === "") return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
+}
+
+/** ISO / parseable string → Date, hoặc null nếu không hợp lệ */
+function parseIsoToDateOrNull(v: unknown): Date | null {
+  if (v === null || v === undefined || v === "") return null;
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Chuẩn hóa xu_ly_diem từ import / POST (khớp GET exam-registrations). */
+function normalizeXuLyDiemForImport(raw: unknown): string {
+  const s = String(raw ?? "").trim();
+  if (!s) return "chờ giải trình";
+  const lower = s.toLowerCase();
+  if (lower === "đã duyệt" || lower === "da duyet") return "đã duyệt";
+  if (lower === "đã hoàn thành" || lower === "da hoan thanh") return "đã hoàn thành";
+  if (lower === "da thi") return "da thi";
+  if (lower === "từ chối" || lower === "tu choi") return "từ chối";
+  if (lower === "chờ giải trình" || lower.includes("chờ giải trình")) return "chờ giải trình";
+  if (lower.includes("cho giai trinh")) return "chờ giải trình";
+  return s;
+}
+
+/** Cột Điểm trống: với đã duyệt / từ chối (miễn) → NULL; còn lại → 0 */
+function resolveDiemForImport(raw: unknown, xuLyNormalized: string): number | null {
+  const n = num(raw);
+  if (n !== undefined) return n;
+  const xu = xuLyNormalized.toLowerCase();
+  if (xu === "đã duyệt" || xu === "từ chối") return null;
+  return 0;
 }
 
 export type InsertRegistrationResult =
@@ -31,6 +62,12 @@ export async function insertExamRegistration(
   const id_su_kien = body.id_su_kien || body.schedule_id || body.scheduled_event_id || null;
   const id_de_thi = body.id_de_thi;
 
+  /** Khi không gắn lịch sự kiện (import CSV/Excel): lưu ngày giờ từ cột Lịch thi để GET không rơi về tao_luc (hôm nay). */
+  let lich_thi_dk: Date | null = null;
+  if (!id_su_kien) {
+    lich_thi_dk = parseIsoToDateOrNull(body.scheduled_at) ?? parseIsoToDateOrNull(body.open_at);
+  }
+
   let thang_dk = num(body.thang_dk ?? body.month);
   let nam_dk = num(body.nam_dk ?? body.year);
   if ((!thang_dk || !nam_dk) && (body.open_at || body.scheduled_at)) {
@@ -46,6 +83,15 @@ export async function insertExamRegistration(
   }
   if (!id_mon && !ma_mon) {
     return { ok: false, error: "Cần cung cấp id_mon hoặc ma_mon", httpStatus: 400 };
+  }
+
+  const xuLyNormalized = normalizeXuLyDiemForImport(body.xu_ly_diem);
+  const diemResolved = resolveDiemForImport(body.diem ?? body.score, xuLyNormalized);
+
+  const dangKyRaw = body.dang_ky_luc ?? body.ngay_dang_ky;
+  let dangKyResolved: Date | null = null;
+  if (dangKyRaw !== undefined && dangKyRaw !== null && String(dangKyRaw).trim() !== "") {
+    dangKyResolved = parseNgayDangKyImportFormat(dangKyRaw);
   }
 
   const client = await pool.connect();
@@ -75,7 +121,11 @@ export async function insertExamRegistration(
       );
       if (subj.rows.length === 0) {
         await client.query("ROLLBACK");
-        return { ok: false, error: "Không tìm thấy môn học tương ứng", httpStatus: 404 };
+        const raw = String(ma_mon ?? "").trim();
+        const hint = raw
+          ? `Không tìm thấy môn học tương ứng — mã đã gửi: "${raw}" (cần trùng hoặc khớp chuyen_sau_monhoc.ma_mon).`
+          : "Không tìm thấy môn học tương ứng — thiếu hoặc rỗng mã môn.";
+        return { ok: false, error: hint, httpStatus: 404 };
       }
       resolvedSubjectId = subj.rows[0].id;
     }
@@ -88,6 +138,13 @@ export async function insertExamRegistration(
       );
       if (activeMonthlySet.rows.length > 0) {
         resolvedSetId = activeMonthlySet.rows[0].id_de;
+      }
+    }
+
+    if (resolvedSetId != null) {
+      const bodeOk = await client.query(`SELECT 1 FROM chuyen_sau_bode WHERE id = $1 LIMIT 1`, [resolvedSetId]);
+      if (bodeOk.rows.length === 0) {
+        resolvedSetId = null;
       }
     }
 
@@ -110,36 +167,7 @@ export async function insertExamRegistration(
       }
     }
 
-    const dupCond: string[] = [
-      "id_mon = $1",
-      `LOWER(TRIM(ma_giao_vien)) = LOWER(TRIM($2))`,
-      `xu_ly_diem = 'chờ giải trình'`,
-    ];
-    const dupVals: unknown[] = [resolvedSubjectId, ma_giao_vien];
-
-    if (id_su_kien) {
-      dupCond.push(`id_su_kien = $${dupVals.length + 1}::uuid`);
-      dupVals.push(id_su_kien);
-    } else if (thang_dk && nam_dk) {
-      dupCond.push(`thang_dk = $${dupVals.length + 1}`);
-      dupVals.push(thang_dk);
-      dupCond.push(`nam_dk = $${dupVals.length + 1}`);
-      dupVals.push(nam_dk);
-    }
-
-    const dup = await client.query(
-      `SELECT id FROM chuyen_sau_results WHERE ${dupCond.join(" AND ")} LIMIT 1`,
-      dupVals
-    );
-    if (dup.rows.length > 0) {
-      await client.query("ROLLBACK");
-      return {
-        ok: false,
-        error: "Giáo viên đã đăng ký môn học này rồi.",
-        httpStatus: 409,
-        result_id: dup.rows[0].id,
-      };
-    }
+    // Không chặn trùng (cùng GV + môn + tháng / chờ giải trình): import cần cho phép thêm bản ghi mới.
 
     const insertResult = await client.query(
       `INSERT INTO chuyen_sau_results (
@@ -147,8 +175,9 @@ export async function insertExamRegistration(
          khu_vuc, hinh_thuc, khoi_giang_day,
          thang_dk, nam_dk, dot,
          id_mon, id_su_kien, id_de_thi,
+         lich_thi_dk,
          diem, xu_ly_diem, dang_ky_luc
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, 'chờ giải trình', NOW())
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, COALESCE($17::timestamptz, NOW()))
        RETURNING *`,
       [
         ma_giao_vien,
@@ -163,7 +192,11 @@ export async function insertExamRegistration(
         dotResolved ?? null,
         resolvedSubjectId,
         id_su_kien || null,
-        resolvedSetId || null,
+        resolvedSetId ?? null,
+        lich_thi_dk,
+        diemResolved,
+        xuLyNormalized,
+        dangKyResolved,
       ]
     );
 

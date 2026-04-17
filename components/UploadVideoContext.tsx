@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState } from "react";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile } from "@ffmpeg/util";
 import { v4 as uuidv4 } from "uuid";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 import { FileVideo, Loader2, CheckCircle2, AlertCircle, Upload } from "lucide-react";
 
 type UploadState = {

@@ -28,6 +28,7 @@
  * Tráº¡ng thĂ¡i giáº£i trĂ¬nh Ä‘Æ°á»£c theo dĂµi qua chuyen_sau_giaitrinh.status.
  */
 
+import { isResultEligibleForGiaiTrinhThisMonth } from '@/lib/giaitrinh-eligibility'
 import pool from '@/lib/db'
 import { NextResponse } from 'next/server'
 
@@ -164,11 +165,14 @@ export async function POST(request: Request) {
     client = await pool.connect()
     await client.query('BEGIN')
 
-    // 1. Kiá»ƒm tra result tá»“n táº¡i vĂ  Ä‘iá»ƒm = 0
+    // 1. Kiểm tra result tồn tại; điểm = 0; kỳ thi thuộc tháng hiện tại (VN)
     const resultRow = await client.query(
-      `SELECT id, diem, xu_ly_diem, ma_giao_vien, dia_chi_email
-       FROM chuyen_sau_results
-       WHERE id = $1
+      `SELECT r.id, r.diem, r.xu_ly_diem, r.ma_giao_vien, r.dia_chi_email,
+              r.thang_dk, r.nam_dk, r.lich_thi_dk,
+              es.bat_dau_luc AS schedule_open
+       FROM chuyen_sau_results r
+       LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
+       WHERE r.id = $1
        LIMIT 1`,
       [resolvedResultId],
     )
@@ -187,6 +191,25 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: 'Chỉ được gửi giải trình khi điểm bằng 0' },
         { status: 400 },
+      )
+    }
+
+    if (
+      !isResultEligibleForGiaiTrinhThisMonth({
+        thang_dk: record.thang_dk != null ? Number(record.thang_dk) : null,
+        nam_dk: record.nam_dk != null ? Number(record.nam_dk) : null,
+        lich_thi_dk: record.lich_thi_dk ?? null,
+        schedule_open: record.schedule_open ?? null,
+      })
+    ) {
+      await client.query('ROLLBACK')
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Chỉ được gửi giải trình trong tháng hiện tại (theo giờ Việt Nam). Các tháng khác không chấp nhận.',
+        },
+        { status: 403 },
       )
     }
 

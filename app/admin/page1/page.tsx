@@ -12,7 +12,7 @@ import {
   UserCheck,
 } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 import useSWR from 'swr'
 import {
   Table,

@@ -7,7 +7,7 @@ import { MessageSquareWarning, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ClipboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 
 type OnboardingData = Record<string, string>;
 const HIDDEN_ONBOARDING_FIELDS = new Set(["No", "Course line", "Rank", "Teacher point"]);

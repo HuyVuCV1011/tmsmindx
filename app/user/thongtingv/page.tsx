@@ -31,7 +31,7 @@ import {
 } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 import useSWR, { useSWRConfig } from 'swr'
 
 // Cache for processed data
