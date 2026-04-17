@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 
 type CalendarView = "day" | "week" | "month" | "year";
 type EventCategory =

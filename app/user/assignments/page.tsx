@@ -8,6 +8,7 @@ import { Tabs } from '@/components/Tabs'
 import { Button } from '@/components/ui/button'
 import { ExplanationSection } from '@/components/user/ExplanationSection'
 import { useAuth } from '@/lib/auth-context'
+import { isExamInCurrentVietnamMonth } from '@/lib/giaitrinh-eligibility'
 import { useTeacher } from '@/lib/teacher-context'
 import {
   AlertCircle,
@@ -30,7 +31,7 @@ import NextImage from 'next/image'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 interface Assignment {
   id: number
@@ -107,6 +108,8 @@ interface ExamAssignment {
   score_handling_note?: string
   explanation_status?: 'pending' | 'accepted' | 'rejected'
   explanation_id?: number | null
+  /** Đã gửi giải trình (cờ trên chuyen_sau_results) */
+  da_giai_thich?: boolean
   admin_note?: string
   is_open?: boolean
   can_take?: boolean
@@ -803,12 +806,8 @@ export default function TeacherAssignmentPage() {
     const now = new Date()
     const openAt = new Date(item.open_at)
     const closeAt = new Date(item.close_at)
-    const isCurrentMonth =
-      openAt.getFullYear() === now.getFullYear() &&
-      openAt.getMonth() === now.getMonth()
-
     const isMissedCurrentMonth =
-      isCurrentMonth &&
+      isExamInCurrentVietnamMonth(item.open_at) &&
       closeAt < now &&
       item.score === null &&
       item.score_status === 'null' &&
@@ -839,6 +838,9 @@ export default function TeacherAssignmentPage() {
   }
 
   function shouldShowExplanationCTA(item: ExamAssignment): boolean {
+    if (!isExamInCurrentVietnamMonth(item.open_at)) {
+      return false
+    }
     const closeAt = new Date(item.close_at)
     const expired = item.assignment_status === 'expired' || closeAt < new Date()
     const note = (item.score_handling_note || '').toLowerCase()
@@ -857,6 +859,13 @@ export default function TeacherAssignmentPage() {
       return false
     }
 
+    // Đã gửi ticket giải trình, chờ admin duyệt — hiện trạng thái, không nút «Giải trình» lần nữa
+    if (item.explanation_status === 'pending') {
+      if (hasLinkedExplanation || item.da_giai_thich) {
+        return false
+      }
+    }
+
     if (isPendingWithoutLinkedExplanation) {
       return true
     }
@@ -868,15 +877,21 @@ export default function TeacherAssignmentPage() {
     return `/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`
   }
 
+  /** Điểm đạt cấu hình trên bộ đề; null = không giới hạn trên UI */
   function getPassingScore(item: ExamAssignment): number | null {
     const parsed = Number(item.passing_score)
     if (!Number.isFinite(parsed) || parsed <= 0) return null
     return parsed
   }
 
+  /** Không cấu hình điểm đạt: coi điểm lớn hơn 5 (thang 10) là đạt */
+  const DEFAULT_PASS_MIN_EXCLUSIVE = 5
+
   function isExamPassed(item: ExamAssignment, score: number | null): boolean {
+    if (score === null) return false
     const passingScore = getPassingScore(item)
-    return score !== null && passingScore !== null && score >= passingScore
+    if (passingScore !== null) return score >= passingScore
+    return score > DEFAULT_PASS_MIN_EXCLUSIVE
   }
 
   function formatScoreSummary(
@@ -925,18 +940,13 @@ export default function TeacherAssignmentPage() {
       targetMonthKey = `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, '0')}`
     }
 
-    const last6Months = new Set(
-      Array.from({ length: 6 }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      }),
-    )
     const monthlyExpertiseScores = new Map<string, number[]>()
 
     examAssignments.forEach((item) => {
-      const { score, isMissedCurrentMonth } = getEffectiveExamScore(item)
       const date = new Date(item.open_at)
+      if (Number.isNaN(date.getTime())) return
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const { score, isMissedCurrentMonth } = getEffectiveExamScore(item)
 
       if (monthKey === targetMonthKey) {
         if (item.explanation_status === 'accepted') explanationsApproved++
@@ -944,28 +954,24 @@ export default function TeacherAssignmentPage() {
         else if (item.explanation_status === 'pending') explanationsPending++
       }
 
-      // Tính Tỉ lệ đạt trong 6 tháng: Loại bỏ bài được duyệt, chỉ đếm các bài đã được phép tính điểm (score !== null)
-      if (last6Months.has(monthKey)) {
-        const isExcluded = item.explanation_status === 'accepted'
-        if (!isExcluded && score !== null) {
-          totalAssigned++
-          if (isExamPassed(item, score)) totalPassed++
-        }
+      // Tỉ lệ đạt / TB CM / điểm QT: toàn bộ bài trong danh sách đã tải (không lọc «6 tháng lăn» — tránh mất kỳ cũ khi năm lịch khác nhau)
+      const isExcluded = item.explanation_status === 'accepted'
+      if (!isExcluded && score !== null) {
+        totalAssigned++
+        if (isExamPassed(item, score)) totalPassed++
       }
 
       if (score !== null) {
         if (item.exam_type === 'experience') {
-          if (last6Months.has(monthKey) && score > bestExperience) {
+          if (score > bestExperience) {
             bestExperience = score
           }
         }
         if (item.exam_type !== 'experience') {
-          if (last6Months.has(monthKey)) {
-            if (!monthlyExpertiseScores.has(monthKey)) {
-              monthlyExpertiseScores.set(monthKey, [])
-            }
-            monthlyExpertiseScores.get(monthKey)!.push(score)
+          if (!monthlyExpertiseScores.has(monthKey)) {
+            monthlyExpertiseScores.set(monthKey, [])
           }
+          monthlyExpertiseScores.get(monthKey)!.push(score)
         }
       }
 
@@ -987,7 +993,7 @@ export default function TeacherAssignmentPage() {
       }
     })
 
-    // Track month of best experience score (within last 6 months)
+    // Tháng có điểm QT / trải nghiệm cao nhất (cùng phạm vi danh sách)
     let bestExperienceMonth = ''
     let tempBest = 0
     examAssignments.forEach((item) => {
@@ -995,8 +1001,9 @@ export default function TeacherAssignmentPage() {
       const { score } = getEffectiveExamScore(item)
       if (score === null) return
       const date = new Date(item.open_at)
+      if (Number.isNaN(date.getTime())) return
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      if (last6Months.has(monthKey) && score > tempBest) {
+      if (score > tempBest) {
         tempBest = score
         bestExperienceMonth = monthKey
       }
@@ -2039,8 +2046,8 @@ export default function TeacherAssignmentPage() {
                   {scoreStats.passRate}%
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {scoreStats.totalPassed} / {scoreStats.totalAssigned} bài
-                  trong 6 tháng gần đây
+                  {scoreStats.totalPassed} / {scoreStats.totalAssigned} bài trong
+                  danh sách đã tải
                 </p>
               </button>
 
@@ -2067,7 +2074,7 @@ export default function TeacherAssignmentPage() {
                   {scoreStats.avgExpertise}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Tháng cao nhất (6 tháng)
+                  Tháng có TB chuyên môn cao nhất
                 </p>
               </button>
 
@@ -2094,7 +2101,7 @@ export default function TeacherAssignmentPage() {
                   {scoreStats.bestExperience}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Trong 6 tháng gần nhất
+                  Điểm cao nhất (cùng phạm vi danh sách)
                 </p>
               </button>
 
@@ -2185,8 +2192,17 @@ export default function TeacherAssignmentPage() {
                         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
                       }),
                     )
-                    const isExpired = !last6MonthsSet.has(data.month)
+                    /** Ngoài cửa sổ 6 tháng lăn (lọc nhanh), không đồng nghĩa «chưa nộp / trễ hạn» */
+                    const isOutsideRecentWindow =
+                      !last6MonthsSet.has(data.month)
                     const isSelected = selectedExamMonth === data.month
+                    const hasExpertiseAvg =
+                      data.avgExpertise != null && data.avgExpertise !== ''
+                    const hasExperienceMax = data.maxExperience !== null
+                    const hasGradedResult =
+                      (hasExpertiseAvg &&
+                        Number.parseFloat(String(data.avgExpertise)) > 0) ||
+                      (hasExperienceMax && Number(data.maxExperience) > 0)
 
                     // Stat card highlight logic
                     const isExpertiseHighlight =
@@ -2217,11 +2233,13 @@ export default function TeacherAssignmentPage() {
                           isStatHighlighted
                             ? statHighlightClass
                             : isSelected
-                              ? isExpired
+                              ? isOutsideRecentWindow && !hasGradedResult
                                 ? 'border-gray-400 bg-gray-100 shadow-sm'
                                 : 'border-blue-400 bg-blue-50 shadow-sm'
-                              : isExpired
-                                ? 'border-gray-200 bg-gray-50/60 opacity-70 hover:opacity-90 hover:border-gray-300'
+                              : isOutsideRecentWindow
+                                ? hasGradedResult
+                                  ? 'border-purple-100 bg-purple-50/50 opacity-90 hover:opacity-100 hover:border-purple-200'
+                                  : 'border-gray-200 bg-gray-50/60 opacity-70 hover:opacity-90 hover:border-gray-300'
                                 : 'border-gray-100 bg-gray-50 hover:border-blue-200 hover:bg-white'
                         }`}
                         onClick={() =>
@@ -2236,17 +2254,28 @@ export default function TeacherAssignmentPage() {
                               ? 'text-purple-700 border-purple-200'
                               : isExperienceHighlight
                                 ? 'text-green-700 border-green-200'
-                                : isMissingHighlight
-                                  ? 'text-amber-700 border-amber-200'
-                                  : isExpired
-                                    ? 'text-gray-400 border-gray-200'
-                                    : 'text-gray-600 border-gray-200'
+                                  : isMissingHighlight
+                                    ? 'text-amber-700 border-amber-200'
+                                    : isOutsideRecentWindow &&
+                                        !hasGradedResult &&
+                                        !hasExpertiseAvg &&
+                                        !hasExperienceMax
+                                      ? 'text-gray-400 border-gray-200'
+                                      : isOutsideRecentWindow
+                                        ? 'text-gray-700 border-gray-200'
+                                        : 'text-gray-600 border-gray-200'
                           }`}
                         >
                           {formatMonthLabel(data.month)}
-                          {isExpired && !isStatHighlighted && (
-                            <span className="text-[9px] bg-gray-200 text-gray-500 px-1 py-0.5 rounded font-normal">
-                              Quá hạn
+                          {isOutsideRecentWindow && !isStatHighlighted && (
+                            <span
+                              className={`text-[9px] px-1 py-0.5 rounded font-normal ${
+                                hasGradedResult
+                                  ? 'bg-slate-100 text-slate-600'
+                                  : 'bg-gray-200 text-gray-500'
+                              }`}
+                            >
+                              {hasGradedResult ? 'Kỳ cũ' : 'Quá hạn'}
                             </span>
                           )}
                           {isExpertiseHighlight && (
@@ -2270,25 +2299,32 @@ export default function TeacherAssignmentPage() {
                             className={`flex justify-between items-center px-2 py-1.5 rounded border ${
                               isExpertiseHighlight
                                 ? 'bg-purple-50 border-purple-100'
-                                : isExpired
-                                  ? 'bg-gray-50 border-gray-100'
-                                  : 'bg-white border-gray-100'
+                                : hasExpertiseAvg &&
+                                    isOutsideRecentWindow &&
+                                    !isStatHighlighted &&
+                                    hasGradedResult
+                                  ? 'bg-purple-50/70 border-purple-100'
+                                  : isOutsideRecentWindow
+                                    ? 'bg-gray-50 border-gray-100'
+                                    : 'bg-white border-gray-100'
                             }`}
                           >
                             <span
-                              className={`font-medium ${isExpired && !isStatHighlighted ? 'text-gray-400' : 'text-gray-500'}`}
+                              className={`font-medium ${
+                                isOutsideRecentWindow &&
+                                !isStatHighlighted &&
+                                !hasExpertiseAvg
+                                  ? 'text-gray-400'
+                                  : 'text-gray-600'
+                              }`}
                             >
                               CM Chuyên sâu:
                             </span>
                             <span
                               className={`font-bold ml-2 text-sm ${
-                                isExpertiseHighlight
+                                isExpertiseHighlight || hasExpertiseAvg
                                   ? 'text-purple-700'
-                                  : isExpired
-                                    ? 'text-gray-400'
-                                    : data.avgExpertise
-                                      ? 'text-purple-700'
-                                      : 'text-gray-400'
+                                  : 'text-gray-400'
                               }`}
                             >
                               {data.avgExpertise ?? '-'}
@@ -2298,25 +2334,32 @@ export default function TeacherAssignmentPage() {
                             className={`flex justify-between items-center px-2 py-1.5 rounded border ${
                               isExperienceHighlight
                                 ? 'bg-green-50 border-green-100'
-                                : isExpired
-                                  ? 'bg-gray-50 border-gray-100'
-                                  : 'bg-white border-gray-100'
+                                : hasExperienceMax &&
+                                    isOutsideRecentWindow &&
+                                    !isStatHighlighted &&
+                                    hasGradedResult
+                                  ? 'bg-green-50/70 border-green-100'
+                                  : isOutsideRecentWindow
+                                    ? 'bg-gray-50 border-gray-100'
+                                    : 'bg-white border-gray-100'
                             }`}
                           >
                             <span
-                              className={`font-medium ${isExpired && !isStatHighlighted ? 'text-gray-400' : 'text-gray-500'}`}
+                              className={`font-medium ${
+                                isOutsideRecentWindow &&
+                                !isStatHighlighted &&
+                                !hasExperienceMax
+                                  ? 'text-gray-400'
+                                  : 'text-gray-600'
+                              }`}
                             >
                               QT Trải nghiệm:
                             </span>
                             <span
                               className={`font-bold ml-2 text-sm ${
-                                isExperienceHighlight
+                                isExperienceHighlight || hasExperienceMax
                                   ? 'text-green-700'
-                                  : isExpired
-                                    ? 'text-gray-400'
-                                    : data.maxExperience !== null
-                                      ? 'text-green-700'
-                                      : 'text-gray-400'
+                                  : 'text-gray-400'
                               }`}
                             >
                               {data.maxExperience ?? '-'}
@@ -2477,8 +2520,6 @@ export default function TeacherAssignmentPage() {
                                 score: effectiveScore,
                                 isMissedCurrentMonth,
                               } = getEffectiveExamScore(item)
-                              const hasPassingScore =
-                                getPassingScore(item) !== null
 
                               return (
                                 <div
@@ -2569,13 +2610,6 @@ export default function TeacherAssignmentPage() {
                                       ) : effectiveScore === null ? (
                                         <span className="text-gray-400 italic text-sm">
                                           Chưa có
-                                        </span>
-                                      ) : !hasPassingScore ? (
-                                        <span className="font-bold text-sm text-amber-700">
-                                          {formatScoreSummary(
-                                            item,
-                                            effectiveScore,
-                                          )}
                                         </span>
                                       ) : (
                                         <span
@@ -2800,20 +2834,13 @@ export default function TeacherAssignmentPage() {
 
         {/* Pass Rate Drill-down Modal */}
         {(() => {
-          const now = new Date()
-          const last6Months = new Set(
-            Array.from({ length: 6 }, (_, i) => {
-              const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-            }),
-          )
           const passRateItems = examAssignments
             .filter((item) => {
               const date = new Date(item.open_at)
-              const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+              if (Number.isNaN(date.getTime())) return false
               const isExcluded = item.explanation_status === 'accepted'
               const { score } = getEffectiveExamScore(item)
-              return last6Months.has(monthKey) && !isExcluded && score !== null
+              return !isExcluded && score !== null
             })
             .sort(
               (a, b) =>
@@ -2830,7 +2857,7 @@ export default function TeacherAssignmentPage() {
               isOpen={showPassRateModal}
               onClose={() => setShowPassRateModal(false)}
               title="Chi tiết Tỉ lệ đạt"
-              subtitle={`${passed} / ${passRateItems.length} bài đạt yêu cầu trong 6 tháng gần nhất`}
+              subtitle={`${passed} / ${passRateItems.length} bài đạt yêu cầu (theo danh sách đã tải)`}
               maxWidth="xl"
               headerColor="bg-[#a1001f]"
               footer={
@@ -2848,7 +2875,7 @@ export default function TeacherAssignmentPage() {
                 <div className="py-10 text-center text-gray-400">
                   <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
                   <p className="text-sm">
-                    Không có bài thi nào được tính trong 6 tháng gần nhất.
+                    Không có bài thi nào được tính trong phạm vi thống kê.
                   </p>
                 </div>
               ) : (

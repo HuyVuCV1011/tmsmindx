@@ -1,5 +1,6 @@
 'use client'
 
+import { lockBodyScroll, unlockBodyScroll } from '@/lib/body-scroll-lock'
 import { ReactNode, useEffect } from 'react'
 
 interface ModalProps {
@@ -46,15 +47,12 @@ export default function Modal({
     return () => window.removeEventListener('keydown', handleEscape)
   }, [isOpen, onClose])
 
-  // Prevent body scroll when modal is open
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = 'unset'
-    }
+    if (!isOpen) return
+
+    lockBodyScroll()
     return () => {
-      document.body.style.overflow = 'unset'
+      unlockBodyScroll()
     }
   }, [isOpen])
 
@@ -80,8 +78,8 @@ export default function Modal({
 
   return (
     <div
-      className="fixed inset-0 flex items-start justify-center overflow-y-auto p-2 pt-16 sm:items-center sm:p-4"
-      style={{ zIndex: 1000 }}
+      className="fixed inset-0 flex items-start justify-center overflow-y-auto p-2 pt-[max(env(safe-area-inset-top),0.5rem)] sm:items-center sm:p-6"
+      style={{ zIndex: 2000 }}
     >
       {/* Backdrop with minimal opacity */}
       <div
@@ -91,7 +89,7 @@ export default function Modal({
 
       {/* Modal Content */}
       <div
-        className={`relative my-0.5 flex h-[calc(100dvh-64px)] w-full flex-col rounded-xl border border-gray-200 bg-white shadow-2xl sm:my-4 sm:h-auto sm:max-h-[95dvh] ${maxWidthClasses[maxWidth]} animate-modal-in ${overflowContent === 'visible' ? 'overflow-visible' : 'overflow-hidden'}`}
+        className={`relative my-0.5 flex h-[calc(100dvh-1rem)] w-full flex-col rounded-xl border border-gray-200 bg-white shadow-2xl sm:my-4 sm:h-auto sm:max-h-[95dvh] ${maxWidthClasses[maxWidth]} animate-modal-in ${overflowContent === 'visible' ? 'overflow-visible' : 'overflow-hidden'}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -133,7 +131,7 @@ export default function Modal({
 
         {/* Body */}
         <div
-          className={`px-4 sm:px-6 py-4 sm:py-6 ${overflowContent === 'visible' ? 'overflow-visible' : 'flex-1 overflow-y-auto'}`}
+          className={`px-4 py-5 sm:px-6 sm:py-6 ${overflowContent === 'visible' ? 'overflow-visible' : 'flex-1 overflow-y-auto'}`}
         >
           {children}
         </div>

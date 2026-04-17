@@ -11,7 +11,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import React, { useEffect, useState } from "react"
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 import useSWR from 'swr'
 
 // Dynamic import for RichTextEditor to avoid SSR issues

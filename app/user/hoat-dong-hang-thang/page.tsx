@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context'
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 type RegistrationTemplate = 'official' | 'supplement'
 type EventCategory =
@@ -30,13 +30,6 @@ interface EvaluationEvent {
   note?: string
   eventType?: EventCategory
   registrationTemplate?: RegistrationTemplate
-}
-
-interface ExamSetAvailability {
-  status: 'active' | 'inactive'
-  block_code: string
-  subject_code: string
-  default_set_id?: number | null
 }
 
 interface RegisteredExamParticipant {
@@ -209,20 +202,8 @@ function getTimelineEventContainerClass(eventType: EventCategory | undefined) {
   }
 }
 
-const REGISTER_OPTIONS = [
-  '[COD] Scratch (S)',
-  '[COD] GameMaker (G)',
-  '[COD] Python (PT)',
-  '[COD] Web (JS)',
-  '[COD] Computer Science (CS)',
-  '[COD] App Producer',
-  '[ROB] Lego 4+',
-  '[ROB] Vex Go',
-  '[ROB] Vex IQ',
-  '[ART] Arts',
-  'Kiểm tra quy trình & kỹ năng trải nghiệm',
-]
-
+// REGISTER_OPTIONS và REGISTER_OPTION_MAP được build động từ DB (chuyen_sau_monhoc)
+// Các constant dưới đây chỉ là fallback khi DB chưa load xong
 type RegisterPayload = {
   exam_type: 'expertise' | 'experience'
   block_code: string
@@ -230,128 +211,6 @@ type RegisterPayload = {
   optionLabel: string
   specialtyAliases: string[]
   subjectCodeCandidates: string[]
-}
-
-const REGISTER_OPTION_MAP: Record<string, RegisterPayload> = {
-  '[COD] Scratch (S)': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] Scratch (S)',
-    optionLabel: '[COD] Scratch (S)',
-    specialtyAliases: ['Coding - Scratch', 'Scratch'],
-    subjectCodeCandidates: ['[COD] Scratch (S)', '[COD] Scratch', 'SCRATCH'],
-  },
-  '[COD] GameMaker (G)': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] GameMaker (G)',
-    optionLabel: '[COD] GameMaker (G)',
-    specialtyAliases: ['Coding - Game', 'GameMaker', 'Coding - Gamemaker'],
-    subjectCodeCandidates: [
-      '[COD] GameMaker (G)',
-      '[COD] GameMaker',
-      'GAMEMAKER',
-    ],
-  },
-  '[COD] Python (PT)': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] Python (PT)',
-    optionLabel: '[COD] Python (PT)',
-    specialtyAliases: ['Coding - Python', 'Python'],
-    subjectCodeCandidates: ['[COD] Python (PT)', '[COD] Python', 'PYTHON'],
-  },
-  '[COD] Web (JS)': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] Web (JS)',
-    optionLabel: '[COD] Web (JS)',
-    specialtyAliases: ['Coding - Web', 'Web'],
-    subjectCodeCandidates: ['[COD] Web (JS)', '[COD] Web', 'WEB'],
-  },
-  '[COD] Computer Science (CS)': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] Computer Science (CS)',
-    optionLabel: '[COD] Computer Science (CS)',
-    specialtyAliases: ['Computer Science', 'ComputerScience'],
-    subjectCodeCandidates: [
-      '[COD] Computer Science (CS)',
-      '[COD] ComputerScience',
-      'COMPUTERSCIENCE',
-    ],
-  },
-  '[COD] App Producer': {
-    exam_type: 'expertise',
-    block_code: 'CODING',
-    subject_code: '[COD] App Producer',
-    optionLabel: '[COD] App Producer',
-    specialtyAliases: ['App Producer', 'AppProducer', 'Coding - App Producer'],
-    subjectCodeCandidates: [
-      '[COD] App Producer',
-      '[COD] AppProducer',
-      'APPPRODUCER',
-    ],
-  },
-  '[ROB] Lego 4+': {
-    exam_type: 'expertise',
-    block_code: 'ROBOTICS',
-    subject_code: '[ROB] Lego 4+',
-    optionLabel: '[ROB] Lego 4+',
-    specialtyAliases: ['Robotics Lego Spike 4+', 'Lego', 'Lego Spike'],
-    subjectCodeCandidates: ['[ROB] Lego 4+', '[ROB] Lego Spike', 'LEGO'],
-  },
-  '[ROB] Vex Go': {
-    exam_type: 'expertise',
-    block_code: 'ROBOTICS',
-    subject_code: '[ROB] Vex Go',
-    optionLabel: '[ROB] Vex Go',
-    specialtyAliases: ['Robotics VexGo', 'VexGo', 'Robotics - VexGo'],
-    subjectCodeCandidates: ['[ROB] Vex Go', '[ROB] VexGo', 'VEXGO'],
-  },
-  '[ROB] Vex IQ': {
-    exam_type: 'expertise',
-    block_code: 'ROBOTICS',
-    subject_code: '[ROB] Vex IQ',
-    optionLabel: '[ROB] Vex IQ',
-    specialtyAliases: [
-      'Robotics Vex IQ',
-      'VexIQ',
-      'Vex IQ',
-      'Robotics - VexIQ',
-    ],
-    subjectCodeCandidates: ['[ROB] Vex IQ', '[ROB] VexIQ', 'VEXIQ'],
-  },
-  '[ART] Arts': {
-    exam_type: 'expertise',
-    block_code: 'ART',
-    subject_code: '[ART] Arts',
-    optionLabel: '[ART] Arts',
-    specialtyAliases: ['Art', 'Test chuyên sâu', 'Arts'],
-    subjectCodeCandidates: [
-      '[ART] Arts',
-      '[ART] Test chuyên sâu',
-      'TEST_CHUY_N_S_U',
-      '[ART]',
-    ],
-  },
-  'Kiểm tra quy trình & kỹ năng trải nghiệm': {
-    exam_type: 'experience',
-    block_code: 'PROCESS',
-    subject_code: 'Kiểm tra quy trình & kỹ năng trải nghiệm',
-    optionLabel: 'Kiểm tra quy trình & kỹ năng trải nghiệm',
-    specialtyAliases: [
-      'Quy trình quy định',
-      'Quy trình - kỹ năng trải nghiệm',
-      'Kiểm tra quy trình - kỹ năng trải nghiệm bổ sung',
-    ],
-    subjectCodeCandidates: [
-      'Kiểm tra quy trình & kỹ năng trải nghiệm',
-      '[Trial] Quy Trình Trai nghiệm',
-      'QUY_TR_NH_TRAI_NGHI_M',
-      'quytrinh',
-    ],
-  },
 }
 
 function startOfDay(date: Date) {
@@ -445,26 +304,45 @@ function toMonthValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
-function mapEventToRegisterPayloads(event: EvaluationEvent) {
-  const eventTitle = normalizeSearchString(event.title || '')
-  const eventSpecialty = normalizeSearchString(event.specialty || '')
-  const eventText = `${eventTitle} ${eventSpecialty}`.trim()
+function mapEventToRegisterPayloads(
+  event: EvaluationEvent,
+  registerOptionMap: Record<string, RegisterPayload>,
+) {
+  const eventSpecialty = (event.specialty || '').trim()
+  const eventTitle = (event.title || '').trim()
+  const normalize = (v: string) =>
+    v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+  const nSpecialty = normalize(eventSpecialty)
+  const nTitle = normalize(eventTitle)
 
-  return Object.values(REGISTER_OPTION_MAP).filter((mapped) =>
-    [
-      ...mapped.specialtyAliases,
-      mapped.subject_code,
-      mapped.optionLabel,
-      ...mapped.subjectCodeCandidates,
-    ].some((alias) => {
-      const normalizedAlias = normalizeSearchString(alias || '')
-      return (
-        normalizedAlias &&
-        (eventText.includes(normalizedAlias) ||
-          normalizedAlias.includes(eventText))
-      )
-    }),
-  )
+  return Object.values(registerOptionMap).filter((mapped) => {
+    // Match trực tiếp specialty với subject_code (cách admin lưu vào DB)
+    if (normalize(mapped.subject_code) === nSpecialty) return true
+    if (normalize(mapped.subject_code) === nTitle) return true
+    // Fallback: match qua aliases
+    return [...mapped.specialtyAliases, ...mapped.subjectCodeCandidates].some(
+      (alias) => {
+        const a = normalize(alias)
+        return a && (nSpecialty.includes(a) || nTitle.includes(a) || a.includes(nSpecialty))
+      },
+    )
+  })
+}
+
+function getEventTagAndSpecialty(
+  event: EvaluationEvent,
+  registerOptionMap: Record<string, RegisterPayload>,
+): string {
+  const payloads = mapEventToRegisterPayloads(event, registerOptionMap)
+  if (payloads && payloads.length > 0) {
+    const firstPayload = payloads[0]
+    const optionLabel = firstPayload.optionLabel || ''
+    const tagMatch = optionLabel.match(/\[(.*?)\]/)
+    const tag = tagMatch ? `[${tagMatch[1]}]` : ''
+    const specialty = event.specialty || ''
+    return tag ? `${tag} ${specialty}`.trim() : specialty
+  }
+  return event.specialty || ''
 }
 
 function resolveExamActionStatus(assignment: CalendarExamAssignment | null) {
@@ -533,18 +411,28 @@ export default function MonthlyActivitiesPage() {
   const [view, setView] = useState<CalendarView>('month')
   const [focusDate, setFocusDate] = useState(new Date())
   const [events, setEvents] = useState<EvaluationEvent[]>([])
+  const [examSubjects, setExamSubjects] = useState<Array<{
+    id: number
+    exam_type: 'expertise' | 'experience'
+    block_code: string
+    subject_code: string
+    subject_name: string
+    default_set_id?: number | null
+  }>>([])
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedRegistrationEvent, setSelectedRegistrationEvent] =
     useState<EvaluationEvent | null>(null)
   const [showDayEventsModal, setShowDayEventsModal] = useState(false)
   const [showRegisterModal, setShowRegisterModal] = useState(false)
   const [selectedOptions, setSelectedOptions] = useState<string[]>([])
-  const [availableOptions, setAvailableOptions] = useState<Set<string>>(
-    new Set(),
-  )
   const [teacherCode, setTeacherCode] = useState('')
   const [teacherCenterCode, setTeacherCenterCode] = useState('')
-  const [teacherInfo, setTeacherInfo] = useState<{ teacher_name?: string; email?: string; lms_code?: string; campus?: string }>({})
+  const [teacherInfo, setTeacherInfo] = useState<{
+    teacher_name?: string
+    email?: string
+    lms_code?: string
+    campus?: string
+  }>({})
 
   const [submitting, setSubmitting] = useState(false)
   const [registeredParticipantsByEvent, setRegisteredParticipantsByEvent] =
@@ -577,7 +465,10 @@ export default function MonthlyActivitiesPage() {
   const [isMobileViewport, setIsMobileViewport] = useState(false)
 
   useEffect(() => {
-    if (searchParams.get('showRegisterHint') !== '1' || registerHintShownRef.current) {
+    if (
+      searchParams.get('showRegisterHint') !== '1' ||
+      registerHintShownRef.current
+    ) {
       return
     }
 
@@ -614,6 +505,46 @@ export default function MonthlyActivitiesPage() {
     return () => mediaQuery.removeEventListener('change', updateViewport)
   }, [])
 
+  // Build REGISTER_OPTIONS và REGISTER_OPTION_MAP động từ examSubjects (chuyen_sau_monhoc)
+  const { REGISTER_OPTIONS, REGISTER_OPTION_MAP } = useMemo(() => {
+    if (examSubjects.length === 0) {
+      return { REGISTER_OPTIONS: [] as string[], REGISTER_OPTION_MAP: {} as Record<string, RegisterPayload> }
+    }
+
+    const options: string[] = []
+    const map: Record<string, RegisterPayload> = {}
+
+    examSubjects.forEach((subject) => {
+      const key = subject.subject_name || subject.subject_code
+      options.push(key)
+      map[key] = {
+        exam_type: subject.exam_type,
+        block_code: subject.block_code,
+        subject_code: subject.subject_code,
+        optionLabel: key,
+        // specialtyAliases: match trực tiếp với subject_code và subject_name
+        // (admin lưu chuyen_nganh = subject_code khi tạo lịch)
+        specialtyAliases: [subject.subject_name, subject.subject_code].filter(Boolean),
+        subjectCodeCandidates: [subject.subject_code, subject.subject_name].filter(Boolean),
+      }
+    })
+
+    return { REGISTER_OPTIONS: options, REGISTER_OPTION_MAP: map }
+  }, [examSubjects])
+
+  // availableOptions: build từ examSubjects (chuyen_sau_monhoc)
+  // Môn có default_set_id (đã set đề mặc định) hoặc exam_type=experience thì available
+  const availableOptions = useMemo(() => {
+    const available = new Set<string>()
+    examSubjects.forEach((subject) => {
+      const key = subject.subject_name || subject.subject_code
+      if (subject.exam_type === 'experience' || subject.default_set_id != null) {
+        available.add(key)
+      }
+    })
+    return available
+  }, [examSubjects])
+
   const resolveExamEventIdByOptionAndSchedule = useCallback(
     (option: string, scheduledAt: string) => {
       const scheduledStamp = toMinuteStamp(scheduledAt)
@@ -626,13 +557,13 @@ export default function MonthlyActivitiesPage() {
           return false
         }
 
-        const mappedPayloads = mapEventToRegisterPayloads(event)
+        const mappedPayloads = mapEventToRegisterPayloads(event, REGISTER_OPTION_MAP)
         return mappedPayloads.some((mapped) => mapped.optionLabel === option)
       })
 
       return matched?.id || ''
     },
-    [events],
+    [events, REGISTER_OPTION_MAP],
   )
 
   useEffect(() => {
@@ -645,7 +576,11 @@ export default function MonthlyActivitiesPage() {
         const data = await response.json()
         if (data?.teacher?.code) {
           setTeacherCode(data.teacher.code)
-          const branchCurrent = data?.teacher?.bu_check || data?.teacher?.main_centre || data?.teacher?.centers || ''
+          const branchCurrent =
+            data?.teacher?.bu_check ||
+            data?.teacher?.main_centre ||
+            data?.teacher?.centers ||
+            ''
           if (branchCurrent) {
             setTeacherCenterCode(String(branchCurrent))
           }
@@ -664,51 +599,15 @@ export default function MonthlyActivitiesPage() {
     })()
   }, [user?.email, user?.displayName])
 
+  // Fetch danh sách môn học từ DB (chuyen_sau_monhoc)
   useEffect(() => {
     ;(async () => {
       try {
-        const response = await fetch('/api/exam-sets')
-        const data = await response.json()
-        if (!response.ok || !data?.success) return
-
-        const rows: ExamSetAvailability[] = data.data || []
-        const normalize = (value: string) =>
-          value
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .toUpperCase()
-            .trim()
-
-        // Chỉ coi subject hợp lệ nếu có default_set_id được cấu hình
-        const subjectWithDefaultSet = new Set<string>()
-        rows
-          .filter((item) => item.default_set_id != null)
-          .forEach((item) => {
-            subjectWithDefaultSet.add(
-              `${item.block_code}::${normalize(item.subject_code)}`,
-            )
-          })
-
-        const available = new Set<string>()
-        Object.entries(REGISTER_OPTION_MAP).forEach(([option, mapped]) => {
-          // "Kiểm tra quy trình - kỹ năng trải nghiệm" (experience) không phụ thuộc bộ đề chuyên môn
-          // nên vẫn cho phép đăng ký theo lịch nếu có event-schedule.
-          if (mapped.exam_type === "experience") {
-            available.add(option);
-            return;
-          }
-
-          const hasDefaultSet = mapped.subjectCodeCandidates.some((candidate) =>
-            subjectWithDefaultSet.has(
-              `${mapped.block_code}::${normalize(candidate)}`,
-            ),
-          )
-          if (hasDefaultSet) {
-            available.add(option)
-          }
-        })
-
-        setAvailableOptions(available)
+        const res = await fetch('/api/exam-subjects')
+        const data = await res.json()
+        if (res.ok && data.success) {
+          setExamSubjects(data.data || [])
+        }
       } catch {}
     })()
   }, [])
@@ -962,7 +861,12 @@ export default function MonthlyActivitiesPage() {
             ...mapped.subjectCodeCandidates,
           ].some((code) => {
             const c = normalizeStr(code)
-            return specialty === c || title === c || specialty.includes(c) || title.includes(c)
+            return (
+              specialty === c ||
+              title === c ||
+              specialty.includes(c) ||
+              title.includes(c)
+            )
           })
           if (directMatch) return true
 
@@ -980,7 +884,25 @@ export default function MonthlyActivitiesPage() {
         )
     })
     return map
-  }, [events])
+  }, [events, REGISTER_OPTION_MAP])
+
+  /** Lịch đang chọn để đăng ký: ưu tiên lịch chưa đăng ký (không chọn nhầm slot đã đăng ký). */
+  const resolveSelectedExamEventIdForOption = useCallback(
+    (option: string) => {
+      const examEvents = upcomingExamEventsByOption[option] || []
+      const regIds = new Set(registeredExamEventIdsByOption[option] || [])
+      const raw = selectedExamEventByOption[option] || ''
+      if (raw && !regIds.has(raw)) return raw
+      return (
+        examEvents.find((e) => !regIds.has(e.id))?.id || examEvents[0]?.id || ''
+      )
+    },
+    [
+      upcomingExamEventsByOption,
+      registeredExamEventIdsByOption,
+      selectedExamEventByOption,
+    ],
+  )
 
   const periodLabel = useMemo(() => {
     if (view === 'day') {
@@ -1214,7 +1136,7 @@ export default function MonthlyActivitiesPage() {
         return
       }
 
-      const mappedPayloads = mapEventToRegisterPayloads(event)
+      const mappedPayloads = mapEventToRegisterPayloads(event, REGISTER_OPTION_MAP)
       if (mappedPayloads.length === 0) {
         next[event.id] = null
         return
@@ -1339,7 +1261,7 @@ export default function MonthlyActivitiesPage() {
         const next: Record<string, RegisteredExamParticipant[]> = {}
 
         relevantEvents.forEach((event) => {
-          const matchedMappings = mapEventToRegisterPayloads(event)
+          const matchedMappings = mapEventToRegisterPayloads(event, REGISTER_OPTION_MAP)
 
           const subjectCodes = new Set(
             matchedMappings.map((mapped) => mapped.subject_code),
@@ -1373,14 +1295,27 @@ export default function MonthlyActivitiesPage() {
       const next: Record<string, string> = {}
       REGISTER_OPTIONS.forEach((option) => {
         const examEvents = upcomingExamEventsByOption[option] || []
-        next[option] =
-          prev[option] && examEvents.some((e) => e.id === prev[option])
-            ? prev[option]
-            : examEvents[0]?.id || ''
+        const regIds = registeredExamEventIdsByOption[option] || []
+        const regSet = new Set(regIds)
+        const prevId = prev[option]
+        const prevStillValid =
+          !!prevId && examEvents.some((e) => e.id === prevId)
+        const prevIsStillSelectable = !!prevId && !regSet.has(prevId)
+        if (prevStillValid && prevIsStillSelectable) {
+          next[option] = prevId
+        } else {
+          const firstOpen = examEvents.find((e) => !regSet.has(e.id))
+          next[option] = firstOpen?.id || examEvents[0]?.id || ''
+        }
       })
       return next
     })
-  }, [upcomingExamEventsByOption, showRegisterModal])
+  }, [
+    upcomingExamEventsByOption,
+    showRegisterModal,
+    registeredExamEventIdsByOption,
+    REGISTER_OPTIONS,
+  ])
 
   useEffect(() => {
     const hasOpenModal =
@@ -1615,6 +1550,7 @@ export default function MonthlyActivitiesPage() {
 
     const submittedOptions: string[] = []
     const submittedSlots: Array<{ option: string; scheduledAt: string }> = []
+    const submittedEventIdsByOption: Record<string, string> = {}
     const failedOptions: string[] = []
     const failedDetails: string[] = []
 
@@ -1634,16 +1570,17 @@ export default function MonthlyActivitiesPage() {
         }
 
         // Experience test (quy trình/kỹ năng trải nghiệm) không cần bộ đề chuyên môn
-        if (mapped.exam_type !== 'experience') {
-          const hasActiveSetForOption = availableOptions.has(option)
-          if (!hasActiveSetForOption) {
-            failedOptions.push(option)
-            failedDetails.push(`${option}: chưa có bộ đề active`)
-            continue
-          }
-        }
+        // Cho phép đăng ký tự do theo lịch admin set (không check bộ đề)
+        // if (mapped.exam_type !== 'experience') {
+        //   const hasActiveSetForOption = availableOptions.has(option)
+        //   if (!hasActiveSetForOption) {
+        //     failedOptions.push(option)
+        //     failedDetails.push(`${option}: chưa có bộ đề active`)
+        //     continue
+        //   }
+        // }
 
-        const examEventId = selectedExamEventByOption[option]
+        const examEventId = resolveSelectedExamEventIdForOption(option)
         const matchedExamEvent =
           (examEventId
             ? events.find((e) => e.id === examEventId) || null
@@ -1692,6 +1629,7 @@ export default function MonthlyActivitiesPage() {
         if (response.ok && data.success) {
           submittedOptions.push(option)
           submittedSlots.push({ option, scheduledAt: matchedExamEvent.startAt })
+          submittedEventIdsByOption[option] = targetEventId
         } else {
           const errMsg = data?.error || 'lỗi không xác định'
           failedOptions.push(option)
@@ -1733,7 +1671,7 @@ export default function MonthlyActivitiesPage() {
       setRegisteredExamEventIdsByOption((prev) => {
         const next: Record<string, string[]> = { ...prev }
         submittedOptions.forEach((option) => {
-          const selectedEventId = selectedExamEventByOption[option] || ''
+          const selectedEventId = submittedEventIdsByOption[option] || ''
           if (!selectedEventId) {
             return
           }
@@ -1753,7 +1691,7 @@ export default function MonthlyActivitiesPage() {
 
       const firstSubmittedOption = submittedOptions[0]
       const firstSubmittedExamEventId =
-        selectedExamEventByOption[firstSubmittedOption]
+        submittedEventIdsByOption[firstSubmittedOption] || ''
       const firstSubmittedExamEvent = events.find(
         (event) => event.id === firstSubmittedExamEventId,
       )
@@ -1852,7 +1790,7 @@ export default function MonthlyActivitiesPage() {
                 onClick={() => setView(option.value)}
                 className={`rounded-md border px-3 py-1.5 text-sm font-semibold ${
                   view === option.value
-                    ? 'bg-blue-600 text-white border-blue-600'
+                    ? 'bg-[#a1001f] text-white border-[#a1001f]'
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                 }`}
               >
@@ -1884,43 +1822,57 @@ export default function MonthlyActivitiesPage() {
               </div>
 
               <div
-                className="relative"
-                style={{ height: `${dayTimelineGridHeight}px` }}
+                className="relative grow flex flex-col"
+                style={{ minHeight: `${dayTimelineGridHeight}px` }}
               >
                 {dayTimelineHours.map((hour) => {
                   const hourEvents = dayTimelineEventsByHour[hour] || []
+                  const eventCount = hourEvents.length
+                  const expandedHeight =
+                    eventCount > 0
+                      ? Math.max(
+                          DAY_TIMELINE_ROW_HEIGHT,
+                          eventCount * 32 + (eventCount - 1) * 6 + 12,
+                        )
+                      : DAY_TIMELINE_ROW_HEIGHT
 
                   return (
                     <div
                       key={`slot-${hour}`}
-                      className="h-16 border-t border-gray-200 px-2 py-1.5 overflow-hidden"
-                      style={{ height: `${DAY_TIMELINE_ROW_HEIGHT}px` }}
+                      className="border-t border-gray-200 px-2 py-1.5"
+                      style={{ minHeight: `${expandedHeight}px` }}
                     >
                       <div className="space-y-1.5">
                         {hourEvents.map((event) => {
                           const calendarEventStyle = getCalendarEventStyle(
                             event.eventType,
                           )
+                          const tagAndSpecialty = getEventTagAndSpecialty(event, REGISTER_OPTION_MAP)
 
                           return (
                             <button
                               key={event.id}
                               type="button"
-                              className={`w-full overflow-hidden rounded-xl border-l-4 px-3 py-2 text-left shadow-sm hover:shadow-md transition ${getTimelineEventContainerClass(event.eventType)}`}
+                              className={`w-full rounded-xl border-l-4 px-2 py-1.5 text-left shadow-sm hover:shadow-md transition flex flex-col ${getTimelineEventContainerClass(event.eventType)}`}
                               onClick={() =>
                                 handleDayEventClick(focusDate, event)
                               }
-                              title={event.title.replace(/\n/g, ' ')}
+                              title={`${event.title}${tagAndSpecialty}`}
                             >
-                              <p className="text-sm font-bold leading-5 line-clamp-1">
-                                {event.title}
-                              </p>
                               <p
-                                className={`mt-0.5 text-xs font-semibold ${calendarEventStyle.timeClassName}`}
+                                className={`text-[10px] font-semibold leading-3 ${calendarEventStyle.timeClassName}`}
                               >
                                 {formatEventTimeRange(
                                   event.startAt,
                                   event.endAt,
+                                )}
+                              </p>
+                              <p className="text-xs font-bold leading-4 mt-0.5">
+                                {event.title}
+                                {tagAndSpecialty && (
+                                  <span className="whitespace-nowrap">
+                                    {tagAndSpecialty}
+                                  </span>
                                 )}
                               </p>
                             </button>
@@ -2006,43 +1958,59 @@ export default function MonthlyActivitiesPage() {
                   return (
                     <div
                       key={`week-col-${dateKey}`}
-                      className="relative border-r border-gray-200"
-                      style={{ height: `${dayTimelineGridHeight}px` }}
+                      className="relative border-r border-gray-200 grow flex flex-col"
                     >
                       {dayTimelineHours.map((hour) => {
                         const hourEvents =
                           weekTimelineEventsByDateHour[dateKey]?.[hour] || []
+                        const eventCount = hourEvents.length
+                        const expandedHeight =
+                          eventCount > 0
+                            ? Math.max(
+                                DAY_TIMELINE_ROW_HEIGHT,
+                                eventCount * 28 + (eventCount - 1) * 4 + 8,
+                              )
+                            : DAY_TIMELINE_ROW_HEIGHT
 
                         return (
                           <div
                             key={`${dateKey}-${hour}`}
-                            className="h-16 border-t border-gray-200 px-1.5 py-1 overflow-hidden"
-                            style={{ height: `${DAY_TIMELINE_ROW_HEIGHT}px` }}
+                            className="border-t border-gray-200 px-1.5 py-1"
+                            style={{
+                              minHeight: `${expandedHeight}px`,
+                            }}
                           >
                             <div className="space-y-1">
                               {hourEvents.map((event) => {
                                 const calendarEventStyle =
                                   getCalendarEventStyle(event.eventType)
+                                const tagAndSpecialty =
+                                  getEventTagAndSpecialty(event, REGISTER_OPTION_MAP)
 
                                 return (
                                   <button
                                     key={event.id}
                                     type="button"
-                                    className={`w-full overflow-hidden rounded-lg border-l-4 px-2 py-1.5 text-left shadow-sm hover:shadow-md transition ${getTimelineEventContainerClass(event.eventType)}`}
+                                    className={`w-full overflow-hidden rounded-lg border-l-4 px-1.5 py-1 text-left shadow-sm hover:shadow-md transition flex flex-col text-xs ${getTimelineEventContainerClass(event.eventType)}`}
                                     onClick={() =>
                                       handleDayEventClick(date, event)
                                     }
-                                    title={event.title.replace(/\n/g, ' ')}
+                                    title={`${event.title}${tagAndSpecialty}`}
                                   >
-                                    <p className="text-xs font-bold leading-4 line-clamp-1">
-                                      {event.title}
-                                    </p>
                                     <p
-                                      className={`mt-0.5 text-[11px] font-semibold ${calendarEventStyle.timeClassName}`}
+                                      className={`text-[9px] font-semibold leading-2 ${calendarEventStyle.timeClassName}`}
                                     >
                                       {formatEventTimeRange(
                                         event.startAt,
                                         event.endAt,
+                                      )}
+                                    </p>
+                                    <p className="mt-0.5 line-clamp-3 wrap-break-word text-[10px] font-bold leading-3">
+                                      {event.title}
+                                      {tagAndSpecialty && (
+                                        <span className="ml-0.5 wrap-break-word">
+                                          {tagAndSpecialty}
+                                        </span>
                                       )}
                                     </p>
                                   </button>
@@ -2258,20 +2226,20 @@ export default function MonthlyActivitiesPage() {
                           <button
                             type="button"
                             key={event.id}
-                            className="flex w-full items-start gap-1 text-left"
+                            className="w-full text-left"
                             onClick={(e) => {
                               e.stopPropagation()
                               handleDayEventClick(date, event)
                             }}
                             title={event.title.replace(/\n/g, ' ')}
                           >
-                            <div
-                              className={`w-18 shrink-0 text-[11px] font-semibold leading-4 ${calendarEventStyle.timeClassName}`}
+                            <p
+                              className={`text-[11px] font-semibold leading-4 ${calendarEventStyle.timeClassName}`}
                             >
                               {formatEventTimeRange(event.startAt, event.endAt)}
-                            </div>
+                            </p>
                             <div
-                              className={`flex-1 rounded-sm px-1 py-1 text-[11px] leading-4 font-semibold text-center ${calendarEventStyle.titleClassName}`}
+                              className={`mt-0.5 rounded-sm px-1 py-1 text-[11px] leading-4 font-semibold text-center ${calendarEventStyle.titleClassName}`}
                             >
                               {event.title}
                             </div>
@@ -2720,56 +2688,60 @@ export default function MonthlyActivitiesPage() {
       >
         <div className="space-y-6">
           <div className="space-y-4">
-          {selectedRegistrationEvent && (
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
-                Đợt đăng ký đang chọn
-              </p>
-              <p className="mt-2 whitespace-pre-line text-base font-semibold text-gray-900">
-                {selectedRegistrationEvent.title}
-              </p>
-              <p className="mt-1 text-sm text-gray-600">
-                Thời gian: {formatDateTime(selectedRegistrationEvent.startAt)} -{' '}
-                {formatDateTime(selectedRegistrationEvent.endAt)}
-              </p>
-            </div>
-          )}
+            {selectedRegistrationEvent && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
+                  Đợt đăng ký đang chọn
+                </p>
+                <p className="mt-2 whitespace-pre-line text-base font-semibold text-gray-900">
+                  {selectedRegistrationEvent.title}
+                </p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Thời gian: {formatDateTime(selectedRegistrationEvent.startAt)}{' '}
+                  - {formatDateTime(selectedRegistrationEvent.endAt)}
+                </p>
+              </div>
+            )}
 
-          <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
-              Thứ tự thao tác
-            </p>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-gray-700">
-              <li>Chọn lịch thi theo từng môn trước.</li>
-              <li>Tick môn muốn đăng ký rồi bấm Gửi đăng ký.</li>
-            </ol>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#a1001f]">
+                Thứ tự thao tác
+              </p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-gray-700">
+                <li>Chọn lịch thi theo từng môn trước.</li>
+                <li>Tick môn muốn đăng ký rồi bấm Gửi đăng ký.</li>
+              </ol>
+            </div>
           </div>
-          </div>
-            <div className="space-y-4">
-              {REGISTER_OPTIONS.filter((option) => {
-                const mapped = REGISTER_OPTION_MAP[option];
-                const hasExamEvents = (upcomingExamEventsByOption[option] || []).length > 0;
-                const isExperience = mapped?.exam_type === "experience";
-                // Hiển thị tất cả option có lịch thi, không phụ thuộc bộ đề
-                return hasExamEvents;
-              }).map((option) => {
-                const mapped = REGISTER_OPTION_MAP[option];
-                const isExperience = mapped?.exam_type === "experience";
-                const isAvailable = true; // Cho phép đăng ký tự do theo lịch admin set
-                const isSelected = selectedOptions.includes(option);
-                const examEvents = upcomingExamEventsByOption[option] || [];
-                const hasExamEvents = examEvents.length > 0;
-                const selectedEventId = selectedExamEventByOption[option] || "";
-                const selectedExamEvent =
-                  (selectedEventId ? examEvents.find((event) => event.id === selectedEventId) : null) ||
-                  examEvents[0] ||
-                  null;
-                const effectiveSelectedEventId = selectedEventId || selectedExamEvent?.id || "";
-                const hasAnyRegistration = userRegisteredSubjects.has(option);
-                const isAlreadyRegisteredForSelectedEvent =
-                  !!effectiveSelectedEventId &&
-                  (registeredExamEventIdsByOption[option] || []).includes(effectiveSelectedEventId);
-                const isDisabled = !isAvailable || !hasExamEvents || isAlreadyRegisteredForSelectedEvent;
+          <div className="space-y-4">
+            {REGISTER_OPTIONS.filter((option) => {
+              const mapped = REGISTER_OPTION_MAP[option]
+              const hasExamEvents =
+                (upcomingExamEventsByOption[option] || []).length > 0
+              const isExperience = mapped?.exam_type === 'experience'
+              // Hiển thị tất cả option có lịch thi, không phụ thuộc bộ đề
+              return hasExamEvents
+            }).map((option) => {
+              const mapped = REGISTER_OPTION_MAP[option]
+              const isExperience = mapped?.exam_type === 'experience'
+              const isAvailable = true // Cho phép đăng ký tự do theo lịch admin set
+              const isSelected = selectedOptions.includes(option)
+              const examEvents = upcomingExamEventsByOption[option] || []
+              const hasExamEvents = examEvents.length > 0
+              const registeredEventIdsForOption =
+                registeredExamEventIdsByOption[option] || []
+              const registeredEventIdSet = new Set(registeredEventIdsForOption)
+              const selectControlledId =
+                resolveSelectedExamEventIdForOption(option)
+
+              const hasAnyRegistration = userRegisteredSubjects.has(option)
+              const isAlreadyRegisteredForSelectedEvent =
+                !!selectControlledId &&
+                registeredEventIdSet.has(selectControlledId)
+              const isDisabled =
+                !isAvailable ||
+                !hasExamEvents ||
+                isAlreadyRegisteredForSelectedEvent
 
               return (
                 <div
@@ -2800,29 +2772,102 @@ export default function MonthlyActivitiesPage() {
                     {!hasExamEvents ? (
                       <p className="text-sm text-gray-500">Chưa có lịch thi</p>
                     ) : examEvents.length === 1 ? (
-                      <p className="text-sm font-medium text-gray-900">
-                        {formatDateTime(examEvents[0].startAt)} —{' '}
-                        {formatDateTime(examEvents[0].endAt)}
-                      </p>
-                    ) : (
-                      <select
-                        value={selectedEventId}
-                        onChange={(e) =>
-                          setSelectedExamEventByOption((prev) => ({
-                            ...prev,
-                            [option]: e.target.value,
-                          }))
-                        }
-                        disabled={!hasExamEvents}
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20"
-                      >
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-900">
+                          {formatDateTime(examEvents[0].startAt)} —{' '}
+                          {formatDateTime(examEvents[0].endAt)}
+                        </p>
+                        {registeredEventIdSet.has(examEvents[0].id) ? (
+                          <p className="text-xs font-semibold text-amber-800">
+                            Đã đăng ký lịch này — không thể đăng ký trùng.
+                          </p>
+                        ) : (
+                          <p className="text-xs text-emerald-800">
+                            Còn đăng ký được lịch này.
+                          </p>
+                        )}
+                      </div>
+                    ) : examEvents.every((e) => registeredEventIdSet.has(e.id)) ? (
+                      <ul className="space-y-2">
                         {examEvents.map((event) => (
-                          <option key={event.id} value={event.id}>
-                            {formatDateTime(event.startAt)} —{' '}
-                            {formatDateTime(event.endAt)}
-                          </option>
+                          <li
+                            key={event.id}
+                            className="flex flex-wrap items-center gap-2 text-sm text-gray-800"
+                          >
+                            <span className="font-medium">
+                              {formatDateTime(event.startAt)} —{' '}
+                              {formatDateTime(event.endAt)}
+                            </span>
+                            <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                              Đã đăng ký
+                            </span>
+                          </li>
                         ))}
-                      </select>
+                      </ul>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs text-gray-600">
+                          Tất cả khung giờ của môn — chọn một lịch còn trống để đăng ký.
+                        </p>
+                        <div className="space-y-2">
+                          {examEvents.map((event) => {
+                            const slotRegistered =
+                              registeredEventIdSet.has(event.id)
+                            const isActiveSlot = selectControlledId === event.id
+                            return (
+                              <label
+                                key={event.id}
+                                className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                                  slotRegistered
+                                    ? 'cursor-not-allowed border-gray-200 bg-white/80'
+                                    : isActiveSlot
+                                      ? 'border-[#a1001f]/35 bg-white shadow-sm ring-1 ring-[#a1001f]/15'
+                                      : 'border-gray-200 bg-white hover:border-gray-300'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`exam-schedule-${option}`}
+                                  value={event.id}
+                                  checked={isActiveSlot}
+                                  disabled={slotRegistered}
+                                  onChange={() =>
+                                    setSelectedExamEventByOption((prev) => ({
+                                      ...prev,
+                                      [option]: event.id,
+                                    }))
+                                  }
+                                  className="mt-0.5 h-4 w-4 shrink-0 border-gray-300 text-[#a1001f] focus:ring-[#a1001f] disabled:cursor-not-allowed disabled:opacity-50"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium text-gray-900">
+                                    {formatDateTime(event.startAt)} —{' '}
+                                    {formatDateTime(event.endAt)}
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                                    {slotRegistered ? (
+                                      <span className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                                        Đã đăng ký
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                                        Còn đăng ký
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </label>
+                            )
+                          })}
+                        </div>
+                        {examEvents.some((e) => registeredEventIdSet.has(e.id)) &&
+                          examEvents.some((e) => !registeredEventIdSet.has(e.id)) && (
+                            <p className="text-xs text-gray-500">
+                              Khung «Đã đăng ký» không chọn được; chỉ đăng ký được
+                              khung «Còn đăng ký».
+                            </p>
+                          )}
+                      </div>
                     )}
                   </div>
 
@@ -2857,7 +2902,7 @@ export default function MonthlyActivitiesPage() {
             })}
           </div>
         </div>
-        </Modal>
-      </PageContainer>
-    );
-  }
+      </Modal>
+    </PageContainer>
+  )
+}

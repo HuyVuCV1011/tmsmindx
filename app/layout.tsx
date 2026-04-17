@@ -52,27 +52,17 @@ export default function RootLayout({
             </AuthProvider>
           </StoreProvider>
         </ErrorBoundary>
-        <Toaster 
-          position="top-center"
+        <Toaster
+          position="top-right"
+          containerStyle={{ top: 24, right: 24 }}
+          gutter={12}
           toastOptions={{
             duration: 4000,
             style: {
-              background: '#363636',
-              color: '#fff',
-              borderRadius: '8px',
-              padding: '12px 20px',
-            },
-            success: {
-              iconTheme: {
-                primary: '#10b981',
-                secondary: '#fff',
-              },
-            },
-            error: {
-              iconTheme: {
-                primary: '#ef4444',
-                secondary: '#fff',
-              },
+              background: "transparent",
+              boxShadow: "none",
+              padding: 0,
+              maxWidth: "none",
             },
           }}
         />

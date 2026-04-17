@@ -3,7 +3,7 @@
 import { logger } from '@/lib/logger';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useContext, useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 interface User {
   email: string;

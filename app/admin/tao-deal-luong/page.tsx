@@ -8,7 +8,7 @@ import { parseLegacyTeacherFromInfoJson } from '@/lib/teacher-db-mapper';
 import { Award, ChevronDown, CheckCircle, DollarSign, FileText, Info, MessageSquare, Plus, Search, Send, TrendingDown, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 // ─── Types ───────────────────────────────────────────
 interface SalaryDeal {

@@ -8,7 +8,7 @@ import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 interface ExamQuestion {
   id: number;

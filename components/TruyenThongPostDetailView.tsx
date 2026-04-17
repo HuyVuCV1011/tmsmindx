@@ -10,7 +10,7 @@ import { Angry, ArrowLeft, Calendar, Check, Eye, FileText, Frown, Heart, Laugh, 
 import Link from 'next/link'
 import { useParams, usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 
 export type TruyenThongPostDetailMode = 'user' | 'admin'

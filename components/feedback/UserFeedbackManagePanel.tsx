@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 type FeedbackItem = {
   id: number
@@ -106,7 +106,7 @@ function formatScreenTitle(screenPath?: string | null): string {
     '/user/thong-tin-giao-vien': 'Thông tin của tôi',
     '/user/hoat-dong-hang-thang': 'Hoạt động hàng tháng',
     '/user/xin-nghi-mot-buoi': 'Tạo yêu cầu xin nghỉ',
-    '/user/nhan-lop-1-buoi': 'Danh sách nhận lớp 1 buổi',
+    '/user/nhan-lop-1-buoi': 'Danh sách nhận lớp dạy thay',
     '/user/dao-tao-nang-cao': 'Đào tạo nâng cao',
     '/user/assignments': 'Quản lý kiểm tra',
     '/user/giaitrinh': 'Giải trình điểm kiểm tra',
@@ -125,7 +125,21 @@ function formatScreenTitle(screenPath?: string | null): string {
     .join(' ')
 }
 
-export default function UserFeedbackManagePanel() {
+type UserFeedbackManagePanelProps = {
+  showInlineRefresh?: boolean
+  externalRefreshSignal?: number
+}
+
+export default function UserFeedbackManagePanel(
+  props: UserFeedbackManagePanelProps,
+) {
+  return <UserFeedbackManagePanelWithOptions {...props} />
+}
+
+function UserFeedbackManagePanelWithOptions({
+  showInlineRefresh = true,
+  externalRefreshSignal,
+}: UserFeedbackManagePanelProps = {}) {
   const { user } = useAuth()
   const [loadingList, setLoadingList] = useState(false)
   const [loadingError, setLoadingError] = useState<string | null>(null)
@@ -184,6 +198,12 @@ export default function UserFeedbackManagePanel() {
   }, [user?.email])
 
   useEffect(() => {
+    if (externalRefreshSignal === undefined) return
+    loadMyFeedback()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalRefreshSignal])
+
+  useEffect(() => {
     if (!previewImages) return
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -208,17 +228,19 @@ export default function UserFeedbackManagePanel() {
   return (
     <>
       <div className="space-y-5">
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={loadMyFeedback}
-            disabled={loadingList}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-          >
-            <RefreshCcw className="h-4 w-4" />
-            Làm mới
-          </button>
-        </div>
+        {showInlineRefresh && (
+          <div className="flex gap-2 border-b border-gray-200 pb-4">
+            <button
+              type="button"
+              onClick={loadMyFeedback}
+              disabled={loadingList}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#f3b4bd] bg-white px-4 text-sm font-medium text-[#a1001f] shadow-sm hover:bg-[#a1001f]/5 disabled:opacity-60"
+            >
+              <RefreshCcw className="mr-1.5 h-4 w-4" />
+              Làm mới
+            </button>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
@@ -498,7 +520,7 @@ export default function UserFeedbackManagePanel() {
       </Modal>
 
       {previewImages && previewImages.length > 0 && (
-        <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-1100 bg-black/80 flex items-center justify-center p-4">
           <div className="relative w-full max-w-4xl">
             <button
               type="button"

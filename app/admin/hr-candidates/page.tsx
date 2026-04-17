@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageContainer } from '@/components/PageContainer';
 import { useAuth } from '@/lib/auth-context';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 import HrCandidateStats from './components/HrCandidateStats';
 import HrCandidatesFilter from './components/HrCandidatesFilter';

@@ -13,7 +13,11 @@ export const GET = withApiProtection(async (request: NextRequest) => {
         { status: 400 }
       );
     }
-    const { expertise, experience } = await loadTeacherScoresOnly(pool, code);
+    const userName = String(request.nextUrl.searchParams.get("userName") || "").trim();
+    const alternateCodes = userName ? [userName] : [];
+    const { expertise, experience } = await loadTeacherScoresOnly(pool, code, {
+      alternateCodes,
+    });
     return NextResponse.json({ success: true, expertise, experience });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Không thể tải điểm";

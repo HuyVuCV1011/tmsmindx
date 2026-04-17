@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/lib/auth-context'
+import { lockBodyScroll, unlockBodyScroll } from '@/lib/body-scroll-lock'
 import {
   ChevronLeft,
   ChevronRight,
@@ -8,9 +9,10 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 const FEEDBACK_PAGE_OPTIONS = [
   { path: '/user/home', title: 'Trang chủ' },
@@ -18,7 +20,7 @@ const FEEDBACK_PAGE_OPTIONS = [
   { path: '/user/thong-tin-giao-vien', title: 'Thông tin của tôi' },
   { path: '/user/hoat-dong-hang-thang', title: 'Hoạt động hàng tháng' },
   { path: '/user/xin-nghi-mot-buoi', title: 'Tạo yêu cầu xin nghỉ' },
-  { path: '/user/nhan-lop-1-buoi', title: 'Danh sách nhận lớp 1 buổi' },
+  { path: '/user/nhan-lop-1-buoi', title: 'Danh sách nhận lớp dạy thay' },
   { path: '/user/dao-tao-nang-cao', title: 'Đào tạo nâng cao' },
   { path: '/user/assignments', title: 'Quản lý kiểm tra' },
   { path: '/user/giaitrinh', title: 'Giải trình điểm kiểm tra' },
@@ -39,6 +41,7 @@ export default function UserFeedbackWidget() {
   const { user } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
+  const [mounted, setMounted] = useState(false)
   const [open, setOpen] = useState(false)
   const [content, setContent] = useState('')
   const [suggestion, setSuggestion] = useState('')
@@ -54,6 +57,10 @@ export default function UserFeedbackWidget() {
     )
     return selected?.title ?? getFallbackPageTitle(selectedScreenPath)
   }, [selectedScreenPath])
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (open) {
@@ -90,6 +97,13 @@ export default function UserFeedbackWidget() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
+  }, [open, previewImages])
+
+  useEffect(() => {
+    if (!open && !previewImages) return
+
+    lockBodyScroll()
+    return () => unlockBodyScroll()
   }, [open, previewImages])
 
   const uploadImages = async () => {
@@ -146,9 +160,15 @@ export default function UserFeedbackWidget() {
     }
   }
 
-  return (
+  const widget = (
     <>
-      <div className="fixed bottom-6 right-6 z-40">
+      <div
+        className="fixed z-1000"
+        style={{
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)',
+          right: 'calc(env(safe-area-inset-right, 0px) + 1rem)',
+        }}
+      >
         <button
           onClick={() => setOpen(true)}
           data-tour="tour-feedback-button"
@@ -161,12 +181,12 @@ export default function UserFeedbackWidget() {
 
       {open && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          className="fixed inset-0 z-1001 bg-black/40 flex items-center justify-center p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) setOpen(false)
           }}
         >
-          <div className="w-full max-w-2xl max-h-[88vh] bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden flex flex-col">
+          <div className="w-full max-w-2xl max-h-[82vh] bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col">
             <div className="bg-[#a1001f] px-4 py-4 flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-white">
@@ -294,7 +314,8 @@ export default function UserFeedbackWidget() {
                           src={URL.createObjectURL(file)}
                           alt={file.name}
                           className="w-24 h-24 object-cover"
-                        />                        <button
+                        />{' '}
+                        <button
                           type="button"
                           onClick={() =>
                             setImages((prev) =>
@@ -338,7 +359,7 @@ export default function UserFeedbackWidget() {
       )}
 
       {previewImages && previewImages.length > 0 && (
-        <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-1100 bg-black/80 flex items-center justify-center p-4">
           <div className="relative w-full max-w-4xl">
             <button
               type="button"
@@ -386,4 +407,7 @@ export default function UserFeedbackWidget() {
       )}
     </>
   )
+
+  if (!mounted) return null
+  return createPortal(widget, document.body)
 }
