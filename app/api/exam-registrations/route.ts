@@ -13,6 +13,30 @@ import pool from '@/lib/db';
 import { insertExamRegistration } from '@/lib/exam-registration-insert';
 import { NextRequest, NextResponse } from 'next/server';
 
+/** Một số bản triển khai cũ chưa có cột `updated_at` — cache theo process, không cần migration */
+let cachedChuyenSauResultsHasUpdatedAt: boolean | null = null;
+
+async function chuyenSauResultsHasUpdatedAtColumn(): Promise<boolean> {
+  if (cachedChuyenSauResultsHasUpdatedAt !== null) {
+    return cachedChuyenSauResultsHasUpdatedAt;
+  }
+  try {
+    const res = await pool.query<{ ok: boolean }>(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_catalog = current_database()
+          AND table_schema = ANY (current_schemas(true))
+          AND table_name = 'chuyen_sau_results'
+          AND column_name = 'updated_at'
+      ) AS ok
+    `);
+    cachedChuyenSauResultsHasUpdatedAt = Boolean(res.rows[0]?.ok);
+  } catch {
+    cachedChuyenSauResultsHasUpdatedAt = false;
+  }
+  return cachedChuyenSauResultsHasUpdatedAt;
+}
+
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -28,11 +52,28 @@ export async function GET(request: NextRequest) {
     const namDk = searchParams.get('nam_dk');
     /** YYYY-MM — lọc theo tháng/năm đăng ký (thang_dk / nam_dk) */
     const monthYm = searchParams.get('month');
-    const subjectQ = searchParams.get('subject_q')?.trim();
-    const blockQ = searchParams.get('block_q')?.trim();
+    /** Một hoặc nhiều giá trị: lặp `subject_q` hoặc chuỗi phân tách bởi dấu phẩy — OR với nhau */
+    const parseMultiQ = (key: string): string[] => {
+      const raw = searchParams.getAll(key).flatMap((s) => s.split(','));
+      const out: string[] = [];
+      const seen = new Set<string>();
+      for (const r of raw) {
+        const t = r.trim();
+        if (!t) continue;
+        const k = t.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(t);
+      }
+      return out;
+    };
+    const subjectQs = parseMultiQ('subject_q');
+    const blockQs = parseMultiQ('block_q');
     const xuLyFilter = searchParams.get('xu_ly_diem')?.trim();
     const registrationType = searchParams.get('registration_type')?.trim();
     const hasScore = searchParams.get('has_score')?.trim();
+    /** Chỉ đếm + thời điểm thay đổi gần nhất — dùng poll nhẹ từ admin */
+    const syncCheck = searchParams.get('sync_check') === '1';
 
     /** Phân trang (tùy chọn): chỉ áp dụng khi có `limit` — không gửi `limit` thì trả toàn bộ (tương thích user / xuất CSV). */
     const limitRaw = searchParams.get('limit');
@@ -66,29 +107,40 @@ export async function GET(request: NextRequest) {
       values.push(scheduleId);
     }
     if (teacherCode) {
-      conditions.push(`LOWER(TRIM(COALESCE(r.ma_giao_vien, ''))) = LOWER(TRIM($${values.length + 1}))`);
-      values.push(teacherCode);
+      /** Tìm gần đúng (chuỗi con) — khớp UX ô «Mã GV» trên admin */
+      conditions.push(
+        `POSITION(LOWER($${values.length + 1}) IN LOWER(COALESCE(r.ma_giao_vien, ''))) > 0`,
+      );
+      values.push(teacherCode.trim());
     }
     if (email) {
       conditions.push(`LOWER(TRIM(COALESCE(r.dia_chi_email, ''))) = LOWER(TRIM($${values.length + 1}))`);
       values.push(email);
     }
-    if (subjectQ) {
-      const i = values.length + 1;
-      conditions.push(
-        `(POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ma_mon, ''))) > 0 OR POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ten_mon, ''))) > 0)`,
-      );
-      values.push(subjectQ);
+    if (subjectQs.length > 0) {
+      const parts: string[] = [];
+      for (const sq of subjectQs) {
+        const i = values.length + 1;
+        values.push(sq);
+        parts.push(
+          `(POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ma_mon, ''))) > 0 OR POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ten_mon, ''))) > 0)`,
+        );
+      }
+      conditions.push(`(${parts.join(' OR ')})`);
     } else if (subjectCode) {
       conditions.push(`mh.ma_mon = $${values.length + 1}`);
       values.push(subjectCode);
     }
-    if (blockQ) {
-      const i = values.length + 1;
-      conditions.push(
-        `(POSITION(LOWER($${i}) IN LOWER(COALESCE(r.khoi_giang_day, ''))) > 0 OR POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ma_khoi, ''))) > 0)`,
-      );
-      values.push(blockQ);
+    if (blockQs.length > 0) {
+      const parts: string[] = [];
+      for (const bq of blockQs) {
+        const i = values.length + 1;
+        values.push(bq);
+        parts.push(
+          `(POSITION(LOWER($${i}) IN LOWER(COALESCE(r.khoi_giang_day, ''))) > 0 OR POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ma_khoi, ''))) > 0)`,
+        );
+      }
+      conditions.push(`(${parts.join(' OR ')})`);
     } else if (blockCode) {
       conditions.push(`mh.ma_khoi = $${values.length + 1}`);
       values.push(blockCode);
@@ -149,6 +201,33 @@ export async function GET(request: NextRequest) {
        LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
        LEFT JOIN chuyen_sau_bode bode ON bode.id = r.id_de_thi
     `;
+
+    if (syncCheck) {
+      const hasUpdatedAt = await chuyenSauResultsHasUpdatedAtColumn();
+      const maxChangedSql = hasUpdatedAt
+        ? 'MAX(COALESCE(r.updated_at, r.tao_luc)) AS max_changed'
+        : 'MAX(COALESCE(r.dang_ky_luc, r.tao_luc)) AS max_changed';
+      const syncRes = await pool.query(
+        `SELECT COUNT(*)::int AS c,
+                ${maxChangedSql}
+         ${fromJoins}
+         ${where}`,
+        values,
+      );
+      const sr = syncRes.rows[0] as { c?: number; max_changed?: Date | string | null };
+      const raw = sr?.max_changed;
+      let maxChangedAt: string | null = null;
+      if (raw != null && raw !== '') {
+        maxChangedAt = raw instanceof Date ? raw.toISOString() : String(raw);
+      }
+      return NextResponse.json({
+        success: true,
+        sync: {
+          total: sr?.c ?? 0,
+          maxChangedAt,
+        },
+      });
+    }
 
     let totalCount: number | undefined;
     if (paginateLimit != null) {

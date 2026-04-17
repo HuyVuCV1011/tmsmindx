@@ -1,6 +1,5 @@
 "use client";
 
-import { Card } from "@/components/Card";
 import { PageContainer } from "@/components/PageContainer";
 import { Stepper } from "@/components/ui/stepper";
 import {
@@ -11,27 +10,60 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AnimatedCalendar, type CalendarLocale } from "@/components/ui/calender";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { parseCsvToRows } from "@/lib/csv-registration-import";
+import {
+  IMPORT_LOG_STORAGE_MAX,
+  IMPORT_UI_STORAGE_KEY,
+  clearImportRecoveryStorage,
+  notifyImportRecoveryChanged,
+  type ImportUiStored,
+} from "@/lib/exam-registration-import-storage";
 import { parseXlsxRegistrationSheet } from "@/lib/xlsx-registration-import";
-import { format } from "date-fns";
+import { format, getMonth, getYear } from "date-fns";
+import { vi } from "date-fns/locale";
 import {
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   ClipboardList,
   Download,
   FileDown,
   Info,
+  RefreshCw,
   Search,
-  SlidersHorizontal,
   Upload,
   XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import toast from "react-hot-toast";
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+/** Chuẩn hóa để tìm không dấu, không phân biệt hoa thường */
+function normalizeVn(s: string) {
+  return s
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .trim();
+}
 
 interface RegistrationRow {
   id: number;
@@ -132,17 +164,90 @@ function previewImportRow(r: Record<string, string>): string {
 
 const PAGE_SIZE = 50;
 
+/** Khối phổ biến trong dữ liệu xuất (CSV) — lọc nhanh */
+const QUICK_BLOCKS = ["CODING", "ART", "ROBOTICS"] as const;
+
+const REG_FILTER_CALENDAR_VI: Partial<CalendarLocale> = {
+  weekdays: ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"],
+  weekdaysShort: ["CN", "T2", "T3", "T4", "T5", "T6", "T7"],
+  months: [
+    "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6",
+    "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12",
+  ],
+  monthsShort: ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"],
+  today: "Tháng này",
+  clear: "Xóa",
+  close: "Đóng",
+  selectTime: "Chọn giờ",
+  backToCalendar: "Về lịch",
+  selected: "đã chọn",
+  weekNumber: "Tuần",
+};
+
+interface ExamSubjectRow {
+  id: number;
+  block_code: string;
+  subject_code: string;
+  subject_name: string | null;
+}
+
+/** mm/yyyy, yyyy-mm, v.v. */
+type PeriodParseResult = "empty" | { month: string; year: string } | null;
+
+function parseMonthYearText(raw: string): PeriodParseResult {
+  const t = raw.trim();
+  if (!t) return "empty";
+  const d1 = /^(\d{1,2})\s*[/.-]\s*(\d{4})$/u.exec(t);
+  if (d1) {
+    const mo = parseInt(d1[1], 10);
+    const yr = parseInt(d1[2], 10);
+    if (mo >= 1 && mo <= 12 && yr >= 1900 && yr <= 2100) {
+      return { month: String(mo).padStart(2, "0"), year: String(yr) };
+    }
+    return null;
+  }
+  const d2 = /^(\d{4})\s*[/.-]\s*(\d{1,2})$/u.exec(t);
+  if (d2) {
+    const yr = parseInt(d2[1], 10);
+    const mo = parseInt(d2[2], 10);
+    if (mo >= 1 && mo <= 12 && yr >= 1900 && yr <= 2100) {
+      return { month: String(mo).padStart(2, "0"), year: String(yr) };
+    }
+    return null;
+  }
+  return null;
+}
+
+function ymWithinBounds(y: number, m: number, minD: Date, maxD: Date): boolean {
+  const t = y * 12 + (m - 1);
+  const tMin = minD.getFullYear() * 12 + minD.getMonth();
+  const tMax = maxD.getFullYear() * 12 + maxD.getMonth();
+  return t >= tMin && t <= tMax;
+}
+
 export default function ExamRegistrationListPage() {
   const [rows, setRows] = useState<RegistrationRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  /** Poll phát hiện thay đổi → fetch silent — hiệu ứng nút Làm mới / phân trang */
+  const [silentListLoading, setSilentListLoading] = useState(false);
+  const listFetchBusy = loading || silentListLoading;
   const [searchTeacherCode, setSearchTeacherCode] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("all");
-  /** Lọc nâng cao */
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [filterSubjectQ, setFilterSubjectQ] = useState("");
-  const [filterBlockQ, setFilterBlockQ] = useState("");
+  /** "all" | YYYY */
+  const [filterYear, setFilterYear] = useState<string>("all");
+  /** "all" | "01".."12" */
+  const [filterMonth, setFilterMonth] = useState<string>("all");
+  /** Gõ tay tháng/năm — đồng bộ khi không đang focus ô gõ */
+  const [periodInput, setPeriodInput] = useState("");
+  const periodFieldFocusedRef = useRef(false);
+  /** Rỗng = tất cả; nhiều mã → API OR */
+  const [filterSubjectCodes, setFilterSubjectCodes] = useState<string[]>([]);
+  const [filterBlockCodes, setFilterBlockCodes] = useState<string[]>([]);
+  /** Gõ để lọc danh sách checkbox (không gửi API) */
+  const [blockListQuery, setBlockListQuery] = useState("");
+  const [subjectListQuery, setSubjectListQuery] = useState("");
+  const [examSubjects, setExamSubjects] = useState<ExamSubjectRow[]>([]);
   const [filterRegType, setFilterRegType] = useState<"all" | "official" | "additional">("all");
   const [filterXuLy, setFilterXuLy] = useState<
     "all" | "chờ giải trình" | "đã duyệt" | "từ chối" | "đã hoàn thành"
@@ -155,62 +260,269 @@ export default function ExamRegistrationListPage() {
   const [importLogOpen, setImportLogOpen] = useState(false);
   const [importLog, setImportLog] = useState<ImportLogState | null>(null);
   const [confirmStopImportOpen, setConfirmStopImportOpen] = useState(false);
+  /** Thu gọn / mở rộng khối bộ lọc */
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importActivityLogRef = useRef<HTMLDivElement>(null);
   /** Dừng giữa các lô / hủy request đang chạy */
   const importCancelRef = useRef(false);
   const importAbortRef = useRef<AbortController | null>(null);
+  /** Dùng trong beforeunload — closure luôn có % và log mới nhất */
+  const importHudRef = useRef({ progress: 0, log: [] as string[] });
+  importHudRef.current = { progress: importProgress, log: importActivityLog };
+  const pageRef = useRef(1);
+  pageRef.current = page;
+  /** So khớp poll nhẹ với GET đầy đủ — đổi DB thì tự làm mới danh sách */
+  const listSyncKeyRef = useRef<string | null>(null);
+
+  const teacherDebounced = useDebouncedValue(searchTeacherCode, 380);
+  /** Khối / môn: chọn từ danh sách — áp dụng ngay */
 
   useEffect(() => {
-    if (!importActivityLog.length || !importActivityLogRef.current) return;
-    importActivityLogRef.current.scrollTop = importActivityLogRef.current.scrollHeight;
-  }, [importActivityLog]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/exam-subjects");
+        const data = await res.json();
+        if (cancelled || !data?.success || !Array.isArray(data.data)) return;
+        setExamSubjects(
+          data.data.map((r: Record<string, unknown>) => ({
+            id: Number(r.id),
+            block_code: String(r.block_code ?? ""),
+            subject_code: String(r.subject_code ?? ""),
+            subject_name: r.subject_name != null ? String(r.subject_name) : null,
+          })),
+        );
+      } catch {
+        if (!cancelled) setExamSubjects([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  /** Bộ lọc chung cho danh sách (có/không phân trang) và xuất CSV */
-  const appendListFilters = (params: URLSearchParams) => {
-    const gv = searchTeacherCode.trim();
+  /** Ghi tiến độ khi đang import; xóa khi xong (để lần sau không nhầm) */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!importing) {
+      sessionStorage.removeItem(IMPORT_UI_STORAGE_KEY);
+      return;
+    }
+    try {
+      const log =
+        importActivityLog.length > IMPORT_LOG_STORAGE_MAX
+          ? importActivityLog.slice(-IMPORT_LOG_STORAGE_MAX)
+          : importActivityLog;
+      const payload: ImportUiStored = {
+        v: 1,
+        phase: "running",
+        progress: importProgress,
+        log,
+        updatedAt: Date.now(),
+      };
+      sessionStorage.setItem(IMPORT_UI_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      /* quota */
+    }
+  }, [importing, importProgress, importActivityLog]);
+
+  /** Cảnh báo + flush cuối khi đóng tab / F5 (mobile: thêm pagehide) */
+  useEffect(() => {
+    if (!importing) return;
+    const flush = () => {
+      try {
+        const { progress, log } = importHudRef.current;
+        const slice = log.length > IMPORT_LOG_STORAGE_MAX ? log.slice(-IMPORT_LOG_STORAGE_MAX) : log;
+        const payload: ImportUiStored = {
+          v: 1,
+          phase: "running",
+          progress,
+          log: slice,
+          updatedAt: Date.now(),
+        };
+        sessionStorage.setItem(IMPORT_UI_STORAGE_KEY, JSON.stringify(payload));
+      } catch {
+        /* ignore */
+      }
+    };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      flush();
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const onPageHide = () => flush();
+    window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [importing]);
+
+  useEffect(() => {
+    if (!importing || !importActivityLog.length || !importActivityLogRef.current) return;
+    importActivityLogRef.current.scrollTop = importActivityLogRef.current.scrollHeight;
+  }, [importActivityLog, importing]);
+
+  const toggleBlockCode = useCallback((code: string) => {
+    const u = code.trim();
+    if (!u) return;
+    setFilterBlockCodes((prev) => {
+      const hit = prev.findIndex((c) => c.toUpperCase() === u.toUpperCase());
+      if (hit >= 0) return prev.filter((_, i) => i !== hit);
+      return [...prev, u];
+    });
+  }, []);
+
+  const toggleSubjectCode = useCallback((code: string) => {
+    const u = code.trim();
+    if (!u) return;
+    setFilterSubjectCodes((prev) => {
+      const hit = prev.findIndex((c) => c.toUpperCase() === u.toUpperCase());
+      if (hit >= 0) return prev.filter((_, i) => i !== hit);
+      return [...prev, u];
+    });
+  }, []);
+
+  /** Bộ lọc — `textFields` dùng giá trị đã debounce khi gọi từ fetchRows / export */
+  const appendListFilters = (
+    params: URLSearchParams,
+    textFields?: { teacher?: string; subjectCodes?: string[]; blockCodes?: string[] },
+  ) => {
+    const gv = (textFields?.teacher ?? searchTeacherCode).trim();
     if (gv) params.set("teacher_code", gv);
-    if (selectedMonth !== "all") params.set("month", selectedMonth);
-    const sq = filterSubjectQ.trim();
-    if (sq) params.set("subject_q", sq);
-    const bq = filterBlockQ.trim();
-    if (bq) params.set("block_q", bq);
+    const y = filterYear;
+    const mo = filterMonth;
+    if (y !== "all" && mo !== "all") {
+      params.set("month", `${y}-${mo}`);
+    } else if (y !== "all") {
+      params.set("nam_dk", y);
+    } else if (mo !== "all") {
+      params.set("thang_dk", String(parseInt(mo, 10)));
+    }
+    const subj = textFields?.subjectCodes ?? filterSubjectCodes;
+    if (subj.length > 0) params.set("subject_q", subj.join(","));
+    const blocks = textFields?.blockCodes ?? filterBlockCodes;
+    if (blocks.length > 0) params.set("block_q", blocks.join(","));
     if (filterRegType !== "all") params.set("registration_type", filterRegType);
     if (filterXuLy !== "all") params.set("xu_ly_diem", filterXuLy);
     if (filterHasScore !== "all") params.set("has_score", filterHasScore === "has" ? "1" : "0");
   };
 
-  const fetchRows = async (nextPage?: number) => {
-    const targetPage = nextPage ?? page;
-    try {
-      setLoading(true);
-
-      const params = new URLSearchParams();
-      appendListFilters(params);
-      params.set("limit", String(PAGE_SIZE));
-      params.set("page", String(targetPage));
-
-      const response = await fetch(`/api/exam-registrations?${params.toString()}`);
-      const data = await response.json();
-
-      if (data.success) {
-        setRows(data.data || []);
-        setTotal(typeof data.total === "number" ? data.total : (data.data?.length ?? 0));
-        setPage(targetPage);
-      } else {
-        toast.error(data.error || "Không thể tải danh sách đăng ký");
+  const fetchRows = useCallback(
+    async (nextPage?: number, opts?: { silent?: boolean }) => {
+      const silent = opts?.silent === true;
+      const targetPage = nextPage ?? pageRef.current;
+      if (!silent) {
+        listSyncKeyRef.current = null;
       }
-    } catch (error) {
-      console.error("Error fetching registrations:", error);
-      toast.error("Có lỗi xảy ra khi tải danh sách đăng ký");
-    } finally {
-      setLoading(false);
-    }
-  };
+      try {
+        if (!silent) setLoading(true);
+        else setSilentListLoading(true);
+
+        const params = new URLSearchParams();
+        appendListFilters(params, {
+          teacher: teacherDebounced,
+          subjectCodes: filterSubjectCodes,
+          blockCodes: filterBlockCodes,
+        });
+        params.set("limit", String(PAGE_SIZE));
+        params.set("page", String(targetPage));
+
+        const response = await fetch(`/api/exam-registrations?${params.toString()}`);
+        const data = await response.json();
+
+        if (data.success) {
+          setRows(data.data || []);
+          setTotal(typeof data.total === "number" ? data.total : (data.data?.length ?? 0));
+          setPage(targetPage);
+        } else {
+          toast.error(data.error || "Không thể tải danh sách đăng ký");
+        }
+      } catch (error) {
+        console.error("Error fetching registrations:", error);
+        toast.error("Có lỗi xảy ra khi tải danh sách đăng ký");
+      } finally {
+        if (!silent) setLoading(false);
+        else setSilentListLoading(false);
+      }
+    },
+    [
+      teacherDebounced,
+      filterSubjectCodes,
+      filterBlockCodes,
+      filterYear,
+      filterMonth,
+      filterRegType,
+      filterXuLy,
+      filterHasScore,
+    ],
+  );
 
   useEffect(() => {
     void fetchRows(1);
-  }, []);
+  }, [fetchRows]);
+
+  /** Poll DB nhẹ (sync_check): chỉ dừng khi unmount (đóng tab / rời route), không phụ thuộc tab ẩn hay đang import */
+  useEffect(() => {
+    const POLL_MS = 20_000;
+    const check = async () => {
+      if (typeof window === "undefined") return;
+      try {
+        const params = new URLSearchParams();
+        appendListFilters(params, {
+          teacher: teacherDebounced,
+          subjectCodes: filterSubjectCodes,
+          blockCodes: filterBlockCodes,
+        });
+        params.set("sync_check", "1");
+        const response = await fetch(`/api/exam-registrations?${params.toString()}`);
+        const data = await response.json();
+        if (!data?.success || !data.sync) return;
+        const key = `${data.sync.total}|${data.sync.maxChangedAt ?? ""}`;
+        if (listSyncKeyRef.current === null) {
+          listSyncKeyRef.current = key;
+          return;
+        }
+        if (listSyncKeyRef.current !== key) {
+          listSyncKeyRef.current = key;
+          await fetchRows(pageRef.current, { silent: true });
+          toast.success("Đã cập nhật danh sách (có thay đổi từ máy chủ).");
+        }
+      } catch {
+        /* bỏ qua lỗi mạng tạm */
+      }
+    };
+    const id = window.setInterval(() => void check(), POLL_MS);
+    /* Về lại tab: check ngay để thấy data mới (poll nền vẫn chạy khi tab ẩn) */
+    const onVis = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [
+    teacherDebounced,
+    filterSubjectCodes,
+    filterBlockCodes,
+    filterYear,
+    filterMonth,
+    filterRegType,
+    filterXuLy,
+    filterHasScore,
+    fetchRows,
+  ]);
+
+  /** Khi đổi bộ lọc nhưng vẫn đang ở trang > 1, API có thể trả 0 dòng trong khi total > 0 — tự tải lại trang 1. */
+  useEffect(() => {
+    if (loading || silentListLoading) return;
+    if (rows.length === 0 && total > 0 && page > 1) {
+      void fetchRows(1);
+    }
+  }, [loading, silentListLoading, rows.length, total, page, fetchRows]);
 
   const handleSetPending = async (row: RegistrationRow) => {
     if (!row.assignment_id) {
@@ -279,7 +591,11 @@ export default function ExamRegistrationListPage() {
     let exportRows = rows;
     try {
       const params = new URLSearchParams();
-      appendListFilters(params);
+      appendListFilters(params, {
+        teacher: teacherDebounced,
+        subjectCodes: filterSubjectCodes,
+        blockCodes: filterBlockCodes,
+      });
       const response = await fetch(`/api/exam-registrations?${params.toString()}`);
       const data = await response.json();
       if (data.success && Array.isArray(data.data)) {
@@ -356,6 +672,8 @@ export default function ExamRegistrationListPage() {
       return;
     }
 
+    clearImportRecoveryStorage();
+    notifyImportRecoveryChanged();
     setImporting(true);
     setImportProgress(0);
     setImportActivityLog([]);
@@ -599,31 +917,124 @@ export default function ExamRegistrationListPage() {
     setConfirmStopImportOpen(false);
   };
 
-  /** Tháng/năm đăng ký (YYYY-MM) — danh sách cố định, không phụ thuộc dữ liệu đã tải */
-  const monthPickerOptions = useMemo(() => {
-    const out: string[] = [];
+  const registrationMonthDate = useMemo(() => {
+    if (filterYear === "all" || filterMonth === "all") return undefined;
+    const y = parseInt(filterYear, 10);
+    const m = parseInt(filterMonth, 10) - 1;
+    if (!Number.isFinite(y) || m < 0 || m > 11) return undefined;
+    return new Date(y, m, 1);
+  }, [filterYear, filterMonth]);
+
+  const registrationPeriodBounds = useMemo(() => {
     const y = new Date().getFullYear();
-    for (let dy = -3; dy <= 2; dy++) {
-      for (let m = 1; m <= 12; m++) {
-        out.push(`${y + dy}-${String(m).padStart(2, "0")}`);
-      }
-    }
-    return out.sort((a, b) => b.localeCompare(a));
+    return { minDate: new Date(y - 3, 0, 1), maxDate: new Date(y + 2, 11, 31) };
   }, []);
+
+  useEffect(() => {
+    if (periodFieldFocusedRef.current) return;
+    const s =
+      filterYear === "all" || filterMonth === "all"
+        ? ""
+        : `${String(filterMonth).padStart(2, "0")}/${filterYear}`;
+    setPeriodInput(s);
+  }, [filterYear, filterMonth]);
+
+  const commitPeriodInput = useCallback(() => {
+    const parsed = parseMonthYearText(periodInput);
+    if (parsed === "empty") {
+      setFilterYear("all");
+      setFilterMonth("all");
+      return;
+    }
+    if (parsed === null) {
+      toast.error("Dùng dạng tháng/năm: 4/2026, 04/2026 hoặc 2026-04");
+      const s =
+        filterYear === "all" || filterMonth === "all"
+          ? ""
+          : `${String(filterMonth).padStart(2, "0")}/${filterYear}`;
+      setPeriodInput(s);
+      return;
+    }
+    const y = parseInt(parsed.year, 10);
+    const m = parseInt(parsed.month, 10);
+    if (
+      !ymWithinBounds(y, m, registrationPeriodBounds.minDate, registrationPeriodBounds.maxDate)
+    ) {
+      toast.error(
+        `Chọn tháng trong ${format(registrationPeriodBounds.minDate, "MM/yyyy", { locale: vi })} – ${format(registrationPeriodBounds.maxDate, "MM/yyyy", { locale: vi })}`,
+      );
+      const s =
+        filterYear === "all" || filterMonth === "all"
+          ? ""
+          : `${String(filterMonth).padStart(2, "0")}/${filterYear}`;
+      setPeriodInput(s);
+      return;
+    }
+    setFilterYear(parsed.year);
+    setFilterMonth(parsed.month);
+    setPeriodInput(`${parsed.month}/${parsed.year}`);
+  }, [periodInput, filterYear, filterMonth, registrationPeriodBounds]);
+
+  const blockSelectOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const b of QUICK_BLOCKS) set.add(b);
+    for (const s of examSubjects) {
+      const bc = s.block_code.trim();
+      if (bc) set.add(bc);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, "vi"));
+  }, [examSubjects]);
+
+  const subjectSelectOptions = useMemo(() => {
+    return [...examSubjects]
+      .sort((a, b) =>
+        (a.subject_name || a.subject_code).localeCompare(b.subject_name || b.subject_code, "vi"),
+      )
+      .map((s) => {
+        const code = s.subject_code.trim();
+        const name = (s.subject_name || "").trim();
+        let label: string;
+        if (!name) label = code;
+        else if (name === code || normalizeVn(name) === normalizeVn(code)) label = name;
+        else label = `${code} · ${name}`;
+        return {
+          key: `${s.id}-${s.subject_code}`,
+          code,
+          label,
+        };
+      });
+  }, [examSubjects]);
+
+  const filteredBlockOptions = useMemo(() => {
+    const q = normalizeVn(blockListQuery);
+    if (!q) return blockSelectOptions;
+    return blockSelectOptions.filter((b) => normalizeVn(b).includes(q));
+  }, [blockSelectOptions, blockListQuery]);
+
+  const filteredSubjectOptions = useMemo(() => {
+    const q = normalizeVn(subjectListQuery);
+    if (!q) return subjectSelectOptions;
+    return subjectSelectOptions.filter((s) =>
+      normalizeVn(`${s.code} ${s.label}`).includes(q),
+    );
+  }, [subjectSelectOptions, subjectListQuery]);
 
   const activeAdvancedFilterCount = useMemo(() => {
     let n = 0;
-    if (selectedMonth !== "all") n++;
-    if (filterSubjectQ.trim()) n++;
-    if (filterBlockQ.trim()) n++;
+    if (searchTeacherCode.trim()) n++;
+    if (filterYear !== "all" || filterMonth !== "all") n++;
+    if (filterSubjectCodes.length > 0) n++;
+    if (filterBlockCodes.length > 0) n++;
     if (filterRegType !== "all") n++;
     if (filterXuLy !== "all") n++;
     if (filterHasScore !== "all") n++;
     return n;
   }, [
-    selectedMonth,
-    filterSubjectQ,
-    filterBlockQ,
+    searchTeacherCode,
+    filterYear,
+    filterMonth,
+    filterSubjectCodes,
+    filterBlockCodes,
     filterRegType,
     filterXuLy,
     filterHasScore,
@@ -632,9 +1043,12 @@ export default function ExamRegistrationListPage() {
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
 
   const clearAdvancedFilters = () => {
-    setSelectedMonth("all");
-    setFilterSubjectQ("");
-    setFilterBlockQ("");
+    setFilterYear("all");
+    setFilterMonth("all");
+    setFilterSubjectCodes([]);
+    setFilterBlockCodes([]);
+    setBlockListQuery("");
+    setSubjectListQuery("");
     setFilterRegType("all");
     setFilterXuLy("all");
     setFilterHasScore("all");
@@ -728,7 +1142,7 @@ export default function ExamRegistrationListPage() {
     <>
       {importing ? (
         <div
-          className="group fixed left-2 top-2 z-[9980] w-[min(calc(100vw-1rem),14rem)]"
+          className="group fixed right-2 top-2 z-[9980] w-[min(calc(100vw-1rem),14rem)]"
           role="progressbar"
           aria-valuenow={importProgress}
           aria-valuemin={0}
@@ -743,7 +1157,7 @@ export default function ExamRegistrationListPage() {
                 <button
                   type="button"
                   onClick={() => setConfirmStopImportOpen(true)}
-                  className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-gray-700 hover:bg-red-50 hover:text-[#a1001f] hover:border-[#a1001f]"
+                  className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-gray-700 hover:border-[#a1001f] hover:bg-red-50 hover:text-[#a1001f]"
                 >
                   Dừng
                 </button>
@@ -755,14 +1169,12 @@ export default function ExamRegistrationListPage() {
                 style={{ width: `${importProgress}%` }}
               />
             </div>
-            <p className="mt-1.5 text-[10px] leading-tight text-gray-500">
-              Di chuột vào đây để xem log từng bước
-            </p>
+            <p className="mt-1.5 text-[10px] leading-tight text-gray-500">Di chuột vào đây để xem log từng bước</p>
           </div>
           <div
             role="log"
             aria-live="polite"
-            className="pointer-events-none invisible absolute left-0 top-full z-[9981] mt-0 max-h-52 w-[min(calc(100vw-1rem),22rem)] overflow-hidden rounded-lg border border-gray-200 bg-white p-2 opacity-0 shadow-xl transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100"
+            className="pointer-events-none invisible absolute right-0 top-full z-[9981] mt-0 max-h-52 w-[min(calc(100vw-1rem),22rem)] overflow-hidden rounded-lg border border-gray-200 bg-white p-2 opacity-0 shadow-xl transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100"
           >
             <p className="mb-1 border-b border-gray-100 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
               Nhật ký import
@@ -789,42 +1201,37 @@ export default function ExamRegistrationListPage() {
         title="Danh sách đăng ký đánh giá chuyên môn"
         description="Tổng hợp toàn bộ thông tin đăng ký kiểm tra chuyên môn của giáo viên"
       >
-      <Card padding="lg">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-2">
-          <div className="flex items-center gap-2">
-            <ClipboardList className="h-5 w-5 text-[#a1001f]" />
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <ClipboardList className="h-5 w-5 shrink-0 text-[#a1001f]" />
             <h2 className="text-base font-bold text-gray-900">Danh sách đăng ký</h2>
-            <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-700">
               {total > 0 ? total : rows.length} bản ghi
             </span>
+            {activeAdvancedFilterCount > 0 ? (
+              <span className="rounded-full border border-[#a1001f]/30 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-[#a1001f]">
+                {activeAdvancedFilterCount} bộ lọc đang bật
+              </span>
+            ) : null}
           </div>
 
-          <div className="flex flex-col sm:flex-row flex-wrap gap-2">
-            <div className="relative">
-              <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                value={searchTeacherCode}
-                onChange={(e) => setSearchTeacherCode(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void fetchRows(1);
-                }}
-                placeholder="Mã GV (Enter để tải)"
-                className="pl-9 pr-3 py-2 rounded-lg border border-gray-300 text-sm w-full sm:w-52"
-              />
-            </div>
-
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <button
               type="button"
               onClick={() => void fetchRows(1)}
-              className="px-3 py-2 rounded-lg bg-[#a1001f] text-white text-sm font-medium hover:bg-[#8a0019]"
+              disabled={listFetchBusy}
+              aria-busy={listFetchBusy}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#a1001f] px-3 py-2 text-sm font-medium text-white hover:bg-[#8a0019] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Tải dữ liệu
+              <RefreshCw className={`h-4 w-4 ${listFetchBusy ? "animate-spin" : ""}`} aria-hidden />
+              {silentListLoading && !loading ? "Đang cập nhật…" : "Làm mới"}
             </button>
             <button
               type="button"
               onClick={() => void exportCsv()}
               disabled={rows.length === 0 && total === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Download className="h-4 w-4" />
               Xuất dữ liệu
@@ -840,7 +1247,7 @@ export default function ExamRegistrationListPage() {
             <button
               type="button"
               onClick={downloadTemplate}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               <FileDown className="h-4 w-4" />
               File mẫu
@@ -849,190 +1256,369 @@ export default function ExamRegistrationListPage() {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={importing}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-[#a1001f] bg-red-50/50 text-sm font-medium text-[#a1001f] hover:bg-red-50 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#a1001f] bg-red-50/50 px-3 py-2 text-sm font-medium text-[#a1001f] hover:bg-red-50 disabled:opacity-50"
             >
               <Upload className="h-4 w-4" />
               {importing ? "Đang import…" : "Import CSV / Excel"}
             </button>
+            <div className="group relative shrink-0 self-end sm:self-center">
+              <button
+                type="button"
+                className="inline-flex cursor-help items-center justify-center rounded-md border border-gray-200 bg-gray-50/80 p-1.5 text-gray-600 hover:border-[#a1001f]/30 hover:bg-red-50/60"
+                aria-label="Hướng dẫn import"
+                title="Di chuột để xem hướng dẫn import"
+              >
+                <Info className="h-3.5 w-3.5 shrink-0 text-[#a1001f]" aria-hidden />
+              </button>
+              <div
+                role="tooltip"
+                className="pointer-events-none invisible absolute right-0 top-full z-50 mt-1 w-[min(100vw-2rem,28rem)] rounded-lg border border-gray-200 bg-white p-3 text-left text-xs leading-relaxed text-gray-700 shadow-lg opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100"
+              >
+                <p className="m-0">
+                  <strong>Import CSV hoặc Excel (.xlsx):</strong> cột giống <strong>Xuất dữ liệu</strong> (Mã GV, Loại đăng ký, Khối, Mã môn, Môn, <strong>Lịch thi</strong>:{" "}
+                  <code className="bg-gray-100 px-1 rounded">HH:mm dd/MM/yyyy</code> hoặc chỉ ngày{" "}
+                  <code className="bg-gray-100 px-1 rounded">d/M/yyyy</code> — nếu không có giờ thì hệ thống dùng mặc định 19:00 theo ngày trong ô). Tải{" "}
+                  <button
+                    type="button"
+                    onClick={downloadTemplate}
+                    className="text-[#a1001f] font-semibold underline underline-offset-2"
+                  >
+                    file mẫu Excel
+                  </button>{" "}
+                  (3 sheet: <strong>Đăng ký</strong> — dữ liệu import; <strong>Tham chiếu môn</strong>; <strong>Khối &amp; môn</strong> — Khối / Mã môn / Môn để đối chiếu; chỉ sheet Đăng ký được đưa vào hệ thống) hoặc xuất danh sách rồi sửa. Với CSV, dòng bắt đầu bằng{" "}
+                  <code className="bg-gray-100 px-1">#</code> bị bỏ qua.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
 
+        <div className="mb-3 p-0">
+          <div className="mb-3 flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-semibold text-gray-900">Bộ lọc danh sách</h3>
+              {filtersOpen ? (
+                <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500">
+                  Khối và môn: gõ ô tìm để thu hẹp danh sách, tick để chọn nhiều. Tháng/năm: chọn một ngày trong tháng cần lọc.
+                </p>
+              ) : (
+                <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500">
+                  Đang ẩn — nhấn &quot;Hiện bộ lọc&quot; để lọc theo GV, tháng/năm, khối, môn…
+                  {activeAdvancedFilterCount > 0 ? (
+                    <span className="font-medium text-[#a1001f]">
+                      {" "}
+                      ({activeAdvancedFilterCount} điều kiện vẫn đang áp dụng)
+                    </span>
+                  ) : null}
+                </p>
+              )}
+            </div>
             <button
               type="button"
-              onClick={() => setAdvancedOpen((o) => !o)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50"
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-expanded={filtersOpen}
+              className="inline-flex shrink-0 items-center justify-center gap-1 self-start rounded-md border border-gray-100 bg-gray-50/60 px-2 py-1 text-xs font-semibold text-gray-800 hover:border-[#a1001f]/25 hover:bg-red-50/50 hover:text-[#a1001f]"
             >
-              <SlidersHorizontal className="h-4 w-4 text-[#a1001f]" />
-              Lọc nâng cao
-              {activeAdvancedFilterCount > 0 ? (
-                <span className="min-w-[1.25rem] rounded-full bg-[#a1001f] px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">
-                  {activeAdvancedFilterCount}
-                </span>
-              ) : null}
-              {advancedOpen ? (
-                <ChevronUp className="h-4 w-4 text-gray-500" aria-hidden />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-gray-500" aria-hidden />
-              )}
+              {filtersOpen ? "Ẩn bộ lọc" : "Hiện bộ lọc"}
+              <ChevronDown
+                className={`h-4 w-4 transition-transform duration-200 ${filtersOpen ? "rotate-180" : ""}`}
+                aria-hidden
+              />
             </button>
           </div>
-        </div>
 
-        {advancedOpen ? (
-          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50/90 p-4">
-            <p className="mb-3 text-xs text-gray-600">
-              Lọc theo tháng/năm đăng ký (<code className="rounded bg-white px-1">thang_dk</code> /{" "}
-              <code className="rounded bg-white px-1">nam_dk</code>), khối, môn (chuỗi con trong mã hoặc tên môn), loại đăng ký, trạng thái xử lý điểm, và có ghi nhận điểm hay chưa.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <label className="flex flex-col gap-1 text-xs font-medium text-gray-700">
-                Tháng đăng ký
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="rounded-lg border border-gray-300 px-2 py-2 text-sm font-normal text-gray-900"
-                >
-                  <option value="all">Tất cả tháng</option>
-                  {monthPickerOptions.map((month) => (
-                    <option key={month} value={month}>
-                      {month}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-gray-700">
-                Khối (dòng đăng ký hoặc mã khối môn)
-                <input
-                  value={filterBlockQ}
-                  onChange={(e) => setFilterBlockQ(e.target.value)}
-                  placeholder="vd. ART"
-                  className="rounded-lg border border-gray-300 px-2 py-2 text-sm font-normal text-gray-900"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-gray-700">
-                Mã môn / tên môn (tìm gần đúng)
-                <input
-                  value={filterSubjectQ}
-                  onChange={(e) => setFilterSubjectQ(e.target.value)}
-                  placeholder="vd. ART hoặc Chuyên sâu"
-                  className="rounded-lg border border-gray-300 px-2 py-2 text-sm font-normal text-gray-900"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-gray-700">
-                Loại đăng ký
-                <select
-                  value={filterRegType}
-                  onChange={(e) => setFilterRegType(e.target.value as "all" | "official" | "additional")}
-                  className="rounded-lg border border-gray-300 px-2 py-2 text-sm font-normal text-gray-900"
-                >
-                  <option value="all">Tất cả</option>
-                  <option value="official">Chính thức</option>
-                  <option value="additional">Bổ sung</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-gray-700">
-                Xử lý điểm
-                <select
-                  value={filterXuLy}
-                  onChange={(e) =>
-                    setFilterXuLy(
-                      e.target.value as "all" | "chờ giải trình" | "đã duyệt" | "từ chối" | "đã hoàn thành",
-                    )
-                  }
-                  className="rounded-lg border border-gray-300 px-2 py-2 text-sm font-normal text-gray-900"
-                >
-                  <option value="all">Tất cả</option>
-                  <option value="chờ giải trình">chờ giải trình</option>
-                  <option value="đã duyệt">đã duyệt</option>
-                  <option value="từ chối">từ chối</option>
-                  <option value="đã hoàn thành">đã hoàn thành</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-gray-700">
-                Cột điểm trong DB
-                <select
-                  value={filterHasScore}
-                  onChange={(e) => setFilterHasScore(e.target.value as "all" | "has" | "none")}
-                  className="rounded-lg border border-gray-300 px-2 py-2 text-sm font-normal text-gray-900"
-                >
-                  <option value="all">Không lọc</option>
-                  <option value="has">Đã có điểm (NOT NULL)</option>
-                  <option value="none">Chưa có điểm (NULL)</option>
-                </select>
-              </label>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void fetchRows(1)}
-                className="rounded-lg bg-[#a1001f] px-4 py-2 text-sm font-medium text-white hover:bg-[#8a0019]"
-              >
-                Áp dụng bộ lọc
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  clearAllFilters();
-                  void fetchRows(1);
-                }}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Xóa lọc &amp; tải lại
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="group relative mb-4 inline-flex">
-          <span
-            className="inline-flex cursor-help items-center gap-1 rounded-md border border-gray-200 bg-gray-50/80 px-2 py-1 text-xs text-gray-600"
-            title="Di chuột để xem hướng dẫn import"
-          >
-            <Info className="h-3.5 w-3.5 shrink-0 text-[#a1001f]" aria-hidden />
-            <span className="font-medium">Hướng dẫn import</span>
-          </span>
-          <div
-            role="tooltip"
-            className="pointer-events-none invisible absolute left-0 top-full z-50 mt-0 w-[min(100vw-2rem,28rem)] rounded-lg border border-gray-200 bg-white p-3 text-left text-xs leading-relaxed text-gray-700 shadow-lg opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100"
-          >
-            <p className="m-0">
-              <strong>Import CSV hoặc Excel (.xlsx):</strong> cột giống <strong>Xuất dữ liệu</strong> (Mã GV, Loại đăng ký, Khối, Mã môn, Môn, <strong>Lịch thi</strong>:{" "}
-              <code className="bg-gray-100 px-1 rounded">HH:mm dd/MM/yyyy</code> hoặc chỉ ngày{" "}
-              <code className="bg-gray-100 px-1 rounded">d/M/yyyy</code> — nếu không có giờ thì hệ thống dùng mặc định 19:00 theo ngày trong ô). Tải{" "}
-              <button
-                type="button"
-                onClick={downloadTemplate}
-                className="text-[#a1001f] font-semibold underline underline-offset-2"
-              >
-                file mẫu Excel
-              </button>{" "}
-              (3 sheet: <strong>Đăng ký</strong> — dữ liệu import; <strong>Tham chiếu môn</strong>; <strong>Khối &amp; môn</strong> — Khối / Mã môn / Môn để đối chiếu; chỉ sheet Đăng ký được đưa vào hệ thống) hoặc xuất danh sách rồi sửa. Với CSV, dòng bắt đầu bằng{" "}
-              <code className="bg-gray-100 px-1">#</code> bị bỏ qua.
-            </p>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="py-8 text-center text-gray-500 text-sm">Đang tải dữ liệu đăng ký...</div>
-        ) : rows.length === 0 ? (
-          <div className="py-10 text-center text-gray-500 text-sm">Chưa có dữ liệu đăng ký.</div>
-        ) : (
+          {filtersOpen ? (
           <>
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <Table>
-              <TableHeader>
+          <div className="grid gap-4 lg:grid-cols-12 lg:items-start">
+            <label className="flex flex-col gap-1.5 text-xs font-medium text-gray-700 lg:col-span-4">
+              Mã GV (tìm gần đúng)
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={searchTeacherCode}
+                  onChange={(e) => setSearchTeacherCode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void fetchRows(1);
+                  }}
+                  placeholder="Một phần mã GV…"
+                  className="w-full rounded-lg border border-gray-200 py-2 pl-8 pr-2 text-sm font-normal text-gray-900 shadow-sm focus:border-[#a1001f]/40 focus:outline-none focus:ring-2 focus:ring-[#a1001f]/15"
+                />
+              </div>
+            </label>
+            <div className="flex flex-col gap-1.5 lg:col-span-8">
+              <span className="text-xs font-medium text-gray-700">Tháng / năm đăng ký</span>
+              <div className="flex max-w-md flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="VD 04/2026 — để trống = tất cả"
+                  value={periodInput}
+                  onChange={(e) => setPeriodInput(e.target.value)}
+                  onFocus={() => {
+                    periodFieldFocusedRef.current = true;
+                  }}
+                  onBlur={() => {
+                    periodFieldFocusedRef.current = false;
+                    commitPeriodInput();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm font-normal text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-[#a1001f]/40 focus:outline-none focus:ring-2 focus:ring-[#a1001f]/15"
+                  aria-label="Tháng và năm đăng ký (gõ hoặc chọn lịch)"
+                />
+                <AnimatedCalendar
+                  mode="single"
+                  monthYearOnly
+                  calendarTriggerVariant="iconOnly"
+                  value={registrationMonthDate}
+                  onChange={(d) => {
+                    if (!d) {
+                      setFilterYear("all");
+                      setFilterMonth("all");
+                      return;
+                    }
+                    setFilterYear(String(getYear(d)));
+                    setFilterMonth(String(getMonth(d) + 1).padStart(2, "0"));
+                  }}
+                  placeholder="Chọn tháng/năm"
+                  aria-label="Mở lịch chọn tháng và năm"
+                  locale={vi}
+                  localeStrings={REG_FILTER_CALENDAR_VI}
+                  formatStr="LLLL yyyy"
+                  size="sm"
+                  weekStartsOn={1}
+                  minDate={registrationPeriodBounds.minDate}
+                  maxDate={registrationPeriodBounds.maxDate}
+                  showTodayButton
+                  showClearButton
+                  className="h-9 shrink-0 rounded-lg border border-gray-200 bg-white font-normal text-gray-900 shadow-sm hover:bg-gray-50/80"
+                />
+              </div>
+              <p className="text-[11px] leading-snug text-gray-500">
+                Gõ <span className="font-mono">tháng/năm</span> (4/2026, 2026-04) hoặc nút lịch để chọn.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-gray-800">Khối</span>
+                <span className="rounded-md bg-white px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-600 ring-1 ring-gray-200/80">
+                  {filterBlockCodes.length} đã chọn
+                </span>
+              </div>
+              <p className="mb-2 text-[11px] text-gray-500">Gõ để lọc danh sách, tick để chọn.</p>
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Nhanh</span>
+                {QUICK_BLOCKS.map((b) => {
+                  const on = filterBlockCodes.some((c) => c.toUpperCase() === b);
+                  return (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => toggleBlockCode(b)}
+                      className={
+                        on
+                          ? "rounded-full border border-[#a1001f] bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-[#a1001f]"
+                          : "rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600 hover:border-[#a1001f]/30"
+                      }
+                    >
+                      {b}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="relative mb-2">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={blockListQuery}
+                  onChange={(e) => setBlockListQuery(e.target.value)}
+                  placeholder="Tìm khối…"
+                  className="w-full rounded-md border border-gray-200 bg-white py-1.5 pl-8 pr-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#a1001f]/40 focus:outline-none focus:ring-2 focus:ring-[#a1001f]/15"
+                  aria-label="Tìm trong danh sách khối"
+                />
+              </div>
+              <div className="max-h-44 min-h-[7rem] overflow-y-auto rounded-md border border-gray-200/80 bg-white p-1.5 custom-scrollbar">
+                {filteredBlockOptions.length === 0 ? (
+                  <p className="px-2 py-3 text-center text-xs text-gray-400">Không có khối khớp.</p>
+                ) : (
+                  filteredBlockOptions.map((b) => (
+                    <label
+                      key={b}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-900 hover:bg-[#a1001f]/8"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={filterBlockCodes.some((c) => c.toUpperCase() === b.toUpperCase())}
+                        onChange={() => toggleBlockCode(b)}
+                        className="size-4 shrink-0 rounded border-gray-300 text-[#a1001f] focus:ring-[#a1001f]"
+                      />
+                      <span className="min-w-0 font-medium">{b}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              <p className="mt-1.5 text-[10px] text-gray-400">
+                Hiển thị {filteredBlockOptions.length}/{blockSelectOptions.length} khối
+              </p>
+            </div>
+
+            <div className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-gray-800">Mã môn / tên môn</span>
+                <span className="rounded-md bg-white px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-600 ring-1 ring-gray-200/80">
+                  {filterSubjectCodes.length} đã chọn
+                </span>
+              </div>
+              <p className="mb-2 text-[11px] text-gray-500">Gõ để lọc theo mã hoặc tên, tick để chọn.</p>
+              <div className="relative mb-2">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={subjectListQuery}
+                  onChange={(e) => setSubjectListQuery(e.target.value)}
+                  placeholder="Tìm môn (mã hoặc tên)…"
+                  className="w-full rounded-md border border-gray-200 bg-white py-1.5 pl-8 pr-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#a1001f]/40 focus:outline-none focus:ring-2 focus:ring-[#a1001f]/15"
+                  aria-label="Tìm trong danh sách môn"
+                />
+              </div>
+              <div className="max-h-44 min-h-[7rem] overflow-y-auto rounded-md border border-gray-200/80 bg-white p-1.5 custom-scrollbar">
+                {filteredSubjectOptions.length === 0 ? (
+                  <p className="px-2 py-3 text-center text-xs text-gray-400">Không có môn khớp.</p>
+                ) : (
+                  filteredSubjectOptions.map((s) => (
+                    <label
+                      key={s.key}
+                      className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm text-gray-900 hover:bg-[#a1001f]/8"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={filterSubjectCodes.some((c) => c.toUpperCase() === s.code.toUpperCase())}
+                        onChange={() => toggleSubjectCode(s.code)}
+                        className="mt-0.5 size-4 shrink-0 rounded border-gray-300 text-[#a1001f] focus:ring-[#a1001f]"
+                      />
+                      <span className="min-w-0 flex-1 break-words leading-snug">{s.label}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              <p className="mt-1.5 text-[10px] text-gray-400">
+                Hiển thị {filteredSubjectOptions.length}/{subjectSelectOptions.length} môn
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <label className="flex flex-col gap-1.5 text-xs font-medium text-gray-700">
+              Loại đăng ký
+              <select
+                value={filterRegType}
+                onChange={(e) => setFilterRegType(e.target.value as "all" | "official" | "additional")}
+                className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm font-normal text-gray-900 shadow-sm focus:border-[#a1001f]/40 focus:outline-none focus:ring-2 focus:ring-[#a1001f]/15"
+              >
+                <option value="all">Tất cả</option>
+                <option value="official">Chính thức</option>
+                <option value="additional">Bổ sung</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-medium text-gray-700">
+              Xử lý điểm
+              <select
+                value={filterXuLy}
+                onChange={(e) =>
+                  setFilterXuLy(
+                    e.target.value as "all" | "chờ giải trình" | "đã duyệt" | "từ chối" | "đã hoàn thành",
+                  )
+                }
+                className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm font-normal text-gray-900 shadow-sm focus:border-[#a1001f]/40 focus:outline-none focus:ring-2 focus:ring-[#a1001f]/15"
+              >
+                <option value="all">Tất cả</option>
+                <option value="chờ giải trình">chờ giải trình</option>
+                <option value="đã duyệt">đã duyệt</option>
+                <option value="từ chối">từ chối</option>
+                <option value="đã hoàn thành">đã hoàn thành</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-medium text-gray-700 sm:col-span-2 xl:col-span-1">
+              Cột điểm trong DB
+              <select
+                value={filterHasScore}
+                onChange={(e) => setFilterHasScore(e.target.value as "all" | "has" | "none")}
+                className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm font-normal text-gray-900 shadow-sm focus:border-[#a1001f]/40 focus:outline-none focus:ring-2 focus:ring-[#a1001f]/15"
+              >
+                <option value="all">Không lọc</option>
+                <option value="has">Đã có điểm (NOT NULL)</option>
+                <option value="none">Chưa có điểm (NULL)</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
+            <button
+              type="button"
+              onClick={() => void fetchRows(1)}
+              className="rounded-lg bg-[#a1001f] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#8a0019]"
+            >
+              Áp dụng ngay
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                clearAllFilters();
+                void fetchRows(1);
+              }}
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            >
+              Xóa lọc &amp; tải lại
+            </button>
+          </div>
+          </>
+          ) : null}
+        </div>
+
+        <>
+          <div
+            className={`overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ${listFetchBusy && rows.length > 0 ? "opacity-80" : ""}`}
+          >
+            <div className="max-h-[min(70vh,calc(100vh-14rem))] overflow-auto overscroll-y-contain">
+            <Table className="min-w-[1100px]">
+              <TableHeader className="sticky top-0 z-20 bg-gray-50 shadow-[0_1px_0_0_rgb(229_231_235)] [&_tr]:border-b-0">
                 <TableRow>
-                  <TableHead className="text-center w-10">#</TableHead>
+                  <TableHead className="w-10 text-center">#</TableHead>
                   <TableHead className="text-center">Mã GV</TableHead>
                   <TableHead className="text-center">Loại đăng ký</TableHead>
                   <TableHead className="text-center">Khối / Môn</TableHead>
                   <TableHead className="text-center">Lịch thi</TableHead>
-                  <TableHead className="text-center">Trạng thái assignment</TableHead>
+                  <TableHead className="text-center">Assignment</TableHead>
                   <TableHead className="text-center">Điểm</TableHead>
+                  <TableHead className="text-center">Xử lý điểm</TableHead>
                   <TableHead className="text-center">Ngày đăng ký</TableHead>
                   <TableHead className="text-center">Thao tác HO</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((row, index) => (
+                {loading && rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="py-10 text-center text-sm text-gray-500">
+                      Đang tải dữ liệu đăng ký...
+                    </TableCell>
+                  </TableRow>
+                ) : !loading && rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="py-10 text-center text-sm text-gray-500">
+                      {activeAdvancedFilterCount > 0
+                        ? "Không có bản ghi khớp bộ lọc."
+                        : "Chưa có dữ liệu đăng ký."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                rows.map((row, index) => (
                   <TableRow key={row.id}>
                     <TableCell className="text-center text-gray-600">
                       {(page - 1) * PAGE_SIZE + index + 1}
@@ -1070,10 +1656,10 @@ export default function ExamRegistrationListPage() {
                     <TableCell className="text-center">{getAssignmentBadge(row)}</TableCell>
                     <TableCell className="text-center text-xs text-gray-700">
                       {row.xu_ly_diem === 'đã duyệt' ? (
-                        <div className="text-purple-700 font-semibold">Miễn (giải trình)</div>
+                        <div className="font-semibold text-purple-700">Miễn (giải trình)</div>
                       ) : row.xu_ly_diem === 'từ chối' ? (
                         <>
-                          <div className="text-red-700 font-semibold">Từ chối GT</div>
+                          <div className="font-semibold text-red-700">Từ chối GT</div>
                           {row.tong_diem_bi_tru != null && (
                             <div className="text-gray-500">Trừ: {row.tong_diem_bi_tru}</div>
                           )}
@@ -1083,7 +1669,9 @@ export default function ExamRegistrationListPage() {
                       ) : (
                         <div className="font-semibold text-gray-900">{row.score}</div>
                       )}
-                      <div className="text-gray-400 text-[11px]">{row.xu_ly_diem || '-'}</div>
+                    </TableCell>
+                    <TableCell className="max-w-[10rem] whitespace-normal text-center text-xs text-gray-700">
+                      <span className="line-clamp-2 break-words">{row.xu_ly_diem || "—"}</span>
                     </TableCell>
                     <TableCell className="text-center text-xs text-gray-600">
                       {new Date(row.dang_ky_luc || row.created_at).toLocaleDateString("vi-VN", {
@@ -1118,9 +1706,11 @@ export default function ExamRegistrationListPage() {
                       })()}
                     </TableCell>
                   </TableRow>
-                ))}
+                ))
+                )}
               </TableBody>
             </Table>
+            </div>
           </div>
           {total > 0 ? (
             <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1136,7 +1726,7 @@ export default function ExamRegistrationListPage() {
                 <button
                   type="button"
                   onClick={() => void fetchRows(1)}
-                  disabled={page <= 1 || loading}
+                  disabled={page <= 1 || listFetchBusy}
                   className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Đầu
@@ -1144,7 +1734,7 @@ export default function ExamRegistrationListPage() {
                 <button
                   type="button"
                   onClick={() => void fetchRows(page - 1)}
-                  disabled={page <= 1 || loading}
+                  disabled={page <= 1 || listFetchBusy}
                   className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <ChevronLeft className="h-4 w-4" aria-hidden />
@@ -1156,7 +1746,7 @@ export default function ExamRegistrationListPage() {
                 <button
                   type="button"
                   onClick={() => void fetchRows(page + 1)}
-                  disabled={page >= totalPages || loading}
+                  disabled={page >= totalPages || listFetchBusy}
                   className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Sau
@@ -1165,7 +1755,7 @@ export default function ExamRegistrationListPage() {
                 <button
                   type="button"
                   onClick={() => void fetchRows(totalPages)}
-                  disabled={page >= totalPages || loading}
+                  disabled={page >= totalPages || listFetchBusy}
                   className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Cuối
@@ -1173,9 +1763,8 @@ export default function ExamRegistrationListPage() {
               </div>
             </div>
           ) : null}
-          </>
-        )}
-      </Card>
+        </>
+      </div>
 
       <Dialog open={importLogOpen} onOpenChange={setImportLogOpen}>
         <DialogContent className="flex max-h-[85vh] w-[calc(100vw-2rem)] max-w-4xl flex-col gap-3 overflow-hidden p-4 sm:p-6">
