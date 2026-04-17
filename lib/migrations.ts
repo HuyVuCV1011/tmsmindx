@@ -1250,6 +1250,32 @@ const migrations: Migration[] = [
         ADD COLUMN IF NOT EXISTS birth_month INTEGER;
     `,
   },
+
+  // ═══════════════════════════════════════════════════════
+  // V51: System Events tracking for Metrics Dashboard
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V51_system_events_tracking',
+    version: 51,
+    sql: `
+      CREATE TABLE IF NOT EXISTS system_events (
+        id BIGSERIAL PRIMARY KEY,
+        event_name VARCHAR(100) NOT NULL,
+        user_id VARCHAR(255),
+        session_id VARCHAR(100),
+        properties JSONB DEFAULT '{}'::jsonb,
+        user_agent TEXT,
+        ip_address VARCHAR(45),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_system_events_name ON system_events(event_name);
+      CREATE INDEX IF NOT EXISTS idx_system_events_user ON system_events(user_id);
+      CREATE INDEX IF NOT EXISTS idx_system_events_session ON system_events(session_id);
+      CREATE INDEX IF NOT EXISTS idx_system_events_created ON system_events(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_system_events_name_created ON system_events(event_name, created_at DESC);
+    `,
+  },
 ];
 
 // ========== HÀM CHẠY MIGRATIONS ==========
