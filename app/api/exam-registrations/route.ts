@@ -10,7 +10,32 @@
  */
 
 import pool from '@/lib/db';
+import { insertExamRegistration } from '@/lib/exam-registration-insert';
 import { NextRequest, NextResponse } from 'next/server';
+
+/** Một số bản triển khai cũ chưa có cột `updated_at` — cache theo process, không cần migration */
+let cachedChuyenSauResultsHasUpdatedAt: boolean | null = null;
+
+async function chuyenSauResultsHasUpdatedAtColumn(): Promise<boolean> {
+  if (cachedChuyenSauResultsHasUpdatedAt !== null) {
+    return cachedChuyenSauResultsHasUpdatedAt;
+  }
+  try {
+    const res = await pool.query<{ ok: boolean }>(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_catalog = current_database()
+          AND table_schema = ANY (current_schemas(true))
+          AND table_name = 'chuyen_sau_results'
+          AND column_name = 'updated_at'
+      ) AS ok
+    `);
+    cachedChuyenSauResultsHasUpdatedAt = Boolean(res.rows[0]?.ok);
+  } catch {
+    cachedChuyenSauResultsHasUpdatedAt = false;
+  }
+  return cachedChuyenSauResultsHasUpdatedAt;
+}
 
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
@@ -25,6 +50,50 @@ export async function GET(request: NextRequest) {
     const resultId = searchParams.get('result_id');
     const thangDk = searchParams.get('thang_dk');
     const namDk = searchParams.get('nam_dk');
+    /** YYYY-MM — lọc theo tháng/năm đăng ký (thang_dk / nam_dk) */
+    const monthYm = searchParams.get('month');
+    /** Một hoặc nhiều giá trị: lặp `subject_q` hoặc chuỗi phân tách bởi dấu phẩy — OR với nhau */
+    const parseMultiQ = (key: string): string[] => {
+      const raw = searchParams.getAll(key).flatMap((s) => s.split(','));
+      const out: string[] = [];
+      const seen = new Set<string>();
+      for (const r of raw) {
+        const t = r.trim();
+        if (!t) continue;
+        const k = t.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(t);
+      }
+      return out;
+    };
+    const subjectQs = parseMultiQ('subject_q');
+    const blockQs = parseMultiQ('block_q');
+    const xuLyFilter = searchParams.get('xu_ly_diem')?.trim();
+    const registrationType = searchParams.get('registration_type')?.trim();
+    const hasScore = searchParams.get('has_score')?.trim();
+    /** Chỉ đếm + thời điểm thay đổi gần nhất — dùng poll nhẹ từ admin */
+    const syncCheck = searchParams.get('sync_check') === '1';
+
+    /** Phân trang (tùy chọn): chỉ áp dụng khi có `limit` — không gửi `limit` thì trả toàn bộ (tương thích user / xuất CSV). */
+    const limitRaw = searchParams.get('limit');
+    const pageRaw = searchParams.get('page');
+    const offsetRaw = searchParams.get('offset');
+    let paginateLimit: number | null = null;
+    let paginateOffset = 0;
+    if (limitRaw != null && limitRaw !== '') {
+      const l = parseInt(limitRaw, 10);
+      if (Number.isFinite(l) && l > 0) {
+        paginateLimit = Math.min(l, 500);
+        if (offsetRaw != null && offsetRaw !== '') {
+          const o = parseInt(offsetRaw, 10);
+          if (Number.isFinite(o) && o >= 0) paginateOffset = o;
+        } else {
+          const pg = Math.max(1, parseInt(pageRaw || '1', 10) || 1);
+          paginateOffset = (pg - 1) * paginateLimit;
+        }
+      }
+    }
 
     const conditions: string[] = [];
     const values: unknown[] = [];
@@ -38,31 +107,143 @@ export async function GET(request: NextRequest) {
       values.push(scheduleId);
     }
     if (teacherCode) {
-      conditions.push(`LOWER(TRIM(COALESCE(r.ma_giao_vien, ''))) = LOWER(TRIM($${values.length + 1}))`);
-      values.push(teacherCode);
+      /** Tìm gần đúng (chuỗi con) — khớp UX ô «Mã GV» trên admin */
+      conditions.push(
+        `POSITION(LOWER($${values.length + 1}) IN LOWER(COALESCE(r.ma_giao_vien, ''))) > 0`,
+      );
+      values.push(teacherCode.trim());
     }
     if (email) {
       conditions.push(`LOWER(TRIM(COALESCE(r.dia_chi_email, ''))) = LOWER(TRIM($${values.length + 1}))`);
       values.push(email);
     }
-    if (subjectCode) {
+    if (subjectQs.length > 0) {
+      const parts: string[] = [];
+      for (const sq of subjectQs) {
+        const i = values.length + 1;
+        values.push(sq);
+        parts.push(
+          `(POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ma_mon, ''))) > 0 OR POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ten_mon, ''))) > 0)`,
+        );
+      }
+      conditions.push(`(${parts.join(' OR ')})`);
+    } else if (subjectCode) {
       conditions.push(`mh.ma_mon = $${values.length + 1}`);
       values.push(subjectCode);
     }
-    if (blockCode) {
+    if (blockQs.length > 0) {
+      const parts: string[] = [];
+      for (const bq of blockQs) {
+        const i = values.length + 1;
+        values.push(bq);
+        parts.push(
+          `(POSITION(LOWER($${i}) IN LOWER(COALESCE(r.khoi_giang_day, ''))) > 0 OR POSITION(LOWER($${i}) IN LOWER(COALESCE(mh.ma_khoi, ''))) > 0)`,
+        );
+      }
+      conditions.push(`(${parts.join(' OR ')})`);
+    } else if (blockCode) {
       conditions.push(`mh.ma_khoi = $${values.length + 1}`);
       values.push(blockCode);
     }
-    if (thangDk) {
+
+    let monthFromParam = false;
+    if (monthYm && /^\d{4}-\d{2}$/.test(monthYm)) {
+      const [yStr, mStr] = monthYm.split('-');
+      const yi = parseInt(yStr, 10);
+      const mi = parseInt(mStr, 10);
+      if (Number.isFinite(yi) && mi >= 1 && mi <= 12) {
+        conditions.push(`r.nam_dk = $${values.length + 1}`);
+        values.push(yi);
+        conditions.push(`r.thang_dk = $${values.length + 1}`);
+        values.push(mi);
+        monthFromParam = true;
+      }
+    }
+    if (!monthFromParam && thangDk) {
       conditions.push(`r.thang_dk = $${values.length + 1}`);
       values.push(thangDk);
     }
-    if (namDk) {
+    if (!monthFromParam && namDk) {
       conditions.push(`r.nam_dk = $${values.length + 1}`);
       values.push(namDk);
     }
 
+    if (xuLyFilter && xuLyFilter !== 'all') {
+      conditions.push(`LOWER(TRIM(COALESCE(r.xu_ly_diem, ''))) = LOWER(TRIM($${values.length + 1}))`);
+      values.push(xuLyFilter);
+    }
+
+    if (registrationType === 'official') {
+      conditions.push(`NOT (
+        LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) LIKE '%b%sung%'
+        OR LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) LIKE '%bo%'
+        OR LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) = 'additional'
+      )`);
+    } else if (registrationType === 'additional') {
+      conditions.push(`(
+        LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) LIKE '%b%sung%'
+        OR LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) LIKE '%bo%'
+        OR LOWER(TRIM(COALESCE(r.hinh_thuc, ''))) = 'additional'
+      )`);
+    }
+
+    if (hasScore === '1') {
+      conditions.push(`r.diem IS NOT NULL`);
+    } else if (hasScore === '0') {
+      conditions.push(`r.diem IS NULL`);
+    }
+
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const fromJoins = `
+       FROM chuyen_sau_results r
+       LEFT JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
+       LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
+       LEFT JOIN chuyen_sau_bode bode ON bode.id = r.id_de_thi
+    `;
+
+    if (syncCheck) {
+      const hasUpdatedAt = await chuyenSauResultsHasUpdatedAtColumn();
+      const maxChangedSql = hasUpdatedAt
+        ? 'MAX(COALESCE(r.updated_at, r.tao_luc)) AS max_changed'
+        : 'MAX(COALESCE(r.dang_ky_luc, r.tao_luc)) AS max_changed';
+      const syncRes = await pool.query(
+        `SELECT COUNT(*)::int AS c,
+                ${maxChangedSql}
+         ${fromJoins}
+         ${where}`,
+        values,
+      );
+      const sr = syncRes.rows[0] as { c?: number; max_changed?: Date | string | null };
+      const raw = sr?.max_changed;
+      let maxChangedAt: string | null = null;
+      if (raw != null && raw !== '') {
+        maxChangedAt = raw instanceof Date ? raw.toISOString() : String(raw);
+      }
+      return NextResponse.json({
+        success: true,
+        sync: {
+          total: sr?.c ?? 0,
+          maxChangedAt,
+        },
+      });
+    }
+
+    let totalCount: number | undefined;
+    if (paginateLimit != null) {
+      const countRes = await pool.query(
+        `SELECT COUNT(*)::int AS c ${fromJoins} ${where}`,
+        values
+      );
+      totalCount = countRes.rows[0]?.c ?? 0;
+    }
+
+    const limitClause =
+      paginateLimit != null
+        ? `LIMIT $${values.length + 1} OFFSET $${values.length + 2}`
+        : '';
+    const dataValues =
+      paginateLimit != null ? [...values, paginateLimit, paginateOffset] : values;
 
     const result = await pool.query(
       `SELECT
@@ -98,9 +279,9 @@ export async function GET(request: NextRequest) {
          COALESCE(mh.loai_ky_thi, 'expertise')                        AS exam_type,
          mh.thoi_gian_thi_phut                                         AS duration_minutes,
          es.ten                                                        AS schedule_name,
-         es.bat_dau_luc                                                AS open_at,
+         COALESCE(es.bat_dau_luc, r.lich_thi_dk)                       AS open_at,
          es.ket_thuc_luc                                               AS close_at,
-         COALESCE(es.bat_dau_luc, r.tao_luc)                          AS scheduled_at,
+         COALESCE(es.bat_dau_luc, r.lich_thi_dk, r.tao_luc)             AS scheduled_at,
          es.loai_su_kien,
          -- registration_type: map hinh_thuc → official/additional
          CASE
@@ -141,16 +322,25 @@ export async function GET(request: NextRequest) {
          bode.ten_de                                                   AS set_name,
          bode.tong_diem                                                AS total_points,
          bode.diem_dat                                                 AS passing_score
-       FROM chuyen_sau_results r
-       LEFT JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
-       LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
-       LEFT JOIN chuyen_sau_bode bode ON bode.id = r.id_de_thi
+       ${fromJoins}
        ${where}
-       ORDER BY r.tao_luc DESC`,
-      values
+       ORDER BY r.tao_luc DESC
+       ${limitClause}`,
+      dataValues
     );
 
-    return NextResponse.json({ success: true, data: result.rows, count: result.rows.length });
+    return NextResponse.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length,
+      ...(paginateLimit != null && totalCount !== undefined
+        ? {
+            total: totalCount,
+            page: Math.floor(paginateOffset / paginateLimit) + 1,
+            pageSize: paginateLimit,
+          }
+        : {}),
+    });
   } catch (error: unknown) {
     const pgErr = error as { code?: string; message?: string };
     if (pgErr?.code === '53300') {
@@ -171,170 +361,26 @@ export async function GET(request: NextRequest) {
 // ─── POST: Đăng ký thi → tạo results record ──────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  const client = await pool.connect();
   try {
     const body = await request.json();
-    const teacherInfo = body.teacher_info || {};
-    // Accept both Vietnamese and English field names, fallback to teacher_info object
-    const ma_giao_vien = body.ma_giao_vien || body.teacher_code;
-    const ho_ten = body.ho_ten || body.full_name || teacherInfo.teacher_name || teacherInfo.full_name;
-    const dia_chi_email = body.dia_chi_email || body.email || teacherInfo.email;
-    const co_so_lam_viec = body.co_so_lam_viec || body.campus || teacherInfo.campus;
-    const khu_vuc = body.khu_vuc || body.region || teacherInfo.region;
-    const hinh_thuc = body.hinh_thuc || body.registration_type;
-    const khoi_giang_day = body.khoi_giang_day || body.block_code;
-    const dot = body.dot;
-    const id_mon = body.id_mon || body.subject_id;
-    const ma_mon = body.ma_mon || body.subject_code;
-    // Resolve id_su_kien — frontend có thể gửi nhiều field name khác nhau
-    const id_su_kien = body.id_su_kien || body.schedule_id || body.scheduled_event_id || null;
-    const id_de_thi = body.id_de_thi;
-
-    // Resolve thang_dk/nam_dk: ưu tiên explicit, fallback từ open_at/scheduled_at
-    let thang_dk = body.thang_dk || body.month;
-    let nam_dk = body.nam_dk || body.year;
-    if ((!thang_dk || !nam_dk) && (body.open_at || body.scheduled_at)) {
-      const refDate = new Date(body.open_at || body.scheduled_at);
-      if (!Number.isNaN(refDate.getTime())) {
-        thang_dk = thang_dk || (refDate.getMonth() + 1);
-        nam_dk = nam_dk || refDate.getFullYear();
-      }
-    }
-
-    if (!ma_giao_vien) {
-      return NextResponse.json({ success: false, error: 'ma_giao_vien là bắt buộc' }, { status: 400 });
-    }
-    if (!id_mon && !ma_mon) {
-      return NextResponse.json({ success: false, error: 'Cần cung cấp id_mon hoặc ma_mon' }, { status: 400 });
-    }
-
-    await client.query('BEGIN');
-
-    // Nếu ho_ten không được cung cấp, tự lookup từ bảng teachers theo mã giáo viên
-    let resolvedHoTen = ho_ten;
-    if (!resolvedHoTen) {
-      const teacherRow = await client.query(
-        `SELECT full_name FROM teachers WHERE LOWER(TRIM(code)) = LOWER(TRIM($1)) LIMIT 1`,
-        [ma_giao_vien]
-      );
-      resolvedHoTen = teacherRow.rows[0]?.full_name || ma_giao_vien;
-    }
-
-    // Resolve subject ID if not provided
-    let resolvedSubjectId = id_mon;
-    if (!resolvedSubjectId && ma_mon) {
-      // Tìm chính xác trước, sau đó thử tìm theo prefix (vd: "[COD] Scratch (S)" → "[COD] Scratch")
-      const subj = await client.query(
-        `SELECT id FROM chuyen_sau_monhoc
-         WHERE ma_mon = $1
-            OR $1 LIKE (ma_mon || '%')
-            OR ma_mon LIKE ($1 || '%')
-         ORDER BY
-           CASE WHEN ma_mon = $1 THEN 0 ELSE 1 END
-         LIMIT 1`,
-        [ma_mon]
-      );
-      if (subj.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ success: false, error: 'Không tìm thấy môn học tương ứng' }, { status: 404 });
-      }
-      resolvedSubjectId = subj.rows[0].id;
-    }
-
-    // Tự động chọn đề từ thư viện đề tháng (nếu client không tự ấn định id_de_thi)
-    let resolvedSetId = id_de_thi;
-    if (!resolvedSetId && resolvedSubjectId && thang_dk && nam_dk) {
-      const activeMonthlySet = await client.query(
-        `SELECT id_de FROM chuyen_sau_chonde_thang WHERE id_mon = $1 AND nam = $2 AND thang = $3 LIMIT 1`,
-        [resolvedSubjectId, nam_dk, thang_dk]
-      );
-      if (activeMonthlySet.rows.length > 0) {
-        resolvedSetId = activeMonthlySet.rows[0].id_de;
-      }
-    }
-
-    // Kiểm tra trùng theo id_su_kien: mỗi giáo viên chỉ được đăng ký 1 lần cho mỗi lịch thi
-    if (id_su_kien) {
-      const dupEvent = await client.query(
-        `SELECT id FROM chuyen_sau_results
-         WHERE id_su_kien = $1::uuid
-           AND LOWER(TRIM(ma_giao_vien)) = LOWER(TRIM($2))
-         LIMIT 1`,
-        [id_su_kien, ma_giao_vien]
-      );
-      if (dupEvent.rows.length > 0) {
-        await client.query('ROLLBACK');
-        return NextResponse.json(
-          { success: false, error: 'Bạn đã đăng ký lịch thi này rồi.', result_id: dupEvent.rows[0].id },
-          { status: 409 }
-        );
-      }
-    }
-
-    // Kiểm tra trùng đăng ký (cùng giáo viên + môn + tháng, chỉ block nếu chưa có điểm thực)
-    // Nếu có id_su_kien thì chỉ block khi cùng sự kiện — mỗi sự kiện khác nhau được đăng ký độc lập
-    const dupCond: string[] = ['id_mon = $1', `LOWER(TRIM(ma_giao_vien)) = LOWER(TRIM($2))`, `xu_ly_diem = 'chờ giải trình'`];
-    const dupVals: unknown[] = [resolvedSubjectId, ma_giao_vien];
-
-    if (id_su_kien) {
-      dupCond.push(`id_su_kien = $${dupVals.length + 1}::uuid`);
-      dupVals.push(id_su_kien);
-    } else if (thang_dk && nam_dk) {
-      dupCond.push(`thang_dk = $${dupVals.length + 1}`);
-      dupVals.push(thang_dk);
-      dupCond.push(`nam_dk = $${dupVals.length + 1}`);
-      dupVals.push(nam_dk);
-    }
-
-    const dup = await client.query(
-      `SELECT id FROM chuyen_sau_results WHERE ${dupCond.join(' AND ')} LIMIT 1`,
-      dupVals
-    );
-    if (dup.rows.length > 0) {
-      await client.query('ROLLBACK');
+    const result = await insertExamRegistration(pool, body as Record<string, unknown>);
+    if (!result.ok) {
       return NextResponse.json(
-        { success: false, error: 'Giáo viên đã đăng ký môn học này rồi.', result_id: dup.rows[0].id },
-        { status: 409 }
+        {
+          success: false,
+          error: result.error,
+          ...(result.result_id != null ? { result_id: result.result_id } : {}),
+        },
+        { status: result.httpStatus }
       );
     }
-
-    const insertResult = await client.query(
-      `INSERT INTO chuyen_sau_results (
-         ma_giao_vien, ho_ten, dia_chi_email, co_so_lam_viec,
-         khu_vuc, hinh_thuc, khoi_giang_day,
-         thang_dk, nam_dk, dot,
-         id_mon, id_su_kien, id_de_thi,
-         diem, xu_ly_diem, dang_ky_luc
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, 'chờ giải trình', NOW())
-       RETURNING *`,
-      [
-        ma_giao_vien,
-        resolvedHoTen,
-        dia_chi_email || null,
-        co_so_lam_viec || null,
-        khu_vuc || null,
-        hinh_thuc || null,
-        khoi_giang_day || null,
-        thang_dk || null,
-        nam_dk || null,
-        dot || null,
-        resolvedSubjectId,
-        id_su_kien || null,
-        resolvedSetId || null,
-      ]
-    );
-
-    await client.query('COMMIT');
     return NextResponse.json(
-      { success: true, data: insertResult.rows[0], message: 'Đăng ký thi thành công' },
+      { success: true, data: result.data, message: 'Đăng ký thi thành công' },
       { status: 201 }
     );
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('Error creating registration:', error);
-    return NextResponse.json({ success: false, error: 'Failed to create registration' }, { status: 500 });
-  } finally {
-    client.release();
+    return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
   }
 }
 

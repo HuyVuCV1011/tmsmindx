@@ -1,4 +1,4 @@
-'use client';
+'use client'
 
 import {
   Area,
@@ -9,23 +9,23 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-} from 'recharts';
+} from 'recharts'
 
 interface DataPoint {
-  date: string;
-  users: number;
+  date: string
+  users: number
 }
 
 interface EngagementChartProps {
-  dau: DataPoint[];
-  wau: DataPoint[];
-  activeTab: 'dau' | 'wau';
-  onTabChange: (tab: 'dau' | 'wau') => void;
+  dau: DataPoint[]
+  wau: DataPoint[]
+  activeTab: 'dau' | 'wau'
+  onTabChange: (tab: 'dau' | 'wau') => void
 }
 
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return `${d.getDate()}/${d.getMonth() + 1}`;
+  const d = new Date(dateStr)
+  return `${d.getDate()}/${d.getMonth() + 1}`
 }
 
 export function EngagementChart({
@@ -34,11 +34,11 @@ export function EngagementChart({
   activeTab,
   onTabChange,
 }: EngagementChartProps) {
-  const data = activeTab === 'dau' ? dau : wau;
+  const data = activeTab === 'dau' ? dau : wau
   const formatted = data.map((d) => ({
     ...d,
     label: formatDate(d.date),
-  }));
+  }))
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -49,19 +49,21 @@ export function EngagementChart({
         <div className="flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
           <button
             onClick={() => onTabChange('dau')}
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 ${activeTab === 'dau'
-              ? 'bg-[#a1001f] text-white shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-              }`}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 ${
+              activeTab === 'dau'
+                ? 'bg-[#a1001f] text-white shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
           >
             DAU
           </button>
           <button
             onClick={() => onTabChange('wau')}
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 ${activeTab === 'wau'
-              ? 'bg-[#a1001f] text-white shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-              }`}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 ${
+              activeTab === 'wau'
+                ? 'bg-[#a1001f] text-white shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
           >
             WAU
           </button>
@@ -106,14 +108,12 @@ export function EngagementChart({
                 fontSize: 12,
               }}
               labelFormatter={(label) => `Ngày: ${label}`}
-              formatter={(value: number) => [
+              formatter={(value: number | undefined) => [
                 value,
                 activeTab === 'dau' ? 'Người dùng/ngày' : 'Người dùng/tuần',
               ]}
             />
-            <Legend
-              wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-            />
+            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
             <Area
               type="monotone"
               dataKey="users"
@@ -122,11 +122,16 @@ export function EngagementChart({
               strokeWidth={2}
               fill="url(#colorUsers)"
               dot={{ r: 3, fill: '#a1001f', strokeWidth: 0 }}
-              activeDot={{ r: 5, fill: '#a1001f', strokeWidth: 2, stroke: '#fff' }}
+              activeDot={{
+                r: 5,
+                fill: '#a1001f',
+                strokeWidth: 2,
+                stroke: '#fff',
+              }}
             />
           </AreaChart>
         </ResponsiveContainer>
       )}
     </div>
-  );
+  )
 }

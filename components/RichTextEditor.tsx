@@ -51,7 +51,7 @@ import {
   TableProperties,
 } from 'lucide-react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 import { Button } from './ui/button'
 
 interface RichTextEditorProps {

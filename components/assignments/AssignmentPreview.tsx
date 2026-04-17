@@ -5,7 +5,7 @@ import { Question } from '@/types/assignment';
 import { Award, CheckCheck, CheckSquare, Clock, FileText, PenLine, X } from 'lucide-react';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 interface AssignmentPreviewProps {
   assignment: {

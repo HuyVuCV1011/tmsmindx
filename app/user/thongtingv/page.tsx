@@ -31,7 +31,7 @@ import {
 } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 import useSWR, { useSWRConfig } from 'swr'
 
 // Cache for processed data
@@ -537,6 +537,14 @@ export default function Page1() {
     return c || null
   }, [profileBundle])
 
+  /** Khớp thêm với `chuyen_sau_results.ma_giao_vien` khi DB lưu user_name thay vì code. */
+  const teacherUserName = useMemo(() => {
+    if (!profileBundle?.exists || !profileBundle.teacher) return ''
+    const t = profileBundle.teacher as Record<string, unknown>
+    return String(t.user_name ?? (t as { 'User name'?: string })['User name'] ?? '')
+      .trim()
+  }, [profileBundle])
+
   const scoresUrl =
     !isLoadingProfile &&
     user?.email &&
@@ -544,7 +552,11 @@ export default function Page1() {
     (profileBundle as { success?: boolean }).success !== false &&
     profileBundle.exists &&
     teacherLmsCode
-      ? `${PROFILE_API_ORIGIN}/api/checkdatasource/scores?code=${encodeURIComponent(teacherLmsCode)}`
+      ? `${PROFILE_API_ORIGIN}/api/checkdatasource/scores?code=${encodeURIComponent(teacherLmsCode)}${
+          teacherUserName
+            ? `&userName=${encodeURIComponent(teacherUserName)}`
+            : ''
+        }`
       : null
 
   const { data: scoresBundle, isLoading: isLoadingScores } = useSWR(

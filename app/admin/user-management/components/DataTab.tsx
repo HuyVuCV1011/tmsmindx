@@ -1,7 +1,7 @@
 "use client";
 import { Building2, ChevronDown, ChevronRight, Database, Edit2, Filter, Loader2, MapPin, Plus, Save, Search, Trash2, Users2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 import ConfirmDialog from "./ConfirmDialog";
 
 type SubTab = 'centers-leaders' | 'roles';

@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger';
 import { Eye, EyeOff } from 'lucide-react';
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 const SAVED_LOGIN_KEY = 'tps_saved_login_account';
 

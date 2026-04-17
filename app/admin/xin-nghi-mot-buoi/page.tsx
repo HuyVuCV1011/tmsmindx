@@ -17,7 +17,7 @@ import {
 import { useAuth } from '@/lib/auth-context'
 import { AlertCircle, RefreshCcw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 
 interface LeaveRequest {
   id: number

@@ -3,7 +3,7 @@
 import { PageContainer } from '@/components/PageContainer';
 import { Copy, Image as ImageIcon, Loader2, RefreshCw, Search, Trash2, Video } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 type ResourceTypeFilter = 'all' | 'image' | 'video' | 'raw';
 

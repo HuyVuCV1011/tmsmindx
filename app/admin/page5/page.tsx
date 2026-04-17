@@ -10,7 +10,7 @@ import { Tabs } from "@/components/Tabs";
 import { Eye, Lock, Trash2, Upload, Video } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 import { useUploadVideo } from "@/components/UploadVideoContext";
 
 interface Video {
