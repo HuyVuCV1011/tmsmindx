@@ -11,6 +11,12 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['ffprobe-static'],
 
   images: {
+    localPatterns: [
+      {
+        pathname: '/api/storage-image',
+        search: '**',
+      },
+    ],
     remotePatterns: [
       {
         protocol: 'https',

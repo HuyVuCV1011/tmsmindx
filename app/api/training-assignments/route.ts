@@ -1,5 +1,18 @@
 import pool from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { deleteObject, parsePublicUrl } from '@/lib/supabase-s3';
+
+/** Xóa ảnh S3 an toàn, không throw */
+async function deleteImageSilently(url: string | null) {
+  if (!url) return;
+  const parsed = parsePublicUrl(url);
+  if (!parsed) return;
+  try {
+    await deleteObject(parsed.bucket, parsed.key);
+  } catch (err) {
+    console.error(`[S3 Cleanup] Failed to delete ${url}:`, err);
+  }
+}
 
 // GET: Lấy danh sách assignments
 export async function GET(request: Request) {
@@ -225,10 +238,19 @@ export async function DELETE(request: Request) {
       );
     }
 
+    // Lấy ảnh của tất cả câu hỏi TRƯỚC khi xóa (CASCADE sẽ xóa questions cùng lúc với assignment)
+    const questions = await pool.query(
+      'SELECT image_url FROM training_assignment_questions WHERE assignment_id = $1 AND image_url IS NOT NULL',
+      [id]
+    );
+
     const result = await pool.query(
       'DELETE FROM training_video_assignments WHERE id = $1 RETURNING *',
       [id]
     );
+
+    // Xóa ảnh S3 sau khi DB delete thành công
+    questions.rows.forEach(q => deleteImageSilently(q.image_url));
 
     return NextResponse.json({
       success: true,

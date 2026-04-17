@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { deleteObject, parsePublicUrl } from '@/lib/supabase-s3';
+
+/** Xóa ảnh S3 an toàn, không throw */
+async function deleteImageSilently(url: string | null) {
+  if (!url) return;
+  const parsed = parsePublicUrl(url);
+  if (!parsed) return;
+  try {
+    await deleteObject(parsed.bucket, parsed.key);
+  } catch (err) {
+    console.error(`[S3 Cleanup] Failed to delete ${url}:`, err);
+  }
+}
 
 const stripUnstableImageSources = (value: unknown) => {
   if (typeof value !== 'string') return value;
@@ -230,14 +243,27 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const query = 'DELETE FROM training_assignment_questions WHERE id = $1 RETURNING *';
-    const result = await pool.query(query, [id]);
+    // Lấy image_url trước khi xóa để cleanup S3
+    const existing = await pool.query(
+      'SELECT image_url FROM training_assignment_questions WHERE id = $1',
+      [id]
+    );
+
+    const result = await pool.query(
+      'DELETE FROM training_assignment_questions WHERE id = $1 RETURNING *',
+      [id]
+    );
 
     if (result.rows.length === 0) {
       return NextResponse.json(
         { error: 'Assignment question not found' },
         { status: 404 }
       );
+    }
+
+    // Xóa ảnh S3 sau khi xóa DB thành công
+    if (existing.rows[0]?.image_url) {
+      deleteImageSilently(existing.rows[0].image_url);
     }
 
     return NextResponse.json({
