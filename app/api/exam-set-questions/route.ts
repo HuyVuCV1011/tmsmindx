@@ -1,5 +1,30 @@
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { deleteObject, parsePublicUrl } from '@/lib/supabase-s3';
+
+/** Xóa ảnh S3 an toàn, không throw */
+async function deleteImageSilently(url: string | null) {
+  if (!url) return;
+  const parsed = parsePublicUrl(url);
+  if (!parsed) return;
+  try {
+    await deleteObject(parsed.bucket, parsed.key);
+  } catch (err) {
+    console.error(`[S3 Cleanup] Failed to delete ${url}:`, err);
+  }
+}
+
+/** Extract tất cả src URL từ HTML content */
+function extractImageUrls(html: string): string[] {
+  if (!html) return [];
+  const urls: string[] = [];
+  const regex = /src=["']([^"']+)["']/g;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    urls.push(match[1].replace(/&amp;/g, '&'));
+  }
+  return urls;
+}
 
 // Loại bỏ blob/data-url images khỏi HTML content khi lưu vào DB
 const stripUnstableImageSources = (value: unknown) => {
@@ -280,6 +305,12 @@ export async function DELETE(request: NextRequest) {
     client = await pool.connect();
     await client.query('BEGIN');
 
+    // Lấy nội dung câu hỏi trước để cleanup ảnh S3
+    const existing = await client.query(
+      'SELECT noi_dung_cau_hoi FROM chuyen_sau_cauhoi WHERE id = $1',
+      [id]
+    );
+
     // Xóa mapping trước (id_cau là FK)
     await client.query('DELETE FROM chuyen_sau_bode_cauhoi WHERE id_cau = $1', [id]);
 
@@ -297,6 +328,12 @@ export async function DELETE(request: NextRequest) {
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: 'Exam set question not found' }, { status: 404 });
+    }
+
+    // Xóa ảnh S3 nhúng trong nội dung câu hỏi
+    if (existing.rows[0]?.noi_dung_cau_hoi) {
+      const urls = extractImageUrls(existing.rows[0].noi_dung_cau_hoi);
+      urls.forEach(url => deleteImageSilently(url));
     }
 
     return NextResponse.json({ success: true, message: 'Exam set question deleted successfully' });

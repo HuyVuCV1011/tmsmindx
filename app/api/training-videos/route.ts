@@ -1,5 +1,21 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { deleteObject, parsePublicUrl } from '@/lib/supabase-s3';
+
+/**
+ * Xóa file khỏi S3 một cách an toàn (không throw error nếu thất bại)
+ */
+async function deleteS3FileSilently(url: string | null) {
+  if (!url) return;
+  const parsed = parsePublicUrl(url);
+  if (!parsed) return; // Không phải URL S3 hoặc không parse được -> bỏ qua
+  try {
+    await deleteObject(parsed.bucket, parsed.key);
+    console.log(`[S3 Cleanup] Deleted: ${parsed.bucket}/${parsed.key}`);
+  } catch (error) {
+    console.error(`[S3 Cleanup] Failed to delete ${url}:`, error);
+  }
+}
 
 // GET: Lấy danh sách videos
 export async function GET(request: Request) {
@@ -159,7 +175,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    const checkResult = await pool.query('SELECT video_group_id FROM training_videos WHERE id = $1', [id]);
+    const checkResult = await pool.query('SELECT video_group_id, video_link, thumbnail_url FROM training_videos WHERE id = $1', [id]);
     if (checkResult.rows.length === 0) {
       return NextResponse.json(
         { success: false, error: 'Video not found' },
@@ -167,7 +183,8 @@ export async function PUT(request: Request) {
       );
     }
 
-    const groupId = checkResult.rows[0].video_group_id;
+    const currentVideo = checkResult.rows[0];
+    const groupId = currentVideo.video_group_id;
 
     // Build dynamic update query
     const fields = Object.keys(updateData).filter(key => updateData[key] !== undefined);
@@ -221,6 +238,14 @@ export async function PUT(request: Request) {
       result = await pool.query(query, values);
     }
 
+    // --- Cleanup S3 Files if changed ---
+    if (updateData.video_link && updateData.video_link !== currentVideo.video_link) {
+      await deleteS3FileSilently(currentVideo.video_link);
+    }
+    if (updateData.thumbnail_url && updateData.thumbnail_url !== currentVideo.thumbnail_url) {
+      await deleteS3FileSilently(currentVideo.thumbnail_url);
+    }
+
     return NextResponse.json({
       success: true,
       data: result.rows[0],
@@ -270,6 +295,18 @@ export async function DELETE(request: Request) {
         'DELETE FROM training_videos WHERE id = $1 RETURNING id, video_link, thumbnail_url',
         [id]
       );
+    }
+
+    // --- Cleanup S3 Files ---
+    for (const row of result.rows) {
+      // 1. Xóa video file
+      if (row.video_link) {
+        await deleteS3FileSilently(row.video_link);
+      }
+      // 2. Xóa thumbnail file
+      if (row.thumbnail_url) {
+        await deleteS3FileSilently(row.thumbnail_url);
+      }
     }
 
     return NextResponse.json({

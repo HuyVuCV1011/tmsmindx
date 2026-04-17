@@ -29,41 +29,144 @@ export const useUploadVideo = () => {
   return context;
 };
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
-const getSignature = async () => {
-    const res = await fetch("/api/cloudinary-signature", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folder: "mindx_videos" }),
-    });
-    if (!res.ok) throw new Error("Không thể tạo signature");
-    return res.json();
-};
+const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3): Promise<Response> => {
+  let lastError = "";
+  for (let i = 0; i < maxRetries; i++) {
+    const controller = new AbortController();
+    // Timeout cho mỗi part (ví dụ 2 phút cho 8MB là rất thoải mái)
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-const fetchWithRetry = async (url: string, options: any, maxRetries = 3) => {
-    let lastErrorDetails = "";
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        const response = await fetch(url, options);
-        if (response.ok) return response;
-        
-        const errorText = await response.text();
-        lastErrorDetails = `Status ${response.status}: ${errorText}`;
-        console.warn(`Tải lại lần ${i + 1} (${lastErrorDetails})`);
-        
-        // NẾU LỖI 400 (BAD REQUEST) TỪ CLOUDINARY HOẶC API -> THƯỜNG LÀ LỖI DỮ LIỆU/CHỮ KÍ, DỪNG LUÔN KHÔNG RETRY CHO TIẾT KIỆM THỜI GIAN
-        if (response.status >= 400 && response.status < 500 && ![408, 429].includes(response.status)) {
-            throw new Error(`Máy chủ từ chối (Status ${response.status}): ${errorText}`);
-        }
-      } catch (err: any) {
-        console.warn(`Khẩn cấp tải lại mạng lần ${i + 1}: ${err.message}`);
-        lastErrorDetails = err.message;
-        if (err.message.includes("Máy chủ từ chối")) throw err;
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) return response;
+
+      const errorText = await response.text();
+      lastError = `Status ${response.status}: ${errorText}`;
+      console.warn(`Retry ${i + 1} (${lastError})`);
+
+      // Lỗi 4xx (trừ 408, 429) → không retry
+      if (response.status >= 400 && response.status < 500 && ![408, 429].includes(response.status)) {
+        throw new Error(`Máy chủ từ chối (Status ${response.status}): ${errorText}`);
       }
-      if (i < maxRetries - 1) await new Promise(r => setTimeout(r, 5000));
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      console.warn(`Network retry ${i + 1}: ${err.name} - ${err.message}`);
+      
+      if (err.name === 'AbortError') {
+        lastError = "Kết nối bị ngắt do chờ quá lâu hoặc mạng không ổn định (Timeout/Abort).";
+      } else {
+        lastError = err.message;
+      }
+      
+      if (err.message.includes("Máy chủ từ chối")) throw err;
     }
-    throw new Error(`Lỗi đường truyền hoặc máy chủ quá tải. Chi tiết: ${lastErrorDetails}`);
+    // Nghỉ 3s trước khi thử lại (giảm từ 5s xuống 3s để mượt hơn)
+    if (i < maxRetries - 1) await new Promise((r) => setTimeout(r, 3000));
+  }
+  throw new Error(`Lỗi đường truyền hoặc máy chủ quá tải. Chi tiết: ${lastError}`);
 };
+
+/**
+ * Khởi tạo multipart upload, trả về { uploadId, key, bucket }
+ */
+const initMultipartUpload = async (filename: string, contentType: string) => {
+  const res = await fetchWithRetry("/api/upload-multipart-init", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename, contentType }),
+  }, 5);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || "Không thể khởi tạo upload");
+  return data as { uploadId: string; key: string; bucket: string };
+};
+
+/**
+ * Upload một part, trả về { ETag, PartNumber }
+ */
+const uploadPart = async (
+  bucket: string,
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  blob: Blob
+): Promise<{ ETag: string; PartNumber: number }> => {
+  const formData = new FormData();
+  formData.append("bucket", bucket);
+  formData.append("key", key);
+  formData.append("uploadId", uploadId);
+  formData.append("partNumber", String(partNumber));
+  formData.append("file", blob, `part-${partNumber}`);
+
+  const res = await fetchWithRetry("/api/upload-multipart-part", { method: "POST", body: formData }, 5);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || `Lỗi upload part ${partNumber}`);
+  return { ETag: data.ETag, PartNumber: data.PartNumber };
+};
+
+/**
+ * Hoàn tất multipart upload, trả về public URL
+ */
+const completeMultipartUpload = async (
+  bucket: string,
+  key: string,
+  uploadId: string,
+  parts: Array<{ ETag: string; PartNumber: number }>
+): Promise<string> => {
+  const res = await fetchWithRetry("/api/upload-multipart-complete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bucket, key, uploadId, parts }),
+  }, 10); // Cho phép nhiều retry hơn ở bước cuối cùng
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || "Không thể hoàn tất upload");
+  return data.url as string;
+};
+
+/**
+ * Lưu video vào DB qua /api/training-videos
+ */
+const saveVideoToDB = async (params: {
+  title: string;
+  video_link: string;
+  duration_seconds?: number;
+  video_group_id?: string;
+  chunk_index?: number;
+  chunk_total?: number;
+  original_filename?: string;
+  original_size_bytes?: number;
+}) => {
+  const res = await fetchWithRetry("/api/training-videos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: params.title,
+      video_link: params.video_link,
+      start_date: new Date().toISOString().split("T")[0],
+      duration_minutes: Math.ceil((params.duration_seconds || 0) / 60) || 30,
+      duration_seconds: params.duration_seconds || 0,
+      status: "draft",
+      video_group_id: params.video_group_id,
+      chunk_index: params.chunk_index,
+      chunk_total: params.chunk_total,
+      original_filename: params.original_filename,
+      original_size_bytes: params.original_size_bytes,
+    }),
+  });
+  return res.json();
+};
+
+// ─── S3 Multipart chunk size: 8MB (S3 yêu cầu tối thiểu 5MB/part) ──────────
+// Lưu ý: Next.js Proxy mặc định giới hạn body 10MB, nên để 8MB cho an toàn.
+const PART_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
+
+// ─── Provider ────────────────────────────────────────────────────────────────
 
 export const UploadVideoProvider = ({ children }: { children: React.ReactNode }) => {
   const [uploadState, setUploadState] = useState<UploadState>({
@@ -89,175 +192,101 @@ export const UploadVideoProvider = ({ children }: { children: React.ReactNode })
     let isSuccess = false;
 
     try {
-      // Lấy signature khởi tạo (chỉ để lấy cloudName, v.v.)
-      const { cloudName, apiKey, folder } = await getSignature();
-
       const fileMB = file.size / (1024 * 1024);
-      const CHUNK_LIMIT_MB = 45;
+      // Ngưỡng dùng multipart: > 50MB
+      const USE_MULTIPART_THRESHOLD = 50 * 1024 * 1024;
 
-      // NẾU LỚN HƠN 100MB => DÙNG FFMPEG CẮT VÀ UPLOAD THEO TỪNG CHUNK
-      if (file.size > 100 * 1024 * 1024) {
-        setUploadState((prev) => ({ ...prev, statusText: "Đang tải dữ liệu bộ nhớ đệm FFmpeg..." }));
+      if (file.size > USE_MULTIPART_THRESHOLD) {
+        // ── MULTIPART UPLOAD (file lớn > 50MB) ──────────────────────────────
+        setUploadState((prev) => ({ ...prev, statusText: "Đang khởi tạo multipart upload..." }));
 
-        const ffmpeg = new FFmpeg();
-        ffmpeg.on("log", ({ message }) => console.log("FFmpeg:", message));
-        ffmpeg.on("progress", ({ progress }) => {
-            // progress of slicing is separate, we can interpolate 0->30% for carving
-            setUploadState((prev) => ({ ...prev, progress: Math.min(30, Math.round(progress * 30)) }));
-        });
+        const { uploadId, key, bucket } = await initMultipartUpload(file.name, file.type || "video/mp4");
 
-        const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
-        await ffmpeg.load({
-          coreURL: `${baseURL}/ffmpeg-core.js`,
-          wasmURL: `${baseURL}/ffmpeg-core.wasm`,
-        });
+        const totalParts = Math.ceil(file.size / PART_SIZE_BYTES);
+        const parts: Array<{ ETag: string; PartNumber: number }> = [];
 
-        setUploadState((prev) => ({ ...prev, statusText: "Đang đọc dữ liệu video vào bộ nhớ xử lý..." }));
-        await ffmpeg.writeFile("input.mp4", await fetchFile(file));
+        for (let i = 0; i < totalParts; i++) {
+          const start = i * PART_SIZE_BYTES;
+          const end = Math.min(start + PART_SIZE_BYTES, file.size);
+          const chunk = file.slice(start, end);
 
-        const durationSec = await new Promise<number>((resolve) => {
-          const video = document.createElement("video");
-          video.preload = "metadata";
-          video.onloadedmetadata = () => {
-            window.URL.revokeObjectURL(video.src);
-            resolve(video.duration);
-          };
-          video.src = URL.createObjectURL(file);
-        });
-
-        const estimatedChunks = Math.ceil(fileMB / CHUNK_LIMIT_MB);
-        const segmentTime = Math.ceil(durationSec / estimatedChunks) + 2;
-
-        setUploadState((prev) => ({ ...prev, statusText: `Đang phân rã dữ liệu... (Tùy máy sẽ mất vài phút)` }));
-        
-        await ffmpeg.exec([
-          "-i", "input.mp4",
-          "-c", "copy",
-          "-f", "segment",
-          "-segment_time", segmentTime.toString(),
-          "-reset_timestamps", "1",
-          "output_%03d.mp4",
-        ]);
-
-        const groupId = uuidv4();
-
-        // Đếm chính xác số phận cắt được sinh ra
-        const dirList = await ffmpeg.listDir('/');
-        const outputFiles = dirList.filter(f => f.name && f.name.startsWith('output_') && f.name.endsWith('.mp4')).map(f => f.name).sort();
-        const actualNumChunks = outputFiles.length;
-
-        for (let i = 0; i < actualNumChunks; i++) {
-          const filename = outputFiles[i];
-          
-          // Trọng số progress: Cắt chiếm 30%, Upload chiếm 70%
-          // Upload chunkSize = 70/numChunks
-          const baseUploadProgress = 30 + (i / actualNumChunks) * 70;
-          
-          setUploadState((prev) => ({ 
-              ...prev, 
-              statusText: `Đang tải lên phần ${i + 1}/${actualNumChunks}...`,
-              progress: Math.round(baseUploadProgress)
+          const uploadProgress = Math.round(((i + 1) / totalParts) * 90);
+          setUploadState((prev) => ({
+            ...prev,
+            statusText: `Đang tải lên phần ${i + 1}/${totalParts}...`,
+            progress: uploadProgress,
           }));
 
-          const chunkData = await ffmpeg.readFile(filename);
-          const chunkBlob = new Blob([new Uint8Array(chunkData as any)], { type: "video/mp4" });
-
-          const formData = new FormData();
-          formData.append("file", chunkBlob, `${file.name}_part${i + 1}.mp4`);
-          const { signature, timestamp } = await getSignature(); // Làm mới signature để không bị hết hạn 1 giờ trong quá trình cắt video lâu
-
-          formData.append("signature", signature);
-          formData.append("timestamp", timestamp.toString());
-          formData.append("api_key", apiKey);
-          formData.append("folder", folder);
-
-          const uploadRes = await fetchWithRetry(
-`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`,
-{ method: "POST", body: formData }, 5); // Thử lại 5 lần nếu rớt mạng
-
-          if (!uploadRes.ok) {
-            throw new Error(`Upload lỗi ở phân đoạn ${i + 1}`);
-          }
-          const uploadData = await uploadRes.json();
-          // Dọn dẹp memory ngay để tránh tràn RAM trình duyệt
-          try { await ffmpeg.deleteFile(filename); } catch (e) {}
-
-
-          await fetchWithRetry("/api/training-videos", {
-method: "POST",
-headers: { "Content-Type": "application/json" },
-body: JSON.stringify({
-              title: file.name.replace(/\.[^/.]+$/, ""),
-              video_link: uploadData.secure_url,
-              start_date: new Date().toISOString().split("T")[0],
-              duration_minutes: Math.ceil((uploadData.duration || segmentTime) / 60),
-              duration_seconds: uploadData.duration || segmentTime,
-              status: "draft",
-              video_group_id: groupId,
-              chunk_index: i + 1,
-              chunk_total: actualNumChunks,
-              original_filename: file.name,
-              original_size_bytes: file.size,
-            }),
-          });
-        }
-        isSuccess = true;
-        try { await ffmpeg.deleteFile("input.mp4"); } catch (e) {}
-
-      } else {
-        // ĐƠN FILE DƯỚI 100MB
-        setUploadState((prev) => ({ ...prev, statusText: "Đang tải lên video...", progress: 50 }));
-        
-        const formData = new FormData();
-        formData.append("file", file);
-        const { signature, timestamp } = await getSignature();
-
-        formData.append("signature", signature);
-        formData.append("timestamp", timestamp.toString());
-        formData.append("api_key", apiKey);
-        formData.append("folder", folder);
-
-        const uploadRes = await fetchWithRetry(
-`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`,
-{ method: "POST", body: formData }, 5); // Thử lại 5 lần nếu rớt mạng
-
-        if (!uploadRes.ok) {
-          const errorData = await uploadRes.json();
-          throw new Error(errorData.error?.message || "Upload lên Cloudinary thất bại");
+          const part = await uploadPart(bucket, key, uploadId, i + 1, chunk);
+          parts.push(part);
         }
 
-        const uploadData = await uploadRes.json();
+        setUploadState((prev) => ({ ...prev, statusText: "Đang hoàn tất upload...", progress: 92 }));
+        const videoUrl = await completeMultipartUpload(bucket, key, uploadId, parts);
 
-        setUploadState((prev) => ({ ...prev, statusText: "Đang lưu vào kho dữ liệu...", progress: 95 }));
+        setUploadState((prev) => ({ ...prev, statusText: "Đang lưu vào kho dữ liệu...", progress: 96 }));
 
-        const response = await fetchWithRetry("/api/training-videos", {
-method: "POST",
-headers: { "Content-Type": "application/json" },
-body: JSON.stringify({
-            title: file.name.replace(/\.[^/.]+$/, ""),
-            video_link: uploadData.secure_url,
-            start_date: new Date().toISOString().split("T")[0],
-            duration_minutes: Math.ceil(uploadData.duration / 60) || 30,
-            duration_seconds: uploadData.duration || 0,
-            status: "draft",
-          }),
+        // Lấy duration từ video element
+        const durationSec = await getVideoDuration(file).catch(() => 0);
+
+        const videoData = await saveVideoToDB({
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          video_link: videoUrl,
+          duration_seconds: durationSec,
+          original_filename: file.name,
+          original_size_bytes: file.size,
         });
 
-        const videoData = await response.json();
         if (videoData.success) {
-            isSuccess = true;
+          isSuccess = true;
         } else {
-            throw new Error("Lỗi khi lưu video: " + videoData.error);
+          throw new Error("Lỗi khi lưu video: " + videoData.error);
+        }
+
+      } else if (file.size > 100 * 1024 * 1024) {
+        // ── FFmpeg CHUNKING + MULTIPART (file 100MB–50MB range đã bị loại bởi điều kiện trên)
+        // Nhánh này không còn cần thiết vì threshold đã là 50MB
+        // Giữ lại để tương thích nếu threshold thay đổi
+        throw new Error("File quá lớn, vui lòng dùng multipart upload");
+
+      } else {
+        // ── SINGLE UPLOAD (file ≤ 50MB) ─────────────────────────────────────
+        setUploadState((prev) => ({ ...prev, statusText: "Đang tải lên video...", progress: 30 }));
+
+        const formData = new FormData();
+        formData.append("video", file);
+
+        const uploadRes = await fetchWithRetry("/api/upload-video", { method: "POST", body: formData }, 5);
+        const uploadData = await uploadRes.json();
+
+        if (!uploadData.success) {
+          throw new Error(uploadData.error || "Upload thất bại");
+        }
+
+        setUploadState((prev) => ({ ...prev, statusText: "Đang lưu vào kho dữ liệu...", progress: 90 }));
+
+        const durationSec = await getVideoDuration(file).catch(() => 0);
+
+        const videoData = await saveVideoToDB({
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          video_link: uploadData.url,
+          duration_seconds: durationSec,
+          original_filename: file.name,
+          original_size_bytes: file.size,
+        });
+
+        if (videoData.success) {
+          isSuccess = true;
+        } else {
+          throw new Error("Lỗi khi lưu video: " + videoData.error);
         }
       }
 
       setUploadState((prev) => ({ ...prev, progress: 100, statusText: "Hoàn tất!" }));
       if (isSuccess) {
-          toast.success("Tải lên video thành công!");
-          // Bắn event qua trình duyệt để các màn hình khác reload
-          window.dispatchEvent(new Event("videoUploaded"));
+        toast.success("Tải lên video thành công!");
+        window.dispatchEvent(new Event("videoUploaded"));
       }
-
     } catch (err: any) {
       console.error("Upload error:", err);
       toast.error(err.message || "Lỗi khi upload video!");
@@ -273,81 +302,92 @@ body: JSON.stringify({
       {children}
       {uploadState.isUploading && (
         <div className="fixed bottom-8 right-8 z-[9999] group flex flex-col items-end gap-3 transform transition-all duration-300">
-          
-          {/* TRẠNG THÁI TẢI LÊN (CARD ĐẸP HIỂN THỊ KHI HOVER) */}
+          {/* Card chi tiết (hiện khi hover) */}
           <div className="opacity-0 translate-y-3 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-300 w-[340px] bg-white shadow-[0_10px_40px_rgba(161,0,31,0.15)] border border-rose-100 rounded-2xl p-4 origin-bottom-right">
-             <div className="flex flex-col gap-3">
-                 <div className="flex items-start gap-4">
-                     <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center shrink-0 border border-rose-100 shadow-inner">
-                         <FileVideo className="w-5 h-5 text-[#a1001f]" />
-                     </div>
-                     <div className="flex-1 min-w-0 pt-0.5">
-                        <div className="flex justify-between items-center mb-1">
-                          <h4 className="text-sm font-semibold text-gray-800 truncate pr-2 w-[80%]" title={uploadState.originalFilename}>
-                            {uploadState.originalFilename}
-                          </h4>
-                          <span className="text-xs font-bold text-[#a1001f] bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full">
-                            {uploadState.progress}%
-                          </span>
-                        </div>
-                        <p className="text-[11.5px] text-gray-500 truncate w-full font-medium" title={uploadState.statusText}>
-                          {uploadState.statusText}
-                        </p>
-                     </div>
-                 </div>
-
-                 {/* Dải tiến trình (Progress Line) */}
-                 <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden mt-1 shadow-inner">
-                     <div 
-                        className="h-full bg-gradient-to-r from-rose-400 to-[#a1001f] transition-all duration-300 ease-out" 
-                        style={{ width: `${uploadState.progress}%` }} 
-                     />
-                 </div>
-
-                 <div className="flex items-center gap-2 mt-1 bg-gradient-to-r from-rose-50 to-white p-2.5 rounded-xl border border-rose-100/50 text-[11.5px] text-gray-700 shadow-sm">
-                    {uploadState.progress === 100 ? (
-                       <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    ) : (
-                       <Loader2 className="w-4 h-4 text-[#a1001f] animate-spin" />
-                    )}
-                    <span className="font-medium">
-                      {uploadState.progress === 100 ? 'Tải lên hoàn tất!' : 'Hệ thống đang xử lý, xin vui lòng giữ nguyên trang.'}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center shrink-0 border border-rose-100 shadow-inner">
+                  <FileVideo className="w-5 h-5 text-[#a1001f]" />
+                </div>
+                <div className="flex-1 min-w-0 pt-0.5">
+                  <div className="flex justify-between items-center mb-1">
+                    <h4
+                      className="text-sm font-semibold text-gray-800 truncate pr-2 w-[80%]"
+                      title={uploadState.originalFilename}
+                    >
+                      {uploadState.originalFilename}
+                    </h4>
+                    <span className="text-xs font-bold text-[#a1001f] bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full">
+                      {uploadState.progress}%
                     </span>
-                 </div>
-             </div>
+                  </div>
+                  <p
+                    className="text-[11.5px] text-gray-500 truncate w-full font-medium"
+                    title={uploadState.statusText}
+                  >
+                    {uploadState.statusText}
+                  </p>
+                </div>
+              </div>
+
+              <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden mt-1 shadow-inner">
+                <div
+                  className="h-full bg-gradient-to-r from-rose-400 to-[#a1001f] transition-all duration-300 ease-out"
+                  style={{ width: `${uploadState.progress}%` }}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 mt-1 bg-gradient-to-r from-rose-50 to-white p-2.5 rounded-xl border border-rose-100/50 text-[11.5px] text-gray-700 shadow-sm">
+                {uploadState.progress === 100 ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                ) : (
+                  <Loader2 className="w-4 h-4 text-[#a1001f] animate-spin" />
+                )}
+                <span className="font-medium">
+                  {uploadState.progress === 100
+                    ? "Tải lên hoàn tất!"
+                    : "Hệ thống đang xử lý, xin vui lòng giữ nguyên trang."}
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* VÒNG TRÒN TIẾN TRÌNH NHỎ LƯU TRÚ GÓC PHẢI DƯỚI (MẶC ĐỊNH HIỂN THỊ) */}
+          {/* Vòng tròn tiến trình nhỏ */}
           <div className="relative w-14 h-14 bg-white rounded-full shadow-[0_8px_25px_rgba(161,0,31,0.2)] flex items-center justify-center cursor-pointer border-2 border-white hover:scale-105 hover:shadow-[0_8px_30px_rgba(161,0,31,0.3)] transition-all duration-300">
-             {/* Vòng bg mờ */}
-             <svg className="absolute inset-0 w-full h-full -rotate-90 transform origin-center" viewBox="0 0 36 36">
-               <path
-                 className="text-gray-100"
-                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                 fill="none"
-                 stroke="currentColor"
-                 strokeWidth="2.5"
-               />
-               <path
-                 className={uploadState.progress === 100 ? "text-emerald-500 transition-all duration-500 ease-out" : "text-[#a1001f] transition-all duration-500 ease-out"}
-                 strokeDasharray="100, 100"
-                 strokeDashoffset={100 - uploadState.progress}
-                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                 fill="none"
-                 stroke="currentColor"
-                 strokeWidth="2.5"
-                 strokeLinecap="round"
-               />
-             </svg>
-             {/* Icon bên trong */}
-             {uploadState.progress === 100 ? (
-                <CheckCircle2 className="w-[22px] h-[22px] text-emerald-500 relative z-10 animate-in zoom-in" />
-             ) : (
-                <div className="relative z-10 flex items-center justify-center">
-                  <Upload className="w-[18px] h-[18px] text-[#a1001f] absolute" />
-                  <div className="absolute w-[22px] h-[22px] bg-[#a1001f] rounded-full blur-[10px] opacity-20 animate-pulse"></div>
-                </div>
-             )}
+            <svg
+              className="absolute inset-0 w-full h-full -rotate-90 transform origin-center"
+              viewBox="0 0 36 36"
+            >
+              <path
+                className="text-gray-100"
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              />
+              <path
+                className={
+                  uploadState.progress === 100
+                    ? "text-emerald-500 transition-all duration-500 ease-out"
+                    : "text-[#a1001f] transition-all duration-500 ease-out"
+                }
+                strokeDasharray="100, 100"
+                strokeDashoffset={100 - uploadState.progress}
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              />
+            </svg>
+            {uploadState.progress === 100 ? (
+              <CheckCircle2 className="w-[22px] h-[22px] text-emerald-500 relative z-10 animate-in zoom-in" />
+            ) : (
+              <div className="relative z-10 flex items-center justify-center">
+                <Upload className="w-[18px] h-[18px] text-[#a1001f] absolute" />
+                <div className="absolute w-[22px] h-[22px] bg-[#a1001f] rounded-full blur-[10px] opacity-20 animate-pulse" />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -355,3 +395,17 @@ body: JSON.stringify({
   );
 };
 
+// ─── Utility ─────────────────────────────────────────────────────────────────
+
+function getVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      window.URL.revokeObjectURL(video.src);
+      resolve(video.duration);
+    };
+    video.onerror = reject;
+    video.src = URL.createObjectURL(file);
+  });
+}

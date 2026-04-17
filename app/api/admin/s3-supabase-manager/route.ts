@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
         const objects = listRes.Contents || [];
         for (const obj of objects) {
           const key = obj.Key || '';
-          if (!key) continue;
+          if (!key || key.endsWith('.emptyFolderPlaceholder') || key.startsWith('.DS_Store')) continue;
           const objectKind = mapS3ContentTypeToKind(undefined, key);
           if (kind !== 'all' && kind !== objectKind) continue;
           allItems.push({

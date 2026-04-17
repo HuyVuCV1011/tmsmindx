@@ -1,72 +1,71 @@
-import { v2 as cloudinary } from "cloudinary";
-import { NextRequest, NextResponse } from "next/server";
+import { createSupabaseS3Client, isSupabaseS3Configured } from '@/lib/supabase-s3';
+import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { NextRequest, NextResponse } from 'next/server';
 
-// Cấu hình Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const BUCKET_NAME = 'mindx-question-images';
+
+async function ensureBucket() {
+  const client = createSupabaseS3Client();
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: BUCKET_NAME }));
+  } catch {
+    await client.send(new CreateBucketCommand({ Bucket: BUCKET_NAME }));
+  }
+}
+
+function makeProxyUrl(bucket: string, key: string): string {
+  return `/api/storage-image?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
+}
 
 export async function POST(req: NextRequest): Promise<Response> {
   try {
+    if (!isSupabaseS3Configured()) {
+      return NextResponse.json({ error: 'Chưa cấu hình Supabase S3 Storage' }, { status: 500 });
+    }
+
     const formData = await req.formData();
-    const file = formData.get("image");
-    
-    if (!file || typeof file === "string") {
-      return NextResponse.json({ error: "Không tìm thấy file" }, { status: 400 });
+    const file = formData.get('image');
+
+    if (!file || typeof file === 'string') {
+      return NextResponse.json({ error: 'Không tìm thấy file' }, { status: 400 });
     }
 
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      return NextResponse.json({ error: "File phải là hình ảnh" }, { status: 400 });
+    if (!file.type.startsWith('image/')) {
+      return NextResponse.json({ error: 'File phải là hình ảnh' }, { status: 400 });
     }
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      return NextResponse.json({ error: "Kích thước file không được vượt quá 5MB" }, { status: 400 });
+      return NextResponse.json({ error: 'Kích thước file không được vượt quá 5MB' }, { status: 400 });
     }
 
-    // Đọc file thành buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Upload lên Cloudinary bằng upload_stream
-    return await new Promise<Response>((resolve) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { 
-          resource_type: "image", 
-          folder: "mindx_question_images",
-          transformation: [
-            { width: 800, height: 600, crop: "limit" },
-            { quality: "auto" }
-          ]
-        },
-        (error, result) => {
-          if (error || !result) {
-            console.error("Cloudinary upload error:", error);
-            resolve(NextResponse.json({ 
-              error: "Lỗi upload ảnh lên cloud. Vui lòng thử lại." 
-            }, { status: 500 }));
-          } else {
-            resolve(
-              NextResponse.json({
-                success: true,
-                url: result.secure_url,
-                public_id: result.public_id,
-                width: result.width,
-                height: result.height,
-              })
-            );
-          }
-        }
-      );
-      stream.end(buffer);
+    await ensureBucket();
+    const client = createSupabaseS3Client();
+
+    const ext = file.name.includes('.') ? file.name.split('.').pop() : 'png';
+    const key = `question-images/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+        Body: buffer,
+        ContentType: file.type || 'image/png',
+      })
+    );
+
+    const url = makeProxyUrl(BUCKET_NAME, key);
+
+    return NextResponse.json({
+      success: true,
+      url,
+      public_id: key,
+      storagePath: `s3://${BUCKET_NAME}/${key}`,
     });
-  } catch (error) {
-    console.error("Upload error:", error);
-    return NextResponse.json({ 
-      error: "Lỗi server khi upload ảnh" 
-    }, { status: 500 });
+  } catch (error: any) {
+    console.error('Upload question image error:', error);
+    return NextResponse.json({ error: 'Lỗi server khi upload ảnh' }, { status: 500 });
   }
 }
