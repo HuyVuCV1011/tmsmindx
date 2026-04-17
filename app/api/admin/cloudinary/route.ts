@@ -1,92 +1,96 @@
-import { v2 as cloudinary } from 'cloudinary';
+/**
+ * Admin Storage Manager — thay thế Cloudinary Manager.
+ * List và xóa objects trong các Supabase S3 buckets.
+ */
+import {
+  createSupabaseS3Client,
+  getPublicObjectUrl,
+  isSupabaseS3Configured,
+} from '@/lib/supabase-s3';
+import {
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+} from '@aws-sdk/client-s3';
 import { NextRequest, NextResponse } from 'next/server';
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const KNOWN_BUCKETS = [
+  'mindx-videos',
+  'mindx-thumbnails',
+  'mindx-posts-content',
+  'mindx-question-images',
+  'feedback-images',
+];
 
-type AllowedResourceType = 'image' | 'video' | 'raw' | 'all';
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const isTransientCloudinaryDeleteError = (error: any) => {
-  const statusCode = Number(error?.http_code || error?.statusCode || 0);
-  const message = String(error?.message || '').toLowerCase();
-  return (
-    statusCode === 420 ||
-    statusCode === 429 ||
-    statusCode >= 500 ||
-    message.includes('timeout waiting for parallel processing') ||
-    message.includes('timeout')
-  );
-};
-
-const parsePositiveInt = (value: string | null, fallback: number) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.min(Math.floor(parsed), 100);
-};
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const resourceType = (searchParams.get('resource_type') || 'all') as AllowedResourceType;
-    const maxResults = parsePositiveInt(searchParams.get('max_results'), 30);
-    const nextCursor = searchParams.get('next_cursor') || undefined;
-    const prefix = (searchParams.get('prefix') || '').trim();
-
-    if (!['image', 'video', 'raw', 'all'].includes(resourceType)) {
-      return NextResponse.json({ success: false, error: 'Invalid resource_type' }, { status: 400 });
+    if (!isSupabaseS3Configured()) {
+      return NextResponse.json(
+        { success: false, error: 'Chưa cấu hình Supabase S3 Storage' },
+        { status: 500 }
+      );
     }
 
-    const baseOptions: Record<string, any> = {
-      type: 'upload',
-      max_results: maxResults,
-      next_cursor: nextCursor,
-      prefix: prefix || undefined,
-      direction: 'desc',
-    };
+    const { searchParams } = new URL(request.url);
+    const bucket = searchParams.get('bucket') || '';
+    const prefix = (searchParams.get('prefix') || '').trim();
+    const maxResults = Math.min(100, parseInt(searchParams.get('max_results') || '30', 10));
+    const continuationToken = searchParams.get('next_cursor') || undefined;
 
-    if (resourceType === 'all') {
-      const [images, videos] = await Promise.all([
-        cloudinary.api.resources({ ...baseOptions, resource_type: 'image' }),
-        cloudinary.api.resources({ ...baseOptions, resource_type: 'video' }),
-      ]);
+    const client = createSupabaseS3Client();
 
-      const resources = [...(images.resources || []), ...(videos.resources || [])].sort((a: any, b: any) => {
-        const left = new Date(a.created_at || 0).getTime();
-        const right = new Date(b.created_at || 0).getTime();
-        return right - left;
-      });
-
+    // Nếu không chỉ định bucket, list tất cả buckets đã biết
+    if (!bucket) {
       return NextResponse.json({
         success: true,
-        data: resources,
-        next_cursor: images.next_cursor || videos.next_cursor || null,
-        total_count: resources.length,
+        buckets: KNOWN_BUCKETS,
       });
     }
 
-    const result = await cloudinary.api.resources({
-      ...baseOptions,
-      resource_type: resourceType,
+    const result = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix || undefined,
+        MaxKeys: maxResults,
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    const objects = (result.Contents || []).map((obj) => {
+      const key = obj.Key || '';
+      const url = getPublicObjectUrl(bucket, key);
+      const ext = key.split('.').pop()?.toLowerCase() || '';
+      const isVideo = ['mp4', 'mov', 'avi', 'webm', 'mkv'].includes(ext);
+      const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
+
+      return {
+        // Giữ tương thích với CloudinaryResource interface ở frontend
+        asset_id: key,
+        public_id: key,
+        resource_type: isVideo ? 'video' : isImage ? 'image' : 'raw',
+        format: ext,
+        bytes: obj.Size || 0,
+        secure_url: url,
+        created_at: obj.LastModified?.toISOString() || new Date().toISOString(),
+        // S3-specific
+        key,
+        bucket,
+        etag: obj.ETag,
+      };
     });
 
     return NextResponse.json({
       success: true,
-      data: result.resources || [],
-      next_cursor: result.next_cursor || null,
-      total_count: (result.resources || []).length,
+      data: objects,
+      next_cursor: result.NextContinuationToken || null,
+      total_count: objects.length,
     });
   } catch (error: any) {
-    console.error('Cloudinary list error:', error);
+    console.error('S3 list error:', error);
     return NextResponse.json(
-      {
-        success: false,
-        error: error?.message || 'Failed to fetch Cloudinary resources',
-      },
+      { success: false, error: error?.message || 'Không thể lấy danh sách files' },
       { status: 500 }
     );
   }
@@ -94,67 +98,58 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const body = await request.json();
-    const publicId = String(body?.public_id || '').trim();
-    const resourceType = String(body?.resource_type || 'image').trim();
-
-    if (!publicId) {
-      return NextResponse.json({ success: false, error: 'public_id is required' }, { status: 400 });
-    }
-
-    if (!['image', 'video', 'raw'].includes(resourceType)) {
-      return NextResponse.json({ success: false, error: 'Invalid resource_type' }, { status: 400 });
-    }
-
-    const maxAttempts = 4;
-    let lastError: any;
-    let result: any = null;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        // First attempt keeps invalidate=true, fallback attempts disable invalidate
-        // to avoid long edge purge timeouts on large/derived videos.
-        result = await cloudinary.uploader.destroy(publicId, {
-          resource_type: resourceType as 'image' | 'video' | 'raw',
-          invalidate: attempt === 1,
-        });
-        break;
-      } catch (error: any) {
-        lastError = error;
-        if (!isTransientCloudinaryDeleteError(error) || attempt === maxAttempts) {
-          throw error;
-        }
-
-        // Exponential backoff: 250ms, 500ms, 1000ms...
-        await sleep(250 * Math.pow(2, attempt - 1));
-      }
-    }
-
-    if (!result) {
-      throw lastError || new Error('Cloudinary destroy returned no result');
-    }
-
-    const destroyStatus = String(result?.result || '').toLowerCase();
-    if (destroyStatus && destroyStatus !== 'ok' && destroyStatus !== 'not found') {
+    if (!isSupabaseS3Configured()) {
       return NextResponse.json(
-        {
-          success: false,
-          error: `Cloudinary delete failed: ${result.result}`,
-          data: result,
-        },
-        { status: 502 }
+        { success: false, error: 'Chưa cấu hình Supabase S3 Storage' },
+        { status: 500 }
       );
     }
 
-    return NextResponse.json({ success: true, data: result });
+    const body = await request.json();
+    // Hỗ trợ cả format cũ (public_id) và format mới (key + bucket)
+    const key = String(body?.key || body?.public_id || '').trim();
+    const bucket = String(body?.bucket || '').trim() || inferBucketFromKey(key);
+
+    if (!key) {
+      return NextResponse.json({ success: false, error: 'key là bắt buộc' }, { status: 400 });
+    }
+    if (!bucket) {
+      return NextResponse.json({ success: false, error: 'bucket là bắt buộc' }, { status: 400 });
+    }
+
+    const client = createSupabaseS3Client();
+
+    // Retry với exponential backoff
+    const maxAttempts = 3;
+    let lastError: any;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+        return NextResponse.json({ success: true, data: { result: 'ok' } });
+      } catch (err: any) {
+        lastError = err;
+        if (attempt < maxAttempts) await sleep(300 * attempt);
+      }
+    }
+
+    throw lastError;
   } catch (error: any) {
-    console.error('Cloudinary delete error:', error);
+    console.error('S3 delete error:', error);
     return NextResponse.json(
-      {
-        success: false,
-        error: error?.message || 'Failed to delete Cloudinary resource',
-      },
+      { success: false, error: error?.message || 'Không thể xóa file' },
       { status: 500 }
     );
   }
+}
+
+/**
+ * Suy ra bucket từ key path (dùng khi client cũ không gửi bucket).
+ */
+function inferBucketFromKey(key: string): string {
+  if (key.startsWith('videos/')) return 'mindx-videos';
+  if (key.startsWith('thumbnails/')) return 'mindx-thumbnails';
+  if (key.startsWith('post-images/')) return 'mindx-posts-content';
+  if (key.startsWith('question-images/')) return 'mindx-question-images';
+  if (key.startsWith('feedback/')) return 'feedback-images';
+  return '';
 }

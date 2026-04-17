@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useSidebar } from '@/lib/sidebar-context'
 import { cn } from '@/lib/utils'
 import {
+  BarChart3,
   BookOpen,
   CalendarDays,
   ChevronDown,
@@ -216,6 +217,11 @@ export function Sidebar() {
         { href: '/admin/s3-supabase-manager', label: 'S3 Supabase Manager' },
       ],
     },
+    {
+      href: '/admin/system-metrics',
+      label: 'Quản lý chỉ số hệ thống',
+      icon: BarChart3,
+    },
   ]
 
   const userMenuItems = [
@@ -368,6 +374,10 @@ export function Sidebar() {
           const isTrainingInputMenu = item?.href === '/admin/hr-candidates'
           if (isTrainingInputMenu && hasTrainingInputRole) {
             return item
+          }
+
+          if (item?.href === '/admin/system-metrics') {
+            return null
           }
 
           if (item?.submenu && Array.isArray(item.submenu)) {

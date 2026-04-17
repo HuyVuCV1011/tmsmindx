@@ -2,10 +2,11 @@
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { normalizeStorageUrl } from '@/lib/storage-url'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useState, useCallback } from 'react'
+import CroppedImage from './CroppedImage'
 
 interface Post {
     id: string | number
@@ -15,6 +16,7 @@ interface Post {
     banner_image: string
     post_type: string
     slug?: string
+    thumbnail_position?: string
 }
 
 interface SliderProps {
@@ -70,18 +72,25 @@ export default function Slider({ posts }: SliderProps) {
                         index === currentSlide ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
                     )}
                 >
-                    {/* Image — blur nhẹ để tăng depth */}
+                    {/* Image — sử dụng CroppedImage để hiển thị đúng vùng thumbnail đã cập nhật */}
                     <div className="absolute inset-0">
-                        <Image
-                            src={post.banner_image || post.featured_image || "/placeholder-banner.jpg"}
+                        {/* Background blur để tăng độ sâu (depth) */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src={normalizeStorageUrl(post.banner_image || post.featured_image) || "/placeholder-banner.jpg"}
                             alt={post.title}
-                            fill
-                            className="object-cover object-center scale-105"
-                            style={{ filter: 'blur(6px)' }}
-                            priority={index === 0}
-                            quality={95}
-                            sizes="(max-width: 768px) 100vw, 1920px"
+                            className="w-full h-full object-cover object-center scale-105"
+                            style={{ filter: 'blur(10px) brightness(0.7)' }}
                         />
+                        {/* Ảnh chính đã được crop */}
+                        <div className="absolute inset-0">
+                            <CroppedImage
+                                src={post.banner_image || post.featured_image || "/placeholder-banner.jpg"}
+                                alt={post.title}
+                                cropData={post.thumbnail_position}
+                                className="w-full h-full"
+                            />
+                        </div>
                     </div>
 
                     {/* Double gradient overlay */}

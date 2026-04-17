@@ -1,6 +1,7 @@
 import { Analytics } from "@vercel/analytics/react"
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PersistentLayout } from "@/components/PersistentLayout";
+import { TrackerProvider } from "@/components/TrackerProvider";
 import { AuthProvider } from "@/lib/auth-context";
 import { TeacherProvider } from "@/lib/teacher-context";
 import StoreProvider from "./StoreProvider";
@@ -45,9 +46,11 @@ export default function RootLayout({
           <StoreProvider>
             <AuthProvider>
               <TeacherProvider>
-                <PersistentLayout>
-                  {children}
-                </PersistentLayout>
+                <TrackerProvider>
+                  <PersistentLayout>
+                    {children}
+                  </PersistentLayout>
+                </TrackerProvider>
               </TeacherProvider>
             </AuthProvider>
           </StoreProvider>

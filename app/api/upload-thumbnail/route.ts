@@ -1,52 +1,65 @@
-import { NextRequest, NextResponse } from "next/server";
-import { v2 as cloudinary } from "cloudinary";
+import { createSupabaseS3Client, isSupabaseS3Configured } from '@/lib/supabase-s3';
+import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { NextRequest, NextResponse } from 'next/server';
 
-// Cấu hình Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const BUCKET_NAME = 'mindx-thumbnails';
+
+async function ensureBucket() {
+  const client = createSupabaseS3Client();
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: BUCKET_NAME }));
+  } catch {
+    await client.send(new CreateBucketCommand({ Bucket: BUCKET_NAME }));
+  }
+}
+
+/** Tạo URL proxy để serve ảnh qua server (hoạt động với cả private bucket) */
+function makeProxyUrl(bucket: string, key: string): string {
+  return `/api/storage-image?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`;
+}
 
 export async function POST(req: NextRequest): Promise<Response> {
-  const formData = await req.formData();
-  const file = formData.get("image");
-  if (!file || typeof file === "string") {
-    return NextResponse.json({ error: "No file" }, { status: 400 });
-  }
+  try {
+    if (!isSupabaseS3Configured()) {
+      return NextResponse.json({ error: 'Chưa cấu hình Supabase S3 Storage' }, { status: 500 });
+    }
 
-  // Đọc file thành buffer
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+    const formData = await req.formData();
+    const file = formData.get('image');
 
-  // Upload lên Cloudinary bằng upload_stream
-  return await new Promise<Response>((resolve) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { 
-        resource_type: "image", 
-        folder: "mindx_thumbnails",
-        // Không crop ảnh — giữ nguyên ảnh gốc để admin có thể chỉnh vùng crop sau
-        transformation: [
-          { quality: "auto" },
-          { fetch_format: "auto" }
-        ]
-      },
-      (error, result) => {
-        if (error || !result) {
-          resolve(NextResponse.json({ error: "Cloudinary upload failed" }, { status: 500 }));
-        } else {
-          resolve(
-            NextResponse.json({
-              success: true,
-              url: result.secure_url,
-              public_id: result.public_id,
-              width: result.width,
-              height: result.height,
-            })
-          );
-        }
-      }
+    if (!file || typeof file === 'string') {
+      return NextResponse.json({ error: 'Không tìm thấy file' }, { status: 400 });
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    await ensureBucket();
+    const client = createSupabaseS3Client();
+
+    const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg';
+    const key = `thumbnails/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+        Body: buffer,
+        ContentType: file.type || 'image/jpeg',
+      })
     );
-    stream.end(buffer);
-  });
+
+    // Dùng proxy URL để hoạt động với cả private bucket
+    const url = makeProxyUrl(BUCKET_NAME, key);
+
+    return NextResponse.json({
+      success: true,
+      url,
+      public_id: key,
+      storagePath: `s3://${BUCKET_NAME}/${key}`,
+    });
+  } catch (error: any) {
+    console.error('Upload thumbnail error:', error);
+    return NextResponse.json({ error: 'Lỗi upload thumbnail' }, { status: 500 });
+  }
 }

@@ -96,6 +96,7 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
     const timer = setTimeout(() => {
       if (typeof window === 'undefined') return;
       
+      // Không lưu imagePreview (base64) vào localStorage — quá lớn, gây QuotaExceededError
       const draftData = {
         question_type: questionType,
         question_text: questionText,
@@ -105,13 +106,27 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
         points,
         difficulty,
         image_url: imageUrl,
-        imagePreview: imagePreview,
       };
 
       try {
         localStorage.setItem(draftKey, JSON.stringify(draftData));
-      } catch (error) {
-        console.error('Failed to save draft:', error);
+      } catch (error: any) {
+        if (error?.name === 'QuotaExceededError') {
+          // Dọn dẹp tất cả draft cũ rồi thử lại
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('question_draft_')) keysToRemove.push(k);
+          }
+          keysToRemove.forEach((k) => localStorage.removeItem(k));
+          try {
+            localStorage.setItem(draftKey, JSON.stringify(draftData));
+          } catch {
+            // Nếu vẫn lỗi thì bỏ qua, không crash app
+          }
+        } else {
+          console.error('Failed to save draft:', error);
+        }
       }
     }, 500); // Debounce 500ms
 

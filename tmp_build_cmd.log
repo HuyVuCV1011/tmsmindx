@@ -1,0 +1,32 @@
+
+> teaching-portal-system@0.1.0 build
+> next build
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   ▲ Next.js 16.0.10 (Turbopack)
+   - Environments: .env
+   - Experiments (use with caution):
+     ⨯ webpackBuildWorker
+
+ ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+   Creating an optimized production build ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ✓ Compiled successfully in 23.7s
+   Running TypeScript ...
+Failed to compile.
+
+./components/system-metrics/EngagementChart.tsx:109:15
+Type error: Type '(value: number) => [number, "Người dùng/ngày" | "Người dùng/tuần"]' is not assignable to type 'Formatter<number, "Người dùng/ngày" | "Người dùng/tuần"> & ((value: number, name: "Người dùng/ngày" | "Người dùng/tuần", item: Payload<number, "Người dùng/ngày" | "Người dùng/tuần">, index: number, payload: Payload<...>[]) => ReactNode | [...])'.
+  Type '(value: number) => [number, "Người dùng/ngày" | "Người dùng/tuần"]' is not assignable to type 'Formatter<number, "Người dùng/ngày" | "Người dùng/tuần">'.
+    Types of parameters 'value' and 'value' are incompatible.
+      Type 'number | undefined' is not assignable to type 'number'.
+        Type 'undefined' is not assignable to type 'number'.
+
+[0m [90m 107 |[39m               }}
+ [90m 108 |[39m               labelFormatter[33m=[39m{(label) [33m=>[39m [32m`Ngày: ${label}`[39m}
+[31m[1m>[22m[39m[90m 109 |[39m               formatter[33m=[39m{(value[33m:[39m number) [33m=>[39m [
+ [90m     |[39m               [31m[1m^[22m[39m
+ [90m 110 |[39m                 value[33m,[39m
+ [90m 111 |[39m                 activeTab [33m===[39m [32m'dau'[39m [33m?[39m [32m'Người dùng/ngày'[39m [33m:[39m [32m'Người dùng/tuần'[39m[33m,[39m
+ [90m 112 |[39m               ]}[0m
+Next.js build worker exited with code: 1 and signal: null

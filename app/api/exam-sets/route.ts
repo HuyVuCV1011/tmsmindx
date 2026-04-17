@@ -1,5 +1,30 @@
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { deleteObject, parsePublicUrl } from '@/lib/supabase-s3';
+
+/** Xóa ảnh S3 an toàn, không throw */
+async function deleteImageSilently(url: string | null) {
+  if (!url) return;
+  const parsed = parsePublicUrl(url);
+  if (!parsed) return;
+  try {
+    await deleteObject(parsed.bucket, parsed.key);
+  } catch (err) {
+    console.error(`[S3 Cleanup] Failed to delete ${url}:`, err);
+  }
+}
+
+/** Extract tất cả src URL từ HTML content */
+function extractImageUrls(html: string): string[] {
+  if (!html) return [];
+  const urls: string[] = [];
+  const regex = /src=["']([^"']+)["']/g;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    urls.push(match[1].replace(/&amp;/g, '&'));
+  }
+  return urls;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -349,6 +374,15 @@ export async function DELETE(request: NextRequest) {
 
     await client.query('BEGIN');
 
+    // Lấy nội dung tất cả câu hỏi thuộc bộ đề để cleanup ảnh S3 sau
+    const questionsResult = await client.query(
+      `SELECT cq.noi_dung_cau_hoi
+       FROM chuyen_sau_cauhoi cq
+       JOIN chuyen_sau_bode_cauhoi bc ON bc.id_cau = cq.id
+       WHERE bc.id_de = $1`,
+      [id]
+    );
+
     const deleteResult = await client.query(
       'DELETE FROM chuyen_sau_bode WHERE id = $1 RETURNING id, ma_de AS set_code, ten_de AS set_name',
       [id]
@@ -360,6 +394,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     await client.query('COMMIT');
+
+    // Xóa ảnh S3 của tất cả câu hỏi trong bộ đề
+    questionsResult.rows.forEach(q => {
+      const urls = extractImageUrls(q.noi_dung_cau_hoi || '');
+      urls.forEach(url => deleteImageSilently(url));
+    });
+
     return NextResponse.json({ success: true, message: 'Đã xóa bộ đề thành công', data: deleteResult.rows[0] });
   } catch (error: unknown) {
     await client.query('ROLLBACK');
