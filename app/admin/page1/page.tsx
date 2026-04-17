@@ -4,12 +4,19 @@ import {
   Briefcase,
   Calendar,
   Clock,
+  Eye,
+  EyeOff,
+  Hash,
   Mail,
   MapPin,
+  Phone,
   Search,
+  Shield,
+  Star,
   TrendingUp,
   User,
   UserCheck,
+  Users,
 } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '@/lib/app-toast'
@@ -115,37 +122,268 @@ const InfoItem = memo(
     icon,
     label,
     value,
+    sensitive,
   }: {
     icon: React.ReactNode
     label: string
     value: string
+    sensitive?: boolean
   }) => {
+    const [revealed, setRevealed] = useState(false)
+
     return (
       <div className="flex items-start gap-2 p-2.5 rounded-lg border border-gray-300 bg-[#f3f3f3]">
         <div className="text-gray-500 mt-0.5">{icon}</div>
         <div className="flex-1 min-w-0">
           <div className="text-xs text-gray-500">{label}</div>
           <div className="text-sm font-semibold text-gray-900 truncate">
-            {value}
+            {sensitive && !revealed ? '••••••' : value}
           </div>
         </div>
+        {sensitive && (
+          <button
+            type="button"
+            onClick={() => setRevealed((v) => !v)}
+            className="text-gray-400 hover:text-gray-600 mt-1 shrink-0 transition-colors"
+            aria-label={revealed ? 'Ẩn' : 'Hiện'}
+          >
+            {revealed ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </button>
+        )}
       </div>
     )
   },
 )
 InfoItem.displayName = 'InfoItem'
 
-// Fetcher function with caching and compression
-const fetcher = async (url: string) => {
-  const res = await fetch(url, {
-    next: { revalidate: 60 }, // Cache 60s
-    headers: {
-      'Accept-Encoding': 'gzip, deflate, br',
-      'Cache-Control': 'max-age=60',
-    },
-  })
-  if (!res.ok) throw new Error('Failed to fetch')
-  return res.json()
+function formatJoinedDate(raw: string): string {
+  const s = String(raw).trim()
+  if (!s) return raw
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (iso) {
+    const [, y, m, d] = iso
+    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`
+  }
+  const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (slash) {
+    const a = parseInt(slash[1], 10)
+    const b = parseInt(slash[2], 10)
+    const y = slash[3]
+    let day: number
+    let month: number
+    if (a > 12) {
+      day = a
+      month = b
+    } else if (b > 12) {
+      month = a
+      day = b
+    } else {
+      month = a
+      day = b
+    }
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${y}`
+  }
+  return s
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  CL: 'CL (Coding Leader)',
+  RL: 'RL (Robotics Leader)',
+  AL: 'AL (Art Leader)',
+  TC: 'TC (Teaching Coordinator)',
+  TE: 'TE (Teaching Executive)',
+  TEGL: 'TEGL (Teaching Executive Group Leader)',
+  'TEGL+': 'TEGL+ (Teaching Executive Group Leader Plus)',
+  HO: 'HO (Teaching HO)',
+  AD: 'AD (Administrator)',
+  HR: 'HR (Human Resources)',
+  TM: 'TM (Teaching Manager)',
+  TD: 'TD (Teaching Development)',
+  TF: 'TF (Teacher Full-time)',
+  TP: 'TP (Teacher Part-time)',
+}
+
+function formatRolePosition(raw: string): string {
+  const s = String(raw).trim()
+  if (!s) return raw
+  const normalized = s.toUpperCase()
+  if (ROLE_LABELS[normalized]) return ROLE_LABELS[normalized]
+  return s
+}
+
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  if (!digits) return raw
+  const local = digits.startsWith('84') ? `0${digits.slice(2)}` : digits
+  if (local.length === 10)
+    return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`
+  if (local.length === 11)
+    return `${local.slice(0, 4)} ${local.slice(4, 8)} ${local.slice(8)}`
+  return local
+}
+
+function formatRateVnd(raw: string): string {
+  const t = raw.replace(/\s/g, '').replace(/\u00A0/g, '')
+  if (!t) return raw
+  let n: number | null = null
+  if (/^\d{1,3}(,\d{3})*(\.\d+)?$/.test(t)) n = parseFloat(t.replace(/,/g, ''))
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) n = parseFloat(t.replace(/\./g, ''))
+  if (n == null || !isFinite(n)) return raw
+  return new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+    maximumFractionDigits: 0,
+  }).format(Math.round(n))
+}
+
+const PROFILE_FIELDS: {
+  key: string
+  label: string
+  icon: string
+  format?: (v: string) => string
+  sensitive?: boolean
+}[] = [
+  { key: 'code', label: 'Mã giáo viên (LMS)', icon: 'hash' },
+  { key: 'full_name', label: 'Họ và tên', icon: 'user' },
+  { key: 'user_name', label: 'Tên người dùng (Username)', icon: 'user' },
+  { key: 'work_email', label: 'Email (MindX)', icon: 'mail' },
+  { key: 'personal_email', label: 'Email (Cá nhân)', icon: 'mail' },
+  {
+    key: 'phone_number',
+    label: 'Số điện thoại',
+    icon: 'phone',
+    format: formatPhone,
+  },
+  { key: 'main_centre', label: 'Chi nhánh hiện tại', icon: 'mappin' },
+  { key: 'khoi_final', label: 'Khối', icon: 'briefcase' },
+  { key: 'role', label: 'Vị trí', icon: 'shield', format: formatRolePosition },
+  { key: 'course_line', label: 'Course Line', icon: 'briefcase' },
+  {
+    key: 'joined_date',
+    label: 'Ngày vào',
+    icon: 'calendar',
+    format: formatJoinedDate,
+  },
+  { key: 'data_hr_raw', label: 'Mã giáo viên (HR)', icon: 'hash' },
+  { key: 'check_col', label: 'CHECK', icon: 'shield' },
+  { key: 'te_quan_ly', label: 'TE quản lý', icon: 'users' },
+  { key: 'leader_quan_ly', label: 'Quản lý trực tiếp', icon: 'users' },
+  {
+    key: 'rate_k12_check',
+    label: 'Mức lương (Rate)',
+    icon: 'star',
+    format: formatRateVnd,
+    sensitive: true,
+  },
+  {
+    key: 'rank_k12_check',
+    label: 'Bậc lương (Rank)',
+    icon: 'star',
+    sensitive: true,
+  },
+]
+
+const ICON_MAP: Record<string, React.ReactNode> = {
+  hash: <Hash className="h-4 w-4" />,
+  user: <User className="h-4 w-4" />,
+  mail: <Mail className="h-4 w-4" />,
+  phone: <Phone className="h-4 w-4" />,
+  mappin: <MapPin className="h-4 w-4" />,
+  briefcase: <Briefcase className="h-4 w-4" />,
+  shield: <Shield className="h-4 w-4" />,
+  star: <Star className="h-4 w-4" />,
+  calendar: <Calendar className="h-4 w-4" />,
+  users: <Users className="h-4 w-4" />,
+}
+
+// API Secret Key for internal requests
+const API_SECRET_KEY =
+  process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025'
+
+/** Gốc API (vd. https://www.tpsmindx.com). Để trống = gọi /api cùng origin (khuyến nghị khi deploy cùng domain). */
+const PROFILE_API_ORIGIN = (
+  process.env.NEXT_PUBLIC_TPS_PROFILE_API_ORIGIN ?? ''
+).replace(/\/$/, '')
+
+// Custom fetcher với Authorization header và token refresh
+const createSecureFetcher = (): ((url: string) => Promise<any>) => {
+  return async (url: string) => {
+    let token = localStorage.getItem('token')
+
+    const doFetch = async (tok: string | null) => {
+      const headers: HeadersInit = {
+        'x-api-key': API_SECRET_KEY,
+      }
+      if (tok) headers['Authorization'] = `Bearer ${tok}`
+
+      const res = await fetch(url, { headers })
+      return res
+    }
+
+    let response = await doFetch(token)
+
+    // Handle 401 -> attempt silent refresh with refreshToken
+    if (response.status === 401) {
+      const refreshToken = localStorage.getItem('refreshToken')
+      if (refreshToken) {
+        try {
+          const FIREBASE_API_KEY =
+            process.env.NEXT_PUBLIC_FIREBASE_API_KEY || ''
+          const refreshRes = await fetch(
+            `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `grant_type=refresh_token&refresh_token=${refreshToken}`,
+            },
+          )
+
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json()
+            const newIdToken = refreshData.id_token
+            const newRefreshToken = refreshData.refresh_token
+
+            if (newIdToken) {
+              localStorage.setItem('token', newIdToken)
+              if (newRefreshToken)
+                localStorage.setItem('refreshToken', newRefreshToken)
+              token = newIdToken
+              // retry original request
+              response = await doFetch(token)
+            }
+          }
+        } catch (e) {
+          console.warn('Silent token refresh failed', e)
+        }
+      }
+    }
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // If still unauthorized after refresh attempt, force logout
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        localStorage.removeItem('refreshToken')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+
+      const error: any = new Error('An error occurred while fetching the data.')
+      try {
+        error.info = await response.json()
+      } catch (e) {
+        error.info = null
+      }
+      error.status = response.status
+      throw error
+    }
+
+    return response.json()
+  }
 }
 
 export default function Page1() {
@@ -193,45 +431,127 @@ export default function Page1() {
     }
   }, [])
 
-  // SWR với auto caching và revalidation
+  // Create secure fetcher instance
+  const secureFetcher = createSecureFetcher()
+
+  // Bundle nhanh: teacher + chứng chỉ + training (không chờ CSV/query điểm chuyên sâu–trải nghiệm)
+  const profileUrl = submitCode.trim()
+    ? `${PROFILE_API_ORIGIN}/api/checkdatasource/status?code=${encodeURIComponent(submitCode.trim())}&fast=1`
+    : null
+
   const {
-    data: teacherData,
-    isLoading: isLoadingTeacher,
-    error: teacherError,
-  } = useSWR(submitCode ? `/api/teachers?code=${submitCode}` : null, fetcher, {
+    data: profileBundle,
+    isLoading: isLoadingProfile,
+    error: profileError,
+    mutate: mutateProfile,
+  } = useSWR(profileUrl, secureFetcher, {
     revalidateOnFocus: false,
-    dedupingInterval: 60000, // Dedupe requests trong 60s
-    shouldRetryOnError: false, // Don't retry on 404
+    revalidateOnReconnect: false,
+    dedupingInterval: 300000,
+    shouldRetryOnError: false,
+    revalidateIfStale: false,
   })
 
-  const teacher = teacherData?.teacher || null
+  const teacherLmsCode = useMemo(() => {
+    if (!profileBundle?.exists || !profileBundle.teacher) return null
+    const t = profileBundle.teacher as Record<string, unknown>
+    const c = String(t.code ?? '').trim()
+    return c || null
+  }, [profileBundle])
 
-  // Only load scores after teacher is loaded
-  const { data: expertiseDataRes, isLoading: isLoadingExpertise } = useSWR(
-    teacher ? `/api/rawdata?code=${submitCode}` : null,
-    fetcher,
+  const scoresUrl =
+    !isLoadingProfile &&
+    profileBundle &&
+    (profileBundle as { success?: boolean }).success !== false &&
+    profileBundle.exists &&
+    teacherLmsCode
+      ? `${PROFILE_API_ORIGIN}/api/checkdatasource/scores?code=${encodeURIComponent(teacherLmsCode)}`
+      : null
+
+  const { data: scoresBundle, isLoading: isLoadingScores } = useSWR(
+    scoresUrl,
+    secureFetcher,
     {
       revalidateOnFocus: false,
-      dedupingInterval: 60000,
+      revalidateOnReconnect: false,
+      dedupingInterval: 300000,
+      shouldRetryOnError: false,
+      revalidateIfStale: false,
     },
   )
 
-  const { data: experienceDataRes, isLoading: isLoadingExperience } = useSWR(
-    teacher ? `/api/rawdata-experience?code=${submitCode}` : null,
-    fetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 60000,
-    },
-  )
+  const mergedProfileBundle = useMemo(() => {
+    if (!profileBundle) return undefined
+    const s = scoresBundle as
+      | { success?: boolean; expertise?: unknown; experience?: unknown }
+      | undefined
+    if (!s?.success) return profileBundle
+    return {
+      ...profileBundle,
+      expertise: s.expertise ?? profileBundle.expertise,
+      experience: s.experience ?? profileBundle.experience,
+    }
+  }, [profileBundle, scoresBundle])
 
-  const expertiseData = expertiseDataRes?.monthlyData || []
-  const experienceData = experienceDataRes?.monthlyData || []
-  const scoresLoaded = !isLoadingExpertise && !isLoadingExperience
+  const dbRow: Record<string, unknown> | null =
+    profileBundle?.exists && profileBundle.teacher
+      ? (profileBundle.teacher as Record<string, unknown>)
+      : null
+
+  // Map database row to Teacher interface - simplified version for admin
+  const teacher: Teacher | null = dbRow
+    ? ({
+        stt: String(dbRow.stt ?? ''),
+        name: String(dbRow.full_name ?? dbRow.name ?? ''),
+        code: String(dbRow.code ?? ''),
+        emailMindx: String(dbRow.work_email ?? ''),
+        emailPersonal: String(dbRow.personal_email ?? ''),
+        status: String(dbRow.status ?? 'Active'),
+        branchIn: String(dbRow.centers ?? ''),
+        programIn: String(dbRow.khoi ?? 'K12'),
+        branchCurrent: String(dbRow.main_centre ?? ''),
+        programCurrent: String(dbRow.khoi_final ?? 'K12'),
+        manager: String(dbRow.te_quan_ly ?? ''),
+        responsible: String(dbRow.leader_quan_ly ?? ''),
+        position: String(dbRow.role ?? ''),
+        startDate: String(dbRow.joined_date ?? ''),
+        onboardBy: String(dbRow.onboard_by ?? ''),
+      } as Teacher)
+    : null
+
+  const {
+    certificates: _cert,
+    trainingData,
+    expertiseData,
+    experienceData,
+    scoresLoaded,
+    isLoadingTraining,
+  } = useMemo(() => {
+    const bundle = mergedProfileBundle
+    const certificates = bundle?.certificates?.data ?? []
+    const trainingStat = bundle?.training?.data?.[0] ?? null
+    const trainingData = trainingStat as TrainingData | null
+    const expertiseData = bundle?.expertise?.monthlyData ?? []
+    const experienceData = bundle?.experience?.monthlyData ?? []
+    const scoresReady =
+      !isLoadingProfile &&
+      bundle !== undefined &&
+      bundle !== null &&
+      (!teacherLmsCode || !isLoadingScores)
+    const isLoadingTraining = isLoadingProfile
+    return {
+      certificates,
+      trainingData,
+      expertiseData,
+      experienceData,
+      scoresLoaded: scoresReady,
+      isLoadingTraining,
+    }
+  }, [mergedProfileBundle, isLoadingProfile, isLoadingScores, teacherLmsCode])
 
   // Show feedback modal 30 seconds after successful teacher search
   useEffect(() => {
-    if (submitCode && teacherData && !hasFeedback && !feedbackModalOpen) {
+    if (submitCode && profileBundle && !hasFeedback && !feedbackModalOpen) {
       const timer = setTimeout(() => {
         setFeedbackModalOpen(true)
         setIsFirstTimeFeedback(true) // Mark as mandatory first-time feedback
@@ -239,7 +559,7 @@ export default function Page1() {
 
       return () => clearTimeout(timer)
     }
-  }, [submitCode, teacherData, hasFeedback, feedbackModalOpen])
+  }, [submitCode, profileBundle, hasFeedback, feedbackModalOpen])
 
   // Prevent body scroll when feedback modal is open
   useEffect(() => {
@@ -278,28 +598,19 @@ export default function Page1() {
       }
     }, [availabilityPeriod])
 
-  // Load training data AFTER teacher is loaded
-  const { data: trainingData, isLoading: isLoadingTraining } = useSWR(
-    teacher ? `/api/training?code=${submitCode}` : null,
-    fetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 60000,
-      shouldRetryOnError: false,
-    },
-  )
-
   // Load availability AFTER scores are loaded - filter by teacher name on server side
   // This allows UI to render first, then load availability data later
   const { data: availabilityDataRes, isLoading: isLoadingAvailabilityData } =
     useSWR(
       teacher && scoresLoaded
-        ? `/api/availability?fromDate=${availabilityFromDate}&toDate=${availabilityToDate}&teacherName=${encodeURIComponent(teacher.name || '')}`
+        ? `${PROFILE_API_ORIGIN}/api/availability?fromDate=${availabilityFromDate}&toDate=${availabilityToDate}&teacherName=${encodeURIComponent(teacher.name || '')}`
         : null,
-      fetcher,
+      secureFetcher,
       {
         revalidateOnFocus: false,
-        dedupingInterval: 60000,
+        revalidateOnReconnect: false,
+        dedupingInterval: 120000,
+        shouldRetryOnError: false,
       },
     )
 
@@ -344,20 +655,75 @@ export default function Page1() {
 
   // Handle teacher data errors
   useEffect(() => {
-    if (teacherError) {
-      // API returned error (404, 500, etc)
-      setNotFoundModalOpen(true)
-    } else if (teacherData && teacherData.error) {
-      // API returned error in response body
-      setError(teacherData.error)
-      setNotFoundModalOpen(true)
-    } else if (submitCode && !isLoadingTeacher && teacherData && !teacher) {
-      // API returned but no teacher found
-      setNotFoundModalOpen(true)
-    } else if (teacher) {
-      setError('')
-    }
-  }, [teacherData, teacher, submitCode, isLoadingTeacher, teacherError])
+    ;(async () => {
+      if (profileError) {
+        // If unauthorized, try silent refresh and revalidate once
+        const status = (profileError as any)?.status
+        if (status === 401) {
+          const refreshToken = localStorage.getItem('refreshToken')
+          if (refreshToken) {
+            try {
+              const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || ''
+              const refreshRes = await fetch(
+                `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                  },
+                  body: `grant_type=refresh_token&refresh_token=${refreshToken}`,
+                },
+              )
+
+              if (refreshRes.ok) {
+                const refreshData = await refreshRes.json()
+                const newIdToken = refreshData.id_token
+                const newRefreshToken = refreshData.refresh_token
+                if (newIdToken) {
+                  localStorage.setItem('token', newIdToken)
+                  if (newRefreshToken)
+                    localStorage.setItem('refreshToken', newRefreshToken)
+                  // Revalidate teacher data
+                  if (profileUrl) await mutateProfile()
+                  return
+                }
+              }
+            } catch (e) {
+              console.warn('Silent refresh failed', e)
+            }
+          }
+
+          // If refresh not possible or failed, force logout
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+          localStorage.removeItem('refreshToken')
+          window.location.href = '/login'
+          return
+        }
+
+        // Other API errors: show not found modal
+        setNotFoundModalOpen(true)
+      } else if (teacher) {
+        setError('')
+        setNotFoundModalOpen(false)
+      } else if (
+        submitCode.trim() &&
+        !isLoadingProfile &&
+        profileBundle &&
+        !profileBundle.exists
+      ) {
+        setNotFoundModalOpen(true)
+      }
+    })()
+  }, [
+    profileError,
+    teacher,
+    submitCode,
+    isLoadingProfile,
+    profileBundle,
+    profileUrl,
+    mutateProfile,
+  ])
 
   // Handle not found modal confirm
   const handleNotFoundConfirm = useCallback(() => {
@@ -367,59 +733,6 @@ export default function Page1() {
     setError('')
     localStorage.removeItem('lastSearchCode')
   }, [])
-
-  // Debounce search for better performance
-  useEffect(() => {
-    if (!searchCode.trim()) return
-
-    const timer = setTimeout(() => {
-      // Auto-search after 500ms of no typing
-    }, 500)
-
-    return () => clearTimeout(timer)
-  }, [searchCode])
-
-  // Track page visit on mount
-  useEffect(() => {
-    fetch('/api/analytics', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'visit' }),
-    }).catch((err) => console.error('Visit tracking failed:', err))
-  }, [])
-
-  // Handle ESC key to close modals
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (feedbackSuccessModalOpen) {
-          setFeedbackSuccessModalOpen(false)
-        } else if (feedbackModalOpen && !isFirstTimeFeedback) {
-          // Only allow ESC if it's not first-time mandatory feedback
-          setFeedbackModalOpen(false)
-          setFeedbackRating(0)
-          setFeedbackComment('')
-          setFeedbackFeature('')
-        } else if (registrationCheckModalOpen) {
-          setRegistrationCheckModalOpen(false)
-        } else if (notFoundModalOpen) {
-          setNotFoundModalOpen(false)
-        } else if (modalOpen) {
-          setModalOpen(false)
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [
-    feedbackSuccessModalOpen,
-    feedbackModalOpen,
-    isFirstTimeFeedback,
-    registrationCheckModalOpen,
-    notFoundModalOpen,
-    modalOpen,
-  ])
 
   const handleSearch = useCallback(() => {
     if (!searchCode.trim()) {
@@ -799,7 +1112,7 @@ export default function Page1() {
         {/* Header */}
         <div className="border-b border-gray-200 pb-2 sm:pb-3">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-            Tìm kiếm giáo viên
+            Tìm Kiếm Giáo Viên
           </h1>
           <p className="text-xs text-gray-600 mt-1">
             Nhập mã giáo viên để xem thông tin chi tiết (ví dụ: phunt,
@@ -822,11 +1135,11 @@ export default function Page1() {
           </div>
           <button
             onClick={handleSearch}
-            disabled={isLoadingTeacher}
+            disabled={isLoadingProfile}
             className="px-6 py-2.5 bg-[#a1001f] text-white rounded-full text-sm font-semibold hover:bg-[#870019] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 min-w-[100px]"
           >
             <Search className="h-4 w-4" />
-            {isLoadingTeacher ? 'Đang tìm...' : 'Tìm'}
+            {isLoadingProfile ? 'Đang tìm...' : 'Tìm'}
           </button>
         </div>
 
@@ -867,7 +1180,7 @@ export default function Page1() {
         )}
 
         {/* Teacher Info Skeleton */}
-        {isLoadingTeacher && submitCode && (
+        {isLoadingProfile && submitCode && (
           <div className="border border-gray-200 rounded-xl overflow-hidden">
             {/* Header Skeleton */}
             <div className="bg-[#a1001f] text-white p-3 sm:p-4">
@@ -902,7 +1215,7 @@ export default function Page1() {
         )}
 
         {/* Teacher Info */}
-        {teacher && !isLoadingTeacher && (
+        {teacher && !isLoadingProfile && (
           <div
             className="border border-gray-200 rounded-xl overflow-hidden animate-fadeIn"
             style={{ animationDelay: '0.1s' }}
@@ -933,88 +1246,35 @@ export default function Page1() {
               </div>
             </div>
 
-            {/* Info Grid */}
-            <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
+            {/* Full Profile Grid */}
+            <div className="p-3 sm:p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
-                {teacher.emailMindx && teacher.emailMindx !== 'N/A' && (
-                  <InfoItem
-                    icon={<Mail className="h-4 w-4" />}
-                    label="Email MindX"
-                    value={teacher.emailMindx}
-                  />
-                )}
-                {teacher.emailPersonal && teacher.emailPersonal !== 'N/A' && (
-                  <InfoItem
-                    icon={<Mail className="h-4 w-4" />}
-                    label="Email cá nhân"
-                    value={teacher.emailPersonal}
-                  />
-                )}
-                {teacher.branchCurrent && teacher.branchCurrent !== 'N/A' && (
-                  <InfoItem
-                    icon={<MapPin className="h-4 w-4" />}
-                    label="Cơ sở hiện tại"
-                    value={teacher.branchCurrent}
-                  />
-                )}
-                {teacher.programCurrent && teacher.programCurrent !== 'N/A' && (
-                  <InfoItem
-                    icon={<Briefcase className="h-4 w-4" />}
-                    label="Program"
-                    value={teacher.programCurrent}
-                  />
-                )}
-                {teacher.position && teacher.position !== 'N/A' && (
-                  <InfoItem
-                    icon={<User className="h-4 w-4" />}
-                    label="Vị trí"
-                    value={teacher.position}
-                  />
-                )}
-                {teacher.startDate && teacher.startDate !== 'N/A' && (
-                  <InfoItem
-                    icon={<Calendar className="h-4 w-4" />}
-                    label="Ngày bắt đầu làm việc"
-                    value={teacher.startDate}
-                  />
-                )}
-              </div>
+                {dbRow &&
+                  PROFILE_FIELDS.map(
+                    ({ key, label, icon, format, sensitive }) => {
+                      const raw = dbRow[key]
+                      if (
+                        raw == null ||
+                        String(raw).trim() === '' ||
+                        String(raw).trim() === 'N/A'
+                      )
+                        return null
 
-              {/* Additional Info */}
-              <div className="pt-3 border-t border-gray-200">
-                <h3 className="text-xs font-bold text-gray-900 mb-2">
-                  Thông tin ban đầu
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div className="text-xs">
-                    <span className="text-gray-600">Cơ sở ban đầu :</span>
-                    <span className="ml-2 font-medium">{teacher.branchIn}</span>
-                  </div>
-                  <div className="text-xs">
-                    <span className="text-gray-600">Khối đầu vào:</span>
-                    <span className="ml-2 font-medium">
-                      {teacher.programIn}
-                    </span>
-                  </div>
-                  <div className="text-xs">
-                    <span className="text-gray-600">Onboard bởi:</span>
-                    <span className="ml-2 font-medium">
-                      {teacher.onboardBy}
-                    </span>
-                  </div>
-                  <div className="text-xs">
-                    <span className="text-gray-600">Trạng thái hoạt động:</span>
-                    <span
-                      className={`ml-2 font-medium ${
-                        teacher.status === 'Active'
-                          ? 'text-green-600'
-                          : 'text-gray-600'
-                      }`}
-                    >
-                      {teacher.status}
-                    </span>
-                  </div>
-                </div>
+                      const display = format
+                        ? format(String(raw).trim())
+                        : String(raw).trim()
+
+                      return (
+                        <InfoItem
+                          key={key}
+                          icon={ICON_MAP[icon] || <Hash className="h-4 w-4" />}
+                          label={label}
+                          value={display}
+                          sensitive={sensitive}
+                        />
+                      )
+                    },
+                  )}
               </div>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool } from 'pg'
 
 // ============================================================
 // Hệ thống Migration tự động cho TPS
@@ -7,9 +7,9 @@ import { Pool } from 'pg';
 // ============================================================
 
 interface Migration {
-  name: string;
-  version: number;
-  sql: string;
+  name: string
+  version: number
+  sql: string
 }
 
 const migrations: Migration[] = [
@@ -908,13 +908,13 @@ const migrations: Migration[] = [
     `,
   },
 
-    // ═══════════════════════════════════════════════════════
-    // V36: HR GEN catalog for planner page
-    // ═══════════════════════════════════════════════════════
-    {
-      name: 'V36_hr_gen_catalog',
-      version: 36,
-      sql: `
+  // ═══════════════════════════════════════════════════════
+  // V36: HR GEN catalog for planner page
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V36_hr_gen_catalog',
+    version: 36,
+    sql: `
         CREATE TABLE IF NOT EXISTS hr_gen_catalog (
           id SERIAL PRIMARY KEY,
           gen_name VARCHAR(100) NOT NULL UNIQUE,
@@ -952,7 +952,7 @@ const migrations: Migration[] = [
           END IF;
         END $$;
       `,
-    },
+  },
 
   // ═══════════════════════════════════════════════════════
   // V37: Group mapping for split training videos
@@ -1259,18 +1259,20 @@ const migrations: Migration[] = [
         ADD COLUMN IF NOT EXISTS lich_thi_dk TIMESTAMP;
     `,
   },
-];
+]
 
 // ========== HÀM CHẠY MIGRATIONS ==========
 
-let migrationRan = false;
+let migrationRan = false
 
-export async function runMigrations(pool: Pool): Promise<{ success: boolean; applied: string[]; errors: string[] }> {
-  const applied: string[] = [];
-  const errors: string[] = [];
-  let client;
+export async function runMigrations(
+  pool: Pool,
+): Promise<{ success: boolean; applied: string[]; errors: string[] }> {
+  const applied: string[] = []
+  const errors: string[] = []
+  let client
   try {
-    client = await pool.connect();
+    client = await pool.connect()
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS _migrations (
@@ -1279,49 +1281,55 @@ export async function runMigrations(pool: Pool): Promise<{ success: boolean; app
           version INTEGER NOT NULL,
           applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-      `);
-      const result = await client.query('SELECT name FROM _migrations');
-      const appliedMigrations = new Set(result.rows.map((r: { name: string }) => r.name));
+      `)
+      const result = await client.query('SELECT name FROM _migrations')
+      const appliedMigrations = new Set(
+        result.rows.map((r: { name: string }) => r.name),
+      )
       for (const migration of migrations) {
-        if (appliedMigrations.has(migration.name)) continue;
+        if (appliedMigrations.has(migration.name)) continue
         try {
-          await client.query('BEGIN');
-          await client.query(migration.sql);
-          await client.query('INSERT INTO _migrations (name, version) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING', [migration.name, migration.version]);
-          await client.query('COMMIT');
-          applied.push(migration.name);
-          console.log(`  ✅ Migration applied: ${migration.name} (v${migration.version})`);
+          await client.query('BEGIN')
+          await client.query(migration.sql)
+          await client.query(
+            'INSERT INTO _migrations (name, version) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING',
+            [migration.name, migration.version],
+          )
+          await client.query('COMMIT')
+          applied.push(migration.name)
+          console.log(
+            `  ✅ Migration applied: ${migration.name} (v${migration.version})`,
+          )
         } catch (err: any) {
-          await client.query('ROLLBACK');
-          const errorMsg = `Migration ${migration.name} failed: ${err.message}`;
-          errors.push(errorMsg);
-          console.error(`  ❌ ${errorMsg}`);
+          await client.query('ROLLBACK')
+          const errorMsg = `Migration ${migration.name} failed: ${err.message}`
+          errors.push(errorMsg)
+          console.error(`  ❌ ${errorMsg}`)
         }
       }
-      return { success: errors.length === 0, applied, errors };
+      return { success: errors.length === 0, applied, errors }
     } finally {
-      client.release();
+      client.release()
     }
   } catch (err: any) {
-    console.error('❌ Migration system error:', err.message);
-    return { success: false, applied, errors: [err.message] };
+    console.error('❌ Migration system error:', err.message)
+    return { success: false, applied, errors: [err.message] }
   }
 }
 
 export async function initDatabase(pool: Pool): Promise<void> {
-  if (migrationRan) return;
-  migrationRan = true;
-  console.log('\n🔄 Running database migrations...');
-  const result = await runMigrations(pool);
+  if (migrationRan) return
+  migrationRan = true
+  console.log('\n🔄 Running database migrations...')
+  const result = await runMigrations(pool)
   if (result.applied.length === 0) {
-    console.log('✅ Database is up to date. No new migrations.\n');
+    console.log('✅ Database is up to date. No new migrations.\n')
   } else {
-    console.log(`✅ Applied ${result.applied.length} migration(s).\n`);
+    console.log(`✅ Applied ${result.applied.length} migration(s).\n`)
   }
   if (result.errors.length > 0) {
-    console.warn(`⚠️ ${result.errors.length} migration(s) had errors.\n`);
+    console.warn(`⚠️ ${result.errors.length} migration(s) had errors.\n`)
   }
 }
 
-export { migrations };
-
+export { migrations }
