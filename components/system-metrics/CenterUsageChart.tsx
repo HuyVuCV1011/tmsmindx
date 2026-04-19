@@ -101,7 +101,7 @@ export function CenterUsageChart({ data }: CenterUsageChartProps) {
                       | undefined
                     return `Cơ sở: ${datum?.center ?? ''}`
                   }}
-                  formatter={(value: number) => [value, 'Lượt sử dụng']}
+                  formatter={(value) => [Number(value ?? 0), 'Lượt sử dụng']}
                 />
                 <Bar
                   dataKey="usage_count"
@@ -157,7 +157,7 @@ export function CenterUsageChart({ data }: CenterUsageChartProps) {
                       | undefined
                     return `Cơ sở: ${datum?.center ?? ''}`
                   }}
-                  formatter={(value: number) => [value, 'Lượt sử dụng']}
+                  formatter={(value) => [Number(value ?? 0), 'Lượt sử dụng']}
                 />
                 <Bar
                   dataKey="usage_count"
