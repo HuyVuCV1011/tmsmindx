@@ -15,6 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
 import { findMatchingCampus } from '@/lib/campus-data'
 import { useTeacher } from '@/lib/teacher-context'
 import {
@@ -178,7 +179,7 @@ function getWorkflowSteps(status: LeaveRequest['status']): StepItem[] {
 }
 
 export default function XinNghiMotBuoiPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const { teacherProfile } = useTeacher()
 
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([])
@@ -312,6 +313,7 @@ export default function XinNghiMotBuoiPage() {
 
         const response = await fetch(
           `/api/leave-requests?email=${encodeURIComponent(user.email)}`,
+          { headers: authHeaders(token) },
         )
         const data = await response.json()
 
@@ -330,7 +332,7 @@ export default function XinNghiMotBuoiPage() {
         setLoading(false)
       }
     },
-    [user?.email],
+    [user?.email, token],
   )
 
   useEffect(() => {
@@ -536,7 +538,10 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
     try {
       const response = await fetch('/api/leave-requests', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(token),
+        },
         body: JSON.stringify({
           ...formData,
           email_subject: subjectLine,

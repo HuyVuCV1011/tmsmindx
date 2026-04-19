@@ -1,8 +1,27 @@
 import { createHash } from 'crypto';
 
-const DEFAULT_SHEET_ID = '10cKm22qwE224nAB3GxECb6SApl1wURHEgspgpWuFhvQ';
-const DEFAULT_GID = '951906874';
 const DEFAULT_CACHE_TTL_MS = 2 * 60 * 1000;
+
+function hrSheetFallbackFromEnv(): { sheetId?: string; gid?: string } {
+  return {
+    sheetId: process.env.HR_CANDIDATE_SHEET_ID?.trim(),
+    gid: process.env.HR_CANDIDATE_SHEET_GID?.trim(),
+  };
+}
+
+function resolveHrSheetIds(
+  sheetId: string | undefined,
+  gid: string | undefined,
+): { sheetId: string; gid: string } {
+  const s = sheetId?.trim();
+  const g = gid?.trim();
+  if (!s || !g) {
+    throw new Error(
+      'Thiếu sheet id/gid: đặt HR_CANDIDATE_SHEET_CSV_URL đầy đủ hoặc HR_CANDIDATE_SHEET_ID + HR_CANDIDATE_SHEET_GID trong .env.',
+    );
+  }
+  return { sheetId: s, gid: g };
+}
 
 interface CacheEntry<T> {
   data: T;
@@ -164,43 +183,39 @@ function findHeaderRow(rows: string[][]): number {
 }
 
 function extractSheetInfoFromUrl(rawUrl: string | undefined): SheetSource {
-  const fallbackSheetId = process.env.HR_CANDIDATE_SHEET_ID || DEFAULT_SHEET_ID;
-  const fallbackGid = process.env.HR_CANDIDATE_SHEET_GID || DEFAULT_GID;
+  const fb = hrSheetFallbackFromEnv();
 
-  if (!rawUrl) {
+  if (!rawUrl?.trim()) {
+    const { sheetId, gid } = resolveHrSheetIds(fb.sheetId, fb.gid);
     return {
-      sheetId: fallbackSheetId,
-      gid: fallbackGid,
-      csvUrl: `https://docs.google.com/spreadsheets/d/${fallbackSheetId}/export?format=csv&gid=${fallbackGid}`,
+      sheetId,
+      gid,
+      csvUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`,
     };
   }
 
   try {
     const parsed = new URL(rawUrl);
     const pathMatch = parsed.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
-    const sheetId = pathMatch?.[1] || fallbackSheetId;
     const gidFromQuery = parsed.searchParams.get('gid');
     const gidFromHash = parsed.hash.match(/gid=(\d+)/)?.[1];
-    const gid = gidFromQuery || gidFromHash || fallbackGid;
+    const merged = resolveHrSheetIds(
+      pathMatch?.[1] || fb.sheetId,
+      gidFromQuery || gidFromHash || fb.gid,
+    );
 
-    if (parsed.pathname.includes('/export')) {
-      return {
-        sheetId,
-        gid,
-        csvUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`,
-      };
-    }
-
+    return {
+      sheetId: merged.sheetId,
+      gid: merged.gid,
+      csvUrl: `https://docs.google.com/spreadsheets/d/${merged.sheetId}/export?format=csv&gid=${merged.gid}`,
+    };
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith('Thiếu sheet')) throw e;
+    const { sheetId, gid } = resolveHrSheetIds(fb.sheetId, fb.gid);
     return {
       sheetId,
       gid,
       csvUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`,
-    };
-  } catch {
-    return {
-      sheetId: fallbackSheetId,
-      gid: fallbackGid,
-      csvUrl: `https://docs.google.com/spreadsheets/d/${fallbackSheetId}/export?format=csv&gid=${fallbackGid}`,
     };
   }
 }

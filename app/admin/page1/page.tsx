@@ -300,10 +300,6 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   users: <Users className="h-4 w-4" />,
 }
 
-// API Secret Key for internal requests
-const API_SECRET_KEY =
-  process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025'
-
 /** Gốc API (vd. https://www.tpsmindx.com). Để trống = gọi /api cùng origin (khuyến nghị khi deploy cùng domain). */
 const PROFILE_API_ORIGIN = (
   process.env.NEXT_PUBLIC_TPS_PROFILE_API_ORIGIN ?? ''
@@ -315,9 +311,7 @@ const createSecureFetcher = (): ((url: string) => Promise<any>) => {
     let token = localStorage.getItem('token')
 
     const doFetch = async (tok: string | null) => {
-      const headers: HeadersInit = {
-        'x-api-key': API_SECRET_KEY,
-      }
+      const headers: HeadersInit = {}
       if (tok) headers['Authorization'] = `Bearer ${tok}`
 
       const res = await fetch(url, { headers })

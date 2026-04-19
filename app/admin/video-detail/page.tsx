@@ -202,15 +202,10 @@ function VideoDetailContent() {
     try {
       console.log('[Video Detail] Sending payload:', payload);
       
-      // Get auth token from localStorage
-      const token = localStorage.getItem('token');
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025'
+        ...authHeaders(token),
       };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
       
       const response = await fetch('/api/training-video-questions', {
         method: 'POST',
@@ -235,14 +230,9 @@ function VideoDetailContent() {
   // Delete question from database
   const deleteQuestionFromDb = async (questionId: number) => {
     try {
-      // Get auth token from localStorage
-      const token = localStorage.getItem('token');
       const headers: HeadersInit = {
-        'x-api-key': process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025'
+        ...authHeaders(token),
       };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
       
       const response = await fetch(`/api/training-video-questions?id=${questionId}`, {
         method: 'DELETE',
