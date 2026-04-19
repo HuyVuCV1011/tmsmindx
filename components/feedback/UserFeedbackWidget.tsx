@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { toast } from '@/lib/app-toast'
+import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 
 const FEEDBACK_PAGE_OPTIONS = [
   { path: '/user/home', title: 'Trang chủ' },
@@ -26,7 +27,7 @@ const FEEDBACK_PAGE_OPTIONS = [
   { path: '/user/giaitrinh', title: 'Giải trình điểm kiểm tra' },
   { path: '/user/quy-trinh-quy-dinh', title: 'Quy trình & Quy định' },
   { path: '/user/quan-ly-phan-hoi', title: 'Quản lý phản hồi' },
-]
+].filter((o) => !isTempHiddenUserRoute(o.path))
 
 const getFallbackPageTitle = (path: string) => {
   const segments = path.split('/').filter(Boolean)

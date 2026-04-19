@@ -1259,6 +1259,37 @@ const migrations: Migration[] = [
         ADD COLUMN IF NOT EXISTS lich_thi_dk TIMESTAMP;
     `,
   },
+  {
+    name: 'V53_teaching_leaders_areas',
+    version: 53,
+    sql: `
+      ALTER TABLE teaching_leaders
+        ADD COLUMN IF NOT EXISTS areas JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+      UPDATE teaching_leaders
+      SET areas = jsonb_build_array(trim(area))
+      WHERE trim(area) IS NOT NULL
+        AND trim(area) <> ''
+        AND jsonb_array_length(COALESCE(areas, '[]'::jsonb)) = 0;
+    `,
+  },
+  {
+    name: 'V54_teaching_leaders_timestamps',
+    version: 54,
+    sql: `
+      -- Bảng cũ có thể thiếu updated_at nhưng vẫn có trigger -> lỗi "record new has no field updated_at"
+      ALTER TABLE teaching_leaders
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE teaching_leaders
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+      DROP TRIGGER IF EXISTS trg_teaching_leaders_updated_at ON teaching_leaders;
+      CREATE TRIGGER trg_teaching_leaders_updated_at
+        BEFORE UPDATE ON teaching_leaders
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
 ]
 
 // ========== HÀM CHẠY MIGRATIONS ==========

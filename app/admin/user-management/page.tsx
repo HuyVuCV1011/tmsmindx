@@ -31,30 +31,42 @@ export default function UserManagementPage() {
     ];
 
     return (
-        <div className="p-4 w-full">
-            <div className="mb-6">
-                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                    <ShieldCheck className="h-7 w-7 text-[#a1001f]" />
-                    Quản lý tài khoản & phân quyền
-                </h1>
-                <p className="text-sm text-gray-500 mt-1">Tạo tài khoản, gán role, cài đặt phân quyền theo role.</p>
-            </div>
+        <div className="min-h-screen w-full bg-gradient-to-b from-gray-50 to-white pb-10">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6">
+                <header className="mb-6">
+                    <h1 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-2 sm:text-3xl">
+                        <ShieldCheck className="h-8 w-8 shrink-0 text-[#a1001f]" />
+                        Quản lý tài khoản & phân quyền
+                    </h1>
+                    <p className="mt-2 max-w-3xl text-sm text-gray-600 sm:text-[15px]">
+                        Tạo và gán tài khoản, cấu hình role/màn hình, quản lý dữ liệu centers & teaching leaders (một leader có thể phụ trách nhiều khu vực).
+                    </p>
+                </header>
 
-            {/* Tabs */}
-            <div className="flex border-b border-gray-200 mb-6 gap-1">
-                {tabs.map(t => (
-                    <button key={t.key} onClick={() => setTab(t.key)}
-                        className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-all -mb-px ${tab === t.key
-                                ? 'border-[#a1001f] text-[#a1001f]'
-                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            }`}>{t.icon}{t.label}</button>
-                ))}
-            </div>
+                <nav className="mb-6 flex flex-wrap gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm" aria-label="Phân khu tab">
+                    {tabs.map((t) => (
+                        <button
+                            key={t.key}
+                            type="button"
+                            onClick={() => setTab(t.key)}
+                            className={`flex flex-1 min-w-[140px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors sm:flex-none sm:justify-start ${
+                                tab === t.key
+                                    ? 'bg-[#a1001f] text-white shadow'
+                                    : 'text-gray-600 hover:bg-gray-50'
+                            }`}
+                        >
+                            {t.icon}
+                            {t.label}
+                        </button>
+                    ))}
+                </nav>
 
-            {/* Tab content */}
-            {tab === 'users' && <UsersTab />}
-            {tab === 'roles' && <RoleSettingsTab />}
-            {tab === 'data' && <DataTab />}
+                <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+                    {tab === 'users' && <UsersTab />}
+                    {tab === 'roles' && <RoleSettingsTab />}
+                    {tab === 'data' && <DataTab />}
+                </section>
+            </div>
         </div>
     );
 }

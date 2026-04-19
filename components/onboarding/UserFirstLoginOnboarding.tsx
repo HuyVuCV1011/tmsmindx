@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/lib/auth-context'
+import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import { useSidebar } from '@/lib/sidebar-context'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react'
@@ -44,7 +45,7 @@ function findStepIndexById(id: string) {
   return idx >= 0 ? idx : 0
 }
 
-const TOUR_STEPS: TourStep[] = [
+const ALL_TOUR_STEPS: TourStep[] = [
   {
     id: 'sidebar',
     title: 'Đây là khu vực Thanh điều hướng',
@@ -165,6 +166,10 @@ const TOUR_STEPS: TourStep[] = [
     mascotAction: 'jump',
   },
 ]
+
+const TOUR_STEPS = ALL_TOUR_STEPS.filter(
+  (s) => !s.route || !isTempHiddenUserRoute(s.route),
+)
 
 function getMascotFrames(action: MascotAction) {
   const folder = action === 'jump' ? 'jump' : 'walk'
