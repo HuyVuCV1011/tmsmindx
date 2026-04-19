@@ -1,5 +1,6 @@
 'use client';
 
+import { sanitizeHtml } from '@/lib/sanitize-html';
 import { AlertCircle, CheckCircle, Clock, User, XCircle } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -118,7 +119,7 @@ export default function SubmissionDetailPage() {
     return (
       <div 
         className="prose prose-xs sm:prose-sm max-w-none prose-p:my-0 prose-slate"
-        dangerouslySetInnerHTML={{ __html: html }} 
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }} 
       />
     );
   };

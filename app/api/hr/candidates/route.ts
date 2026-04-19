@@ -1,3 +1,4 @@
+import { requireBearerSession } from '@/lib/datasource-api-auth';
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
 import { buildCandidateFingerprint, buildCandidateKey, getHrCandidateSheetData } from '@/lib/hr-candidate-sheet';
@@ -128,18 +129,15 @@ async function validateHrAccess(requestEmail: string): Promise<{ ok: boolean; st
 
 const handleGet = async (request: NextRequest) => {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const requestEmail = normalizeEmail(searchParams.get('requestEmail'));
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
 
-    if (!requestEmail) {
-      return NextResponse.json({ error: 'requestEmail là bắt buộc.' }, { status: 400 });
-    }
-
-    const access = await validateHrAccess(requestEmail);
+    const access = await validateHrAccess(auth.sessionEmail);
     if (!access.ok) {
       return NextResponse.json({ error: access.message || 'Không có quyền truy cập.' }, { status: access.status });
     }
 
+    const searchParams = request.nextUrl.searchParams;
     const statusFilter = (normalizeValue(searchParams.get('status')) || 'all') as HrListStatus;
     const search = normalizeValue(searchParams.get('search'));
     const genFilter = normalizeValue(searchParams.get('gen'));
@@ -406,12 +404,12 @@ const handleGet = async (request: NextRequest) => {
 
 const handlePost = async (request: NextRequest) => {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
 
-    const requestEmail = normalizeEmail(body.requestEmail);
-    if (!requestEmail) {
-      return NextResponse.json({ error: 'requestEmail là bắt buộc.' }, { status: 400 });
-    }
+    const requestEmail = auth.sessionEmail;
 
     const access = await validateHrAccess(requestEmail);
     if (!access.ok) {
@@ -556,12 +554,15 @@ const handlePost = async (request: NextRequest) => {
 
 const handleDelete = async (request: NextRequest) => {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const searchParams = request.nextUrl.searchParams;
-    const requestEmail = normalizeEmail(searchParams.get('requestEmail'));
+    const requestEmail = auth.sessionEmail;
     const candidateKey = normalizeValue(searchParams.get('candidateKey'));
 
-    if (!requestEmail || !candidateKey) {
-      return NextResponse.json({ error: 'requestEmail và candidateKey là bắt buộc.' }, { status: 400 });
+    if (!candidateKey) {
+      return NextResponse.json({ error: 'candidateKey là bắt buộc.' }, { status: 400 });
     }
 
     const access = await validateHrAccess(requestEmail);

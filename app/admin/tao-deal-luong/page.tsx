@@ -4,6 +4,7 @@ import Modal from '@/components/Modal';
 import { Button } from '@/components/ui/button';
 import { StepItem, Stepper } from '@/components/ui/stepper';
 import { useAuth } from '@/lib/auth-context';
+import { authHeaders } from '@/lib/auth-headers';
 import { parseLegacyTeacherFromInfoJson } from '@/lib/teacher-db-mapper';
 import { Award, ChevronDown, CheckCircle, DollarSign, FileText, Info, MessageSquare, Plus, Search, Send, TrendingDown, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -117,7 +118,7 @@ function getSteps(deal: SalaryDeal): StepItem[] {
 const ALLOWED_ROLES = ['manager', 'admin', 'super_admin'];
 
 export default function DealLuongPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const searchParams = useSearchParams();
   const [deals, setDeals] = useState<SalaryDeal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -202,7 +203,9 @@ export default function DealLuongPage() {
     setTeacherLookupError('');
 
     try {
-      const res = await fetch(`/api/teachers/info?code=${encodeURIComponent(code)}`);
+      const res = await fetch(`/api/teachers/info?code=${encodeURIComponent(code)}`, {
+        headers: authHeaders(token),
+      });
       const data = await res.json();
       const legacy = parseLegacyTeacherFromInfoJson(data);
 

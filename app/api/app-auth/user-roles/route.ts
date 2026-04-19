@@ -1,9 +1,13 @@
+import { requireBearerDbRoles, requireBearerSuperAdmin } from '@/lib/auth-server';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 // GET: Get roles for a user
 export async function GET(request: NextRequest) {
     try {
+        const listGate = await requireBearerDbRoles(request, ['super_admin', 'admin']);
+        if (!listGate.ok) return listGate.response;
+
         const { searchParams } = new URL(request.url);
         const userId = searchParams.get('userId');
 
@@ -29,6 +33,9 @@ export async function GET(request: NextRequest) {
 // POST: Set roles for a user (replaces all existing)
 export async function POST(request: NextRequest) {
     try {
+        const gate = await requireBearerSuperAdmin(request);
+        if (!gate.ok) return gate.response;
+
         const { userId, roleCodes } = await request.json();
 
         if (!userId || !Array.isArray(roleCodes)) {

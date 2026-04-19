@@ -1,6 +1,7 @@
 'use client';
 
 import { DIFFICULTY_LEVELS } from '@/lib/assignment-constants';
+import { sanitizeHtml } from '@/lib/sanitize-html';
 import { Question } from '@/types/assignment';
 import { Award, CheckCheck, CheckSquare, Clock, FileText, PenLine, X } from 'lucide-react';
 import Image from 'next/image';
@@ -158,7 +159,7 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
                       </div>
                       <div
                         className="text-gray-900 font-medium text-lg prose prose-sm max-w-none"
-                        dangerouslySetInnerHTML={{ __html: question.question_text }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.question_text) }}
                       />
                     </div>
                   </div>
@@ -206,7 +207,7 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
                                 return (
                                   <div
                                     className="prose prose-sm max-w-none flex-1 font-medium text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
-                                    dangerouslySetInnerHTML={{ __html: normalizedOption }}
+                                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizedOption) }}
                                   />
                                 );
                               }

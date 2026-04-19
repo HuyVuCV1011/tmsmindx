@@ -1,9 +1,16 @@
+import {
+  rejectIfDatasourceLookupForbidden,
+  requireBearerSession,
+} from '@/lib/datasource-api-auth';
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const GET = withApiProtection(async (request: NextRequest) => {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const searchParams = request.nextUrl.searchParams;
     const teacherCode = searchParams.get('code');
 
@@ -12,6 +19,14 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     if (!teacherCode) {
       return NextResponse.json({ error: 'Teacher code is required' }, { status: 400 });
     }
+
+    const denied = await rejectIfDatasourceLookupForbidden(
+      auth.sessionEmail,
+      auth.privileged,
+      '',
+      teacherCode,
+    );
+    if (denied) return denied;
 
     // Fetch teacher stats - auto-create if not exists, but always enrich from teachers table when possible.
     const teacherInfoQuery = `

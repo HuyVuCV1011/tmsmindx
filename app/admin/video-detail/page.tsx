@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from '@/lib/app-toast';
+import { useAuth } from '@/lib/auth-context';
+import { authHeaders } from '@/lib/auth-headers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -54,6 +56,7 @@ interface CreateTrainingVideoQuestionPayload {
 }
 
 function VideoDetailContent() {
+  const { token } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
   const videoId = searchParams.get("id");
@@ -450,7 +453,7 @@ function VideoDetailContent() {
               storageDeletes.push(
                 fetch('/api/admin/cloudinary', {
                   method: 'DELETE',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                   body: JSON.stringify({ key: videoParsed.key, bucket: videoParsed.bucket })
                 }).then(() => {}).catch(e => console.warn('S3 video delete warn:', e))
               );
@@ -460,7 +463,7 @@ function VideoDetailContent() {
               storageDeletes.push(
                 fetch('/api/admin/cloudinary', {
                   method: 'DELETE',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                   body: JSON.stringify({ key: thumbParsed.key, bucket: thumbParsed.bucket })
                 }).then(() => {}).catch(e => console.warn('S3 thumb delete warn:', e))
               );

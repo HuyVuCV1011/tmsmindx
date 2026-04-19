@@ -1,15 +1,29 @@
+import {
+  rejectIfDatasourceLookupForbidden,
+  requireBearerOrSessionCookie,
+} from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
-// Public route - returns full attempt logs for auditing.
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireBearerOrSessionCookie(request);
+    if (!auth.ok) return auth.response;
+
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
 
     if (!code) {
       return NextResponse.json({ success: false, error: 'Thiếu mã giáo viên' }, { status: 400 });
     }
+
+    const forbidden = await rejectIfDatasourceLookupForbidden(
+      auth.sessionEmail,
+      auth.privileged,
+      '',
+      code,
+    );
+    if (forbidden) return forbidden;
 
     const teacherResult = await pool.query(
       `SELECT teacher_code, full_name, center, teaching_block, total_score, status, updated_at

@@ -1,3 +1,4 @@
+import { rejectIfEmailNotSelf, requireBearerSession } from '@/lib/datasource-api-auth';
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
 import { getSignedObjectUrl, isSupabaseS3Configured, parseStoragePath } from '@/lib/supabase-s3';
@@ -104,6 +105,9 @@ async function hydrateFeedbackRow(item: any, signedUrlCache: Map<string, string>
 
 export const GET = withApiProtection(async (request: NextRequest) => {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const scope = searchParams.get('scope') || 'mine';
     const requestEmail = (searchParams.get('requestEmail') || '').trim().toLowerCase();
@@ -112,7 +116,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       return NextResponse.json({ success: false, error: 'requestEmail là bắt buộc' }, { status: 400 });
     }
 
-    const role = await getUserRole(requestEmail);
+    const role = await getUserRole(auth.sessionEmail);
     const isAdmin = ADMIN_ROLES.has(role || '');
     const signedUrlCache = new Map<string, string>();
 
@@ -132,6 +136,9 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       );
       return NextResponse.json({ success: true, items });
     }
+
+    const denied = rejectIfEmailNotSelf(auth.sessionEmail, false, requestEmail);
+    if (denied) return denied;
 
     const result = await pool.query(
       `SELECT id, user_email, user_name, user_code, screen_path, content, suggestion, image_urls, status, admin_note,
@@ -156,6 +163,9 @@ export const GET = withApiProtection(async (request: NextRequest) => {
 
 export const POST = withApiProtection(async (request: NextRequest) => {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const requestEmail = String(body?.requestEmail || '').trim().toLowerCase();
     const userName = String(body?.userName || '').trim();
@@ -173,6 +183,9 @@ export const POST = withApiProtection(async (request: NextRequest) => {
         { status: 400 }
       );
     }
+
+    const denied = rejectIfEmailNotSelf(auth.sessionEmail, false, requestEmail);
+    if (denied) return denied;
 
     const result = await pool.query(
       `INSERT INTO feedback_tickets (user_email, user_name, user_code, screen_path, content, suggestion, image_urls)
@@ -196,6 +209,9 @@ export const POST = withApiProtection(async (request: NextRequest) => {
 
 export const PATCH = withApiProtection(async (request: NextRequest) => {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const id = Number(body?.id);
     const status = String(body?.status || '').trim();
@@ -204,7 +220,6 @@ export const PATCH = withApiProtection(async (request: NextRequest) => {
     const adminImageUrls = Array.isArray(body?.adminImageUrls)
       ? body.adminImageUrls.map((v: any) => normalizeStorageRef(String(v || ''))).filter(Boolean)
       : undefined;
-    const requestEmail = String(body?.requestEmail || '').trim().toLowerCase();
 
     if (!Number.isFinite(id) || id <= 0) {
       return NextResponse.json({ success: false, error: 'id không hợp lệ' }, { status: 400 });
@@ -213,7 +228,7 @@ export const PATCH = withApiProtection(async (request: NextRequest) => {
       return NextResponse.json({ success: false, error: 'status không hợp lệ' }, { status: 400 });
     }
 
-    const role = await getUserRole(requestEmail);
+    const role = await getUserRole(auth.sessionEmail);
     if (!ADMIN_ROLES.has(role || '')) {
       return NextResponse.json({ success: false, error: 'Không có quyền cập nhật feedback' }, { status: 403 });
     }
@@ -256,7 +271,7 @@ export const PATCH = withApiProtection(async (request: NextRequest) => {
        RETURNING id, user_email, user_name, user_code, screen_path, content, suggestion, image_urls, status, admin_note,
                  admin_reply, admin_image_urls,
                  resolved_by_email, resolved_at, created_at, updated_at`,
-      [id, status, adminNote || null, adminReply || null, adminImageUrls ? JSON.stringify(adminImageUrls) : null, requestEmail]
+      [id, status, adminNote || null, adminReply || null, adminImageUrls ? JSON.stringify(adminImageUrls) : null, auth.sessionEmail]
     );
 
     return NextResponse.json({ success: true, item: await hydrateFeedbackRow(result.rows[0], new Map<string, string>()) });

@@ -2,6 +2,7 @@
 
 import AppLayout from "@/components/AppLayout";
 import { useAuth } from "@/lib/auth-context";
+import { authHeaders } from "@/lib/auth-headers";
 import { cn } from "@/lib/utils";
 import { MessageSquareWarning, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -176,7 +177,7 @@ function FeedbackImageThumb({ file, onRemove }: { file: File; onRemove: () => vo
 }
 
 function CheckDataSourceContent() {
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const router = useRouter();
   const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -258,7 +259,12 @@ function CheckDataSourceContent() {
     const fetchTeacherByEmail = async () => {
       setLoading(true);
       try {
-        const headers: HeadersInit = { "x-api-key": API_SECRET_KEY };
+        const headers: HeadersInit = {
+          "x-api-key": API_SECRET_KEY,
+          ...(token?.trim()
+            ? { Authorization: `Bearer ${token.trim()}` }
+            : {}),
+        };
 
         // Run both requests in parallel:
         // - DB first for reliability after user has been synced.
@@ -309,7 +315,7 @@ function CheckDataSourceContent() {
     };
 
     fetchTeacherByEmail();
-  }, [user, router, logout, userEmail]);
+  }, [user, router, logout, userEmail, token]);
 
   const continueToApp = async () => {
     if (!user?.email) return;
@@ -317,7 +323,10 @@ function CheckDataSourceContent() {
     try {
       const response = await fetch("/api/checkdatasource/confirm", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(token),
+        },
         body: JSON.stringify({
           userEmail: user.email,
           userName: user.displayName,

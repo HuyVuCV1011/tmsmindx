@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { isDatabaseUnavailableError } from '@/lib/db-helpers'
+import { rejectIfEmailNotSelf, requireBearerSession } from '@/lib/datasource-api-auth'
 import { withApiProtection } from '@/lib/api-protection'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +9,9 @@ export const dynamic = 'force-dynamic'
 // GET: Lấy danh sách chứng chỉ của giáo viên
 async function handleGet(req: NextRequest) {
     try {
+        const auth = await requireBearerSession(req)
+        if (!auth.ok) return auth.response
+
         const searchParams = req.nextUrl.searchParams
         const teacherEmail = searchParams.get('email')
 
@@ -17,6 +21,13 @@ async function handleGet(req: NextRequest) {
                 { status: 400 }
             )
         }
+
+        const denied = rejectIfEmailNotSelf(
+            auth.sessionEmail,
+            auth.privileged,
+            teacherEmail.trim().toLowerCase(),
+        )
+        if (denied) return denied
 
         const result = await pool.query(
             `SELECT * FROM teacher_certificates 
@@ -51,6 +62,9 @@ async function handleGet(req: NextRequest) {
 // POST: Thêm chứng chỉ mới
 async function handlePost(req: NextRequest) {
     try {
+        const auth = await requireBearerSession(req)
+        if (!auth.ok) return auth.response
+
         const body = await req.json()
         const {
             teacher_email,
@@ -70,6 +84,13 @@ async function handlePost(req: NextRequest) {
                 { status: 400 }
             )
         }
+
+        const denied = rejectIfEmailNotSelf(
+            auth.sessionEmail,
+            auth.privileged,
+            String(teacher_email).trim().toLowerCase(),
+        )
+        if (denied) return denied
 
         const result = await pool.query(
             `INSERT INTO teacher_certificates 
@@ -117,6 +138,9 @@ async function handlePost(req: NextRequest) {
 // DELETE: Xóa chứng chỉ
 async function handleDelete(req: NextRequest) {
     try {
+        const auth = await requireBearerSession(req)
+        if (!auth.ok) return auth.response
+
         const searchParams = req.nextUrl.searchParams
         const certificateId = searchParams.get('id')
         const teacherEmail = searchParams.get('email')
@@ -127,6 +151,13 @@ async function handleDelete(req: NextRequest) {
                 { status: 400 }
             )
         }
+
+        const denied = rejectIfEmailNotSelf(
+            auth.sessionEmail,
+            auth.privileged,
+            teacherEmail.trim().toLowerCase(),
+        )
+        if (denied) return denied
 
         // Verify ownership before delete
         const result = await pool.query(

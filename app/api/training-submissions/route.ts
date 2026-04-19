@@ -1,14 +1,38 @@
+import {
+  rejectIfDatasourceLookupForbidden,
+  requireBearerSession,
+} from '@/lib/datasource-api-auth';
+import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 // GET: Fetch teacher submissions with filters
-export async function GET(request: NextRequest) {
+async function handleTrainingSubmissionsGet(request: NextRequest) {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const teacherCode = searchParams.get('teacher_code');
     const assignmentId = searchParams.get('assignment_id');
     const status = searchParams.get('status');
     const latest = searchParams.get('latest'); // Get only the latest submission
+
+    if (!auth.privileged) {
+      if (!teacherCode?.trim()) {
+        return NextResponse.json(
+          { error: 'teacher_code là bắt buộc' },
+          { status: 400 },
+        );
+      }
+      const denied = await rejectIfDatasourceLookupForbidden(
+        auth.sessionEmail,
+        false,
+        '',
+        teacherCode,
+      );
+      if (denied) return denied;
+    }
 
     let query = `
       SELECT 
@@ -67,9 +91,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export const GET = withApiProtection(handleTrainingSubmissionsGet);
+
 // POST: Create new submission (teacher starts assignment)
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const {
       teacher_code,
@@ -83,6 +112,16 @@ export async function POST(request: NextRequest) {
         { error: 'teacher_code and assignment_id are required' },
         { status: 400 }
       );
+    }
+
+    if (!auth.privileged) {
+      const denied = await rejectIfDatasourceLookupForbidden(
+        auth.sessionEmail,
+        false,
+        '',
+        String(teacher_code),
+      );
+      if (denied) return denied;
     }
 
     // Sync teacher info if provided
@@ -245,6 +284,9 @@ export async function POST(request: NextRequest) {
 // PUT: Update submission (submit or grade)
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const { id, action, ...updates } = body;
 
@@ -253,6 +295,23 @@ export async function PUT(request: NextRequest) {
         { error: 'Submission id is required' },
         { status: 400 }
       );
+    }
+
+    if (!auth.privileged) {
+      const own = await pool.query(
+        'SELECT teacher_code FROM training_assignment_submissions WHERE id = $1 LIMIT 1',
+        [id],
+      );
+      if (own.rows.length === 0) {
+        return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+      }
+      const denied = await rejectIfDatasourceLookupForbidden(
+        auth.sessionEmail,
+        false,
+        '',
+        String(own.rows[0].teacher_code || ''),
+      );
+      if (denied) return denied;
     }
 
     let query = '';
@@ -571,6 +630,9 @@ export async function PUT(request: NextRequest) {
 // DELETE: Delete submission (fixed sync)
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -579,6 +641,23 @@ export async function DELETE(request: NextRequest) {
         { error: 'Submission id is required' },
         { status: 400 }
       );
+    }
+
+    if (!auth.privileged) {
+      const own = await pool.query(
+        'SELECT teacher_code FROM training_assignment_submissions WHERE id = $1 LIMIT 1',
+        [id],
+      );
+      if (own.rows.length === 0) {
+        return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+      }
+      const denied = await rejectIfDatasourceLookupForbidden(
+        auth.sessionEmail,
+        false,
+        '',
+        String(own.rows[0].teacher_code || ''),
+      );
+      if (denied) return denied;
     }
 
     const query = 'DELETE FROM training_assignment_submissions WHERE id = $1 RETURNING *';

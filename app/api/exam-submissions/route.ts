@@ -10,6 +10,11 @@
  * Không còn dùng: chuyen_sau_phancong, chuyen_sau_dangky, chuyen_sau_submissions (legacy)
  */
 
+import {
+  rejectIfChuyenSauResultNotOwned,
+  rejectIfEmailNotSelf,
+  requireBearerSession,
+} from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -22,6 +27,9 @@ interface AnswerPayload {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const resultId = searchParams.get('result_id');
     const email = searchParams.get('email');
@@ -29,6 +37,26 @@ export async function GET(request: NextRequest) {
     const includeAnswers = searchParams.get('include_answers') === 'true';
     const examType = searchParams.get('exam_type');
     const blockCode = searchParams.get('block_code');
+
+    if (!auth.privileged && !resultId && !email) {
+      return NextResponse.json(
+        { success: false, error: 'Cần result_id hoặc email để tra cứu' },
+        { status: 400 },
+      );
+    }
+
+    if (email) {
+      const denied = rejectIfEmailNotSelf(auth.sessionEmail, auth.privileged, email);
+      if (denied) return denied;
+    }
+    if (resultId) {
+      const denied = await rejectIfChuyenSauResultNotOwned(
+        auth.sessionEmail,
+        auth.privileged,
+        resultId,
+      );
+      if (denied) return denied;
+    }
 
     const conditions: string[] = [];
     const values: unknown[] = [];

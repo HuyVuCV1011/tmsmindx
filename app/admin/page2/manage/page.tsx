@@ -4,6 +4,7 @@ import { PageContainer } from "@/components/PageContainer";
 import RichTextEditor from "@/components/RichTextEditor";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/lib/auth-context";
+import { authHeaders } from "@/lib/auth-headers";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -570,7 +571,7 @@ function buildSidebarTreeByRelativePath(documents: K12DocRow[]): SidebarTreeNode
 }
 
 export default function ManageK12DocsPage() {
-  const { user, isLoading } = useAuth();
+  const { user, token, isLoading } = useAuth();
   const [documents, setDocuments] = useState<K12DocRow[]>([]);
   const [selectedSlug, setSelectedSlug] = useState("");
   const [pendingParentSlug, setPendingParentSlug] = useState<string | null>(null);
@@ -765,16 +766,14 @@ export default function ManageK12DocsPage() {
     body?: Record<string, unknown>,
     includeDraft = true
   ): Promise<ApiResponse> => {
-    const email = user?.email || "";
     const query = new URLSearchParams();
     if (includeDraft) query.set("includeDraft", "1");
-    if (email) query.set("email", email);
 
     const response = await fetch(`/api/k12-docs?${query.toString()}`, {
       method,
       headers: {
         "Content-Type": "application/json",
-        "x-user-email": email,
+        ...authHeaders(token),
       },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -856,14 +855,13 @@ export default function ManageK12DocsPage() {
 
     const query = new URLSearchParams();
     query.set("includeDraft", "1");
-    query.set("email", user.email);
     query.set("action", "history");
 
     const response = await fetch(`/api/k12-docs?${query.toString()}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        "x-user-email": user.email,
+        ...authHeaders(token),
       },
     });
 

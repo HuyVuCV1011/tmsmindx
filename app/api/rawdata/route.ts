@@ -1,3 +1,7 @@
+import {
+  rejectIfDatasourceLookupForbidden,
+  requireBearerSession,
+} from "@/lib/datasource-api-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { withApiProtection } from "@/lib/api-protection";
 import pool from "@/lib/db";
@@ -31,12 +35,23 @@ interface MonthlyAverage {
 }
 
 export const GET = withApiProtection(async (request: NextRequest) => {
+  const auth = await requireBearerSession(request);
+  if (!auth.ok) return auth.response;
+
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
 
   if (!code) {
     return NextResponse.json({ error: "Mã giáo viên là bắt buộc" }, { status: 400 });
   }
+
+  const denied = await rejectIfDatasourceLookupForbidden(
+    auth.sessionEmail,
+    auth.privileged,
+    "",
+    code,
+  );
+  if (denied) return denied;
 
   const client = await pool.connect();
   try {

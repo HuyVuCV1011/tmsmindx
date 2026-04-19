@@ -10,6 +10,9 @@ const BIRTHDAY_GAS_URL = 'https://script.google.com/macros/s/AKfycbxgtpi2ZxtWxzc
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+    if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
+    }
     try {
         const { searchParams } = new URL(request.url)
         const email = (searchParams.get('email') || '').trim()

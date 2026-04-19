@@ -28,21 +28,48 @@
  * Tráº¡ng thĂ¡i giáº£i trĂ¬nh Ä‘Æ°á»£c theo dĂµi qua chuyen_sau_giaitrinh.status.
  */
 
+import {
+  rejectIfChuyenSauResultNotOwned,
+  rejectIfEmailNotSelf,
+  requireBearerSession,
+} from '@/lib/datasource-api-auth'
 import { isResultEligibleForGiaiTrinhThisMonth } from '@/lib/giaitrinh-eligibility'
 import pool from '@/lib/db'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 // â”€â”€â”€ GET â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Query params: email, status, result_id
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   let client
 
   try {
+    const auth = await requireBearerSession(request)
+    if (!auth.ok) return auth.response
+
     const { searchParams } = new URL(request.url)
     const email = searchParams.get('email')
     const status = searchParams.get('status')
     const resultId = searchParams.get('result_id')
+
+    if (!auth.privileged && !email && !resultId) {
+      return NextResponse.json(
+        { success: false, error: 'Cần email hoặc result_id' },
+        { status: 400 },
+      )
+    }
+    if (email) {
+      const denied = rejectIfEmailNotSelf(auth.sessionEmail, auth.privileged, email)
+      if (denied) return denied
+    }
+    if (resultId) {
+      const denied = await rejectIfChuyenSauResultNotOwned(
+        auth.sessionEmail,
+        auth.privileged,
+        resultId,
+      )
+      if (denied) return denied
+    }
 
     const conditions: string[] = []
     const values: unknown[] = []

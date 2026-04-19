@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * API Protection Middleware
- * Chỉ cho phép request từ giao diện ứng dụng, không cho truy cập trực tiếp
+ * API Protection Middleware — kiểm tra Origin/Referer/User-Agent.
+ * Không thay thế xác thực Bearer/DB role: các route nhạy cảm vẫn phải gọi
+ * `requireBearerSession` / `requireBearerDbRoles` trong handler.
  */
 
 /** Strip trailing slashes; Origin header never includes a trailing slash. */
