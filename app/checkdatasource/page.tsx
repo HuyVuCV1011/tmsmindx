@@ -143,7 +143,6 @@ function mapTeacherToOnboardingData(t: Record<string, unknown>): OnboardingData 
 }
 
 const MAX_FEEDBACK_IMAGES = 6;
-const API_SECRET_KEY = process.env.NEXT_PUBLIC_API_SECRET || "mindx-teaching-internal-2025";
 
 function FeedbackImageThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -260,10 +259,7 @@ function CheckDataSourceContent() {
       setLoading(true);
       try {
         const headers: HeadersInit = {
-          "x-api-key": API_SECRET_KEY,
-          ...(token?.trim()
-            ? { Authorization: `Bearer ${token.trim()}` }
-            : {}),
+          ...authHeaders(token),
         };
 
         // Run both requests in parallel:

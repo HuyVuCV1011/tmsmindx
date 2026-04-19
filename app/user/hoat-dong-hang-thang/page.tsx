@@ -618,9 +618,7 @@ export default function MonthlyActivitiesPage() {
     ;(async () => {
       try {
         const response = await fetch('/api/event-schedules', {
-          headers: {
-            'x-api-key': process.env.NEXT_PUBLIC_API_SECRET || '',
-          },
+          headers: authHeaders(token),
         })
         const data = await response.json()
         if (!response.ok || !data?.success) {
@@ -658,7 +656,7 @@ export default function MonthlyActivitiesPage() {
         setEvents([])
       }
     })()
-  }, [])
+  }, [token])
 
   useEffect(() => {
     if (!teacherCode) return

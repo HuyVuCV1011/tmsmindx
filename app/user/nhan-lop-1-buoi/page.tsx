@@ -15,6 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
 import { AlertCircle, RefreshCcw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '@/lib/app-toast'
@@ -69,7 +70,7 @@ function getStatusMeta(status: LeaveRequest['status']): {
 }
 
 export default function NhanLop1BuoiPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const [items, setItems] = useState<LeaveRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingError, setLoadingError] = useState<string | null>(null)
@@ -92,6 +93,7 @@ export default function NhanLop1BuoiPage() {
 
         const res = await fetch(
           `/api/leave-requests?mode=substitute&email=${encodeURIComponent(user.email)}`,
+          { headers: authHeaders(token) },
         )
         const data = await res.json()
 
@@ -112,7 +114,7 @@ export default function NhanLop1BuoiPage() {
         setLoading(false)
       }
     },
-    [user?.email],
+    [user?.email, token],
   )
 
   useEffect(() => {
@@ -207,7 +209,10 @@ export default function NhanLop1BuoiPage() {
     try {
       const res = await fetch('/api/leave-requests', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(token),
+        },
         body: JSON.stringify({
           action: 'substitute_confirm',
           id,

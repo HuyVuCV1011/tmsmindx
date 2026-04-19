@@ -1,6 +1,8 @@
 'use client';
 
 import { PageContainer } from '@/components/PageContainer';
+import { useAuth } from '@/lib/auth-context';
+import { authHeaders } from '@/lib/auth-headers';
 import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Columns, Copy, Database, Download, Eye, Hash, Key, Link2, Play, Plus, RefreshCw, Search, Terminal, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from '@/lib/app-toast';
@@ -14,6 +16,7 @@ interface ForeignKeyInfo { column_name: string; foreign_table: string; foreign_c
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 export default function DatabasePage() {
+    const { token } = useAuth();
     const [tables, setTables] = useState<TableInfo[]>([]);
     const [dbSize, setDbSize] = useState('');
     const [migrationHistory, setMigrationHistory] = useState<MigrationInfo[]>([]);
@@ -52,13 +55,17 @@ export default function DatabasePage() {
     const [insertData, setInsertData] = useState<Record<string, string>>({});
     const sqlInputRef = useRef<HTMLTextAreaElement>(null);
 
-    const API_SECRET = process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025';
+    const dbAuthHeaders = (): HeadersInit => ({
+        ...authHeaders(token),
+    });
 
     // ─── Fetch overview ───────────────────────────────────
     const fetchOverview = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/database?action=overview');
+            const res = await fetch('/api/database?action=overview', {
+                headers: dbAuthHeaders(),
+            });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
             setTables(data.tables || []);
@@ -71,7 +78,7 @@ export default function DatabasePage() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [token]);
 
     useEffect(() => { fetchOverview(); }, [fetchOverview]);
 
@@ -83,7 +90,9 @@ export default function DatabasePage() {
         setSortCol('');
         setDetailTab('data');
         try {
-            const colRes = await fetch(`/api/database?action=columns&table=${tableName}`);
+            const colRes = await fetch(`/api/database?action=columns&table=${tableName}`, {
+                headers: dbAuthHeaders(),
+            });
             const colData = await colRes.json();
             setColumns(colData.columns || []);
             setIndexes(colData.indexes || []);
@@ -103,7 +112,9 @@ export default function DatabasePage() {
                 ...(search ? { search } : {}),
                 ...(sort ? { sort, order } : {}),
             });
-            const res = await fetch(`/api/database?${params}`);
+            const res = await fetch(`/api/database?${params}`, {
+                headers: dbAuthHeaders(),
+            });
             const data = await res.json();
             setPreviewData(data.rows || []);
             setPreviewTotal(data.total || 0);
@@ -144,8 +155,8 @@ export default function DatabasePage() {
         try {
             const res = await fetch('/api/database', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'query', sql: sqlQuery, secret: API_SECRET }),
+                headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+                body: JSON.stringify({ action: 'query', sql: sqlQuery }),
             });
             const data = await res.json();
             if (data.error) {
@@ -179,8 +190,8 @@ export default function DatabasePage() {
         try {
             const res = await fetch('/api/database', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'deleteRow', table: selectedTable, where, secret: API_SECRET }),
+                headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+                body: JSON.stringify({ action: 'deleteRow', table: selectedTable, where }),
             });
             const data = await res.json();
             if (data.success) {
@@ -207,8 +218,8 @@ export default function DatabasePage() {
         try {
             const res = await fetch('/api/database', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'insertRow', table: selectedTable, data: cleanData, secret: API_SECRET }),
+                headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+                body: JSON.stringify({ action: 'insertRow', table: selectedTable, data: cleanData }),
             });
             const data = await res.json();
             if (data.success) {
@@ -227,7 +238,9 @@ export default function DatabasePage() {
     const exportTable = async (format: 'csv' | 'json') => {
         if (!selectedTable) return;
         try {
-            const res = await fetch(`/api/database?action=export&table=${selectedTable}&format=${format}`);
+            const res = await fetch(`/api/database?action=export&table=${selectedTable}&format=${format}`, {
+                headers: dbAuthHeaders(),
+            });
             if (format === 'csv') {
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
@@ -258,8 +271,8 @@ export default function DatabasePage() {
         try {
             const res = await fetch('/api/database', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'migrate', secret: API_SECRET }),
+                headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+                body: JSON.stringify({ action: 'migrate' }),
             });
             const data = await res.json();
             if (data.success) {

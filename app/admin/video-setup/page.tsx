@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import React, { Suspense, useEffect, useRef, useState } from "react";
 import { useToast } from "@/lib/use-toast";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useAuth } from "@/lib/auth-context";
+import { authHeaders } from "@/lib/auth-headers";
 
 interface Video {
   id: number;
@@ -33,6 +35,7 @@ interface Question {
 }
 
 function VideoSetupContent() {
+  const { token } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
   const toast = useToast();
@@ -332,15 +335,10 @@ function VideoSetupContent() {
     if (!videoId) return;
     
     try {
-      // Get auth token from localStorage
-      const token = localStorage.getItem('token');
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025'
+        ...authHeaders(token),
       };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
       
       const response = await fetch('/api/training-video-questions', {
         method: 'POST',
@@ -368,14 +366,9 @@ function VideoSetupContent() {
   // Delete question from database
   const deleteQuestionFromDb = async (questionId: number) => {
     try {
-      // Get auth token from localStorage
-      const token = localStorage.getItem('token');
       const headers: HeadersInit = {
-        'x-api-key': process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025'
+        ...authHeaders(token),
       };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
       
       await fetch(`/api/training-video-questions?id=${questionId}`, {
         method: 'DELETE',

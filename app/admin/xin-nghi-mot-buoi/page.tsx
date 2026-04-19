@@ -15,6 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
 import { AlertCircle, RefreshCcw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '@/lib/app-toast'
@@ -106,7 +107,7 @@ function getStatusMeta(status: LeaveRequest['status']): {
 }
 
 export default function AdminXinNghiMotBuoiPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
 
   const [items, setItems] = useState<LeaveRequest[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -130,7 +131,9 @@ export default function AdminXinNghiMotBuoiPage() {
       setLoading(true)
       setLoadingError(null)
 
-      const res = await fetch('/api/leave-requests?mode=admin')
+      const res = await fetch('/api/leave-requests?mode=admin', {
+        headers: authHeaders(token),
+      })
       const data = await res.json()
 
       if (!res.ok || !data.success) {
@@ -149,7 +152,7 @@ export default function AdminXinNghiMotBuoiPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [token])
 
   useEffect(() => {
     fetchData()
@@ -273,7 +276,10 @@ export default function AdminXinNghiMotBuoiPage() {
     try {
       const res = await fetch('/api/leave-requests', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(token),
+        },
         body: JSON.stringify({
           action: 'admin_review',
           id: selected.id,
@@ -324,7 +330,10 @@ export default function AdminXinNghiMotBuoiPage() {
     try {
       const res = await fetch('/api/leave-requests', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(token),
+        },
         body: JSON.stringify({
           action: 'assign_substitute',
           id: selected.id,

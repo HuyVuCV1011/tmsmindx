@@ -2,8 +2,15 @@
 
 import { authHeaders } from '@/lib/auth-headers';
 import { logger } from '@/lib/logger';
-import { usePathname, useRouter } from 'next/navigation';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { toast } from '@/lib/app-toast';
 
 interface User {
@@ -42,7 +49,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
     // Check authentication status - only run once on mount
@@ -70,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []); // Empty dependency array - only run once
 
-  const logout = () => {
+  const logout = useCallback(() => {
     try {
       logger.info('Logging out user');
 
@@ -90,9 +96,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logger.error('Error during logout', { error: error.message });
       toast.error('Có lỗi khi đăng xuất');
     }
-  };
+  }, [router]);
 
-  const updateUser = (newUser: User, newToken: string) => {
+  const updateUser = useCallback((newUser: User, newToken: string) => {
     try {
       logger.info('Updating user in auth context');
 
@@ -106,9 +112,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logger.error('Error updating user', { error: error.message });
       toast.error('Có lỗi khi cập nhật thông tin');
     }
-  };
+  }, []);
 
-  const refreshPermissions = async () => {
+  const refreshPermissions = useCallback(async () => {
     if (!user || !token) return;
 
     try {
@@ -143,10 +149,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       logger.error('Error refreshing permissions', { error: error.message });
     }
-  };
+  }, [user, token]);
+
+  const contextValue = useMemo(
+    () => ({
+      user,
+      token,
+      isLoading,
+      logout,
+      updateUser,
+      refreshPermissions,
+    }),
+    [user, token, isLoading, logout, updateUser, refreshPermissions],
+  );
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, logout, updateUser, refreshPermissions }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
