@@ -1,6 +1,10 @@
 import { promises as fs } from "fs";
 import pool from "@/lib/db";
+import { type PoolClient } from 'pg';
 import path from "path";
+import { unstable_cache } from "next/cache";
+
+
 
 let k12SchemaEnsured = false;
 
@@ -54,10 +58,10 @@ function normalizeRelativePath(input: string) {
 	return input.replace(/\\/g, "/").replace(/\/+/g, "/").trim();
 }
 
-async function ensureK12Schema() {
+async function ensureK12Schema(client: PoolClient) {
 	if (k12SchemaEnsured) return;
 
-	await pool.query(`
+	await client.query(`
 		ALTER TABLE IF EXISTS k12_documents
 		ADD COLUMN IF NOT EXISTS topic VARCHAR(255),
 		ADD COLUMN IF NOT EXISTS excerpt TEXT,
@@ -545,7 +549,8 @@ async function loadK12DocsFromDatabase(includeDraft = false): Promise<K12DocsPay
 	const client = await pool.connect();
 	let releasedEarly = false;
 	try {
-		await ensureK12Schema();
+		// Dùng client đang giữ — tránh lấy connection thứ 2 từ pool (gây timeout khi pool nhỏ)
+		await ensureK12Schema(client);
 
 		const tableCheck = await client.query(
 			"SELECT to_regclass('public.k12_documents') AS table_name"
@@ -634,29 +639,86 @@ async function loadK12DocsFromDatabase(includeDraft = false): Promise<K12DocsPay
 	}
 }
 
+/** In-memory cache — tránh gọi DB/filesystem lặp lại trong cùng 1 process/worker */
+const k12DocsMemCache = new Map<
+	string,
+	{ payload: K12DocsPayload; expiresAt: number }
+>();
+const MEM_CACHE_TTL_MS = 5 * 60 * 1000; // 5 phút
+
+/** Phiên bản được cache bởi Next.js (persist qua requests, revalidate 5 phút) */
+const loadK12DocsCached = unstable_cache(
+	async (includeDraft: boolean): Promise<K12DocsPayload> => {
+		try {
+			const dbDocs = await loadK12DocsFromDatabase(includeDraft);
+			if (dbDocs) return dbDocs;
+		} catch (error) {
+			console.error('Failed loading K12 docs from database, fallback to filesystem:', error);
+		}
+
+		const documents: K12DocItem[] = [];
+		const tree = await walkDirectory(DOCS_ROOT, '', documents);
+		const defaultDoc =
+			documents.find((doc) => doc.slug.endsWith('/index')) ||
+			documents.find((doc) => doc.slug === 'index') ||
+			documents[0];
+
+		return {
+			rootTitle: 'Quy Trình, Quy Định K12 Teaching',
+			tree,
+			documents,
+			defaultSlug: defaultDoc?.slug || '',
+		};
+	},
+	['k12-docs-published'],
+	{ revalidate: 300 }, // 5 phút cho published
+);
+
+/** Cache riêng cho draft (admin) — revalidate 60s */
+const loadK12DocsDraftCached = unstable_cache(
+	async (): Promise<K12DocsPayload> => {
+		try {
+			const dbDocs = await loadK12DocsFromDatabase(true);
+			if (dbDocs) return dbDocs;
+		} catch (error) {
+			console.error('Failed loading K12 docs (draft) from database, fallback to filesystem:', error);
+		}
+		const documents: K12DocItem[] = [];
+		const tree = await walkDirectory(DOCS_ROOT, '', documents);
+		const defaultDoc =
+			documents.find((doc) => doc.slug.endsWith('/index')) ||
+			documents.find((doc) => doc.slug === 'index') ||
+			documents[0];
+		return {
+			rootTitle: 'Quy Trình, Quy Định K12 Teaching',
+			tree,
+			documents,
+			defaultSlug: defaultDoc?.slug || '',
+		};
+	},
+	['k12-docs-draft'],
+	{ revalidate: 60 }, // 60 giây cho draft (admin page)
+);
+
 export async function loadK12Docs(options?: { includeDraft?: boolean }): Promise<K12DocsPayload> {
 	const includeDraft = options?.includeDraft ?? false;
-	try {
-		const dbDocs = await loadK12DocsFromDatabase(includeDraft);
-		if (dbDocs) {
-			return dbDocs;
-		}
-	} catch (error) {
-		console.error("Failed loading K12 docs from database, fallback to filesystem:", error);
+	const cacheKey = includeDraft ? 'draft' : 'published';
+
+	// Lớp 1: in-memory (instant — cùng worker/process)
+	const mem = k12DocsMemCache.get(cacheKey);
+	if (mem && Date.now() < mem.expiresAt) {
+		return mem.payload;
 	}
 
-	const documents: K12DocItem[] = [];
-	const tree = await walkDirectory(DOCS_ROOT, "", documents);
+	// Lớp 2: Next.js unstable_cache (persist qua requests, tự revalidate)
+	let payload: K12DocsPayload;
+	if (includeDraft) {
+		payload = await loadK12DocsDraftCached();
+	} else {
+		payload = await loadK12DocsCached(false);
+	}
 
-	const defaultDoc =
-		documents.find((doc) => doc.slug.endsWith("/index")) ||
-		documents.find((doc) => doc.slug === "index") ||
-		documents[0];
-
-	return {
-		rootTitle: "Quy Trình, Quy Định K12 Teaching",
-		tree,
-		documents,
-		defaultSlug: defaultDoc?.slug || "",
-	};
+	// Lưu vào in-memory cache
+	k12DocsMemCache.set(cacheKey, { payload, expiresAt: Date.now() + MEM_CACHE_TTL_MS });
+	return payload;
 }
