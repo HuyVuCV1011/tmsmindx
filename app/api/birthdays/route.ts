@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { requireBearerSession } from '@/lib/datasource-api-auth'
+import { NextRequest, NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { getCacheKey, isCacheValid, setCacheEntry, getCacheEntry, type BirthdaysCacheEntry } from '@/lib/birthday-cache'
 import { getBirthdayRecordsFromDataCache } from '@/lib/birthday-data-cache'
@@ -183,16 +184,17 @@ function maskName(fullName: string): string {
     return `${lastName} ${initials}`
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const { searchParams } = new URL(request.url)
-        const loginEmail = (searchParams.get('email') || '').trim()
-        const normalizedLoginEmail = loginEmail.toLowerCase()
-        const fallbackUsername = (searchParams.get('username') || '').trim()
+        const auth = await requireBearerSession(request)
+        if (!auth.ok) return auth.response
 
-        // Ưu tiên lấy usernameLms chính xác từ emailCongViec
+        const loginEmail = auth.sessionEmail
+        const normalizedLoginEmail = loginEmail.toLowerCase()
+
+        // Ưu tiên lấy usernameLms chính xác từ emailCongViec (chỉ theo email trong token)
         const resolvedUsername = loginEmail ? await resolveUsernameFromEmail(loginEmail) : null
-        const username = resolvedUsername || fallbackUsername
+        const username = resolvedUsername || ''
 
         const now = new Date()
         const currentMonth = now.getMonth() + 1

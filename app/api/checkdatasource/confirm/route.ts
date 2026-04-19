@@ -1,10 +1,14 @@
 import { withApiProtection } from "@/lib/api-protection";
+import { rejectIfEmailNotSelf, requireDatasourceBearer } from "@/lib/datasource-api-auth";
 import pool from "@/lib/db";
 import { isDatabaseUnavailableError } from "@/lib/db-helpers";
 import { NextRequest, NextResponse } from "next/server";
 
 export const POST = withApiProtection(async (request: NextRequest) => {
   try {
+    const auth = await requireDatasourceBearer(request);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const userEmail = String(body?.userEmail || "").trim().toLowerCase();
     const userName = String(body?.userName || "").trim();
@@ -19,6 +23,9 @@ export const POST = withApiProtection(async (request: NextRequest) => {
     if (!userEmail) {
       return NextResponse.json({ success: false, error: "userEmail là bắt buộc" }, { status: 400 });
     }
+
+    const denied = rejectIfEmailNotSelf(auth.sessionEmail, false, userEmail);
+    if (denied) return denied;
 
     const code          = f("Code") || userCode || userEmail.split("@")[0];
     const fullName      = f("Full name") || userName || code;

@@ -1,4 +1,6 @@
 "use client";
+import { useAuth } from "@/lib/auth-context";
+import { authHeaders } from "@/lib/auth-headers";
 import { Loader2, Save, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "@/lib/app-toast";
@@ -10,6 +12,7 @@ interface RoleData {
 }
 
 export default function RoleSettingsTab() {
+    const { token } = useAuth();
     const [roles, setRoles] = useState<RoleData[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedRole, setSelectedRole] = useState<RoleData | null>(null);
@@ -41,7 +44,7 @@ export default function RoleSettingsTab() {
     const loadRoles = async () => {
         try {
             setLoading(true);
-            const res = await fetch('/api/app-auth/role-permissions');
+            const res = await fetch('/api/app-auth/role-permissions', { headers: authHeaders(token) });
             const data = await res.json();
             if (data.roles) setRoles(data.roles);
         } catch { toast.error("Lỗi tải roles"); }
@@ -58,7 +61,7 @@ export default function RoleSettingsTab() {
         setSaving(true);
         try {
             const res = await fetch('/api/app-auth/role-permissions', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({ roleCode: selectedRole.role_code, permissions: perms }),
             });
             const data = await res.json();
@@ -76,7 +79,7 @@ export default function RoleSettingsTab() {
         setCreatingRole(true);
         try {
             const res = await fetch('/api/app-auth/role-permissions', {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({
                     roleCode: newRoleCode,
                     roleName: newRoleName,

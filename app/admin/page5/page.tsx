@@ -11,6 +11,8 @@ import { Eye, Lock, Trash2, Upload, Video } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from '@/lib/app-toast';
+import { useAuth } from '@/lib/auth-context';
+import { authHeaders } from '@/lib/auth-headers';
 import { useUploadVideo } from "@/components/UploadVideoContext";
 
 interface Video {
@@ -33,6 +35,7 @@ interface Video {
 }
 
 export default function Page5() {
+  const { token } = useAuth();
   const [tab, setTab] = useState<'assigned' | 'draft' | 'locked'>('assigned');
   const [search, setSearch] = useState("");
   const { uploadState, startUpload } = useUploadVideo();
@@ -155,7 +158,7 @@ export default function Page5() {
               storageDeletes.push(
                 fetch('/api/admin/cloudinary', {
                   method: 'DELETE',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                   body: JSON.stringify({ key: videoParsed.key, bucket: videoParsed.bucket })
                 }).then(() => {}).catch(e => console.warn('S3 video delete warn:', e))
               );
@@ -165,7 +168,7 @@ export default function Page5() {
               storageDeletes.push(
                 fetch('/api/admin/cloudinary', {
                   method: 'DELETE',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                   body: JSON.stringify({ key: thumbParsed.key, bucket: thumbParsed.bucket })
                 }).then(() => {}).catch(e => console.warn('S3 thumb delete warn:', e))
               );

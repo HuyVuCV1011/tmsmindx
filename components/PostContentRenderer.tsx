@@ -1,6 +1,7 @@
 'use client'
 
 import ImageLightbox from '@/components/ImageLightbox'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 import { normalizeStorageUrl } from '@/lib/storage-url'
 import React, { useCallback, useMemo, useState } from 'react'
 
@@ -273,7 +274,13 @@ export default function PostContentRenderer({ html, className = '' }: PostConten
               />
             )
           }
-          return <div key={i} dangerouslySetInnerHTML={{ __html: seg.html }} onClick={handleHtmlClick} />
+          return (
+            <div
+              key={i}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(seg.html) }}
+              onClick={handleHtmlClick}
+            />
+          )
         })}
       </div>
 

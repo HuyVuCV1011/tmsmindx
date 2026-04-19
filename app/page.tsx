@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
 import { logger } from '@/lib/logger'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
@@ -50,7 +51,7 @@ export default function Home() {
       try {
         const res = await fetch(
           `/api/checkdatasource/status?email=${encodeURIComponent(user.email)}&brief=1`,
-          { cache: 'no-store' },
+          { cache: 'no-store', headers: authHeaders(token) },
         )
         const data = (await res.json()) as {
           success?: boolean

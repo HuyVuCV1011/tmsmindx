@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
 import { ArrowLeft, Mail, MessageCircle, ShieldAlert } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -22,11 +23,17 @@ export default function AppLayout({
   redirectPath = '/login',
 }: AppLayoutProps) {
   const PROFILE_CHECK_DONE_EMAIL_KEY = "tps_profile_check_done_email";
-  const { user, isLoading, refreshPermissions, logout } = useAuth();
+  const { user, token, isLoading, refreshPermissions, logout, updateUser } = useAuth();
+  /** Không tin role/permissions trong localStorage — chỉ render /admin sau khi /api/check-admin + Bearer hợp lệ. */
+  const [adminAccessState, setAdminAccessState] = useState<
+    'idle' | 'checking' | 'allowed' | 'denied'
+  >('idle');
   const router = useRouter();
   const pathname = usePathname()
 
   const hasRedirected = useRef(false)
+  const latestUserRef = useRef(user);
+  latestUserRef.current = user;
   const lastAdminPermRefreshAt = useRef(0);
   const lastTeacherVerifyAt = useRef(0);
   const lastTeacherVerifyPathname = useRef<string | null>(null);
@@ -69,7 +76,7 @@ export default function AppLayout({
       try {
         const res = await fetch(
           `/api/checkdatasource/status?email=${encodeURIComponent(user!.email)}&brief=1`,
-          { cache: 'no-store' },
+          { cache: 'no-store', headers: authHeaders(token) },
         );
         const data = (await res.json()) as {
           success?: boolean;
@@ -99,7 +106,7 @@ export default function AppLayout({
     return () => {
       cancelled = true;
     };
-  }, [needsTeacherDbCheck, user?.email, router]);
+  }, [needsTeacherDbCheck, user?.email, router, token]);
   const getRoutePermissionAliases = (path: string) => {
     if (path === '/admin/thu-vien-de') {
       return ['/admin/thu-vien-de', '/admin/page4/thu-vien-de']
@@ -110,9 +117,124 @@ export default function AppLayout({
     return [path]
   }
 
+  useEffect(() => {
+    if (isLoading) return;
+    if (!requireAdmin || !user?.email) {
+      setAdminAccessState('idle');
+      return;
+    }
+    if (!pathname.startsWith('/admin')) {
+      setAdminAccessState('idle');
+      return;
+    }
+
+    const bearer = token?.trim();
+    if (!bearer) {
+      setAdminAccessState('denied');
+      if (!hasRedirected.current) {
+        hasRedirected.current = true;
+        logout();
+        router.replace(redirectPath);
+      }
+      return;
+    }
+
+    const verifyEmail = user.email.trim().toLowerCase();
+    let cancelled = false;
+    setAdminAccessState('checking');
+
+    (async () => {
+      try {
+        const res = await fetch('/api/check-admin', {
+          cache: 'no-store',
+          headers: authHeaders(bearer),
+        });
+        const data = (await res.json()) as {
+          success?: boolean;
+          isAdmin?: boolean;
+          role?: string;
+          permissions?: string[];
+          userRoles?: Array<string | { role_code?: string }>;
+        };
+
+        if (cancelled) return;
+
+        if (!res.ok) {
+          setAdminAccessState('denied');
+          if (!hasRedirected.current) {
+            hasRedirected.current = true;
+            logout();
+            router.replace(redirectPath);
+          }
+          return;
+        }
+
+        if (data.success !== true || !data.isAdmin) {
+          setAdminAccessState('denied');
+          if (!hasRedirected.current) {
+            hasRedirected.current = true;
+            router.replace('/user/thong-tin-giao-vien');
+          }
+          return;
+        }
+
+        const cur = latestUserRef.current;
+        if (!cur || cur.email.trim().toLowerCase() !== verifyEmail) {
+          return;
+        }
+
+        const role = (data.role || 'teacher') as
+          | 'teacher'
+          | 'manager'
+          | 'super_admin'
+          | 'admin'
+          | 'hr';
+        const userRolesFlat = (data.userRoles || []).map((r) =>
+          typeof r === 'string' ? r : String((r as { role_code?: string }).role_code ?? ''),
+        );
+
+        updateUser(
+          {
+            ...cur,
+            role,
+            isAdmin: true,
+            permissions: data.permissions || [],
+            userRoles: userRolesFlat,
+          },
+          bearer,
+        );
+        setAdminAccessState('allowed');
+        hasRedirected.current = false;
+      } catch {
+        if (cancelled) return;
+        setAdminAccessState('denied');
+        if (!hasRedirected.current) {
+          hasRedirected.current = true;
+          logout();
+          router.replace(redirectPath);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isLoading,
+    requireAdmin,
+    user?.email,
+    token,
+    pathname,
+    logout,
+    router,
+    redirectPath,
+    updateUser,
+  ]);
+
   // Admin: làm mới quyền khi vào /admin — không gọi /api/check-admin mỗi lần đổi route con (throttle)
   useEffect(() => {
     if (!user || !pathname.startsWith('/admin')) return;
+    if (adminAccessState !== 'allowed') return;
     const now = Date.now();
     if (
       lastAdminPermRefreshAt.current !== 0 &&
@@ -122,10 +244,19 @@ export default function AppLayout({
     }
     lastAdminPermRefreshAt.current = now;
     void refreshPermissions();
-  }, [pathname, user, refreshPermissions]);
+  }, [pathname, user, refreshPermissions, adminAccessState]);
 
   useEffect(() => {
     if (isLoading) return
+
+    if (
+      requireAdmin &&
+      pathname.startsWith('/admin') &&
+      user &&
+      adminAccessState !== 'allowed'
+    ) {
+      return;
+    }
 
     const roleCodes = (user?.userRoles || []).map((code) =>
       String(code).toUpperCase(),
@@ -233,6 +364,7 @@ export default function AppLayout({
     requireAdmin,
     redirectPath,
     pathname,
+    adminAccessState,
   ])
 
   // GV: mỗi lần đổi route trong /user/* xác minh lại còn trong bảng teachers; throttle chỉ khi cùng pathname (tránh gọi trùng khi re-render).
@@ -244,7 +376,7 @@ export default function AppLayout({
       try {
         const response = await fetch(
           `/api/checkdatasource/status?email=${encodeURIComponent(user.email)}&brief=1`,
-          { cache: "no-store" }
+          { cache: "no-store", headers: authHeaders(token) }
         );
         const data = (await response.json()) as {
           success?: boolean;
@@ -280,7 +412,7 @@ export default function AppLayout({
     }
     lastTeacherVerifyAt.current = Date.now();
     void verifyTeacherStillExists();
-  }, [user, pathname, router]);
+  }, [user, token, pathname, router]);
 
   // Show skeleton while checking authentication
   if (isLoading) {
@@ -298,6 +430,30 @@ export default function AppLayout({
         </div>
       </div>
     )
+  }
+
+  const adminGateBlocking =
+    requireAdmin &&
+    pathname.startsWith('/admin') &&
+    user &&
+    (adminAccessState === 'checking' || adminAccessState === 'idle');
+
+  if (adminGateBlocking) {
+    return (
+      <div className="min-h-screen bg-white p-4">
+        <div className="animate-pulse space-y-6">
+          <div className="flex items-center space-x-4">
+            <div className="h-10 w-10 bg-gray-300 rounded-full"></div>
+            <div className="h-6 bg-gray-300 rounded w-40"></div>
+          </div>
+          <p className="text-sm text-gray-500">Đang xác thực phiên quản trị…</p>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="h-64 bg-gray-300 rounded"></div>
+            <div className="md:col-span-3 h-64 bg-gray-300 rounded"></div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // GV: đang kiểm tra DB trước khi render /user (tránh nháy /checkdatasource)
@@ -374,11 +530,13 @@ export default function AppLayout({
     return null
   }
 
-  if (requireAdmin && user) {
-    const isAdminUser =
-      user.isAdmin || ['super_admin', 'admin', 'manager'].includes(user.role)
-    if (!isAdminUser) {
-      return null
+  if (requireAdmin && user && pathname.startsWith('/admin')) {
+    if (adminAccessState !== 'allowed') {
+      return null;
+    }
+    /** Đã đồng bộ từ /api/check-admin; không tin bản ghi localStorage cũ. */
+    if (!user.isAdmin) {
+      return null;
     }
   }
 

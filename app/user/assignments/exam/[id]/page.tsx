@@ -3,6 +3,8 @@
 import { PageContainer } from '@/components/PageContainer';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
+import { authHeaders } from '@/lib/auth-headers';
+import { sanitizeHtml } from '@/lib/sanitize-html';
 import { useTeacher } from '@/lib/teacher-context';
 import { AlertCircle, ArrowLeft, Award, BookOpen, CheckCircle, Clock, FileText, Send } from 'lucide-react';
 import Link from 'next/link';
@@ -38,7 +40,7 @@ interface ExamAssignment {
 export default function ExamAssignmentTakingPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher();
 
   const assignmentIdParam = Array.isArray(params?.id) ? params.id[0] : params?.id;
@@ -157,7 +159,9 @@ export default function ExamAssignmentTakingPage() {
 
     (async () => {
       try {
-        const res = await fetch(`/api/teachers/info?email=${encodeURIComponent(user.email)}`);
+        const res = await fetch(`/api/teachers/info?email=${encodeURIComponent(user.email)}`, {
+          headers: authHeaders(token),
+        });
         const data = await res.json();
         if (data?.success && data?.teacher?.code) {
           setTeacherCode(String(data.teacher.code).trim());
@@ -169,7 +173,7 @@ export default function ExamAssignmentTakingPage() {
       const fallback = user.email.split('@')[0];
       setTeacherCode(fallback);
     })();
-  }, [user, isTeacherLoading, teacherProfile]);
+  }, [user, token, isTeacherLoading, teacherProfile]);
 
   useEffect(() => {
     if (!assignmentIdParam || Number.isNaN(assignmentId)) return;
@@ -531,7 +535,7 @@ export default function ExamAssignmentTakingPage() {
                             {hasHtmlMarkup(questionBody) ? (
                               <div
                                 className="prose prose-sm max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
-                                dangerouslySetInnerHTML={{ __html: questionBody }}
+                                dangerouslySetInnerHTML={{ __html: sanitizeHtml(questionBody) }}
                               />
                             ) : (
                               <p className="text-base text-gray-900 flex-1">{questionBody}</p>
@@ -570,7 +574,7 @@ export default function ExamAssignmentTakingPage() {
                                   {hasHtmlMarkup(optionBody) ? (
                                     <span
                                       className="prose prose-sm max-w-none flex-1 text-sm text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
-                                      dangerouslySetInnerHTML={{ __html: optionBody }}
+                                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(optionBody) }}
                                     />
                                   ) : (
                                     <span className="flex-1 text-sm md:text-base text-gray-900">{optionBody}</span>

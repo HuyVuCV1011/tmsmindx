@@ -1,6 +1,7 @@
 'use client';
 
 import { DIFFICULTY_LEVELS, QUESTION_TEMPLATES } from '@/lib/assignment-constants';
+import { sanitizeHtml } from '@/lib/sanitize-html';
 import { Question } from '@/types/assignment';
 import { Edit, GripVertical, Trash2 } from 'lucide-react';
 import Image from 'next/image';
@@ -72,7 +73,7 @@ export function QuestionCard({ question, index, onEdit, onDelete, isDraggable = 
 
           <div 
             className="text-gray-900 font-medium mb-2 prose prose-sm max-w-none"
-            dangerouslySetInnerHTML={{ __html: question.question_text }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.question_text) }}
           />
 
           {question.image_url && (
@@ -112,7 +113,7 @@ export function QuestionCard({ question, index, onEdit, onDelete, isDraggable = 
                         {renderAsHtml ? (
                           <div
                             className="prose prose-sm max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
-                            dangerouslySetInnerHTML={{ __html: normalizedOption }}
+                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizedOption) }}
                           />
                         ) : (
                           <span className="flex-1">{normalizedOption}</span>
@@ -159,7 +160,7 @@ export function QuestionCard({ question, index, onEdit, onDelete, isDraggable = 
               <span className="font-semibold">💡 Giải thích: </span>
               <span 
                 className="prose prose-sm max-w-none inline"
-                dangerouslySetInnerHTML={{ __html: question.explanation }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.explanation) }}
               />
             </div>
           )}

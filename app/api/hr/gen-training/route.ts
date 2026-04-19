@@ -1,3 +1,4 @@
+import { requireBearerSession } from '@/lib/datasource-api-auth';
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
 import { getHrCandidateSheetData } from '@/lib/hr-candidate-sheet';
@@ -175,12 +176,11 @@ function canEditTrainingTab(roleCodes: string[]): boolean {
 
 const handleGet = async (request: NextRequest) => {
 	try {
-		const searchParams = request.nextUrl.searchParams;
-		const requestEmail = normalizeEmail(searchParams.get('requestEmail'));
+		const auth = await requireBearerSession(request);
+		if (!auth.ok) return auth.response;
 
-		if (!requestEmail) {
-			return NextResponse.json({ error: 'requestEmail là bắt buộc.' }, { status: 400 });
-		}
+		const searchParams = request.nextUrl.searchParams;
+		const requestEmail = auth.sessionEmail;
 
 		const access = await validateTrainingTabAccess(requestEmail);
 		if (!access.ok) {
@@ -396,14 +396,17 @@ const handleGet = async (request: NextRequest) => {
 
 const handlePatch = async (request: NextRequest) => {
 	try {
+		const auth = await requireBearerSession(request);
+		if (!auth.ok) return auth.response;
+
 		const body = await request.json();
-		const requestEmail = normalizeEmail(body.requestEmail);
+		const requestEmail = auth.sessionEmail;
 		const teacherCode = normalizeValue(body.teacherCode);
 		const updates = Array.isArray(body.updates) ? body.updates : [];
 
-		if (!requestEmail || !teacherCode || updates.length === 0) {
+		if (!teacherCode || updates.length === 0) {
 			return NextResponse.json(
-				{ error: 'requestEmail, teacherCode và updates là bắt buộc.' },
+				{ error: 'teacherCode và updates là bắt buộc.' },
 				{ status: 400 }
 			);
 		}

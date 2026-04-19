@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { rejectIfEmailNotSelf, requireBearerSession } from '@/lib/datasource-api-auth'
 import { withApiProtection } from '@/lib/api-protection'
 import { invalidateCurrentAndNeighboringMonths } from '@/lib/birthday-cache'
 
@@ -8,6 +9,9 @@ export const dynamic = 'force-dynamic'
 // GET: Lấy privacy settings của giáo viên
 async function handleGet(req: NextRequest) {
     try {
+        const auth = await requireBearerSession(req)
+        if (!auth.ok) return auth.response
+
         const searchParams = req.nextUrl.searchParams
         const teacherEmail = searchParams.get('email')
 
@@ -17,6 +21,13 @@ async function handleGet(req: NextRequest) {
                 { status: 400 }
             )
         }
+
+        const denied = rejectIfEmailNotSelf(
+            auth.sessionEmail,
+            auth.privileged,
+            teacherEmail.trim().toLowerCase(),
+        )
+        if (denied) return denied
 
         // Get or create privacy settings
         let result = await pool.query(
@@ -52,6 +63,9 @@ async function handleGet(req: NextRequest) {
 // PUT: Cập nhật privacy settings
 async function handlePut(req: NextRequest) {
     try {
+        const auth = await requireBearerSession(req)
+        if (!auth.ok) return auth.response
+
         const body = await req.json()
         const {
             teacher_email,
@@ -67,6 +81,13 @@ async function handlePut(req: NextRequest) {
                 { status: 400 }
             )
         }
+
+        const denied = rejectIfEmailNotSelf(
+            auth.sessionEmail,
+            auth.privileged,
+            String(teacher_email).trim().toLowerCase(),
+        )
+        if (denied) return denied
 
         // Upsert privacy settings
         const result = await pool.query(

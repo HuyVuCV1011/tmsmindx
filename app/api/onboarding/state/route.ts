@@ -1,3 +1,4 @@
+import { rejectIfEmailNotSelf, requireBearerSession } from "@/lib/datasource-api-auth";
 import pool from "@/lib/db";
 import { isDatabaseUnavailableError } from "@/lib/db-helpers";
 import { NextRequest, NextResponse } from "next/server";
@@ -7,11 +8,17 @@ function normalizeEmail(value: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await requireBearerSession(request);
+  if (!auth.ok) return auth.response;
+
   const email = request.nextUrl.searchParams.get("email");
   if (!email) {
     return NextResponse.json({ error: "Thiếu email" }, { status: 400 });
   }
   const normalizedEmail = normalizeEmail(email);
+
+  const denied = rejectIfEmailNotSelf(auth.sessionEmail, auth.privileged, normalizedEmail);
+  if (denied) return denied;
 
   try {
     const result = await pool.query(
@@ -60,6 +67,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const rawBody = await request.text();
     let body: Record<string, unknown> = {};
     if (rawBody.trim()) {
@@ -79,6 +89,10 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedEmail = normalizeEmail(email);
+
+    const denied = rejectIfEmailNotSelf(auth.sessionEmail, auth.privileged, normalizedEmail);
+    if (denied) return denied;
+
     const result = await pool.query(
       `INSERT INTO user_onboarding_states (email, tour_version, completed, completed_at, last_seen_step)
        VALUES ($1, $2, $3, CASE WHEN $3 THEN CURRENT_TIMESTAMP ELSE NULL END, $4)

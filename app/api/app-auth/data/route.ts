@@ -1,3 +1,5 @@
+import { requireBearerDbRoles } from '@/lib/auth-server';
+import { requireBearerSession } from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
 import { getLeaderAreas } from '@/lib/teaching-leaders';
 import { NextRequest, NextResponse } from 'next/server';
@@ -30,6 +32,9 @@ function normalizeLeaderRows(rows: Record<string, unknown>[]) {
 // GET: list with filters
 export async function GET(request: NextRequest) {
     try {
+        const auth = await requireBearerSession(request);
+        if (!auth.ok) return auth.response;
+
         const { searchParams } = new URL(request.url);
         const table = searchParams.get('table') || 'teaching_leaders';
         const status = searchParams.get('status'); // Active, Deactive
@@ -120,6 +125,9 @@ export async function GET(request: NextRequest) {
 // POST: Create
 export async function POST(request: NextRequest) {
     try {
+        const gate = await requireBearerDbRoles(request, ['super_admin', 'admin']);
+        if (!gate.ok) return gate.response;
+
         const body = await request.json();
         const { table, ...data } = body;
 
@@ -182,6 +190,9 @@ export async function POST(request: NextRequest) {
 // PUT: Update
 export async function PUT(request: NextRequest) {
     try {
+        const gate = await requireBearerDbRoles(request, ['super_admin', 'admin']);
+        if (!gate.ok) return gate.response;
+
         const body = await request.json();
         const { table, ...data } = body;
 
@@ -301,6 +312,9 @@ export async function PUT(request: NextRequest) {
 // DELETE
 export async function DELETE(request: NextRequest) {
     try {
+        const gate = await requireBearerDbRoles(request, ['super_admin', 'admin']);
+        if (!gate.ok) return gate.response;
+
         const { searchParams } = new URL(request.url);
         const table = searchParams.get('table');
         const code = searchParams.get('code');

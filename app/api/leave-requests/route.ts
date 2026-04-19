@@ -1,5 +1,10 @@
+import { requireBearerDbRoles } from '@/lib/auth-server';
+import {
+  rejectIfEmailNotSelf,
+  requireBearerSession,
+} from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 type LeaveStatus =
   | 'pending_admin'
@@ -16,14 +21,48 @@ const VALID_STATUS: LeaveStatus[] = [
   'substitute_confirmed'
 ];
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   let client;
 
   try {
-    const { searchParams } = new URL(request.url);
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
+    const { searchParams } = request.nextUrl;
     const email = searchParams.get('email');
     const mode = searchParams.get('mode');
     const status = searchParams.get('status');
+
+    if (mode === 'admin') {
+      const gate = await requireBearerDbRoles(request, [
+        'super_admin',
+        'admin',
+        'manager',
+      ]);
+      if (!gate.ok) return gate.response;
+    } else if (mode === 'substitute' && email) {
+      const denied = rejectIfEmailNotSelf(
+        auth.sessionEmail,
+        auth.privileged,
+        email,
+      );
+      if (denied) return denied;
+    } else if (email) {
+      const denied = rejectIfEmailNotSelf(
+        auth.sessionEmail,
+        auth.privileged,
+        email,
+      );
+      if (denied) return denied;
+    } else {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Cần email hoặc mode=admin với quyền quản trị',
+        },
+        { status: 400 },
+      );
+    }
 
     client = await pool.connect();
 
@@ -77,10 +116,13 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   let client;
 
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
 
     const {
@@ -111,6 +153,13 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const denied = rejectIfEmailNotSelf(
+      auth.sessionEmail,
+      auth.privileged,
+      String(email),
+    );
+    if (denied) return denied;
 
     const trimmedClassCode = typeof class_code === 'string' ? class_code.trim() : '';
     if (!trimmedClassCode) {
@@ -230,10 +279,13 @@ export async function POST(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   let client;
 
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const { action, id } = body;
 
@@ -250,10 +302,17 @@ export async function PATCH(request: Request) {
     client = await pool.connect();
 
     if (action === 'admin_review') {
+      const gate = await requireBearerDbRoles(request, [
+        'super_admin',
+        'admin',
+        'manager',
+      ]);
+      if (!gate.ok) return gate.response;
+
+      const sessionAdminEmail = gate.sessionEmail;
       const {
         decision,
         admin_note,
-        admin_email,
         admin_name,
         substitute_teacher,
         substitute_email
@@ -281,7 +340,12 @@ export async function PATCH(request: Request) {
           RETURNING *
         `;
 
-        const rejectedResult = await client.query(rejectedQuery, [admin_note || null, admin_email || null, admin_name || null, id]);
+        const rejectedResult = await client.query(rejectedQuery, [
+          admin_note || null,
+          sessionAdminEmail,
+          admin_name || null,
+          id,
+        ]);
 
         if (rejectedResult.rowCount === 0) {
           return NextResponse.json({ success: false, error: 'Không tìm thấy yêu cầu' }, { status: 404 });
@@ -309,7 +373,7 @@ export async function PATCH(request: Request) {
       const approvedResult = await client.query(approvedQuery, [
         approvedStatus,
         admin_note || null,
-        admin_email || null,
+        sessionAdminEmail,
         admin_name || null,
         substitute_teacher || null,
         substitute_email || null,
@@ -324,7 +388,15 @@ export async function PATCH(request: Request) {
     }
 
     if (action === 'assign_substitute') {
-      const { substitute_teacher, substitute_email, admin_email, admin_name } = body;
+      const gate = await requireBearerDbRoles(request, [
+        'super_admin',
+        'admin',
+        'manager',
+      ]);
+      if (!gate.ok) return gate.response;
+      const sessionAdminEmail = gate.sessionEmail;
+
+      const { substitute_teacher, substitute_email, admin_name } = body;
 
       if (!substitute_teacher && !substitute_email) {
         return NextResponse.json(
@@ -351,7 +423,7 @@ export async function PATCH(request: Request) {
       const assignResult = await client.query(assignQuery, [
         substitute_teacher || null,
         substitute_email || null,
-        admin_email || null,
+        sessionAdminEmail,
         admin_name || null,
         id
       ]);
@@ -365,6 +437,9 @@ export async function PATCH(request: Request) {
 
     if (action === 'substitute_confirm') {
       const { substitute_email } = body;
+      const sub = String(substitute_email || '').trim().toLowerCase();
+      const denied = rejectIfEmailNotSelf(auth.sessionEmail, false, sub);
+      if (denied) return denied;
 
       const confirmQuery = `
         UPDATE leave_requests

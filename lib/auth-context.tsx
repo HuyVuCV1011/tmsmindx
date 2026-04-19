@@ -1,5 +1,6 @@
 "use client";
 
+import { authHeaders } from '@/lib/auth-headers';
 import { logger } from '@/lib/logger';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useContext, useEffect, useState } from 'react';
@@ -55,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const parsedUser = JSON.parse(storedUser);
         setToken(storedToken);
         setUser(parsedUser);
-        logger.success('Auth restored from localStorage', { email: parsedUser.email });
+        logger.success('Auth restored from localStorage');
       } else {
         logger.info('No stored auth found');
       }
@@ -71,7 +72,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     try {
-      logger.info('Logging out user', { email: user?.email });
+      logger.info('Logging out user');
+
+      void fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
 
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -91,14 +94,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateUser = (newUser: User, newToken: string) => {
     try {
-      logger.info('Updating user in auth context', { email: newUser.email });
+      logger.info('Updating user in auth context');
 
       localStorage.setItem('token', newToken);
       localStorage.setItem('user', JSON.stringify(newUser));
       setUser(newUser);
       setToken(newToken);
 
-      logger.success('Auth context updated successfully', { email: newUser.email });
+      logger.success('Auth context updated successfully');
     } catch (error: any) {
       logger.error('Error updating user', { error: error.message });
       toast.error('Có lỗi khi cập nhật thông tin');
@@ -106,10 +109,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshPermissions = async () => {
-    if (!user) return;
+    if (!user || !token) return;
 
     try {
-      const response = await fetch(`/api/check-admin?email=${encodeURIComponent(user.email)}`);
+      const response = await fetch('/api/check-admin', {
+        headers: authHeaders(token),
+      });
       const data = await response.json();
 
       if (data.success && data.permissions) {
@@ -132,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           setUser(updatedUser);
           localStorage.setItem('user', JSON.stringify(updatedUser));
-          logger.success('Permissions refreshed successfully', { email: user.email });
+          logger.success('Permissions refreshed successfully');
         }
       }
     } catch (error: any) {

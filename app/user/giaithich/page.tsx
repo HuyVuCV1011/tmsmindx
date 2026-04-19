@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
 import { useTeacher } from '@/lib/teacher-context'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from '@/lib/app-toast'
@@ -57,7 +58,7 @@ const normalizeText = (value: string) =>
 
 
 export default function GiaiTrinhPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher()
   const [explanations, setExplanations] = useState<Explanation[]>([])
   const [centers, setCenters] = useState<CenterOption[]>([])
@@ -179,7 +180,9 @@ export default function GiaiTrinhPage() {
     const loadReferenceData = async () => {
       try {
         const [centersResponse, subjectsResponse] = await Promise.all([
-          fetch('/api/app-auth/data?table=centers&status=Active'),
+          fetch('/api/app-auth/data?table=centers&status=Active', {
+            headers: authHeaders(token),
+          }),
           fetch(
             '/api/database?action=preview&table=exam_subject_catalog&limit=200&sort=subject_name&order=asc',
           ),
@@ -236,7 +239,7 @@ export default function GiaiTrinhPage() {
     return () => {
       isActive = false
     }
-  }, [])
+  }, [token])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
