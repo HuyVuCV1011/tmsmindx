@@ -3,7 +3,7 @@
 import { PageContainer } from '@/components/PageContainer';
 import { Copy, Image as ImageIcon, Loader2, RefreshCw, Search, Trash2, Video } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 
 type ResourceTypeFilter = 'all' | 'image' | 'video' | 'raw';
 
@@ -37,16 +37,18 @@ export default function AdminCloudinaryPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [resourceType, setResourceType] = useState<ResourceTypeFilter>('all');
-  const [prefix, setPrefix] = useState('mindx_');
-  const [appliedPrefix, setAppliedPrefix] = useState('mindx_');
+  const [prefix, setPrefix] = useState('');
+  const [appliedPrefix, setAppliedPrefix] = useState('');
   const [limit, setLimit] = useState(30);
+  const [bucket, setBucket] = useState('mindx-videos');
+  const [buckets, setBuckets] = useState<string[]>([]);
 
   const fetchResources = useCallback(
     async (cursor?: string, append = false) => {
       try {
         setLoading(true);
         const params = new URLSearchParams({
-          resource_type: resourceType,
+          bucket,
           max_results: String(limit),
         });
 
@@ -64,19 +66,31 @@ export default function AdminCloudinaryPage() {
         const data = await response.json();
 
         if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Khong the tai du lieu Cloudinary');
+          throw new Error(data.error || 'Khong the tai du lieu Storage');
         }
 
         setResources((prev) => (append ? [...prev, ...(data.data || [])] : data.data || []));
         setNextCursor(data.next_cursor || null);
       } catch (error: any) {
-        toast.error(error.message || 'Loi tai du lieu Cloudinary');
+        toast.error(error.message || 'Loi tai du lieu Storage');
       } finally {
         setLoading(false);
       }
     },
-    [resourceType, limit, appliedPrefix]
+    [bucket, limit, appliedPrefix]
   );
+
+  // Fetch danh sách buckets khi mount
+  useEffect(() => {
+    fetch('/api/admin/cloudinary')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.buckets) {
+          setBuckets(data.buckets);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetchResources(undefined, false);
@@ -91,8 +105,8 @@ export default function AdminCloudinaryPage() {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          public_id: resource.public_id,
-          resource_type: resource.resource_type,
+          key: resource.public_id,
+          bucket,
         }),
       });
 
@@ -102,7 +116,7 @@ export default function AdminCloudinaryPage() {
       }
 
       setResources((prev) => prev.filter((item) => item.public_id !== resource.public_id));
-      toast.success('Da xoa tai nguyen Cloudinary');
+      toast.success('Da xoa tai nguyen Storage');
     } catch (error: any) {
       toast.error(error.message || 'Loi xoa tai nguyen');
     } finally {
@@ -123,7 +137,7 @@ export default function AdminCloudinaryPage() {
   }, [resources]);
 
   return (
-    <PageContainer title="Cloudinary Manager" description="Quan ly tai nguyen hinh anh, video tren Cloudinary">
+    <PageContainer title="Storage Manager" description="Quan ly tai nguyen hinh anh, video tren Supabase S3 Storage">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <p className="text-xs text-gray-500">Tong tai nguyen</p>
@@ -145,31 +159,42 @@ export default function AdminCloudinaryPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <div className="md:col-span-2">
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Bucket</label>
+            <select
+              value={bucket}
+              onChange={(e) => setBucket(e.target.value)}
+              className="w-full py-2 px-3 border border-gray-300 rounded-lg text-sm"
+            >
+              {buckets.length > 0 ? (
+                buckets.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="mindx-videos">mindx-videos</option>
+                  <option value="mindx-thumbnails">mindx-thumbnails</option>
+                  <option value="mindx-posts-content">mindx-posts-content</option>
+                  <option value="mindx-question-images">mindx-question-images</option>
+                  <option value="feedback-images">feedback-images</option>
+                </>
+              )}
+            </select>
+          </div>
+
+          <div>
             <label className="text-xs text-gray-600 mb-1 block">Prefix/folder</label>
             <div className="relative">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 value={prefix}
                 onChange={(e) => setPrefix(e.target.value)}
-                placeholder="vi du: mindx_question_images"
+                placeholder="vi du: videos/"
                 className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">Loai</label>
-            <select
-              value={resourceType}
-              onChange={(e) => setResourceType(e.target.value as ResourceTypeFilter)}
-              className="w-full py-2 px-3 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="all">Tat ca</option>
-              <option value="image">Image</option>
-              <option value="video">Video</option>
-              <option value="raw">Raw</option>
-            </select>
           </div>
 
           <div>

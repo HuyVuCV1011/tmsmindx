@@ -12,6 +12,7 @@ import Slider from '@/components/slider'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { UpcomingEventsSidebar } from '@/components/upcoming-events-sidebar'
+import { useSidebar } from '@/lib/sidebar-context'
 
 // Skeleton Imports (Inline for simplicity or import if available)
 import { PostCardSkeleton } from '@/components/skeletons'
@@ -24,6 +25,7 @@ interface Post {
   content: string
   featured_image: string
   banner_image: string
+  thumbnail_position?: string
   post_type: string
   published_at: string
   view_count: number
@@ -38,6 +40,7 @@ async function fetchPostsArray(url: string): Promise<Post[]> {
 
 export default function CommunicationsPage() {
     const searchParams = useSearchParams()
+    const { isOpen: isSidebarOpen } = useSidebar()
     const { data: rawPosts, isLoading } = useSWR<Post[]>('/api/truyenthong/posts?status=published', fetchPostsArray, { revalidateOnFocus: false, dedupingInterval: 120000 })
     const posts = Array.isArray(rawPosts) ? rawPosts : []
     const [selectedFilter, setSelectedFilter] = useState<string>('all')
@@ -122,8 +125,11 @@ export default function CommunicationsPage() {
             {/* Main Content - Left Side */}
             <div className="flex-1 min-w-0">
               <div className="flex flex-col gap-6 md:gap-8">
-                {/* Sticky Filter Bar */}
-                <div className="top-20 z-30 overflow-hidden rounded-2xl border border-gray-200/50 bg-white/95 shadow-sm backdrop-blur-sm">
+                {/* Sticky Filter Bar — ẩn trên mobile khi sidebar đang mở */}
+                <div className={cn(
+                  "top-20 overflow-hidden rounded-2xl border border-gray-200/50 bg-white/95 shadow-sm backdrop-blur-sm",
+                  isSidebarOpen && "hidden lg:block"
+                )}>
                   <div className="flex items-center justify-between gap-4 overflow-x-auto p-2 no-scrollbar">
                     <div className="flex p-1 gap-1">
                       {postTypes.map((type) => (

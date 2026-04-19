@@ -4,7 +4,7 @@ import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth-context';
 import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/app-toast';
 import { Button } from '@/components/ui/button';
 import { Stepper, StepItem } from '@/components/ui/stepper';
 import {

@@ -1,6 +1,7 @@
 import { Analytics } from "@vercel/analytics/react"
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PersistentLayout } from "@/components/PersistentLayout";
+import { TrackerProvider } from "@/components/TrackerProvider";
 import { AuthProvider } from "@/lib/auth-context";
 import { TeacherProvider } from "@/lib/teacher-context";
 import StoreProvider from "./StoreProvider";
@@ -45,34 +46,26 @@ export default function RootLayout({
           <StoreProvider>
             <AuthProvider>
               <TeacherProvider>
-                <PersistentLayout>
-                  {children}
-                </PersistentLayout>
+                <TrackerProvider>
+                  <PersistentLayout>
+                    {children}
+                  </PersistentLayout>
+                </TrackerProvider>
               </TeacherProvider>
             </AuthProvider>
           </StoreProvider>
         </ErrorBoundary>
-        <Toaster 
-          position="top-center"
+        <Toaster
+          position="top-right"
+          containerStyle={{ top: 24, right: 24 }}
+          gutter={12}
           toastOptions={{
             duration: 4000,
             style: {
-              background: '#363636',
-              color: '#fff',
-              borderRadius: '8px',
-              padding: '12px 20px',
-            },
-            success: {
-              iconTheme: {
-                primary: '#10b981',
-                secondary: '#fff',
-              },
-            },
-            error: {
-              iconTheme: {
-                primary: '#ef4444',
-                secondary: '#fff',
-              },
+              background: "transparent",
+              boxShadow: "none",
+              padding: 0,
+              maxWidth: "none",
             },
           }}
         />

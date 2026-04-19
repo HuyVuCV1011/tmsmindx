@@ -1,7 +1,7 @@
 "use client";
 import { Loader2, Save, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 import PermSelector from "./PermSelector";
 
 interface RoleData {

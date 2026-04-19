@@ -54,10 +54,36 @@ export async function findTeacherRowByEmailOrCode(
   return null;
 }
 
+/** Gom mã GV dùng để khớp `chuyen_sau_results.ma_giao_vien` (đôi khi trùng `code`, đôi khi chỉ trùng `user_name`). */
+function collectTeacherCodeAliases(code: string, alternateCodes?: string[]): string[] {
+  const set = new Set<string>();
+  const add = (s: string | undefined) => {
+    const t = String(s ?? "").trim().toLowerCase();
+    if (t) set.add(t);
+  };
+  add(code);
+  alternateCodes?.forEach(add);
+  return [...set];
+}
+
 /** Chuyên sâu — cùng logic với /api/rawdata */
-export async function fetchExpertiseBundleByCode(pool: Pool, code: string) {
+export async function fetchExpertiseBundleByCode(
+  pool: Pool,
+  code: string,
+  alternateCodes?: string[]
+) {
   const client = await pool.connect();
   try {
+    const codeAliases = collectTeacherCodeAliases(code, alternateCodes);
+    if (codeAliases.length === 0) {
+      return {
+        records: [],
+        monthlyData: [],
+        totalRecords: 0,
+        teacherCode: code.trim(),
+      };
+    }
+
     const result = await client.query(
       `SELECT
          r.khu_vuc            AS area,
@@ -83,11 +109,11 @@ export async function fetchExpertiseBundleByCode(pool: Pool, code: string) {
          ) AS has_accepted_explanation
        FROM chuyen_sau_results r
        LEFT JOIN chuyen_sau_monhoc mh ON mh.id = r.id_mon
-       WHERE LOWER(TRIM(COALESCE(r.ma_giao_vien, ''))) = LOWER(TRIM($1))
-         AND r.thang_dk IS NOT NULL
-         AND r.nam_dk   IS NOT NULL
+       WHERE r.thang_dk IS NOT NULL
+         AND r.nam_dk IS NOT NULL
+         AND LOWER(TRIM(COALESCE(r.ma_giao_vien, ''))) = ANY($1::text[])
        ORDER BY r.nam_dk DESC, r.thang_dk DESC`,
-      [code]
+      [codeAliases]
     );
 
     type TestRecord = {
@@ -122,7 +148,10 @@ export async function fetchExpertiseBundleByCode(pool: Pool, code: string) {
       const score = parseFloat(String(row.score ?? "0")) || 0;
       const didNotSubmit = row.processing !== "đã hoàn thành";
       const isCountedInAverage = !(didNotSubmit && row.has_accepted_explanation);
-      const dateStr = `${row.month}/${row.year}`;
+      const m = parseInt(String(row.month ?? "").trim(), 10);
+      const y = parseInt(String(row.year ?? "").trim(), 10);
+      const dateStr =
+        Number.isFinite(m) && Number.isFinite(y) ? `${m}/${y}` : `${row.month}/${row.year}`;
 
       return {
         area: String(row.area ?? ""),
@@ -366,7 +395,11 @@ export type TeacherProfileBundle = {
 /**
  * Chỉ tải chuyên sâu + trải nghiệm (query/CSV nặng). Dùng sau khi đã có `teacher.code` từ bundle nhanh.
  */
-export async function loadTeacherScoresOnly(pool: Pool, code: string) {
+export async function loadTeacherScoresOnly(
+  pool: Pool,
+  code: string,
+  opts?: { alternateCodes?: string[] }
+) {
   const trimmed = code.trim();
   if (!trimmed) {
     return {
@@ -374,8 +407,9 @@ export async function loadTeacherScoresOnly(pool: Pool, code: string) {
       experience: null as Awaited<ReturnType<typeof fetchExperienceBundleByCode>> | null,
     };
   }
+  const alt = opts?.alternateCodes?.filter((c) => String(c).trim()) ?? [];
   const [expertise, experience] = await Promise.all([
-    fetchExpertiseBundleByCode(pool, trimmed).catch(() => null),
+    fetchExpertiseBundleByCode(pool, trimmed, alt).catch(() => null),
     fetchExperienceBundleByCode(trimmed).catch(() => null),
   ]);
   return { expertise, experience };
@@ -401,6 +435,8 @@ export async function loadTeacherProfileBundle(
   const teacher = mergeTeacherRow(raw);
   const code = String(teacher.code ?? "").trim();
   const workEmail = String(teacher.work_email ?? teacher["Work email"] ?? "").trim();
+  const userName = String(teacher.user_name ?? "").trim();
+  const expertiseAliases = userName ? [userName] : [];
 
   if (fast) {
     const [certificates, training] = await Promise.all([
@@ -421,7 +457,7 @@ export async function loadTeacherProfileBundle(
 
   const [expertise, experience, certificates, training] = await Promise.all([
     code
-      ? fetchExpertiseBundleByCode(pool, code).catch(() => null)
+      ? fetchExpertiseBundleByCode(pool, code, expertiseAliases).catch(() => null)
       : Promise.resolve(null),
     code ? fetchExperienceBundleByCode(code).catch(() => null) : Promise.resolve(null),
     workEmail

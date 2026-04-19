@@ -1,6 +1,7 @@
 'use client'
 
 import ImageLightbox from '@/components/ImageLightbox'
+import { normalizeStorageUrl } from '@/lib/storage-url'
 import React, { useCallback, useMemo, useState } from 'react'
 
 interface ImageInfo {
@@ -24,7 +25,13 @@ function isImageOnlyElement(el: HTMLElement): boolean {
 function processHTML(html: string): Segment[] {
   if (typeof window === 'undefined') return [{ type: 'html', html }]
 
-  const doc = new DOMParser().parseFromString(`<div id="r">${html}</div>`, 'text/html')
+  // Normalize tất cả src= trong HTML — chuyển Supabase public URL sang proxy URL
+  const normalizedHtml = html.replace(
+    /src=(["'])(https?:\/\/[^"']*supabase\.co\/storage\/v1\/object\/(?:public|sign)\/[^"']+)\1/g,
+    (_match, quote, url) => `src=${quote}${normalizeStorageUrl(url)}${quote}`
+  )
+
+  const doc = new DOMParser().parseFromString(`<div id="r">${normalizedHtml}</div>`, 'text/html')
   const root = doc.getElementById('r')!
 
   // Wrap tất cả <table> trong div.table-scroll-wrapper để scroll ngang trên mobile

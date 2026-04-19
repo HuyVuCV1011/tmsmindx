@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useSidebar } from '@/lib/sidebar-context'
 import { cn } from '@/lib/utils'
 import {
+  BarChart3,
   BookOpen,
   CalendarDays,
   ChevronDown,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -216,6 +218,11 @@ export function Sidebar() {
         { href: '/admin/s3-supabase-manager', label: 'S3 Supabase Manager' },
       ],
     },
+    {
+      href: '/admin/system-metrics',
+      label: 'Quản lý chỉ số hệ thống',
+      icon: BarChart3,
+    },
   ]
 
   const userMenuItems = [
@@ -237,7 +244,7 @@ export function Sidebar() {
         { href: '/user/dang-ky-lich-lam-viec', label: 'Đăng ký lịch làm việc' },
         { href: '/user/xin-nghi-mot-buoi', label: 'Tạo yêu cầu xin nghỉ' },
         { href: '/user/nhan-lop-1-buoi', label: 'Danh sách nhận lớp dạy thay' },
-      ],
+      ].filter((item) => !isTempHiddenUserRoute(item.href)),
     },
     {
       label: 'Đào tạo & Khảo thí',
@@ -368,6 +375,10 @@ export function Sidebar() {
           const isTrainingInputMenu = item?.href === '/admin/hr-candidates'
           if (isTrainingInputMenu && hasTrainingInputRole) {
             return item
+          }
+
+          if (item?.href === '/admin/system-metrics') {
+            return null
           }
 
           if (item?.submenu && Array.isArray(item.submenu)) {

@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { marked } from "marked";
 import Link from "next/link";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 interface K12DocRow {

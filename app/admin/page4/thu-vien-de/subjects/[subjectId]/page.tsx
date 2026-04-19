@@ -8,7 +8,7 @@ import { ArrowLeft, ListChecks, PlusCircle, Shuffle, SquarePen, Star, Trash2 } f
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 import {
     ExamSetRecord,
     ExamSubjectRecord,

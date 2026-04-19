@@ -77,7 +77,8 @@ export function QuestionCard({ question, index, onEdit, onDelete, isDraggable = 
 
           {question.image_url && (
             <div className="mb-2">
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={question.image_url}
                 alt="Question"
                 width={200}

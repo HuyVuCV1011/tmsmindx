@@ -1,5 +1,6 @@
 'use client'
 
+import { normalizeStorageUrl } from '@/lib/storage-url'
 import { mergeAttributes, Node, type Editor as TiptapEditor } from '@tiptap/core'
 import Color from '@tiptap/extension-color'
 import Image from '@tiptap/extension-image'
@@ -51,7 +52,7 @@ import {
   TableProperties,
 } from 'lucide-react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from '@/lib/app-toast'
 import { Button } from './ui/button'
 
 interface RichTextEditorProps {
@@ -302,7 +303,7 @@ function ResizableImageNodeView(props: NodeViewProps) {
       {selected && <ImageFloatControls float={float} onFloat={handleFloat} onDelete={handleDelete} />}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={node.attrs.src} alt={node.attrs.alt || ''} title={node.attrs.title || ''}
+        src={normalizeStorageUrl(node.attrs.src)} alt={node.attrs.alt || ''} title={node.attrs.title || ''}
         className="tiptap-image" draggable={false}
         style={{ width: currentWidth ? `${currentWidth}px` : undefined, height: 'auto', maxWidth: '100%', display: 'block', pointerEvents: 'none', userSelect: 'none' }}
       />

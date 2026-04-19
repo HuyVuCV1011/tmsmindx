@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { Bot, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Code2, GripVertical, Palette, PlusCircle, Settings2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 import {
   BlockCode,
   ExamSetRecord,

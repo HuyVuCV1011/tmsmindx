@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/PageContainer";
 import { useAuth } from "@/lib/auth-context";
 import { File, Filter, Image as ImageIcon, Loader2, RefreshCw, Video } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/app-toast";
 
 type ResourceType = "image" | "video" | "file";
 type ResourceFilter = "all" | ResourceType;

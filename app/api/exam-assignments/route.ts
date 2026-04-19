@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     const giaitrinh_join = hasGiaitrinh
       ? `
       LEFT JOIN LATERAL (
-        SELECT csg.tru_diem, csg.xu_ly_giai_trinh
+        SELECT csg.id, csg.tru_diem, csg.xu_ly_giai_trinh
         FROM chuyen_sau_giaitrinh csg
         WHERE csg.id_ket_qua = csr.id
         ORDER BY csg.tao_luc DESC
@@ -63,6 +63,10 @@ export async function GET(request: NextRequest) {
           ELSE NULL
         END::text AS explanation_status,`
       : `NULL::text AS explanation_status,`;
+
+    const giaitrinh_explanation_id = hasGiaitrinh
+      ? `csg.id::int AS explanation_id,`
+      : `NULL::int AS explanation_id,`;
 
     let query = `
       SELECT
@@ -120,10 +124,11 @@ export async function GET(request: NextRequest) {
           ELSE 'assigned'
         END AS assignment_status,
         csr.diem::numeric                                        AS score,
+        -- Có điểm trong DB → luôn coi là đã có điểm (kể cả chờ giải trình điểm); tránh score_status='null' khiến UI user tính TB = 0
         CASE
-          WHEN LOWER(TRIM(COALESCE(csr.xu_ly_diem, ''))) = 'đã hoàn thành' THEN 'graded'
-          WHEN csr.diem IS NULL OR csr.xu_ly_diem = 'chờ giải trình'        THEN 'null'
-          ELSE 'graded'
+          WHEN csr.diem IS NOT NULL THEN 'graded'
+          WHEN LOWER(TRIM(COALESCE(csr.xu_ly_diem, ''))) IN ('đã hoàn thành', 'da thi') THEN 'graded'
+          ELSE 'null'
         END AS score_status,
         COALESCE(csr.xu_ly_diem, '')::text                       AS score_handling_note,
         COALESCE(csr.cau_dung, 0)::int                           AS correct_answers,
@@ -151,6 +156,7 @@ export async function GET(request: NextRequest) {
         ) AS has_questions,
         -- Explanation status from chuyen_sau_giaitrinh.xu_ly_diem
         ${giaitrinh_explanation_status}
+        ${giaitrinh_explanation_id}
         NULL::text AS admin_note,
         csr.tao_luc  AS created_at,
         csr.tao_luc  AS updated_at
