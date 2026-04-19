@@ -128,6 +128,9 @@ export default function AppLayout({
       return;
     }
 
+    // Đã xác thực trong phiên này — không gọi lại API khi chỉ đổi route con
+    if (adminAccessState === 'allowed') return;
+
     const bearer = token?.trim();
     if (!bearer) {
       setAdminAccessState('denied');
@@ -225,6 +228,7 @@ export default function AppLayout({
     user?.email,
     token,
     pathname,
+    adminAccessState, // cần để early-return khi 'allowed' hoạt động đúng
     logout,
     router,
     redirectPath,
