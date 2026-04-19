@@ -4,6 +4,7 @@ import { PageContainer } from '@/components/PageContainer'
 import { DevicePieChart } from '@/components/system-metrics/DevicePieChart'
 import { EngagementChart } from '@/components/system-metrics/EngagementChart'
 import { MetricCard } from '@/components/system-metrics/MetricCard'
+import { CenterUsageChart } from '@/components/system-metrics/CenterUsageChart'
 import { TopPagesTable } from '@/components/system-metrics/TopPagesTable'
 import {
   useEngagement,
@@ -16,11 +17,13 @@ import {
   Clock,
   Database,
   Download,
+  Eye,
   RefreshCw,
   Smartphone,
   Timer,
   TrendingUp,
   Users,
+  X,
   Zap,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -33,6 +36,8 @@ const periodLabels: Record<PeriodFilter, string> = {
   '7d': '7 ngày',
   '30d': '30 ngày',
 }
+
+const ITEMS_PER_PAGE = 5
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`
@@ -68,12 +73,52 @@ function exportCSV(data: Record<string, unknown>[], filename: string) {
   URL.revokeObjectURL(url)
 }
 
+function NumberedPagination({
+  page,
+  totalPages,
+  onChange,
+}: {
+  page: number
+  totalPages: number
+  onChange: (next: number) => void
+}) {
+  if (totalPages <= 1) return null
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
+      {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+        <button
+          key={n}
+          onClick={() => onChange(n)}
+          className={`h-7 min-w-7 rounded-md px-2 text-xs font-medium transition-colors ${
+            n === page
+              ? 'bg-[#a1001f] text-white'
+              : 'border border-gray-200 bg-white text-gray-600 hover:border-[#a1001f] hover:text-[#a1001f]'
+          }`}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function SystemMetricsPage() {
   const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const [period, setPeriod] = useState<PeriodFilter>('7d')
   const [chartTab, setChartTab] = useState<'dau' | 'wau'>('dau')
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+  const [userSearch, setUserSearch] = useState('')
+  const [debouncedUserSearch, setDebouncedUserSearch] = useState('')
+  const [centerFilter, setCenterFilter] = useState('all')
+  const [errorTablePage, setErrorTablePage] = useState(1)
+  const [onlineTablePage, setOnlineTablePage] = useState(1)
+  const [rankingTablePage, setRankingTablePage] = useState(1)
+  const [centerTablePage, setCenterTablePage] = useState(1)
+  const [selectedCenterDetail, setSelectedCenterDetail] = useState<
+    string | null
+  >(null)
 
   useEffect(() => {
     if (!authLoading && user?.role !== 'super_admin') {
@@ -128,6 +173,134 @@ export default function SystemMetricsPage() {
   const errorAlert = health && health.error_rate > 5
   const dbAlert = health && health.db_usage > 80
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedUserSearch(userSearch)
+    }, 250)
+
+    return () => clearTimeout(timer)
+  }, [userSearch])
+
+  const normalizedUserSearch = debouncedUserSearch.trim().toLowerCase()
+
+  const handleResetUserAndCenterFilters = () => {
+    setUserSearch('')
+    setCenterFilter('all')
+    setOnlineTablePage(1)
+    setRankingTablePage(1)
+    setCenterTablePage(1)
+  }
+
+  const filteredOnlineUsers = (engagement?.online_users ?? []).filter((u) =>
+    u.user_id.toLowerCase().includes(normalizedUserSearch),
+  )
+
+  const filteredInteractionRanking = (
+    engagement?.user_interaction_ranking ?? []
+  ).filter((u) => u.user_id.toLowerCase().includes(normalizedUserSearch))
+
+  const centerOptions = Array.from(
+    new Set((engagement?.center_usage ?? []).map((c) => c.center)),
+  ).sort((a, b) => a.localeCompare(b, 'vi'))
+
+  const filteredCenterUsage = (engagement?.center_usage ?? []).filter((c) =>
+    centerFilter === 'all' ? true : c.center === centerFilter,
+  )
+
+  const errorRows = health?.error_by_page ?? []
+  const errorTotalPages = Math.max(
+    1,
+    Math.ceil(errorRows.length / ITEMS_PER_PAGE),
+  )
+  const pagedErrorRows = errorRows.slice(
+    (errorTablePage - 1) * ITEMS_PER_PAGE,
+    errorTablePage * ITEMS_PER_PAGE,
+  )
+
+  const onlineTotalPages = Math.max(
+    1,
+    Math.ceil(filteredOnlineUsers.length / ITEMS_PER_PAGE),
+  )
+  const pagedOnlineUsers = filteredOnlineUsers.slice(
+    (onlineTablePage - 1) * ITEMS_PER_PAGE,
+    onlineTablePage * ITEMS_PER_PAGE,
+  )
+
+  const rankingTotalPages = Math.max(
+    1,
+    Math.ceil(filteredInteractionRanking.length / ITEMS_PER_PAGE),
+  )
+  const pagedRankingRows = filteredInteractionRanking.slice(
+    (rankingTablePage - 1) * ITEMS_PER_PAGE,
+    rankingTablePage * ITEMS_PER_PAGE,
+  )
+
+  const centerTotalPages = Math.max(
+    1,
+    Math.ceil(filteredCenterUsage.length / ITEMS_PER_PAGE),
+  )
+  const pagedCenterRows = filteredCenterUsage.slice(
+    (centerTablePage - 1) * ITEMS_PER_PAGE,
+    centerTablePage * ITEMS_PER_PAGE,
+  )
+
+  const selectedCenterUsers = selectedCenterDetail
+    ? (engagement?.center_user_details?.[selectedCenterDetail] ?? [])
+    : []
+
+  useEffect(() => {
+    setErrorTablePage(1)
+    setOnlineTablePage(1)
+    setRankingTablePage(1)
+    setCenterTablePage(1)
+  }, [period])
+
+  useEffect(() => {
+    setOnlineTablePage(1)
+    setRankingTablePage(1)
+  }, [normalizedUserSearch])
+
+  useEffect(() => {
+    setCenterTablePage(1)
+  }, [centerFilter])
+
+  useEffect(() => {
+    if (errorTablePage > errorTotalPages) setErrorTablePage(errorTotalPages)
+  }, [errorTablePage, errorTotalPages])
+
+  useEffect(() => {
+    if (onlineTablePage > onlineTotalPages) setOnlineTablePage(onlineTotalPages)
+  }, [onlineTablePage, onlineTotalPages])
+
+  useEffect(() => {
+    if (rankingTablePage > rankingTotalPages)
+      setRankingTablePage(rankingTotalPages)
+  }, [rankingTablePage, rankingTotalPages])
+
+  useEffect(() => {
+    if (centerTablePage > centerTotalPages) setCenterTablePage(centerTotalPages)
+  }, [centerTablePage, centerTotalPages])
+
+  useEffect(() => {
+    if (!selectedCenterDetail) return
+    if (!engagement?.center_user_details?.[selectedCenterDetail]) {
+      setSelectedCenterDetail(null)
+    }
+  }, [engagement, selectedCenterDetail])
+
+  useEffect(() => {
+    if (!selectedCenterDetail) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedCenterDetail(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedCenterDetail])
+
   if (authLoading || user?.role !== 'super_admin') {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -178,13 +351,13 @@ export default function SystemMetricsPage() {
         </div>
       )}
 
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex w-full flex-wrap rounded-lg border border-gray-200 bg-gray-50 p-0.5 sm:w-auto">
           {(Object.keys(periodLabels) as PeriodFilter[]).map((key) => (
             <button
               key={key}
               onClick={() => setPeriod(key)}
-              className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+              className={`flex-1 rounded-md px-4 py-1.5 text-xs font-medium transition-all duration-200 sm:flex-none ${
                 period === key
                   ? 'bg-[#a1001f] text-white shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
@@ -195,8 +368,8 @@ export default function SystemMetricsPage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-gray-400">
+        <div className="flex items-center justify-between gap-2 sm:justify-end">
+          <span className="text-[10px] text-gray-400 sm:text-right">
             Cập nhật: {lastRefresh.toLocaleTimeString('vi-VN')}
           </span>
           <button
@@ -210,7 +383,7 @@ export default function SystemMetricsPage() {
       </div>
 
       <div className="mb-8">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#a1001f]/10">
               <Activity className="h-3.5 w-3.5 text-[#a1001f]" />
@@ -221,7 +394,7 @@ export default function SystemMetricsPage() {
           </div>
           <button
             onClick={handleExportHealth}
-            className="flex items-center gap-1 text-[11px] font-medium text-gray-500 transition-colors hover:text-[#a1001f]"
+            className="flex items-center gap-1 self-start text-[11px] font-medium text-gray-500 transition-colors hover:text-[#a1001f] sm:self-auto"
           >
             <Download className="h-3 w-3" />
             Export CSV
@@ -233,7 +406,7 @@ export default function SystemMetricsPage() {
             {[1, 2, 3, 4].map((i) => (
               <div
                 key={i}
-                className="h-[140px] animate-pulse rounded-xl bg-gray-100"
+                className="h-35 animate-pulse rounded-xl bg-gray-100"
               />
             ))}
           </div>
@@ -283,7 +456,7 @@ export default function SystemMetricsPage() {
             </div>
 
             <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-center justify-between">
+              <div className="mb-3 flex items-center justify-between max-sm:flex-wrap max-sm:gap-2">
                 <h3 className="text-sm font-semibold text-gray-800">
                   Chi tiết lỗi theo page (24h)
                 </h3>
@@ -297,8 +470,8 @@ export default function SystemMetricsPage() {
                   Chưa có dữ liệu lỗi theo page
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-lg border border-gray-100">
-                  <table className="w-full text-left">
+                <div className="overflow-x-auto rounded-lg border border-gray-100">
+                  <table className="min-w-180 w-full text-left">
                     <thead>
                       <tr className="bg-gray-50">
                         <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
@@ -322,9 +495,9 @@ export default function SystemMetricsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {health.error_by_page.map((row) => (
+                      {pagedErrorRows.map((row) => (
                         <tr key={row.page} className="hover:bg-gray-50/70">
-                          <td className="max-w-[320px] truncate px-3 py-2.5 text-xs font-medium text-gray-700">
+                          <td className="max-w-75 truncate px-3 py-2.5 text-xs font-medium text-gray-700">
                             {row.page}
                           </td>
                           <td className="px-3 py-2.5 text-right text-xs font-semibold tabular-nums text-gray-900">
@@ -350,13 +523,18 @@ export default function SystemMetricsPage() {
                   </table>
                 </div>
               )}
+              <NumberedPagination
+                page={errorTablePage}
+                totalPages={errorTotalPages}
+                onChange={setErrorTablePage}
+              />
             </div>
           </>
         )}
       </div>
 
       <div className="mb-8">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#a1001f]/10">
               <TrendingUp className="h-3.5 w-3.5 text-[#a1001f]" />
@@ -367,7 +545,7 @@ export default function SystemMetricsPage() {
           </div>
           <button
             onClick={handleExportEngagement}
-            className="flex items-center gap-1 text-[11px] font-medium text-gray-500 transition-colors hover:text-[#a1001f]"
+            className="flex items-center gap-1 self-start text-[11px] font-medium text-gray-500 transition-colors hover:text-[#a1001f] sm:self-auto"
           >
             <Download className="h-3 w-3" />
             Export CSV
@@ -379,7 +557,7 @@ export default function SystemMetricsPage() {
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="h-[280px] animate-pulse rounded-xl bg-gray-100"
+                className="h-70 animate-pulse rounded-xl bg-gray-100"
               />
             ))}
           </div>
@@ -426,6 +604,369 @@ export default function SystemMetricsPage() {
             <div className="mt-4">
               <TopPagesTable pages={engagement?.top_pages ?? []} />
             </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-medium text-gray-500">
+                  Người dùng online (5 phút)
+                </p>
+                <p className="mt-1 text-2xl font-bold text-gray-900">
+                  {engagement?.online_users?.length ?? 0}
+                </p>
+                <p className="mt-1 text-[10px] text-gray-400">
+                  Dựa trên lượt xem trang gần nhất
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-medium text-gray-500">
+                  Người dùng tương tác nhiều nhất
+                </p>
+                <p className="mt-1 text-2xl font-bold text-gray-900">
+                  {engagement?.user_interaction_ranking?.[0]?.user_id || '-'}
+                </p>
+                <p className="mt-1 text-[10px] text-gray-400">
+                  {engagement?.user_interaction_ranking?.[0]?.interactions ?? 0}{' '}
+                  lượt tương tác
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-medium text-gray-500">
+                  Cơ sở hoạt động cao nhất
+                </p>
+                <p className="mt-1 truncate text-2xl font-bold text-gray-900">
+                  {engagement?.center_usage?.[0]?.center || '-'}
+                </p>
+                <p className="mt-1 text-[10px] text-gray-400">
+                  {engagement?.center_usage?.[0]?.usage_count ?? 0} lượt sử dụng
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm lg:col-span-2 lg:flex-row lg:items-center lg:justify-between">
+                <p className="text-xs font-medium text-gray-600">
+                  Tìm kiếm nhanh người dùng (áp dụng cho trực tuyến + xếp hạng)
+                </p>
+                <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
+                  <input
+                    type="text"
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    placeholder="Nhập email hoặc tên đăng nhập..."
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 outline-none transition-colors focus:border-[#a1001f] sm:w-72"
+                  />
+                  <button
+                    onClick={handleResetUserAndCenterFilters}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:border-[#a1001f] hover:text-[#a1001f]"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <h3 className="mb-3 text-sm font-semibold text-gray-800">
+                  Giáo viên đang trực tuyến
+                </h3>
+                {filteredOnlineUsers.length === 0 ? (
+                  <div className="flex h-36 items-center justify-center text-sm text-gray-400">
+                    Chưa có người dùng trực tuyến
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-gray-100">
+                    <table className="min-w-130 w-full text-left">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            Người dùng
+                          </th>
+                          <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            Lượt trong 5 phút
+                          </th>
+                          <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            Lần truy cập gần nhất
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {pagedOnlineUsers.map((u) => (
+                          <tr key={u.user_id} className="hover:bg-gray-50/70">
+                            <td className="max-w-55 truncate px-3 py-2.5 text-xs font-medium text-gray-700">
+                              {u.user_id}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-600">
+                              {u.hits_5m}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-600">
+                              {new Date(u.last_seen).toLocaleTimeString(
+                                'vi-VN',
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <NumberedPagination
+                  page={onlineTablePage}
+                  totalPages={onlineTotalPages}
+                  onChange={setOnlineTablePage}
+                />
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <h3 className="mb-3 text-sm font-semibold text-gray-800">
+                  Xếp hạng tần suất tương tác
+                </h3>
+                {filteredInteractionRanking.length === 0 ? (
+                  <div className="flex h-36 items-center justify-center text-sm text-gray-400">
+                    Chưa có dữ liệu tương tác
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-gray-100">
+                    <table className="min-w-140 w-full text-left">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            #
+                          </th>
+                          <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            Người dùng
+                          </th>
+                          <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            Tổng tương tác
+                          </th>
+                          <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            Trung bình/ngày
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {pagedRankingRows.map((u) => (
+                          <tr key={u.user_id} className="hover:bg-gray-50/70">
+                            <td className="px-3 py-2.5 text-xs font-semibold text-gray-500">
+                              {u.rank}
+                            </td>
+                            <td className="max-w-45 truncate px-3 py-2.5 text-xs font-medium text-gray-700">
+                              {u.user_id}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-600">
+                              {u.interactions}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-600">
+                              {u.interactions_per_day}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <NumberedPagination
+                  page={rankingTablePage}
+                  totalPages={rankingTotalPages}
+                  onChange={setRankingTablePage}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-gray-800">
+                  Sử dụng theo cơ sở
+                </h3>
+                <select
+                  value={centerFilter}
+                  onChange={(e) => setCenterFilter(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 outline-none transition-colors focus:border-[#a1001f] sm:w-auto"
+                >
+                  <option value="all">Tất cả cơ sở</option>
+                  {centerOptions.map((center) => (
+                    <option key={center} value={center}>
+                      {center}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {filteredCenterUsage.length === 0 ? (
+                <div className="flex h-28 items-center justify-center text-sm text-gray-400">
+                  Chưa có dữ liệu theo cơ sở
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <CenterUsageChart data={filteredCenterUsage} />
+
+                  <div className="overflow-x-auto rounded-lg border border-gray-100">
+                    <table className="min-w-180 w-full text-left">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            Cơ sở
+                          </th>
+                          <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            Số người dùng
+                          </th>
+                          <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            Lượt sử dụng
+                          </th>
+                          <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                            Tần suất / người dùng
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {pagedCenterRows.map((c) => (
+                          <tr key={c.center} className="hover:bg-gray-50/70">
+                            <td className="max-w-75 truncate px-3 py-2.5 text-xs font-medium text-gray-700">
+                              <div className="flex items-center gap-2">
+                                <span className="truncate">{c.center}</span>
+                                <button
+                                  onClick={() =>
+                                    setSelectedCenterDetail(c.center)
+                                  }
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 text-gray-500 transition-colors hover:border-[#a1001f] hover:text-[#a1001f]"
+                                  title="Xem chi tiết người dùng"
+                                  aria-label={`Xem người dùng sử dụng tại ${c.center}`}
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-600">
+                              {c.users}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-600">
+                              {c.usage_count}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-600">
+                              {c.usage_per_user}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              <NumberedPagination
+                page={centerTablePage}
+                totalPages={centerTotalPages}
+                onChange={setCenterTablePage}
+              />
+            </div>
+
+            {selectedCenterDetail && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-[2px] sm:p-4"
+                onClick={() => setSelectedCenterDetail(null)}
+              >
+                <div
+                  className="w-full max-w-3xl overflow-hidden rounded-2xl border bg-white shadow-2xl ring-1 ring-black/5"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-start justify-between gap-3 border-b border-[#7f0f1c] bg-[#a1001f] px-4 py-4 text-white sm:px-5">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75">
+                        Chi tiết cơ sở
+                      </p>
+                      <h4 className="mt-1 truncate text-sm font-semibold text-white sm:text-base">
+                        {selectedCenterDetail}
+                      </h4>
+                      <p className="mt-1 text-[11px] text-white/75 sm:text-xs">
+                        {selectedCenterUsers.length} người dùng trong kỳ đã chọn
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedCenterDetail(null)}
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/25 bg-white/10 text-white transition-colors hover:bg-white/20 hover:border-white/40"
+                      aria-label="Đóng"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="max-h-[78vh] overflow-auto p-3 sm:max-h-[60vh] sm:p-5">
+                    {selectedCenterUsers.length === 0 ? (
+                      <div className="flex h-28 items-center justify-center text-sm text-gray-400">
+                        Chưa có dữ liệu người dùng cho cơ sở này
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-2 sm:hidden">
+                          {selectedCenterUsers.map((u) => (
+                            <div
+                              key={`${selectedCenterDetail}-${u.user_id}`}
+                              className="rounded-xl border border-gray-100 bg-white px-3 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]"
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold text-gray-800">
+                                    {u.user_id}
+                                  </p>
+                                  <p className="mt-1 text-[11px] leading-5 text-gray-500">
+                                    Lần truy cập gần nhất:{' '}
+                                    {new Date(u.last_seen).toLocaleString(
+                                      'vi-VN',
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="min-w-18 rounded-lg bg-gray-50 px-3 py-2 text-right">
+                                  <p className="text-[10px] uppercase tracking-wider text-gray-400">
+                                    Lượt sử dụng
+                                  </p>
+                                  <p className="text-sm font-semibold tabular-nums text-gray-900">
+                                    {u.usage_count}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="hidden overflow-hidden rounded-xl border border-gray-100 sm:block">
+                          <table className="min-w-140 w-full text-left">
+                            <thead>
+                              <tr className="bg-gray-50/80">
+                                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                                  Người dùng
+                                </th>
+                                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                                  Lượt sử dụng
+                                </th>
+                                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                                  Lần truy cập gần nhất
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 bg-white">
+                              {selectedCenterUsers.map((u) => (
+                                <tr
+                                  key={`${selectedCenterDetail}-${u.user_id}`}
+                                  className="hover:bg-gray-50/60"
+                                >
+                                  <td className="max-w-65 truncate px-4 py-3 text-xs font-medium text-gray-700">
+                                    {u.user_id}
+                                  </td>
+                                  <td className="px-4 py-3 text-right text-xs tabular-nums text-gray-600">
+                                    {u.usage_count}
+                                  </td>
+                                  <td className="px-4 py-3 text-right text-xs tabular-nums text-gray-600">
+                                    {new Date(u.last_seen).toLocaleString(
+                                      'vi-VN',
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -443,7 +984,7 @@ export default function SystemMetricsPage() {
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="h-[100px] animate-pulse rounded-xl bg-gray-100"
+                className="h-25 animate-pulse rounded-xl bg-gray-100"
               />
             ))}
           </div>
@@ -519,7 +1060,7 @@ export default function SystemMetricsPage() {
                             {f.usage_count} lần
                           </span>
                           <span className="w-14 text-right text-[11px] tabular-nums text-gray-400">
-                            {f.unique_users} user
+                            {f.unique_users} người dùng
                           </span>
                         </div>
                       )
