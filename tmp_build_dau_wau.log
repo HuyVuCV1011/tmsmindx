@@ -1,0 +1,254 @@
+
+> teaching-portal-system@0.1.0 build
+> next build
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   ▲ Next.js 16.0.10 (Turbopack)
+   - Environments: .env
+   - Experiments (use with caution):
+     · proxyClientMaxBodySize: "1gb"
+     ⨯ webpackBuildWorker
+
+ ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+   Creating an optimized production build ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ✓ Compiled successfully in 55s
+   Running TypeScript ...
+   Collecting page data using 11 workers ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+✅ Gmail transporter configured successfully
+--- REBUILDING API ROUTE FOR HR CANDIDATES ---
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+   Generating static pages using 11 workers (0/160) ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+✅ Gmail transporter configured successfully
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+   Generating static pages using 11 workers (40/160) 
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+   Generating static pages using 11 workers (80/160) 
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+   Generating static pages using 11 workers (120/160) 
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+[DB] Pool init — ssl: ON, host: db.wrlfozuzdblljlxwvbst.supabase.co
+ ✓ Generating static pages using 11 workers (160/160) in 6.5s
+   Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin/assignment-questions
+├ ○ /admin/assignments
+├ ○ /admin/cloudinary
+├ ○ /admin/dashboard
+├ ○ /admin/database
+├ ○ /admin/database-migration
+├ ○ /admin/deal-luong
+├ ○ /admin/feedback
+├ ○ /admin/giaitrinh
+├ ○ /admin/hr-candidates
+├ ○ /admin/hr-candidates/gen-planner
+├ ○ /admin/page1
+├ ƒ /admin/page2
+├ ○ /admin/page2/custom
+├ ○ /admin/page2/manage
+├ ○ /admin/page3
+├ ○ /admin/page4/danh-sach-dang-ky
+├ ○ /admin/page4/form-dang-ky
+├ ○ /admin/page4/lich-danh-gia
+├ ○ /admin/page4/quan-ly-lich-lam-viec
+├ ○ /admin/page4/thu-vien-de
+├ ○ /admin/page4/thu-vien-de/questions
+├ ƒ /admin/page4/thu-vien-de/subjects/[subjectId]
+├ ○ /admin/page5
+├ ○ /admin/profile
+├ ○ /admin/s3-supabase-manager
+├ ○ /admin/system-metrics
+├ ○ /admin/tao-deal-luong
+├ ○ /admin/thu-vien-de
+├ ○ /admin/thu-vien-de/questions
+├ ƒ /admin/thu-vien-de/subjects/[subjectId]
+├ ○ /admin/training-dashboard
+├ ○ /admin/truyenthong
+├ ○ /admin/truyenthong/posts
+├ ƒ /admin/truyenthong/posts/[slug]
+├ ƒ /admin/truyenthong/posts/[slug]/edit
+├ ○ /admin/truyenthong/posts/create
+├ ○ /admin/truyenthong/sliders
+├ ○ /admin/user-management
+├ ○ /admin/video-detail
+├ ○ /admin/video-setup
+├ ○ /admin/xin-nghi-mot-buoi
+├ ○ /analytics
+├ ƒ /api/admin/cloudinary
+├ ƒ /api/admin/s3-supabase-manager
+├ ƒ /api/analytics
+├ ƒ /api/app-auth/data
+├ ƒ /api/app-auth/login
+├ ƒ /api/app-auth/permissions
+├ ƒ /api/app-auth/role-permissions
+├ ƒ /api/app-auth/user-roles
+├ ƒ /api/app-auth/users
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/availability
+├ ƒ /api/birthday-wishes
+├ ƒ /api/birthdays
+├ ƒ /api/birthdays/invalidate
+├ ƒ /api/birthdays/sync
+├ ƒ /api/check-admin
+├ ƒ /api/checkdatasource/confirm
+├ ƒ /api/checkdatasource/scores
+├ ƒ /api/checkdatasource/status
+├ ƒ /api/chuyensau-chonde-monhoc
+├ ƒ /api/chuyensau-chonde-thang
+├ ƒ /api/cloudinary-signature
+├ ƒ /api/cron/birthdays-prewarm
+├ ƒ /api/database
+├ ƒ /api/debug/birthdays
+├ ƒ /api/event-schedule-participants
+├ ƒ /api/event-schedules
+├ ƒ /api/exam-assignment-questions
+├ ƒ /api/exam-assignments
+├ ƒ /api/exam-assignments/expire
+├ ƒ /api/exam-registrations
+├ ƒ /api/exam-registrations/import
+├ ƒ /api/exam-set-questions
+├ ƒ /api/exam-set-questions/export
+├ ƒ /api/exam-set-questions/import
+├ ƒ /api/exam-set-questions/template
+├ ƒ /api/exam-sets
+├ ƒ /api/exam-subjects
+├ ƒ /api/exam-submissions
+├ ƒ /api/explanations
+├ ƒ /api/feedback
+├ ƒ /api/feedback/upload-image
+├ ƒ /api/health
+├ ƒ /api/hr/candidates
+├ ƒ /api/hr/gen-attendance
+├ ƒ /api/hr/gen-training
+├ ƒ /api/hr/gens
+├ ƒ /api/k12-docs
+├ ƒ /api/leave-requests
+├ ƒ /api/metrics/engagement
+├ ƒ /api/metrics/system-health
+├ ƒ /api/metrics/track
+├ ƒ /api/monthly-exam-selections
+├ ƒ /api/onboarding/state
+├ ƒ /api/public/training-detail
+├ ƒ /api/public/training-detail-log
+├ ƒ /api/public/training-submission-detail
+├ ƒ /api/rawdata
+├ ƒ /api/rawdata-experience
+├ ƒ /api/salary-deals
+├ ƒ /api/send-explanation-email
+├ ƒ /api/storage-image
+├ ƒ /api/teacher-certificates
+├ ƒ /api/teacher-privacy
+├ ƒ /api/teachers
+├ ƒ /api/teachers/info
+├ ƒ /api/test-teachers
+├ ƒ /api/training
+├ ƒ /api/training-assignment-questions
+├ ƒ /api/training-assignment-questions/bulk
+├ ƒ /api/training-assignment-questions/export
+├ ƒ /api/training-assignment-questions/import
+├ ƒ /api/training-assignment-questions/template
+├ ƒ /api/training-assignments
+├ ƒ /api/training-db
+├ ƒ /api/training-progress
+├ ƒ /api/training-submissions
+├ ƒ /api/training-teacher-stats
+├ ƒ /api/training-teacher-stats-db
+├ ƒ /api/training-video-questions
+├ ƒ /api/training-video-stats
+├ ƒ /api/training-videos
+├ ƒ /api/truyenthong/comments/[commentId]
+├ ƒ /api/truyenthong/comments/[commentId]/react
+├ ƒ /api/truyenthong/init-comments
+├ ƒ /api/truyenthong/init-db
+├ ƒ /api/truyenthong/migrate-add-hidden-column
+├ ƒ /api/truyenthong/migrate-comments
+├ ƒ /api/truyenthong/migrate-slugs
+├ ƒ /api/truyenthong/posts
+├ ƒ /api/truyenthong/posts/[id]
+├ ƒ /api/truyenthong/posts/[id]/comments
+├ ƒ /api/truyenthong/posts/[id]/like
+├ ƒ /api/truyenthong/posts/[id]/reactions
+├ ƒ /api/truyenthong/posts/[id]/view
+├ ƒ /api/truyenthong/stats
+├ ƒ /api/upload-multipart-complete
+├ ƒ /api/upload-multipart-init
+├ ƒ /api/upload-multipart-part
+├ ƒ /api/upload-question-image
+├ ƒ /api/upload-thumbnail
+├ ƒ /api/upload-video
+├ ○ /bao-tri
+├ ○ /checkdatasource
+├ ○ /course-links-test
+├ ○ /dashboard
+├ ○ /lichgiaovien
+├ ○ /login
+├ ƒ /public/training-detail/[code]
+├ ƒ /public/training-submission-detail/[id]
+├ ○ /rawdata
+├ ○ /rawdata-experience
+├ ○ /test-teachers
+├ ○ /training-test
+├ ○ /user/assignments
+├ ƒ /user/assignments/exam/[id]
+├ ○ /user/checkdatasource
+├ ○ /user/dang-ky-lich-lam-viec
+├ ○ /user/dao-tao-nang-cao
+├ ○ /user/dao-tao-nang-cao/lesson
+├ ○ /user/deal-luong
+├ ○ /user/giaithich
+├ ○ /user/giaitrinh
+├ ○ /user/hoat-dong-hang-thang
+├ ○ /user/home
+├ ○ /user/nhan-lop-1-buoi
+├ ƒ /user/page2
+├ ○ /user/profile
+├ ○ /user/quan-ly-phan-hoi
+├ ƒ /user/quy-trinh-quy-dinh
+├ ○ /user/thong-tin-giao-vien
+├ ○ /user/thongtingv
+├ ○ /user/training
+├ ○ /user/training/lesson
+├ ○ /user/truyenthong
+├ ƒ /user/truyenthong/[slug]
+└ ○ /user/xin-nghi-mot-buoi
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
