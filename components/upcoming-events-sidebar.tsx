@@ -2,11 +2,12 @@
 
 import { Calendar, Clock, ArrowRight, Users, Lock } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import useSWR from 'swr'
 
 import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
 import { BirthdayWishPopup } from '@/components/birthday-wish-popup'
 import { BirthdaySendWishPopup } from '@/components/birthday-send-wish-popup'
 
@@ -106,40 +107,31 @@ function toYmdNumber(year: number, month: number, day: number): number {
 }
 
 export function UpcomingEventsSidebar() {
-    const { user } = useAuth()
+    const { user, token } = useAuth()
     const [privacySyncToken, setPrivacySyncToken] = useState<string | null>(null)
     const [isWishPopupOpen, setIsWishPopupOpen] = useState(false)
     const [isSendWishPopupOpen, setIsSendWishPopupOpen] = useState(false)
     const [isPopupPreferenceDialogOpen, setIsPopupPreferenceDialogOpen] = useState(false)
 
-    // Fallback username từ email nếu backend không resolve được từ emailCongViec
-    const fallbackUsernameLms = useMemo(() => {
-        if (!user?.email) return null
-        const atIdx = user.email.indexOf('@')
-        return atIdx > 0 ? user.email.slice(0, atIdx) : null
-    }, [user?.email])
-
     const birthdaysApiUrl = useMemo(() => {
         const params = new URLSearchParams()
-
-        if (user?.email) {
-            params.set('email', user.email)
-        }
-
-        if (fallbackUsernameLms) {
-            params.set('username', fallbackUsernameLms)
-        }
-
         if (privacySyncToken) {
             params.set('refresh', privacySyncToken)
         }
-
         const queryString = params.toString()
         return queryString ? `/api/birthdays?${queryString}` : '/api/birthdays'
-    }, [user?.email, fallbackUsernameLms, privacySyncToken])
+    }, [privacySyncToken])
 
     // Debounce URL để tránh refetch liên tục khi auth state thay đổi trong thời gian ngắn.
     const [debouncedBirthdaysApiUrl, setDebouncedBirthdaysApiUrl] = useState(birthdaysApiUrl)
+
+    const birthdaysFetcher = useCallback(
+        async (url: string) => {
+            const res = await fetch(url, { headers: authHeaders(token) })
+            return res.json()
+        },
+        [token],
+    )
 
     useEffect(() => {
         const timer = window.setTimeout(() => {
@@ -172,7 +164,10 @@ export function UpcomingEventsSidebar() {
         mutate: mutateBirthdays,
         isLoading: isBirthdaysLoading,
         isValidating: isBirthdaysValidating
-    } = useSWR<BirthdaysResponse>(debouncedBirthdaysApiUrl, fetcher, {
+    } = useSWR<BirthdaysResponse>(
+        user?.email ? debouncedBirthdaysApiUrl : null,
+        birthdaysFetcher,
+        {
         keepPreviousData: true,
         dedupingInterval: 10_000,
         revalidateOnFocus: false,

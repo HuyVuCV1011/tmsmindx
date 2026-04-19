@@ -27,7 +27,8 @@ const eslintConfig = defineConfig([
       "react-hooks/preserve-manual-memoization": "off",
       "@typescript-eslint/no-explicit-any": "warn",
       "react-hooks/exhaustive-deps": "warn",
-      "react/no-unescaped-entities": "warn"
+      "react/no-unescaped-entities": "warn",
+      "react/no-danger": "warn"
     }
   }
 ]);

@@ -1,3 +1,4 @@
+import { requireBearerSession } from '@/lib/datasource-api-auth';
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
@@ -74,11 +75,10 @@ async function validateHrAccess(requestEmail: string): Promise<{ ok: boolean; st
 
 const handleGet = async (request: NextRequest) => {
   try {
-    const requestEmail = normalizeEmail(request.nextUrl.searchParams.get('requestEmail'));
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
 
-    if (!requestEmail) {
-      return NextResponse.json({ error: 'requestEmail la bat buoc.' }, { status: 400 });
-    }
+    const requestEmail = auth.sessionEmail;
 
     const access = await validateHrAccess(requestEmail);
     if (!access.ok) {
@@ -104,13 +104,16 @@ const handleGet = async (request: NextRequest) => {
 
 const handlePost = async (request: NextRequest) => {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
 
-    const requestEmail = normalizeEmail(body.requestEmail);
+    const requestEmail = auth.sessionEmail;
     const genName = normalizeValue(body.genName).toUpperCase();
 
-    if (!requestEmail || !genName) {
-      return NextResponse.json({ error: 'requestEmail va genName la bat buoc.' }, { status: 400 });
+    if (!genName) {
+      return NextResponse.json({ error: 'genName la bat buoc.' }, { status: 400 });
     }
 
     const access = await validateHrAccess(requestEmail);

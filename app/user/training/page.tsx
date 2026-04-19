@@ -73,9 +73,6 @@ interface Teacher {
   emailPersonal: string
 }
 
-const API_SECRET_KEY =
-  process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025'
-
 function extractCodeFromEmail(email: string): string {
   const match = email.match(/^([^@]+)@/)
   return match ? match[1] : ''
@@ -160,9 +157,7 @@ export default function TrainingPage() {
     let token = localStorage.getItem('token')
 
     const doFetch = async (tok: string | null) => {
-      const headers: HeadersInit = {
-        'x-api-key': API_SECRET_KEY,
-      }
+      const headers: HeadersInit = {}
       if (tok) headers['Authorization'] = `Bearer ${tok}`
 
       const res = await fetch(url, { headers })

@@ -1,92 +1,64 @@
-import pool from '@/lib/db';
-import { NextResponse } from 'next/server';
+import { rejectIfEmailNotSelf, requireBearerSession } from '@/lib/datasource-api-auth';
+import { resolveAppUserAccessForEmail } from '@/lib/app-user-access';
+import { clientIpFromRequest, rateLimitOr429 } from '@/lib/rate-limit-memory';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  const rl = rateLimitOr429(
+    `check-admin:${clientIpFromRequest(request)}`,
+    120,
+    60_000,
+  );
+  if (rl) return rl;
+
   try {
-    const { searchParams } = new URL(request.url);
-    const email = searchParams.get('email');
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
 
-    if (!email) {
-      return NextResponse.json({ error: 'Email is required', isAdmin: false }, { status: 400 });
-    }
+    const emailParam = request.nextUrl.searchParams.get('email');
+    let lookupEmail = auth.sessionEmail;
 
-    const normalizedEmail = email.trim().toLowerCase();
-
-    // Check local database — app_users table
-    try {
-      const dbResult = await pool.query(
-        `SELECT id, role, is_active, auth_type FROM app_users WHERE email = $1`,
-        [normalizedEmail]
+    if (emailParam) {
+      const target = emailParam.trim().toLowerCase();
+      const denied = rejectIfEmailNotSelf(
+        auth.sessionEmail,
+        auth.privileged,
+        target,
       );
-
-      if (dbResult.rows.length > 0) {
-        const appUser = dbResult.rows[0];
-
-        // Get direct permissions
-        const directPerms = await pool.query(
-          'SELECT route_path FROM app_permissions WHERE user_id = $1 AND can_access = true',
-          [appUser.id]
-        );
-
-        // Get role-based permissions (via user_roles → role_permissions)
-        const rolePerms = await pool.query(`
-          SELECT DISTINCT rp.route_path
-          FROM user_roles ur
-          JOIN role_permissions rp ON rp.role_code = ur.role_code
-          WHERE ur.user_id = $1
-        `, [appUser.id]);
-
-        // Get user's assigned roles
-        const userRoles = await pool.query(
-          'SELECT role_code FROM user_roles WHERE user_id = $1',
-          [appUser.id]
-        );
-
-        // Merge: union of direct + role-based permissions
-        const allPerms = new Set<string>();
-        directPerms.rows.forEach((r: { route_path: string }) => allPerms.add(r.route_path));
-        rolePerms.rows.forEach((r: { route_path: string }) => allPerms.add(r.route_path));
-
-        const permissions = Array.from(allPerms);
-        const roleCodes = userRoles.rows.map((r: { role_code: string }) => (r.role_code || '').toUpperCase());
-        const hasTrainingInputRole = roleCodes.some((code) => code === 'HR' || code === 'TE' || code === 'TF');
-        const hasAdminPerms = permissions.some(p => p.startsWith('/admin'));
-        const isAdmin = appUser.is_active && (
-          ['super_admin', 'admin', 'manager'].includes(appUser.role) ||
-          hasAdminPerms ||
-          hasTrainingInputRole
-        );
-
-        return NextResponse.json({
-          success: true,
-          email: normalizedEmail,
-          isAdmin,
-          isAppUser: appUser.auth_type === 'app',
-          role: appUser.role,
-          permissions: Array.from(allPerms),
-          userRoles: userRoles.rows.map((r: { role_code: string }) => r.role_code),
-          message: 'Checked from app database',
-        });
-      }
-    } catch (dbError) {
-      console.error('⚠️ DB check failed:', dbError);
+      if (denied) return denied;
+      lookupEmail = target;
     }
 
-    // Not found
+    const access = await resolveAppUserAccessForEmail(lookupEmail);
+
+    if (!access.found) {
+      return NextResponse.json({
+        success: true,
+        email: lookupEmail,
+        isAdmin: false,
+        isAppUser: false,
+        role: 'teacher',
+        permissions: [],
+        userRoles: [],
+        message: 'Email not found',
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      email: normalizedEmail,
-      isAdmin: false,
-      isAppUser: false,
-      permissions: [],
-      userRoles: [],
-      message: 'Email not found',
+      email: lookupEmail,
+      isAdmin: access.isAdmin,
+      isAppUser: access.isAppUser,
+      role: access.role,
+      permissions: access.permissions,
+      userRoles: access.userRoles,
+      message: 'Checked from app database',
     });
   } catch (error) {
-    console.error('❌ Admin check error:', error);
+    console.error('Admin check error:', error);
     return NextResponse.json(
       { error: 'Failed to check admin status', isAdmin: false, isAppUser: false },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

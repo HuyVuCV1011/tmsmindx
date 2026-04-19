@@ -1,8 +1,7 @@
+import { requireBearerSuperAdmin } from '@/lib/auth-server';
 import pool from '@/lib/db';
 import { migrations, runMigrations } from '@/lib/migrations';
 import { NextRequest, NextResponse } from 'next/server';
-
-const API_SECRET = process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025';
 
 // Validate table name exists (prevent SQL injection)
 async function validateTable(tableName: string): Promise<boolean> {
@@ -13,9 +12,12 @@ async function validateTable(tableName: string): Promise<boolean> {
     return result.rows.length > 0;
 }
 
-// GET: Lấy thông tin database
+// GET: Lấy thông tin database — chỉ super_admin + Bearer hợp lệ
 export async function GET(request: NextRequest) {
     try {
+        const gate = await requireBearerSuperAdmin(request);
+        if (!gate.ok) return gate.response;
+
         const { searchParams } = new URL(request.url);
         const action = searchParams.get('action') || 'overview';
 
@@ -242,21 +244,23 @@ export async function GET(request: NextRequest) {
             default:
                 return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Database API error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json(
+            { error: 'Lỗi máy chủ khi truy vấn database' },
+            { status: 500 },
+        );
     }
 }
 
-// POST: SQL query, migrations, CRUD
+// POST: SQL query, migrations, CRUD — chỉ super_admin + Bearer (không dùng secret tĩnh trên client)
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
-        const { action, secret } = body;
+        const gate = await requireBearerSuperAdmin(request);
+        if (!gate.ok) return gate.response;
 
-        if (secret !== API_SECRET) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const body = await request.json();
+        const { action } = body;
 
         switch (action) {
             // ─── Run SQL query ──────────────────────────────────
@@ -372,13 +376,11 @@ export async function POST(request: NextRequest) {
             default:
                 return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Database API POST error:', error);
-        return NextResponse.json({
-            error: error.message,
-            code: error.code,
-            detail: error.detail,
-            position: error.position,
-        }, { status: 500 });
+        return NextResponse.json(
+            { error: 'Lỗi máy chủ khi thao tác database' },
+            { status: 500 },
+        );
     }
 }

@@ -4,6 +4,7 @@ import { Card } from '@/components/Card'
 import Modal from '@/components/Modal'
 import { PageContainer } from '@/components/PageContainer'
 import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -405,7 +406,7 @@ function buildCalendarCells(focusDate: Date, view: CalendarView) {
 }
 
 export default function MonthlyActivitiesPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [view, setView] = useState<CalendarView>('month')
@@ -572,6 +573,7 @@ export default function MonthlyActivitiesPage() {
       try {
         const response = await fetch(
           `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
+          { headers: authHeaders(token) },
         )
         const data = await response.json()
         if (data?.teacher?.code) {
@@ -597,7 +599,7 @@ export default function MonthlyActivitiesPage() {
       const fallback = user.email.split('@')[0] || ''
       setTeacherCode(fallback)
     })()
-  }, [user?.email, user?.displayName])
+  }, [user?.email, user?.displayName, token])
 
   // Fetch danh sách môn học từ DB (chuyen_sau_monhoc)
   useEffect(() => {
@@ -616,9 +618,7 @@ export default function MonthlyActivitiesPage() {
     ;(async () => {
       try {
         const response = await fetch('/api/event-schedules', {
-          headers: {
-            'x-api-key': process.env.NEXT_PUBLIC_API_SECRET || '',
-          },
+          headers: authHeaders(token),
         })
         const data = await response.json()
         if (!response.ok || !data?.success) {
@@ -656,7 +656,7 @@ export default function MonthlyActivitiesPage() {
         setEvents([])
       }
     })()
-  }, [])
+  }, [token])
 
   useEffect(() => {
     if (!teacherCode) return
@@ -1487,6 +1487,7 @@ export default function MonthlyActivitiesPage() {
     try {
       const response = await fetch(
         `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
+        { headers: authHeaders(token) },
       )
       const data = await response.json()
       const resolved = (data?.teacher?.code || '').toString().trim()

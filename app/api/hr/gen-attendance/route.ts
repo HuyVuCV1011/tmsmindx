@@ -1,3 +1,4 @@
+import { requireBearerSession } from '@/lib/datasource-api-auth';
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
@@ -24,11 +25,13 @@ async function validateAccess(requestEmail: string): Promise<{ ok: boolean; stat
 // ─── GET: Lấy toàn bộ bản ghi điểm danh cho 1 GEN ───────────────────────────
 const handleGet = async (request: NextRequest) => {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = request.nextUrl;
-    const requestEmail = normalizeEmail(searchParams.get('requestEmail'));
+    const requestEmail = auth.sessionEmail;
     const genCode = normalizeValue(searchParams.get('gen'));
 
-    if (!requestEmail) return NextResponse.json({ error: 'requestEmail là bắt buộc.' }, { status: 400 });
     if (!genCode) return NextResponse.json({ error: 'gen là bắt buộc.' }, { status: 400 });
 
     const access = await validateAccess(requestEmail);
@@ -68,12 +71,13 @@ const handleGet = async (request: NextRequest) => {
 // Body: { requestEmail, genCode, records: [{ candidateKey, sessionNumber, attendance, score }] }
 const handlePatch = async (request: NextRequest) => {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
-    const requestEmail = normalizeEmail(body.requestEmail);
+    const requestEmail = auth.sessionEmail;
     const genCode = normalizeValue(body.genCode);
     const records = Array.isArray(body.records) ? body.records : [];
-
-    if (!requestEmail) return NextResponse.json({ error: 'requestEmail là bắt buộc.' }, { status: 400 });
     if (!genCode) return NextResponse.json({ error: 'genCode là bắt buộc.' }, { status: 400 });
     if (records.length === 0) return NextResponse.json({ error: 'records không được rỗng.' }, { status: 400 });
 

@@ -1,5 +1,6 @@
 "use client";
 import { useAuth } from "@/lib/auth-context";
+import { authHeaders } from "@/lib/auth-headers";
 import { Check, Eye, EyeOff, Key, Loader2, Lock, Plus, Save, Search, Trash2, UserCheck, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/app-toast";
@@ -15,7 +16,7 @@ interface AppUser {
 interface RoleInfo { role_code: string; role_name: string; department: string; }
 
 export default function UsersTab() {
-    const { user } = useAuth();
+    const { user, token } = useAuth();
     const [users, setUsers] = useState<AppUser[]>([]);
     const [allRoles, setAllRoles] = useState<RoleInfo[]>([]);
     const [loading, setLoading] = useState(true);
@@ -53,14 +54,14 @@ export default function UsersTab() {
     const loadUsers = async () => {
         try {
             setLoading(true);
-            const r = await fetch(`/api/app-auth/users?requestEmail=${encodeURIComponent(user?.email || '')}`);
+            const r = await fetch(`/api/app-auth/users`, { headers: authHeaders(token) });
             const d = await r.json(); if (d.users) setUsers(d.users);
         } catch { toast.error("Lỗi") } finally { setLoading(false) }
     };
 
     const loadAllRoles = async () => {
         try {
-            const r = await fetch('/api/app-auth/role-permissions');
+            const r = await fetch('/api/app-auth/role-permissions', { headers: authHeaders(token) });
             const d = await r.json(); if (d.roles) setAllRoles(d.roles);
         } catch { }
     };
@@ -73,8 +74,8 @@ export default function UsersTab() {
         setCreating(true);
         try {
             const r = await fetch("/api/app-auth/users", {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: newEmail, password: newPw, displayName: newName, role: 'manager', userRoles: newUserRoles, authType: 'app', createdBy: user?.email })
+                method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(token) },
+                body: JSON.stringify({ email: newEmail, password: newPw, displayName: newName, role: 'manager', userRoles: newUserRoles, authType: 'app' })
             });
             const d = await r.json();
             if (d.success) {
@@ -90,8 +91,8 @@ export default function UsersTab() {
         setAdding(true);
         try {
             const r = await fetch("/api/app-auth/users", {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: exEmail, displayName: exName, role: 'manager', userRoles: exUserRoles, authType: 'firebase', createdBy: user?.email })
+                method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(token) },
+                body: JSON.stringify({ email: exEmail, displayName: exName, role: 'manager', userRoles: exUserRoles, authType: 'firebase' })
             });
             const d = await r.json();
             if (d.success) {
@@ -106,7 +107,7 @@ export default function UsersTab() {
         if (!sel) return; setSavingRoles(true);
         try {
             const r = await fetch("/api/app-auth/user-roles", {
-                method: "POST", headers: { "Content-Type": "application/json" },
+                method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(token) },
                 body: JSON.stringify({ userId: sel.id, roleCodes: selRoles })
             });
             const d = await r.json();
@@ -121,7 +122,7 @@ export default function UsersTab() {
         setChPwing(true);
         try {
             const r = await fetch("/api/app-auth/users", {
-                method: "PUT", headers: { "Content-Type": "application/json" },
+                method: "PUT", headers: { "Content-Type": "application/json", ...authHeaders(token) },
                 body: JSON.stringify({ id: sel.id, password: chPw })
             });
             const d = await r.json();
@@ -132,7 +133,7 @@ export default function UsersTab() {
     const handleToggle = async (id: number, active: boolean) => {
         try {
             const r = await fetch("/api/app-auth/users", {
-                method: "PUT", headers: { "Content-Type": "application/json" },
+                method: "PUT", headers: { "Content-Type": "application/json", ...authHeaders(token) },
                 body: JSON.stringify({ id, isActive: !active })
             }); const d = await r.json();
             if (d.success) { toast.success(active ? "Vô hiệu" : "Kích hoạt"); loadUsers(); }
@@ -142,7 +143,7 @@ export default function UsersTab() {
     const confirmDelete = (u: AppUser) => setConfirmDlg({ open: true, userId: u.id, name: u.display_name });
     const handleDelete = async () => {
         try {
-            const r = await fetch(`/api/app-auth/users?id=${confirmDlg.userId}`, { method: "DELETE" });
+            const r = await fetch(`/api/app-auth/users?id=${confirmDlg.userId}`, { method: "DELETE", headers: authHeaders(token) });
             const d = await r.json(); if (d.success) { toast.success("Đã xóa"); loadUsers(); } else toast.error(d.error || "Lỗi");
         } catch { toast.error("Lỗi") } finally { setConfirmDlg({ open: false, userId: 0, name: "" }) }
     };

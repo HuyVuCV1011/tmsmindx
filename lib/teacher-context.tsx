@@ -4,6 +4,7 @@ import { Teacher } from '@/types/teacher';
 import { parseLegacyTeacherFromInfoJson } from '@/lib/teacher-db-mapper';
 import { createContext, useContext, useMemo } from 'react';
 import { useAuth } from './auth-context';
+import { authHeaders } from '@/lib/auth-headers';
 import { logger } from './logger';
 import useSWR from 'swr';
 
@@ -25,8 +26,8 @@ const TeacherContext = createContext<TeacherContextType>({
 
 export const useTeacher = () => useContext(TeacherContext);
 
-async function teacherInfoFetcher(url: string) {
-  const res = await fetch(url);
+async function teacherInfoFetcher([url, token]: readonly [string, string | null]) {
+  const res = await fetch(url, { headers: authHeaders(token) });
   const data = await res.json();
   if (!res.ok) {
     const err = new Error('Teacher info request failed') as Error & { status?: number };
@@ -37,10 +38,13 @@ async function teacherInfoFetcher(url: string) {
 }
 
 export function TeacherProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
 
   const swrKey = user?.email
-    ? `/api/teachers/info?email=${encodeURIComponent(user.email)}`
+    ? ([
+        `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
+        token,
+      ] as const)
     : null;
 
   const { data, error, isLoading, mutate } = useSWR(swrKey, teacherInfoFetcher, {

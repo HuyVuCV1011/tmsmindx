@@ -1,5 +1,7 @@
 'use client'
 
+import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
 import { getLeaderAreas } from '@/lib/teaching-leaders'
 import {
   closestCenter,
@@ -129,6 +131,7 @@ function KanbanColumn({
 }
 
 export default function KanbanLeadersPanel() {
+  const { token } = useAuth()
   const [leaders, setLeaders] = useState<KanbanLeader[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -144,7 +147,9 @@ export default function KanbanLeadersPanel() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/app-auth/data?table=teaching_leaders')
+      const r = await fetch('/api/app-auth/data?table=teaching_leaders', {
+        headers: authHeaders(token),
+      })
       const d = await r.json()
       if (d.rows) setLeaders(d.rows)
     } catch {
@@ -152,7 +157,7 @@ export default function KanbanLeadersPanel() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [token])
 
   useEffect(() => {
     load()
@@ -207,7 +212,7 @@ export default function KanbanLeadersPanel() {
     try {
       const r = await fetch('/api/app-auth/data', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
         body: JSON.stringify({
           table: 'teaching_leaders_status',
           code,

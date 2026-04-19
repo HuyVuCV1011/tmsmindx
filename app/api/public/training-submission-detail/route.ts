@@ -1,8 +1,15 @@
+import {
+  rejectIfDatasourceLookupForbidden,
+  requireBearerOrSessionCookie,
+} from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireBearerOrSessionCookie(request);
+    if (!auth.ok) return auth.response;
+
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get('id');
 
@@ -28,6 +35,13 @@ export async function GET(request: NextRequest) {
     }
 
     const submission = submissionResult.rows[0];
+    const forbidden = await rejectIfDatasourceLookupForbidden(
+      auth.sessionEmail,
+      auth.privileged,
+      '',
+      String(submission.teacher_code || ''),
+    );
+    if (forbidden) return forbidden;
 
     // 2. Get answers
     const answersResult = await pool.query(

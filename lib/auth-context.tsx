@@ -1,8 +1,16 @@
 'use client'
 
+import { authHeaders } from '@/lib/auth-headers'
 import { logger } from '@/lib/logger'
-import { usePathname, useRouter } from 'next/navigation'
-import { createContext, useContext, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { toast } from '@/lib/app-toast'
 
 interface User {
@@ -81,7 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
-  const pathname = usePathname()
 
   useEffect(() => {
     // Check authentication status - only run once on mount
@@ -92,31 +99,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const storedUser = localStorage.getItem('user')
 
       if (storedToken && storedUser) {
-        const parsedUser = JSON.parse(storedUser) as unknown
-
-        if (!isStoredUserShapeValid(parsedUser)) {
-          logger.warn(
-            'Stored auth user has invalid shape, clearing stale auth data',
-          )
-          localStorage.removeItem('token')
-          localStorage.removeItem('user')
-          localStorage.removeItem('refreshToken')
-          return
-        }
-
-        if (isTokenExpired(storedToken)) {
-          logger.info('Stored token is expired, clearing stale auth data')
-          localStorage.removeItem('token')
-          localStorage.removeItem('user')
-          localStorage.removeItem('refreshToken')
-          return
-        }
-
+        const parsedUser = JSON.parse(storedUser)
         setToken(storedToken)
         setUser(parsedUser)
-        logger.success('Auth restored from localStorage', {
-          email: parsedUser.email,
-        })
+        logger.success('Auth restored from localStorage')
       } else {
         logger.info('No stored auth found')
       }
@@ -130,9 +116,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []) // Empty dependency array - only run once
 
-  const logout = () => {
+  const logout = useCallback(() => {
     try {
-      logger.info('Logging out user', { email: user?.email })
+      logger.info('Logging out user')
+
+      void fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
 
       localStorage.removeItem('token')
       localStorage.removeItem('user')
@@ -148,33 +136,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logger.error('Error during logout', { error: error.message })
       toast.error('Có lỗi khi đăng xuất')
     }
-  }
+  }, [router])
 
-  const updateUser = (newUser: User, newToken: string) => {
+  const updateUser = useCallback((newUser: User, newToken: string) => {
     try {
-      logger.info('Updating user in auth context', { email: newUser.email })
+      logger.info('Updating user in auth context')
 
       localStorage.setItem('token', newToken)
       localStorage.setItem('user', JSON.stringify(newUser))
       setUser(newUser)
       setToken(newToken)
 
-      logger.success('Auth context updated successfully', {
-        email: newUser.email,
-      })
+      logger.success('Auth context updated successfully')
     } catch (error: any) {
       logger.error('Error updating user', { error: error.message })
       toast.error('Có lỗi khi cập nhật thông tin')
     }
-  }
+  }, [])
 
-  const refreshPermissions = async () => {
-    if (!user) return
+  const refreshPermissions = useCallback(async () => {
+    if (!user || !token) return
 
     try {
-      const response = await fetch(
-        `/api/check-admin?email=${encodeURIComponent(user.email)}`,
-      )
+      const response = await fetch('/api/check-admin', {
+        headers: authHeaders(token),
+      })
       const data = await response.json()
 
       if (data.success && data.permissions) {
@@ -205,21 +191,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           setUser(updatedUser)
           localStorage.setItem('user', JSON.stringify(updatedUser))
-          logger.success('Permissions refreshed successfully', {
-            email: user.email,
-          })
+          logger.success('Permissions refreshed successfully')
         }
       }
     } catch (error: any) {
       logger.error('Error refreshing permissions', { error: error.message })
     }
-  }
+  }, [user, token])
+
+  const contextValue = useMemo(
+    () => ({
+      user,
+      token,
+      isLoading,
+      logout,
+      updateUser,
+      refreshPermissions,
+    }),
+    [user, token, isLoading, logout, updateUser, refreshPermissions],
+  )
 
   return (
-    <AuthContext.Provider
-      value={{ user, token, isLoading, logout, updateUser, refreshPermissions }}
-    >
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
   )
 }

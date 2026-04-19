@@ -1,3 +1,4 @@
+import { getApiSecret } from '@/lib/internal-api-secret'
 import { NextRequest, NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { getBirthdayRecordsFromDataCache } from '@/lib/birthday-data-cache'
@@ -10,8 +11,8 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json().catch(() => ({}))
         const secret = body.secret || request.headers.get('x-api-key')
-        const API_SECRET = process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025'
-        if (secret !== API_SECRET) {
+        const expected = getApiSecret()
+        if (!expected || secret !== expected) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 

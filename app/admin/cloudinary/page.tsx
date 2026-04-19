@@ -1,6 +1,8 @@
 'use client';
 
 import { PageContainer } from '@/components/PageContainer';
+import { useAuth } from '@/lib/auth-context';
+import { authHeaders } from '@/lib/auth-headers';
 import { Copy, Image as ImageIcon, Loader2, RefreshCw, Search, Trash2, Video } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from '@/lib/app-toast';
@@ -32,6 +34,7 @@ const formatBytes = (bytes: number) => {
 };
 
 export default function AdminCloudinaryPage() {
+  const { token } = useAuth();
   const [resources, setResources] = useState<CloudinaryResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -62,6 +65,7 @@ export default function AdminCloudinaryPage() {
 
         const response = await fetch(`/api/admin/cloudinary?${params.toString()}`, {
           cache: 'no-store',
+          headers: authHeaders(token),
         });
         const data = await response.json();
 
@@ -77,12 +81,12 @@ export default function AdminCloudinaryPage() {
         setLoading(false);
       }
     },
-    [bucket, limit, appliedPrefix]
+    [bucket, limit, appliedPrefix, token]
   );
 
   // Fetch danh sách buckets khi mount
   useEffect(() => {
-    fetch('/api/admin/cloudinary')
+    fetch('/api/admin/cloudinary', { headers: authHeaders(token) })
       .then((r) => r.json())
       .then((data) => {
         if (data.success && data.buckets) {
@@ -90,7 +94,7 @@ export default function AdminCloudinaryPage() {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     fetchResources(undefined, false);
@@ -103,7 +107,7 @@ export default function AdminCloudinaryPage() {
       setDeletingId(resource.public_id);
       const response = await fetch('/api/admin/cloudinary', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
         body: JSON.stringify({
           key: resource.public_id,
           bucket,

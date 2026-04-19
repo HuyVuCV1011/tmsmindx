@@ -1,18 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { TPS_SESSION_COOKIE } from '@/lib/session-cookie';
+import { NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
-  try {
-    // Clear any server-side session data if needed
-    // For now, we're using localStorage on client-side
-    
-    return NextResponse.json({ 
-      success: true,
-      message: 'Đăng xuất thành công' 
-    });
-  } catch (error) {
-    return NextResponse.json(
-      { error: 'Đã xảy ra lỗi khi đăng xuất' },
-      { status: 500 }
-    );
-  }
+/** Xóa cookie phiên edge. JWT app/Firebase vẫn do client quản lý — hết hạn theo exp claim (và refresh Firebase có giới hạn revoke phía Google). */
+export async function POST() {
+  const res = NextResponse.json({ success: true });
+  res.cookies.set(TPS_SESSION_COOKIE, '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  });
+  return res;
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useAuth } from '@/lib/auth-context';
+import { authHeaders } from '@/lib/auth-headers';
 import { Calendar, Filter, User, X } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
@@ -140,6 +142,7 @@ const CalendarCell = memo(({
 CalendarCell.displayName = 'CalendarCell';
 
 export default function Page2() {
+  const { token } = useAuth();
   const [selectedPrograms, setSelectedPrograms] = useState<string[]>([]);
   const [selectedRegion, setSelectedRegion] = useState<string>('Tất cả');
   const [centers, setCenters] = useState<Center[]>([]);
@@ -168,7 +171,9 @@ export default function Page2() {
 
     const loadCenters = async () => {
       try {
-        const response = await fetch('/api/app-auth/data?table=centers&status=Active');
+        const response = await fetch('/api/app-auth/data?table=centers&status=Active', {
+          headers: authHeaders(token),
+        });
         const data = await response.json();
 
         if (!isActive) return;
@@ -199,7 +204,7 @@ export default function Page2() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [token]);
 
   const regionGroups = useMemo<RegionGroup[]>(() => {
     const grouped = new Map<string, Center[]>();

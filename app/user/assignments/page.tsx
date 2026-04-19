@@ -8,6 +8,8 @@ import { Tabs } from '@/components/Tabs'
 import { Button } from '@/components/ui/button'
 import { ExplanationSection } from '@/components/user/ExplanationSection'
 import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 import { isExamInCurrentVietnamMonth } from '@/lib/giaitrinh-eligibility'
 import { useTeacher } from '@/lib/teacher-context'
 import {
@@ -121,7 +123,7 @@ interface EffectiveExamScore {
 }
 
 export default function TeacherAssignmentPage() {
-  const { user, logout } = useAuth()
+  const { user, logout, token } = useAuth()
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher()
   const router = useRouter()
   const [assignments, setAssignments] = useState<Assignment[]>([])
@@ -251,6 +253,7 @@ export default function TeacherAssignmentPage() {
         try {
           const res = await fetch(
             `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
+            { headers: authHeaders(token) },
           )
           const data = await res.json()
           if (data?.teacher?.code) {
@@ -269,7 +272,7 @@ export default function TeacherAssignmentPage() {
         }
       })()
     }
-  }, [user, teacherCode, teacherProfile])
+  }, [user, teacherCode, teacherProfile, token])
 
   useEffect(() => {
     if (teacherCode) {
@@ -378,6 +381,7 @@ export default function TeacherAssignmentPage() {
         try {
           const res = await fetch(
             `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
+            { headers: authHeaders(token) },
           )
           const data = await res.json()
           canonicalTeacherCode = (data?.teacher?.code || '').toString().trim()
@@ -1303,7 +1307,7 @@ export default function TeacherAssignmentPage() {
                               <div
                                 className="prose prose-sm max-w-none flex-1"
                                 dangerouslySetInnerHTML={{
-                                  __html: question.question_text,
+                                  __html: sanitizeHtml(question.question_text),
                                 }}
                               />
                               <span className="self-start px-2 md:px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] md:text-xs font-semibold shrink-0">
@@ -1366,7 +1370,7 @@ export default function TeacherAssignmentPage() {
                                           <div
                                             className="prose prose-sm md:prose-base max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
                                             dangerouslySetInnerHTML={{
-                                              __html: normalizedOption,
+                                              __html: sanitizeHtml(normalizedOption),
                                             }}
                                           />
                                         )
