@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -243,7 +244,7 @@ export function Sidebar() {
         { href: '/user/dang-ky-lich-lam-viec', label: 'Đăng ký lịch làm việc' },
         { href: '/user/xin-nghi-mot-buoi', label: 'Tạo yêu cầu xin nghỉ' },
         { href: '/user/nhan-lop-1-buoi', label: 'Danh sách nhận lớp dạy thay' },
-      ],
+      ].filter((item) => !isTempHiddenUserRoute(item.href)),
     },
     {
       label: 'Đào tạo & Khảo thí',

@@ -71,16 +71,6 @@ const NORTH_CAMPUS_KEYWORDS = [
   'nam dinh',
 ]
 
-const CLASS_TIME_OPTIONS = [
-  '8h00 - 10h00',
-  '10h00 - 12h00',
-  '14h00 - 16h00',
-  '16h00 - 18h00',
-  '18h00 - 20h00',
-  '18h30 - 20h30',
-  '19h00 - 21h00',
-] as const
-
 const LEAVE_SESSION_OPTIONS = Array.from(
   { length: 14 },
   (_, index) => `Buổi ${index + 1}`,
@@ -92,7 +82,46 @@ const INPUT_BASE_CLASS =
   'w-full min-w-0 max-w-full min-h-11 rounded-lg border border-gray-300 px-3 py-3 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm'
 const TEXTAREA_BASE_CLASS =
   'w-full min-w-0 max-w-full rounded-lg border border-gray-300 px-3 py-2.5 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm'
+/** input[type=time]: bước 1 phút */
+const TIME_INPUT_CLASS = `${INPUT_BASE_CLASS} tabular-nums`
 const MIN_ADVANCE_HOURS = 72
+const MAX_REQUESTS_PER_CLASS = 2
+
+type StatFilter = 'pending' | 'done' | 'rejected'
+
+/** Chuẩn hoá "8:0:0" | "08:30" -> "08:30" */
+function normalizeHhMm(iso: string): string {
+  const parts = iso.split(':').map((p) => parseInt(p, 10))
+  const h = parts[0] ?? 0
+  const m = parts[1] ?? 0
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+function timeToVnSegment(iso: string): string {
+  const [hs, ms] = normalizeHhMm(iso).split(':')
+  const h = parseInt(hs ?? '0', 10)
+  const m = parseInt(ms ?? '0', 10)
+  return `${h}h${String(m).padStart(2, '0')}`
+}
+
+function formatClassTimeRange(start: string, end: string): string {
+  return `${timeToVnSegment(start)} - ${timeToVnSegment(end)}`
+}
+
+function timeToMinutes(iso: string): number {
+  const [h, m] = normalizeHhMm(iso).split(':').map((x) => parseInt(x, 10))
+  return (h || 0) * 60 + (m || 0)
+}
+
+function matchesStatFilter(
+  status: LeaveRequest['status'],
+  filter: StatFilter | null,
+): boolean {
+  if (!filter) return true
+  if (filter === 'pending') return status === 'pending_admin'
+  if (filter === 'done') return status === 'substitute_confirmed'
+  return status === 'rejected'
+}
 
 function getStatusMeta(status: LeaveRequest['status']): {
   label: string
@@ -165,7 +194,9 @@ export default function XinNghiMotBuoiPage() {
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(
     null,
   )
-  const [classTimePreset, setClassTimePreset] = useState('')
+  const [classTimeStart, setClassTimeStart] = useState<string | null>(null)
+  const [classTimeEnd, setClassTimeEnd] = useState<string | null>(null)
+  const [statFilter, setStatFilter] = useState<StatFilter | null>(null)
 
   const campusOptions = useMemo(() => {
     const set = new Set<string>()
@@ -185,6 +216,9 @@ export default function XinNghiMotBuoiPage() {
 
   const filteredRequests = useMemo(() => {
     return leaveRequests.filter((item) => {
+      if (!matchesStatFilter(item.status, statFilter)) {
+        return false
+      }
       if (campusFilter.length > 0 && !campusFilter.includes(item.campus)) {
         return false
       }
@@ -196,7 +230,7 @@ export default function XinNghiMotBuoiPage() {
       }
       return true
     })
-  }, [leaveRequests, campusFilter, fromDate, toDate])
+  }, [leaveRequests, campusFilter, fromDate, toDate, statFilter])
 
   const [formData, setFormData] = useState({
     teacher_name: '',
@@ -306,19 +340,17 @@ export default function XinNghiMotBuoiPage() {
   }, [fetchLeaveRequests, user?.email])
 
   useEffect(() => {
-    if (!formData.class_time) {
-      setClassTimePreset('')
-      return
-    }
-
-    setClassTimePreset(
-      CLASS_TIME_OPTIONS.includes(
-        formData.class_time as (typeof CLASS_TIME_OPTIONS)[number],
+    if (classTimeStart && classTimeEnd) {
+      const next = formatClassTimeRange(classTimeStart, classTimeEnd)
+      setFormData((prev) =>
+        prev.class_time === next ? prev : { ...prev, class_time: next },
       )
-        ? formData.class_time
-        : 'other',
-    )
-  }, [formData.class_time])
+    } else {
+      setFormData((prev) =>
+        prev.class_time === '' ? prev : { ...prev, class_time: '' },
+      )
+    }
+  }, [classTimeStart, classTimeEnd])
 
   const inferredRegion = useMemo(() => {
     const normalizedCampus = formData.campus.toLowerCase()
@@ -399,6 +431,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
     () => leaveRequests.filter((item) => item.status === 'rejected').length,
     [leaveRequests],
   )
+  const totalCount = leaveRequests.length
 
   const handleChange = (
     field: keyof typeof formData,
@@ -421,7 +454,8 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
       substitute_email: '',
       class_status: '',
     }))
-    setClassTimePreset('')
+    setClassTimeStart(null)
+    setClassTimeEnd(null)
   }
 
   const validateForm = () => {
@@ -434,6 +468,32 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
       !formData.reason
     ) {
       return 'Vui lòng điền đầy đủ các trường bắt buộc.'
+    }
+
+    const classCodeTrim = formData.class_code.trim()
+    if (!classCodeTrim) {
+      return 'Vui lòng nhập mã lớp (tối đa 2 yêu cầu cho mỗi mã lớp).'
+    }
+
+    const sameClassCount = leaveRequests.filter(
+      (r) =>
+        r.class_code &&
+        r.class_code.trim().toLowerCase() === classCodeTrim.toLowerCase(),
+    ).length
+    if (sameClassCount >= MAX_REQUESTS_PER_CLASS) {
+      return `Mỗi mã lớp chỉ được tạo tối đa ${MAX_REQUESTS_PER_CLASS} yêu cầu. Bạn đã đạt giới hạn cho mã lớp này.`
+    }
+
+    if (!classTimeStart || !classTimeEnd) {
+      return 'Vui lòng chọn đủ giờ bắt đầu và giờ kết thúc (giờ và phút).'
+    }
+
+    if (timeToMinutes(classTimeEnd) <= timeToMinutes(classTimeStart)) {
+      return 'Giờ kết thúc phải sau giờ bắt đầu.'
+    }
+
+    if (!formData.leave_session.trim()) {
+      return 'Vui lòng chọn buổi học xin nghỉ.'
     }
 
     if (formData.reason.trim().length < 10) {
@@ -524,7 +584,8 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
       <div className="min-h-screen bg-white p-4 sm:p-6 lg:p-8">
         <div className="mx-auto max-w-7xl space-y-4">
           <div className="h-10 w-72 animate-pulse rounded bg-gray-200" />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
             <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
             <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
             <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
@@ -568,25 +629,73 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
           }
         />
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <button
+            type="button"
+            onClick={() => setStatFilter(null)}
+            aria-pressed={statFilter === null}
+            className={`rounded-xl border p-4 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${
+              statFilter === null
+                ? 'border-slate-500 bg-slate-100 shadow-md ring-2 ring-slate-300'
+                : 'border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+            }`}
+          >
+            <p className="text-xs font-medium text-slate-700">Tất cả</p>
+            <p className="mt-1 text-2xl font-bold text-slate-900">
+              {totalCount}
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setStatFilter((prev) => (prev === 'pending' ? null : 'pending'))
+            }
+            aria-pressed={statFilter === 'pending'}
+            className={`rounded-xl border p-4 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 ${
+              statFilter === 'pending'
+                ? 'border-amber-500 bg-amber-100 shadow-md ring-2 ring-amber-300'
+                : 'border-amber-200 bg-amber-50 hover:bg-amber-100/80'
+            }`}
+          >
             <p className="text-xs font-medium text-amber-700">Chờ duyệt</p>
             <p className="mt-1 text-2xl font-bold text-amber-900">
               {pendingCount}
             </p>
-          </div>
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setStatFilter((prev) => (prev === 'done' ? null : 'done'))
+            }
+            aria-pressed={statFilter === 'done'}
+            className={`rounded-xl border p-4 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 ${
+              statFilter === 'done'
+                ? 'border-emerald-500 bg-emerald-100 shadow-md ring-2 ring-emerald-300'
+                : 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100/80'
+            }`}
+          >
             <p className="text-xs font-medium text-emerald-700">Đã hoàn tất</p>
             <p className="mt-1 text-2xl font-bold text-emerald-900">
               {doneCount}
             </p>
-          </div>
-          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setStatFilter((prev) => (prev === 'rejected' ? null : 'rejected'))
+            }
+            aria-pressed={statFilter === 'rejected'}
+            className={`rounded-xl border p-4 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 ${
+              statFilter === 'rejected'
+                ? 'border-rose-500 bg-rose-100 shadow-md ring-2 ring-rose-300'
+                : 'border-rose-200 bg-rose-50 hover:bg-rose-100/80'
+            }`}
+          >
             <p className="text-xs font-medium text-rose-700">Bị từ chối</p>
             <p className="mt-1 text-2xl font-bold text-rose-900">
               {rejectedCount}
             </p>
-          </div>
+          </button>
         </div>
 
         {/* Bộ lọc nâng cao */}
@@ -704,7 +813,10 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
               min={fromDate || undefined}
             />
           </div>
-          {(campusFilter.length > 0 || fromDate || toDate) && (
+          {(campusFilter.length > 0 ||
+            fromDate ||
+            toDate ||
+            statFilter !== null) && (
             <Button
               size="sm"
               variant="ghost"
@@ -712,6 +824,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
                 setCampusFilter([])
                 setFromDate('')
                 setToDate('')
+                setStatFilter(null)
               }}
             >
               Xoá lọc
@@ -846,7 +959,8 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
               </p>
               <p className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4" />
-                Cung cấp đủ thông tin lớp để admin phân giáo viên thay nhanh.
+                Mỗi mã lớp tối đa {MAX_REQUESTS_PER_CLASS} yêu cầu; cung cấp đủ
+                thông tin lớp để admin phân GV thay nhanh.
               </p>
               <p className="flex items-center gap-1.5">
                 <CircleX className="h-4 w-4" />
@@ -882,13 +996,15 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Mã lớp
+                Mã lớp *
               </label>
               <input
+                required
                 type="text"
                 value={formData.class_code}
                 onChange={(e) => handleChange('class_code', e.target.value)}
                 className={INPUT_BASE_CLASS}
+                placeholder="Nhập đúng mã lớp (giới hạn theo quy định)"
               />
             </div>
             <div>
@@ -902,55 +1018,63 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
                 className={INPUT_BASE_CLASS}
               />
             </div>
-            <div>
+            <div className="md:col-span-2">
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Thời gian học
+                Thời gian học *
               </label>
-              <div className="space-y-2">
-                <div className="relative">
-                  <select
-                    value={classTimePreset}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      setClassTimePreset(value)
-
-                      if (value === 'other') {
-                        handleChange('class_time', '')
-                        return
-                      }
-
-                      handleChange('class_time', value)
-                    }}
-                    className={SELECT_BASE_CLASS}
+              <p className="mb-3 text-xs text-gray-500">
+                Dùng ô giờ chuẩn của trình duyệt (mobile sẽ mở bánh xe giờ/phút). Bước 1 phút.
+              </p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <label
+                    htmlFor="class-time-start"
+                    className="mb-1.5 block text-xs font-medium text-gray-600"
                   >
-                    <option value="">Chọn khung giờ</option>
-                    {CLASS_TIME_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                    <option value="other">Khung giờ khác</option>
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                </div>
-
-                {classTimePreset === 'other' && (
+                    Giờ bắt đầu
+                  </label>
                   <input
-                    type="text"
-                    value={formData.class_time}
-                    onChange={(e) => handleChange('class_time', e.target.value)}
-                    placeholder="Nhập khung giờ khác"
-                    className="w-full min-h-11 rounded-lg border border-gray-300 px-3 py-3 text-[16px] text-gray-900 shadow-sm outline-none transition-colors focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 sm:text-sm"
+                    id="class-time-start"
+                    type="time"
+                    step={60}
+                    value={classTimeStart ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setClassTimeStart(v ? v.slice(0, 5) : null)
+                    }}
+                    className={TIME_INPUT_CLASS}
+                    aria-label="Giờ và phút bắt đầu"
                   />
-                )}
+                </div>
+                <div className="min-w-0">
+                  <label
+                    htmlFor="class-time-end"
+                    className="mb-1.5 block text-xs font-medium text-gray-600"
+                  >
+                    Giờ kết thúc
+                  </label>
+                  <input
+                    id="class-time-end"
+                    type="time"
+                    step={60}
+                    value={classTimeEnd ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setClassTimeEnd(v ? v.slice(0, 5) : null)
+                    }}
+                    className={TIME_INPUT_CLASS}
+                    aria-label="Giờ và phút kết thúc"
+                  />
+                </div>
               </div>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Buổi học xin nghỉ
+                Buổi học xin nghỉ *
               </label>
               <div className="relative">
                 <select
+                  required
                   value={formData.leave_session}
                   onChange={(e) =>
                     handleChange('leave_session', e.target.value)

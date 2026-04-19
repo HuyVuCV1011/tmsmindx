@@ -1,13 +1,18 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { isMaintenanceModeEnabled } from '@/lib/maintenance';
+import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes';
 
 export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (isTempHiddenUserRoute(pathname)) {
+    return NextResponse.rewrite(new URL('/temp-hidden-404', request.url));
+  }
+
   if (!isMaintenanceModeEnabled()) {
     return NextResponse.next();
   }
-
-  const { pathname } = request.nextUrl;
 
   if (
     /\.(?:ico|png|jpg|jpeg|svg|gif|webp|woff2?|ttf|eot|mp4|webm|pdf)$/i.test(

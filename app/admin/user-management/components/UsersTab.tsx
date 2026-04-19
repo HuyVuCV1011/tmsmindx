@@ -1,7 +1,7 @@
 "use client";
 import { useAuth } from "@/lib/auth-context";
-import { Check, Eye, EyeOff, Key, Loader2, Lock, Plus, Save, Trash2, UserCheck, UserPlus, Users, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, Eye, EyeOff, Key, Loader2, Lock, Plus, Save, Search, Trash2, UserCheck, UserPlus, Users, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/app-toast";
 import ConfirmDialog from "./ConfirmDialog";
 
@@ -37,6 +37,7 @@ export default function UsersTab() {
     const [chPwing, setChPwing] = useState(false);
     // Confirm dialog
     const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; userId: number; name: string }>({ open: false, userId: 0, name: "" });
+    const [userSearch, setUserSearch] = useState("");
 
     // Close modal on escape
     useEffect(() => {
@@ -146,12 +147,37 @@ export default function UsersTab() {
         } catch { toast.error("Lỗi") } finally { setConfirmDlg({ open: false, userId: 0, name: "" }) }
     };
 
-    const depts = [...new Set(allRoles.map(r => r.department))];
+    const depts = useMemo(
+        () => [...new Set(allRoles.map((r) => r.department))].sort(),
+        [allRoles],
+    );
+
+    const filteredUsers = useMemo(() => {
+        const q = userSearch.trim().toLowerCase();
+        if (!q) return users;
+        return users.filter(
+            (u) =>
+                u.display_name.toLowerCase().includes(q) ||
+                u.email.toLowerCase().includes(q) ||
+                (u.user_roles || []).some((r) => r.toLowerCase().includes(q)),
+        );
+    }, [users, userSearch]);
 
     return (
         <div className="space-y-4">
             {/* Action buttons */}
-            <div className="flex items-center gap-2 justify-end">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative w-full sm:max-w-sm">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                        value={userSearch}
+                        onChange={(e) => setUserSearch(e.target.value)}
+                        placeholder="Tìm theo tên, email, role..."
+                        className="w-full rounded-lg border border-gray-200 bg-gray-50/80 py-2 pl-10 pr-3 text-sm outline-none transition focus:border-[#a1001f] focus:bg-white focus:ring-2 focus:ring-[#a1001f]/15"
+                        aria-label="Tìm người dùng"
+                    />
+                </div>
+                <div className="flex flex-wrap items-center gap-2 justify-end">
                 <button onClick={() => { setPanel(panel === 'addExisting' ? 'none' : 'addExisting'); setSel(null); }}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-md text-sm font-medium transition-all hover:scale-105 ${panel === 'addExisting' ? 'bg-gray-200 text-gray-700' : 'bg-gradient-to-r from-green-600 to-green-700 text-white'}`}>
                     {panel === 'addExisting' ? <X className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
@@ -162,6 +188,7 @@ export default function UsersTab() {
                     {panel === 'create' ? <X className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
                     {panel === 'create' ? "Đóng" : "Tạo TK mới"}
                 </button>
+                </div>
             </div>
 
             {/* Add existing panel */}
@@ -332,17 +359,26 @@ export default function UsersTab() {
             )}
 
             {/* Users table */}
-            <div className="bg-white rounded-xl border shadow-lg overflow-hidden">
-                <div className="px-6 py-3 border-b bg-gradient-to-r from-gray-50 to-white">
-                    <h3 className="text-sm font-bold flex items-center gap-2"><Users className="h-4 w-4 text-[#a1001f]" />Danh sách ({users.length})</h3>
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50/90 to-white sm:px-6">
+                    <h3 className="text-sm font-bold flex flex-wrap items-center gap-2">
+                        <Users className="h-4 w-4 text-[#a1001f]" />
+                        Danh sách
+                        <span className="font-normal text-gray-500">
+                            ({filteredUsers.length}
+                            {userSearch.trim() ? ` / ${users.length}` : ''})
+                        </span>
+                    </h3>
                 </div>
                 {loading ? (
                     <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#a1001f]" /></div>
                 ) : users.length === 0 ? (
                     <div className="text-center py-16 text-gray-500">Chưa có tài khoản nào</div>
+                ) : filteredUsers.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 text-sm">Không khớp bộ lọc tìm kiếm.</div>
                 ) : (
                     <div className="divide-y divide-gray-100">
-                        {users.map(u => {
+                        {filteredUsers.map(u => {
                             const isSel = sel?.id === u.id;
                             return (
                                 <div key={u.id} className={`hover:bg-gray-50 transition-colors ${isSel ? 'bg-blue-50/50 ring-1 ring-blue-200' : ''}`}>

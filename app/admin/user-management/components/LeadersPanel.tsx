@@ -1,10 +1,22 @@
 "use client";
+import { getLeaderAreas } from "@/lib/teaching-leaders";
 import { Edit2, Filter, Loader2, MapPin, Plus, Save, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "@/lib/app-toast";
 import ConfirmDialog from "./ConfirmDialog";
 
-interface Leader { code: string; full_name: string; role_code: string; role_name: string; center: string; courses: string; area: string; status: string; joined_date: string; }
+interface Leader {
+    code: string;
+    full_name: string;
+    role_code: string;
+    role_name: string;
+    center: string;
+    courses: string;
+    area: string;
+    areas?: string[];
+    status: string;
+    joined_date: string;
+}
 interface Filters { areas: string[]; roleCodes: { role_code: string; role_name: string }[]; statuses: string[]; }
 
 export default function LeadersPanel() {
@@ -35,7 +47,16 @@ export default function LeadersPanel() {
         } catch { toast.error("Lỗi") } finally { setLoading(false) }
     };
 
-    const filtered = data.filter(l => !search || l.full_name.toLowerCase().includes(search.toLowerCase()) || l.code.toLowerCase().includes(search.toLowerCase()) || l.center.toLowerCase().includes(search.toLowerCase()));
+    const filtered = data.filter(l => {
+        if (!search) return true;
+        const q = search.toLowerCase();
+        return (
+            l.full_name.toLowerCase().includes(q) ||
+            l.code.toLowerCase().includes(q) ||
+            l.center.toLowerCase().includes(q) ||
+            getLeaderAreas(l).some((a) => a.toLowerCase().includes(q))
+        );
+    });
 
     const askToggleStatus = (l: Leader) => {
         const newStatus = l.status === 'Active' ? 'Deactive' : 'Active';
@@ -55,12 +76,24 @@ export default function LeadersPanel() {
     };
 
     const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault(); if (!editLeader) return; setSaving(true);
+        e.preventDefault();
+        if (!editLeader) return;
+        const areas = editLeader.areas?.length ? editLeader.areas : getLeaderAreas(editLeader);
+        if (areas.length === 0) {
+            toast.error('Chọn ít nhất một khu vực.');
+            return;
+        }
+        setSaving(true);
         try {
             const method = isNew ? 'POST' : 'PUT';
             const r = await fetch('/api/app-auth/data', {
                 method, headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ table: 'teaching_leaders', ...editLeader })
+                body: JSON.stringify({
+                    table: 'teaching_leaders',
+                    ...editLeader,
+                    areas,
+                    area: areas[0] || '',
+                })
             });
             const d = await r.json();
             if (d.success) { toast.success(isNew ? "Đã thêm" : "Đã cập nhật"); setEditLeader(null); load(); }
@@ -76,11 +109,36 @@ export default function LeadersPanel() {
         } catch { toast.error("Lỗi") } finally { setConfirmDlg({ open: false, code: "", name: "" }) }
     };
 
-    const openNew = () => { setIsNew(true); setEditLeader({ code: '', full_name: '', role_code: '', role_name: '', center: '', courses: '', area: '', status: 'Active', joined_date: '' }); };
-    const openEdit = (l: Leader) => { setIsNew(false); setEditLeader({ ...l }); };
+    const openNew = () => {
+        setIsNew(true);
+        setEditLeader({
+            code: '',
+            full_name: '',
+            role_code: '',
+            role_name: '',
+            center: '',
+            courses: '',
+            area: '',
+            areas: [],
+            status: 'Active',
+            joined_date: '',
+        });
+    };
+    const openEdit = (l: Leader) => {
+        setIsNew(false);
+        const areas = getLeaderAreas(l);
+        setEditLeader({ ...l, areas, area: areas[0] || l.area || '' });
+    };
 
-    // Group by area
-    const areas = [...new Set(filtered.map(l => l.area).filter(Boolean))].sort();
+    const toggleLeaderArea = (a: string) => {
+        if (!editLeader) return;
+        const cur = editLeader.areas || getLeaderAreas(editLeader);
+        const next = cur.includes(a) ? cur.filter((x) => x !== a) : [...cur, a];
+        setEditLeader({ ...editLeader, areas: next, area: next[0] || '' });
+    };
+
+    // Group by area (leader có thể xuất hiện ở nhiều nhóm)
+    const areas = [...new Set(filtered.flatMap((l) => getLeaderAreas(l)))].sort();
     const activeCount = data.filter(l => l.status === 'Active').length;
     const deactiveCount = data.filter(l => l.status !== 'Active').length;
 
@@ -155,9 +213,24 @@ export default function LeadersPanel() {
                             <div><label className="block text-xs font-semibold text-gray-700 mb-1">Courses</label>
                                 <input value={editLeader.courses || ''} onChange={e => setEditLeader({ ...editLeader, courses: e.target.value })}
                                     className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500" /></div>
-                            <div><label className="block text-xs font-semibold text-gray-700 mb-1">Area</label>
-                                <input value={editLeader.area || ''} onChange={e => setEditLeader({ ...editLeader, area: e.target.value })}
-                                    className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500" /></div>
+                            <div className="md:col-span-4">
+                                <label className="block text-xs font-semibold text-gray-700 mb-1">Khu vực * <span className="font-normal text-gray-500">(nhiều)</span></label>
+                                <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto rounded-lg border p-2 bg-gray-50">
+                                    {filters.areas.length === 0 ? (
+                                        <span className="text-xs text-gray-500">Chưa có khu vực.</span>
+                                    ) : (
+                                        filters.areas.map((a) => {
+                                            const checked = (editLeader.areas || getLeaderAreas(editLeader)).includes(a);
+                                            return (
+                                                <label key={a} className={`flex items-center gap-1.5 px-2 py-1 rounded border text-xs cursor-pointer ${checked ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'}`}>
+                                                    <input type="checkbox" checked={checked} onChange={() => toggleLeaderArea(a)} className="rounded" />
+                                                    {a}
+                                                </label>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
                             <div><label className="block text-xs font-semibold text-gray-700 mb-1">Status</label>
                                 <select value={editLeader.status} onChange={e => setEditLeader({ ...editLeader, status: e.target.value })}
                                     className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500">
@@ -178,7 +251,7 @@ export default function LeadersPanel() {
             ) : (
                 <div className="space-y-4">
                     {areas.map(area => {
-                        const areaLeaders = filtered.filter(l => l.area === area);
+                        const areaLeaders = filtered.filter((l) => getLeaderAreas(l).includes(area));
                         return (
                             <div key={area} className="bg-white rounded-xl border shadow overflow-hidden">
                                 <div className="px-4 py-2.5 bg-gradient-to-r from-gray-50 to-white border-b flex items-center justify-between">
