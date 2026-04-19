@@ -116,6 +116,7 @@ export default function LoginPage() {
         error?: string;
         dbUnavailable?: boolean;
         idToken?: string;
+        accessToken?: string;
         email?: string;
         displayName?: string;
         role?: string;
@@ -146,7 +147,8 @@ export default function LoginPage() {
           permissions: appAuthData.permissions ?? [],
         };
 
-        updateUser(userData, appAuthData.idToken);
+        // Ưu tiên dùng accessToken (JWT nội bộ) làm Bearer; fallback idToken Firebase
+        updateUser(userData, appAuthData.accessToken || appAuthData.idToken);
 
         const isAdminRole = Boolean(appAuthData.isAdmin);
         const redirectPath = isAdminRole
@@ -247,7 +249,8 @@ export default function LoginPage() {
       }
 
       persistRememberedAccount(trimmedEmail, role);
-      updateUser(userData, data.idToken);
+      // Ưu tiên dùng accessToken (JWT nội bộ HS256) làm Bearer; fallback idToken Firebase
+      updateUser(userData, data.accessToken || data.idToken);
 
       logger.info('Redirecting to', { path: finalRedirectPath });
       setTimeout(() => { router.replace(finalRedirectPath); }, 500);

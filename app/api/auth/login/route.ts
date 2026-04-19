@@ -159,11 +159,13 @@ export async function POST(request: NextRequest) {
         ap: access.isAdmin === true,
       },
       getJwtSecret(),
-      { expiresIn: '12h' },
+      { expiresIn: '1h' }, // Khớp thời hạn Firebase idToken — giảm rủi ro nếu bị đánh cắp
     );
 
     const res = NextResponse.json({
       idToken: successData.idToken,
+      /** JWT nội bộ HS256 — dùng làm Bearer cho /api/check-admin và các API bảo vệ thay vì Firebase idToken */
+      accessToken: edgeSessionJwt,
       email: successData.email,
       localId: successData.localId,
       displayName: finalDisplayName || String(successData.email || '').split('@')[0],

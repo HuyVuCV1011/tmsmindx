@@ -113,6 +113,8 @@ export async function POST(request: NextRequest) {
     const res = NextResponse.json({
       appUser: true,
       idToken: token,
+      /** JWT nội bộ HS256 — alias của idToken (cùng giá trị), dùng làm Bearer cho /api/check-admin */
+      accessToken: token,
       email: user.email,
       localId: `app_${user.id}`,
       displayName: user.display_name,
