@@ -1,11 +1,31 @@
 "use client";
-import { Building2, ChevronDown, ChevronRight, Database, Edit2, Filter, Loader2, MapPin, Plus, Save, Search, Trash2, Users2 } from "lucide-react";
+import { getLeaderAreas } from "@/lib/teaching-leaders";
+import { Building2, Database, Edit2, Filter, LayoutGrid, Loader2, MapPin, Plus, Save, Search, Trash2, Users2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "@/lib/app-toast";
 import ConfirmDialog from "./ConfirmDialog";
+import KanbanLeadersPanel from "./KanbanLeadersPanel";
+import {
+    CenterCardDragHeader,
+    DraggableLeaderRow,
+    DroppableCenterCard,
+    DroppableRegion,
+    LeaderCenterDndProvider,
+} from "./CenterLeaderDnD";
 
-type SubTab = 'centers-leaders' | 'roles';
-interface Leader { code: string; full_name: string; role_code: string; role_name: string; center: string; courses: string; area: string; status: string; joined_date: string; }
+type SubTab = 'centers-leaders' | 'roles' | 'kanban';
+interface Leader {
+    code: string;
+    full_name: string;
+    role_code: string;
+    role_name: string;
+    center: string;
+    courses: string;
+    area: string;
+    areas?: string[];
+    status: string;
+    joined_date: string;
+}
 interface Center { id: number; region: string; short_code: string; full_name: string; display_name: string; status: string; }
 interface Filters { areas: string[]; roleCodes: { role_code: string; role_name: string }[]; statuses: string[]; courses: string[]; }
 
@@ -13,11 +33,19 @@ export default function DataTab() {
     const [subTab, setSubTab] = useState<SubTab>('centers-leaders');
     const tabs: { key: SubTab; label: string; icon: React.ReactNode }[] = [
         { key: 'centers-leaders', label: 'Centers & Leaders', icon: <Building2 className="h-4 w-4" /> },
+        { key: 'kanban', label: 'Kanban', icon: <LayoutGrid className="h-4 w-4" /> },
         { key: 'roles', label: 'Roles', icon: <Database className="h-4 w-4" /> },
     ];
     return (
         <div className="space-y-4">
-            <p className="text-sm text-gray-500">Quản lý dữ liệu hệ thống: Centers, Teaching Leaders, và Roles.</p>
+            <p className="text-sm text-gray-500">
+                Quản lý dữ liệu hệ thống: Centers, Teaching Leaders, và Roles.
+                {subTab === 'kanban' && (
+                    <span className="mt-1 block text-[13px] text-gray-600">
+                        Kanban: kéo thả leader giữa <strong>Đang hoạt động</strong> và <strong>Tạm ngưng</strong> để cập nhật trạng thái nhanh.
+                    </span>
+                )}
+            </p>
             <div className="flex gap-2 flex-wrap">
                 {tabs.map(t => (
                     <button key={t.key} onClick={() => setSubTab(t.key)}
@@ -26,6 +54,7 @@ export default function DataTab() {
                 ))}
             </div>
             {subTab === 'centers-leaders' && <CentersLeadersPanel />}
+            {subTab === 'kanban' && <KanbanLeadersPanel />}
             {subTab === 'roles' && <RolesPanel />}
         </div>
     );
@@ -116,12 +145,26 @@ function CentersLeadersPanel() {
 
     // Leader CRUD
     const handleSaveLeader = async (e: React.FormEvent) => {
-        e.preventDefault(); if (!editLeader) return; setSaving(true);
+        e.preventDefault();
+        if (!editLeader) return;
+        const areas = editLeader.areas?.length
+            ? editLeader.areas
+            : getLeaderAreas(editLeader);
+        if (areas.length === 0) {
+            toast.error('Chọn ít nhất một khu vực.');
+            return;
+        }
+        setSaving(true);
         try {
             const method = isNew ? 'POST' : 'PUT';
             const r = await fetch('/api/app-auth/data', {
                 method, headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ table: 'teaching_leaders', ...editLeader })
+                body: JSON.stringify({
+                    table: 'teaching_leaders',
+                    ...editLeader,
+                    areas,
+                    area: areas[0] || '',
+                })
             });
             const d = await r.json();
             if (d.success) { toast.success(isNew ? "Đã thêm" : "Đã cập nhật"); setEditLeader(null); loadAll(); }
@@ -135,11 +178,101 @@ function CentersLeadersPanel() {
             if (d.success) { toast.success("Đã xóa"); loadAll(); } else toast.error(d.error || "Lỗi");
         } catch { toast.error("Lỗi") } finally { setDeleteDlg({ open: false, code: "", name: "" }) }
     };
-    const openNewLeader = (center?: string, area?: string) => {
+    const openNewLeader = (center?: string, regionOrArea?: string) => {
         setIsNew(true);
-        setEditLeader({ code: '', full_name: '', role_code: '', role_name: '', center: center || '', courses: '', area: area || '', status: 'Active', joined_date: '' });
+        const initialAreas = regionOrArea?.trim() ? [regionOrArea.trim()] : [];
+        setEditLeader({
+            code: '',
+            full_name: '',
+            role_code: '',
+            role_name: '',
+            center: center || '',
+            courses: '',
+            area: initialAreas[0] || '',
+            areas: initialAreas,
+            status: 'Active',
+            joined_date: '',
+        });
     };
-    const openEditLeader = (l: Leader) => { setIsNew(false); setEditLeader({ ...l }); };
+    const openEditLeader = (l: Leader) => {
+        setIsNew(false);
+        const areas = getLeaderAreas(l);
+        setEditLeader({ ...l, areas, area: areas[0] || l.area || '' });
+    };
+
+    const handleAssignCenter = async (code: string, centerFullName: string) => {
+        try {
+            const r = await fetch('/api/app-auth/data', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    table: 'teaching_leaders_center',
+                    code,
+                    center: centerFullName,
+                }),
+            });
+            const d = await r.json();
+            if (d.success) {
+                toast.success('Đã chuyển leader sang cơ sở mới');
+                loadAll();
+            } else toast.error(d.error || 'Không cập nhật được');
+        } catch {
+            toast.error('Lỗi mạng');
+        }
+    };
+
+    const handleAssignLeaderAreas = async (code: string, areas: string[]) => {
+        try {
+            const r = await fetch('/api/app-auth/data', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    table: 'teaching_leaders_areas',
+                    code,
+                    areas,
+                }),
+            });
+            const d = await r.json();
+            if (d.success) {
+                toast.success('Đã cập nhật khu vực cho leader');
+                loadAll();
+            } else toast.error(d.error || 'Không cập nhật được');
+        } catch {
+            toast.error('Lỗi mạng');
+        }
+    };
+
+    const handleAssignCenterRegion = async (centerId: number, region: string) => {
+        try {
+            const r = await fetch('/api/app-auth/data', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    table: 'centers_region',
+                    id: centerId,
+                    region,
+                }),
+            });
+            const d = await r.json();
+            if (d.success) {
+                toast.success('Đã chuyển cơ sở sang khu vực mới');
+                loadAll();
+            } else toast.error(d.error || 'Không cập nhật được');
+        } catch {
+            toast.error('Lỗi mạng');
+        }
+    };
+
+    const toggleLeaderArea = (a: string) => {
+        if (!editLeader) return;
+        const cur = editLeader.areas || getLeaderAreas(editLeader);
+        const next = cur.includes(a) ? cur.filter((x) => x !== a) : [...cur, a];
+        setEditLeader({
+            ...editLeader,
+            areas: next,
+            area: next[0] || '',
+        });
+    };
 
     // Center CRUD
     const handleSaveCenter = async (e: React.FormEvent) => {
@@ -147,7 +280,7 @@ function CentersLeadersPanel() {
         try {
             const r = await fetch('/api/app-auth/data', {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ table: 'centers', id: editCenter.id, region: editCenter.region })
+                body: JSON.stringify({ table: 'centers_region', id: editCenter.id, region: editCenter.region })
             });
             const d = await r.json();
             if (d.success) { toast.success("Đã cập nhật khu vực"); setEditCenter(null); loadAll(); }
@@ -164,47 +297,68 @@ function CentersLeadersPanel() {
         // Also match if any leader in this center matches
         leaders.some(l => l.center === c.full_name && (l.full_name.toLowerCase().includes(searchLower) || l.code.toLowerCase().includes(searchLower)))
     );
-    const allRegions = new Set([
-        ...filteredCenters.map(c => c.region),
-        ...leaders.filter(l => !search ||
+    const leaderMatchesSearch = (l: Leader) => {
+        if (!search) return true;
+        const la = getLeaderAreas(l);
+        return (
             l.full_name.toLowerCase().includes(searchLower) ||
             l.code.toLowerCase().includes(searchLower) ||
-            l.area.toLowerCase().includes(searchLower)
-        ).map(l => l.area).filter(Boolean)
+            la.some((x) => x.toLowerCase().includes(searchLower))
+        );
+    };
+    const allRegions = new Set([
+        ...filteredCenters.map(c => c.region),
+        ...leaders.filter(leaderMatchesSearch).flatMap((l) => getLeaderAreas(l)),
     ]);
     const regions = Array.from(allRegions).sort();
 
     const isRegionGrouped = (region: string) => region.startsWith('HCM') || region.startsWith('HN') || region === 'ONLINE' || region === 'HO';
 
-    const renderLeaderItem = (l: Leader, indentClass: string = "pl-4") => (
-        <div key={l.code} className={`px-4 ${indentClass} py-2 flex items-center gap-3 hover:bg-white transition-colors border-b last:border-0 ${l.status !== 'Active' ? 'opacity-50' : ''}`}>
-            <div className={`h-7 w-7 rounded-full flex justify-center items-center text-white text-xs font-bold flex-shrink-0 ${l.status === 'Active' ? 'bg-gradient-to-br from-indigo-500 to-purple-600' : 'bg-gray-400'}`}>
-                {l.full_name.charAt(0)}
-            </div>
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-medium text-gray-900">{l.full_name}</span>
-                    <span className="text-xs text-gray-400">({l.code})</span>
-                    <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700">{l.role_code}</span>
-                    {l.courses && <span className="px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-600">{l.courses}</span>}
-                    {l.area && <span className="px-1.5 py-0.5 rounded text-xs bg-amber-50 text-amber-700">{l.area}</span>}
+    const renderLeaderItem = (l: Leader, indentClass: string = "pl-4", draggable = false, sourceRegion = "") => {
+        const rowInner = (
+            <>
+                <div className={`h-7 w-7 rounded-full flex justify-center items-center text-white text-xs font-bold flex-shrink-0 ${l.status === 'Active' ? 'bg-gradient-to-br from-indigo-500 to-purple-600' : 'bg-gray-400'}`}>
+                    {l.full_name.charAt(0)}
                 </div>
-                {l.center && <p className="text-xs text-gray-500 mt-0.5">{l.center}</p>}
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-medium text-gray-900">{l.full_name}</span>
+                        <span className="text-xs text-gray-400">({l.code})</span>
+                        <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700">{l.role_code}</span>
+                        {l.courses && <span className="px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-600">{l.courses}</span>}
+                        {getLeaderAreas(l).map((ar) => (
+                            <span key={ar} className="px-1.5 py-0.5 rounded text-xs bg-amber-50 text-amber-800">{ar}</span>
+                        ))}
+                    </div>
+                    {l.center && <p className="text-xs text-gray-500 mt-0.5">{l.center}</p>}
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                    <button type="button" onClick={() => askToggleStatus('leader', l)}
+                        className={`px-2 py-0.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${l.status === 'Active' ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700' : 'bg-red-100 text-red-700 hover:bg-green-100 hover:text-green-700'}`}>
+                        {l.status}
+                    </button>
+                    <button type="button" onClick={() => openEditLeader(l)} className="p-1 rounded hover:bg-blue-50" title="Sửa">
+                        <Edit2 className="h-3.5 w-3.5 text-gray-400" />
+                    </button>
+                    <button type="button" onClick={() => setDeleteDlg({ open: true, code: l.code, name: l.full_name })} className="p-1 rounded hover:bg-red-50" title="Xóa">
+                        <Trash2 className="h-3.5 w-3.5 text-gray-400" />
+                    </button>
+                </div>
+            </>
+        );
+        if (draggable && sourceRegion) {
+            return (
+                <DraggableLeaderRow key={l.code} leader={l} indentClass={indentClass} sourceRegion={sourceRegion}>
+                    {rowInner}
+                </DraggableLeaderRow>
+            );
+        }
+        return (
+            <div key={l.code} className={`px-4 ${indentClass} py-2 flex items-center gap-3 hover:bg-white transition-colors border-b last:border-0 ${l.status !== 'Active' ? 'opacity-50' : ''}`}>
+                {rowInner}
             </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-                <button onClick={() => askToggleStatus('leader', l)}
-                    className={`px-2 py-0.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${l.status === 'Active' ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700' : 'bg-red-100 text-red-700 hover:bg-green-100 hover:text-green-700'}`}>
-                    {l.status}
-                </button>
-                <button onClick={() => openEditLeader(l)} className="p-1 rounded hover:bg-blue-50" title="Sửa">
-                    <Edit2 className="h-3.5 w-3.5 text-gray-400" />
-                </button>
-                <button onClick={() => setDeleteDlg({ open: true, code: l.code, name: l.full_name })} className="p-1 rounded hover:bg-red-50" title="Xóa">
-                    <Trash2 className="h-3.5 w-3.5 text-gray-400" />
-                </button>
-            </div>
-        </div>
-    );
+        );
+    };
 
     // Stats
     const activeCenters = centers.filter(c => c.status === 'Active').length;
@@ -238,6 +392,10 @@ function CentersLeadersPanel() {
                     <Plus className="h-4 w-4" />Thêm Leader
                 </button>
             </div>
+            <p className="text-xs text-gray-500">
+                <strong>Kéo leader</strong> (⋮⋮): thả vào <strong>khung khu vực</strong> khác để đổi khu vực phụ trách; thả vào <strong>khung cơ sở</strong> / dòng leader cùng cơ sở để đổi cơ sở.
+                <span className="ml-1"><strong>Kéo cơ sở</strong> (⋮⋮ đầu dòng cơ sở): thả vào vùng <strong>khu vực đích</strong> (khung bọc tiêu đề khu vực).</span>
+            </p>
 
             {/* Filters */}
             {showFilters && (
@@ -296,12 +454,24 @@ function CentersLeadersPanel() {
                                         <option value="">Chọn courses</option>
                                         {filters.courses.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select></div>
-                                <div className="space-y-1"><label className="block text-sm font-medium text-gray-700">Area</label>
-                                    <select value={editLeader.area || ''} onChange={e => setEditLeader({ ...editLeader, area: e.target.value })} required
-                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f]">
-                                        <option value="">Chọn area</option>
-                                        {filters.areas.map(a => <option key={a} value={a}>{a}</option>)}
-                                    </select></div>
+                                <div className="sm:col-span-2 space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700">Khu vực phụ trách * <span className="font-normal text-gray-500">(có thể chọn nhiều)</span></label>
+                                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50/80 p-3">
+                                        {filters.areas.length === 0 ? (
+                                            <p className="text-xs text-gray-500">Chưa có danh sách khu vực trong hệ thống.</p>
+                                        ) : (
+                                            filters.areas.map((a) => {
+                                                const checked = (editLeader.areas || getLeaderAreas(editLeader)).includes(a);
+                                                return (
+                                                    <label key={a} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-sm cursor-pointer transition-colors ${checked ? 'border-[#a1001f] bg-red-50 text-[#a1001f]' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                                                        <input type="checkbox" checked={checked} onChange={() => toggleLeaderArea(a)} className="rounded border-gray-300 text-[#a1001f] focus:ring-[#a1001f]" />
+                                                        {a}
+                                                    </label>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </div>
                                 <div className="space-y-1"><label className="block text-sm font-medium text-gray-700">Status</label>
                                     <select value={editLeader.status} onChange={e => setEditLeader({ ...editLeader, status: e.target.value })}
                                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f]">
@@ -321,19 +491,26 @@ function CentersLeadersPanel() {
 
             {/* Regions → Centers → Leaders */}
             {/* Regions → Hierarchical Grouping */}
+            <LeaderCenterDndProvider
+                leaders={leaders}
+                centers={centers}
+                onAssignCenter={handleAssignCenter}
+                onAssignLeaderAreas={handleAssignLeaderAreas}
+                onAssignCenterRegion={handleAssignCenterRegion}
+            >
             {regions.map(region => {
                 const regionCenters = filteredCenters.filter(c => c.region === region);
                 const grouped = isRegionGrouped(region);
 
                 // Region-level leaders (HCM/HN/Online = All, TỈNH = TEGL/Admin/TM/HR)
                 const regionLeaders = leaders.filter(l =>
-                    (l.area === region) && (grouped || ['TEGL', 'Admin', 'TM', 'HR'].includes(l.role_code))
+                    getLeaderAreas(l).includes(region) && (grouped || ['TEGL', 'Admin', 'TM', 'HR'].includes(l.role_code))
                 );
 
                 return (
-                    <div key={region} className="space-y-3 mb-8">
+                    <DroppableRegion key={region} regionKey={region} className="mb-8 space-y-3">
                         {/* Region Header */}
-                        <div className="flex items-center gap-2 px-1 border-b pb-2">
+                        <div className="flex items-center gap-2 border-b px-1 pb-2">
                             <MapPin className="h-5 w-5 text-[#a1001f]" />
                             <h3 className="text-base font-bold text-gray-900">{region}</h3>
                             <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
@@ -349,7 +526,7 @@ function CentersLeadersPanel() {
                                     <button onClick={() => openNewLeader('', region)} className="text-[#a1001f] normal-case flex items-center gap-1 font-medium hover:underline"><Plus className="h-3.5 w-3.5" /> Thêm QL</button>
                                 </div>
                                 <div className="divide-y divide-gray-100">
-                                    {regionLeaders.map(l => renderLeaderItem(l, "pl-4"))}
+                                    {regionLeaders.map(l => renderLeaderItem(l, "pl-4", true, region))}
                                 </div>
                             </div>
                         )}
@@ -367,35 +544,25 @@ function CentersLeadersPanel() {
                                     const activeL = centerLeaders.filter(l => l.status === 'Active').length;
 
                                     return (
-                                        <div key={center.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all ${center.status !== 'Active' ? 'opacity-60 grayscale-[0.5]' : ''}`}>
-                                            <div className="px-4 py-2.5 flex items-center gap-3 cursor-pointer hover:bg-gray-50"
-                                                onClick={() => grouped ? null : toggleExpand(center.id)}>
-                                                {!grouped && (
-                                                    <button className="flex-shrink-0 text-gray-400">
-                                                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                                    </button>
-                                                )}
-                                                <Building2 className={`h-4 w-4 flex-shrink-0 ${grouped ? 'text-gray-400' : 'text-[#a1001f]'}`} />
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="text-sm font-bold text-gray-900">{center.display_name}</span>
-                                                        <span className="text-xs text-gray-400">{center.short_code}</span>
-                                                        {!grouped && centerLeaders.length > 0 && (
-                                                            <span className="px-1.5 py-0.5 rounded text-xs bg-indigo-50 text-indigo-700 font-medium">
-                                                                <Users2 className="h-3 w-3 inline mr-0.5" />{activeL}/{centerLeaders.length}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <button onClick={e => { e.stopPropagation(); setEditCenter({ ...center }); }}
-                                                    className="p-1.5 rounded hover:bg-gray-200 text-gray-500 transition-colors flex-shrink-0" title="Đổi khu vực">
-                                                    <Edit2 className="h-3.5 w-3.5" />
-                                                </button>
-                                                <button onClick={e => { e.stopPropagation(); askToggleStatus('center', center) }}
-                                                    className={`px-2 py-0.5 rounded-full text-xs font-semibold transition-all cursor-pointer flex-shrink-0 ${center.status === 'Active' ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700' : 'bg-red-100 text-red-700 hover:bg-green-100 hover:text-green-700'}`}>
-                                                    {center.status || 'Active'}
-                                                </button>
-                                            </div>
+                                        <DroppableCenterCard key={center.id} centerId={center.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all ${center.status !== 'Active' ? 'opacity-60 grayscale-[0.5]' : ''}`}>
+                                            <CenterCardDragHeader
+                                                center={{
+                                                    id: center.id,
+                                                    full_name: center.full_name,
+                                                    display_name: center.display_name,
+                                                    region: center.region,
+                                                    short_code: center.short_code,
+                                                    status: center.status || 'Active',
+                                                }}
+                                                grouped={grouped}
+                                                isExpanded={isExpanded}
+                                                showLeaderCount={!grouped && centerLeaders.length > 0}
+                                                activeL={activeL}
+                                                centerLeadersCount={centerLeaders.length}
+                                                onRowClick={() => { if (!grouped) toggleExpand(center.id); }}
+                                                onEdit={(e) => { e.stopPropagation(); setEditCenter({ ...center }); }}
+                                                onToggleStatus={(e) => { e.stopPropagation(); askToggleStatus('center', center); }}
+                                            />
 
                                             {!grouped && isExpanded && (
                                                 <div className="border-t bg-gray-50/50">
@@ -407,7 +574,7 @@ function CentersLeadersPanel() {
                                                         </div>
                                                     ) : (
                                                         <div className="divide-y divide-gray-100">
-                                                            {centerLeaders.map(l => renderLeaderItem(l, "pl-11"))}
+                                                            {centerLeaders.map(l => renderLeaderItem(l, "pl-11", true, region))}
                                                             <div className="px-11 py-2">
                                                                 <button onClick={() => openNewLeader(center.full_name, center.region)}
                                                                     className="text-xs font-medium text-[#a1001f] hover:underline flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Thêm leader tại đây</button>
@@ -416,14 +583,15 @@ function CentersLeadersPanel() {
                                                     )}
                                                 </div>
                                             )}
-                                        </div>
+                                        </DroppableCenterCard>
                                     );
                                 })}
                             </div>
                         )}
-                    </div>
+                    </DroppableRegion>
                 );
             })}
+            </LeaderCenterDndProvider>
 
             {filteredCenters.length === 0 && <div className="text-center py-12 text-gray-500">Không tìm thấy center nào</div>}
 
@@ -542,7 +710,9 @@ function RolesPanel() {
                                                             </div>
                                                             <div className="text-[11px] text-gray-500 flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
                                                                 <span className="font-mono text-gray-400">{l.code}</span>
-                                                                {l.area && <span className="text-amber-600">({l.area})</span>}
+                                                                {getLeaderAreas(l).length > 0 && (
+                                                                    <span className="text-amber-600">({getLeaderAreas(l).join(', ')})</span>
+                                                                )}
                                                             </div>
                                                             {l.center && <div className="text-[11px] text-gray-400 mt-0.5 truncate" title={l.center}>{l.center}</div>}
                                                         </div>

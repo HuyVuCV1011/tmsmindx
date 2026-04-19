@@ -112,9 +112,56 @@ export async function POST(request: Request) {
       );
     }
 
+    const trimmedClassCode = typeof class_code === 'string' ? class_code.trim() : '';
+    if (!trimmedClassCode) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Vui lòng nhập mã lớp để tạo yêu cầu (tối đa 2 yêu cầu cho mỗi mã lớp).'
+        },
+        { status: 400 }
+      );
+    }
+
+    const trimmedClassTime =
+      typeof class_time === 'string' ? class_time.trim() : '';
+    const trimmedLeaveSession =
+      typeof leave_session === 'string' ? leave_session.trim() : '';
+    if (!trimmedClassTime || !trimmedLeaveSession) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Vui lòng điền đầy đủ thời gian học và buổi học xin nghỉ.'
+        },
+        { status: 400 }
+      );
+    }
+
     const normalizedHasSubstitute = Boolean(has_substitute);
 
     client = await pool.connect();
+
+    const countSameClass = await client.query(
+      `
+      SELECT COUNT(*)::int AS cnt
+      FROM leave_requests
+      WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))
+        AND LOWER(TRIM(class_code)) = LOWER(TRIM($2))
+      `,
+      [email, trimmedClassCode]
+    );
+
+    const existingForClass = countSameClass.rows[0]?.cnt ?? 0;
+    if (existingForClass >= 2) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Mỗi mã lớp chỉ được tạo tối đa 2 yêu cầu xin nghỉ. Bạn đã đạt giới hạn cho mã lớp này.'
+        },
+        { status: 400 }
+      );
+    }
 
     const insertQuery = `
       INSERT INTO leave_requests (
@@ -150,10 +197,10 @@ export async function POST(request: Request) {
       campus,
       leave_date,
       reason,
-      class_code || null,
+      trimmedClassCode,
       student_count || null,
-      class_time || null,
-      leave_session || null,
+      trimmedClassTime,
+      trimmedLeaveSession,
       normalizedHasSubstitute,
       substitute_teacher || null,
       substitute_email || null,
