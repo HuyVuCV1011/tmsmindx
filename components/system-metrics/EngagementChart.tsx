@@ -28,6 +28,12 @@ function formatDate(dateStr: string): string {
   return `${d.getDate()}/${d.getMonth() + 1}`
 }
 
+function formatHour(dateStr: string): string {
+  const d = new Date(dateStr)
+  const hh = String(d.getHours()).padStart(2, '0')
+  return `${hh}:00`
+}
+
 export function EngagementChart({
   dau,
   wau,
@@ -37,7 +43,7 @@ export function EngagementChart({
   const data = activeTab === 'dau' ? dau : wau
   const formatted = data.map((d) => ({
     ...d,
-    label: formatDate(d.date),
+    label: activeTab === 'dau' ? formatHour(d.date) : formatDate(d.date),
   }))
 
   return (
@@ -107,10 +113,12 @@ export function EngagementChart({
                 boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
                 fontSize: 12,
               }}
-              labelFormatter={(label) => `Ngày: ${label}`}
+              labelFormatter={(label) =>
+                activeTab === 'dau' ? `Giờ: ${label}` : `Ngày: ${label}`
+              }
               formatter={(value: number | undefined) => [
                 value,
-                activeTab === 'dau' ? 'Người dùng/ngày' : 'Người dùng/tuần',
+                activeTab === 'dau' ? 'Người dùng/giờ' : 'WAU theo ngày',
               ]}
             />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
