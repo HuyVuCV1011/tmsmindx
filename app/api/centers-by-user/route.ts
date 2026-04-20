@@ -22,6 +22,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Thiếu email' }, { status: 400 })
     }
 
+    // 0. Kiểm tra nếu là super_admin → trả về tất cả centers
+    const adminCheck = await pool.query(
+      `SELECT role FROM app_users WHERE LOWER(TRIM(email)) = $1 AND is_active = true LIMIT 1`,
+      [email]
+    )
+    
+    if (adminCheck.rows.length > 0 && adminCheck.rows[0].role === 'super_admin') {
+      const allCentersResult = await pool.query(
+        `SELECT id, region, short_code, full_name
+         FROM centers
+         WHERE status = 'Active'
+         ORDER BY region, full_name`
+      )
+      return NextResponse.json({
+        success: true,
+        mainCentre: 'ALL',
+        region: 'ALL',
+        group: 'ALL',
+        isSuperAdmin: true,
+        centers: allCentersResult.rows,
+      })
+    }
+
     // 1. Lấy main_centre của teacher
     const teacherResult = await pool.query(
       `SELECT COALESCE(main_centre, "Main centre", centers) AS main_centre
@@ -60,7 +83,6 @@ export async function GET(request: NextRequest) {
       .map(([r]) => r)
 
     // 4. Lấy tất cả cơ sở thuộc các region đó
-    const placeholders = groupRegions.map((_, i) => `$${i + 1}`).join(', ')
     const centersResult = await pool.query(
       `SELECT id, region, short_code, full_name
        FROM centers

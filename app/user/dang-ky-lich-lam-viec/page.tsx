@@ -3,23 +3,25 @@
 import { Card } from '@/components/Card'
 import { PageContainer } from '@/components/PageContainer'
 import { useAuth } from '@/lib/auth-context'
-import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 const HOUR_OPTIONS = Array.from({length: 15}, (_, i) => `${String(i+7).padStart(2,'0')}:00`)
-const LS_KEY = 'tps_lich_ranh'
 
 type CenterOption = { id: number; region: string; short_code: string; full_name: string }
 
-type LichRanh = {
+type LichRanhSlot = {
+  id: number
   date: string
   batDau: string
   ketThuc: string
   coSo: string[]
-  coSoLinhHoat: string[]
-  userName?: string
+  linhHoat: boolean
 }
+
+// Group slots theo ngày
+type LichRanhByDate = Record<string, LichRanhSlot[]>
 
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x }
 function isSameDate(a: Date, b: Date) {
@@ -34,7 +36,6 @@ function parseDateKey(key: string): Date {
 }
 function toInputDate(date: Date) { return formatDateKey(date) }
 
-// Build 42-cell month grid (6 rows × 7 cols, starting Monday)
 function buildMonthCells(focusDate: Date) {
   const monthStart = new Date(focusDate.getFullYear(), focusDate.getMonth(), 1)
   const gridStart = new Date(monthStart)
@@ -47,32 +48,43 @@ function buildMonthCells(focusDate: Date) {
   })
 }
 
-function load(): LichRanh[] {
-  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]') } catch { return [] }
-}
-function save(data: LichRanh[]) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(data)) } catch {}
-}
-
 export default function DangKyLichLamViecPage() {
   const { user } = useAuth()
   const [focusDate, setFocusDate] = useState(() => new Date())
-  const [lichRanhList, setLichRanhList] = useState<LichRanh[]>([])
+  const [lichRanhByDate, setLichRanhByDate] = useState<LichRanhByDate>({})
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [viewDate, setViewDate] = useState<Date | null>(null) // xem danh sách slot
   const [centers, setCenters] = useState<CenterOption[]>([])
   const [userRegion, setUserRegion] = useState<string | null>(null)
+  const [maGv, setMaGv] = useState<string>('')
+  const [saving, setSaving] = useState(false)
+  const [editingSlotId, setEditingSlotId] = useState<number | null>(null)
 
+  // Form state
   const [batDau, setBatDau] = useState('08:00')
   const [ketThuc, setKetThuc] = useState('12:00')
   const [coSoChon, setCoSoChon] = useState<string[]>([])
-  const [coSoLinhHoat, setCoSoLinhHoat] = useState<string[]>([])
+  const [linhHoat, setLinhHoat] = useState(false)
   const [lapLich, setLapLich] = useState(false)
   const [lapTu, setLapTu] = useState('')
   const [lapDen, setLapDen] = useState('')
+  const [kieuLap, setKieuLap] = useState<'ngay' | 'tuan'>('tuan')
   const [formError, setFormError] = useState('')
 
-  useEffect(() => { setLichRanhList(load()) }, [])
+  // Fetch teacher code
+  useEffect(() => {
+    if (!user?.email) return
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/teachers/info?email=${encodeURIComponent(user.email)}`)
+        const data = await res.json()
+        if (data?.teacher?.code) setMaGv(data.teacher.code)
+        else setMaGv(user.email.split('@')[0] || '')
+      } catch { setMaGv(user.email.split('@')[0] || '') }
+    })()
+  }, [user?.email])
 
+  // Fetch centers by user region
   useEffect(() => {
     if (!user?.email) return
     ;(async () => {
@@ -86,88 +98,134 @@ export default function DangKyLichLamViecPage() {
       } catch {}
     })()
   }, [user?.email])
-  const monthCells = useMemo(() => buildMonthCells(focusDate), [focusDate])
 
+  // Fetch lịch rảnh từ DB theo tháng
+  const fetchLichRanh = async (date: Date) => {
+    if (!maGv) return
+    const thang = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`
+    try {
+      const res = await fetch(`/api/dangky-lich-lam?ma_gv=${encodeURIComponent(maGv)}&thang=${thang}`)
+      const data = await res.json()
+      if (res.ok && data.success) {
+        const byDate: LichRanhByDate = {}
+        ;(data.data || []).forEach((row: any) => {
+          const ngay = typeof row.ngay === 'string' ? row.ngay.slice(0, 10) : ''
+          if (!byDate[ngay]) byDate[ngay] = []
+          byDate[ngay].push({
+            id: row.id,
+            date: ngay,
+            batDau: row.gio_bat_dau?.slice(0, 5),
+            ketThuc: row.gio_ket_thuc?.slice(0, 5),
+            coSo: row.co_so_uu_tien || [],
+            linhHoat: row.linh_hoat || false,
+          })
+        })
+        setLichRanhByDate(byDate)
+      }
+    } catch {}
+  }
+
+  useEffect(() => { if (maGv) fetchLichRanh(focusDate) }, [maGv, focusDate])
+
+  const monthCells = useMemo(() => buildMonthCells(focusDate), [focusDate])
   const periodLabel = useMemo(() =>
     focusDate.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })
   , [focusDate])
 
-  const stepMonth = (delta: number) => {
+  const stepMonth = (delta: number) =>
     setFocusDate(prev => new Date(prev.getFullYear(), prev.getMonth() + delta, 1))
-  }
 
   const openForm = (date: Date) => {
     setSelectedDate(date)
-    const key = formatDateKey(date)
-    const existing = lichRanhList.find(l => l.date === key)
-    if (existing) {
-      setBatDau(existing.batDau); setKetThuc(existing.ketThuc)
-      setCoSoChon(existing.coSo); setCoSoLinhHoat(existing.coSoLinhHoat || [])
-    } else {
-      setBatDau('08:00'); setKetThuc('12:00'); setCoSoChon([]); setCoSoLinhHoat([])
-    }
-    setLapLich(false)
-    setLapTu(toInputDate(date))
-    setLapDen(toInputDate(date))
-    setFormError('')
+    setBatDau('08:00'); setKetThuc('12:00'); setCoSoChon([]); setLinhHoat(false)
+    setLapLich(false); setLapTu(toInputDate(date)); setLapDen(toInputDate(date))
+    setKieuLap('tuan'); setFormError('')
+    setEditingSlotId(null)
+  }
+
+  const openEditForm = (slot: LichRanhSlot) => {
+    const date = parseDateKey(slot.date)
+    setSelectedDate(date)
+    setBatDau(slot.batDau); setKetThuc(slot.ketThuc)
+    setCoSoChon(slot.coSo); setLinhHoat(slot.linhHoat)
+    setLapLich(false); setLapTu(slot.date); setLapDen(slot.date)
+    setKieuLap('tuan'); setFormError('')
+    setEditingSlotId(slot.id)
   }
 
   const toggleCoSo = (cs: string) =>
     setCoSoChon(prev => prev.includes(cs) ? prev.filter(x => x!==cs) : [...prev, cs])
 
-  const toggleCoSoLinhHoat = (cs: string) =>
-    setCoSoLinhHoat(prev => prev.includes(cs) ? prev.filter(x => x!==cs) : [...prev, cs])
+  // Tính danh sách ngày cần lưu
+  const buildDates = (): string[] => {
+    if (!lapLich || !lapTu || !lapDen || !selectedDate) return selectedDate ? [formatDateKey(selectedDate)] : []
+    const dates: string[] = []
+    const cur = parseDateKey(lapTu)
+    const end = parseDateKey(lapDen)
+    if (kieuLap === 'ngay') {
+      while (cur <= end) { dates.push(formatDateKey(cur)); cur.setDate(cur.getDate() + 1) }
+    } else {
+      const targetDay = selectedDate.getDay()
+      while (cur.getDay() !== targetDay) cur.setDate(cur.getDate() + 1)
+      while (cur <= end) { dates.push(formatDateKey(cur)); cur.setDate(cur.getDate() + 7) }
+    }
+    return dates
+  }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!batDau || !ketThuc) { setFormError('Vui lòng chọn giờ bắt đầu và kết thúc.'); return }
     if (batDau >= ketThuc) { setFormError('Giờ kết thúc phải sau giờ bắt đầu.'); return }
     if (coSoChon.length === 0) { setFormError('Vui lòng chọn ít nhất một cơ sở.'); return }
+    if (lapLich && (!lapTu || !lapDen)) { setFormError('Vui lòng chọn ngày bắt đầu và kết thúc.'); return }
+    if (lapLich && lapTu > lapDen) { setFormError('Ngày kết thúc phải sau ngày bắt đầu.'); return }
+    if (!maGv) { setFormError('Chưa xác định được mã giáo viên.'); return }
 
-    if (lapLich) {
-      if (!lapTu || !lapDen) { setFormError('Vui lòng chọn ngày bắt đầu và kết thúc.'); return }
-      if (lapTu > lapDen) { setFormError('Ngày kết thúc phải sau ngày bắt đầu.'); return }
-      if (!selectedDate) return
+    const dates = buildDates()
+    if (dates.length === 0) { setFormError('Không có ngày hợp lệ.'); return }
 
-      const targetDayOfWeek = selectedDate.getDay()
-      const dates: string[] = []
-      const cur = parseDateKey(lapTu)
-      const end = parseDateKey(lapDen)
-      while (cur.getDay() !== targetDayOfWeek) cur.setDate(cur.getDate() + 1)
-      while (cur <= end) {
-        dates.push(formatDateKey(cur))
-        cur.setDate(cur.getDate() + 7)
+    setSaving(true)
+    try {
+      // Nếu đang edit: xóa slot cũ trước
+      if (editingSlotId !== null) {
+        await fetch(`/api/dangky-lich-lam?id=${editingSlotId}`, { method: 'DELETE' })
       }
-
-      const newEntries: LichRanh[] = dates.map(date => ({
-        date, batDau, ketThuc, coSo: coSoChon, coSoLinhHoat,
-        userName: user?.displayName || user?.email || ''
-      }))
-      const updated = [...lichRanhList.filter(l => !dates.includes(l.date)), ...newEntries]
-      setLichRanhList(updated); save(updated)
-    } else {
-      if (!selectedDate) return
-      const key = formatDateKey(selectedDate)
-      const entry: LichRanh = { date: key, batDau, ketThuc, coSo: coSoChon, coSoLinhHoat, userName: user?.displayName || user?.email || '' }
-      const updated = [...lichRanhList.filter(l => l.date !== key), entry]
-      setLichRanhList(updated); save(updated)
-    }
-    setSelectedDate(null)
+      // Chạy tuần tự để tránh race condition khi merge overlap cùng ngày
+      for (const ngay of dates) {
+        const res = await fetch('/api/dangky-lich-lam', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ma_gv: maGv, ngay, gio_bat_dau: batDau, gio_ket_thuc: ketThuc,
+            co_so_uu_tien: coSoChon, linh_hoat: linhHoat,
+            lap_lai_tu_ngay: lapLich ? lapTu : null,
+            lap_lai_den_ngay: lapLich ? lapDen : null,
+            kieu_lap: lapLich ? kieuLap : null,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok || !data.success) throw new Error(data.error || 'Lỗi khi lưu')
+      }
+      await fetchLichRanh(focusDate)
+      setSelectedDate(null)
+      setEditingSlotId(null)
+    } catch (e: any) { setFormError(e.message || 'Lỗi khi lưu, vui lòng thử lại.') }
+    finally { setSaving(false) }
   }
 
-  const handleDelete = (date: Date) => {
-    const key = formatDateKey(date)
-    const updated = lichRanhList.filter(l => l.date !== key)
-    setLichRanhList(updated); save(updated)
+  const handleDeleteSlot = async (id: number, date: string) => {
+    try {
+      await fetch(`/api/dangky-lich-lam?id=${id}`, { method: 'DELETE' })
+      setLichRanhByDate(prev => {
+        const slots = (prev[date] || []).filter(s => s.id !== id)
+        if (slots.length === 0) { const next = {...prev}; delete next[date]; return next }
+        return { ...prev, [date]: slots }
+      })
+    } catch {}
   }
 
   return (
     <PageContainer title="Đăng ký lịch làm việc" description="">
       <Card className="overflow-hidden" padding="sm">
-        <div className="px-4 py-3 border-b border-gray-200 bg-white text-center">
-          <h2 className="text-2xl font-bold text-gray-900">Đăng ký lịch rảnh</h2>
-          <p className="mt-1 text-sm text-gray-500">Bấm vào ngày để đăng ký giờ rảnh của bạn</p>
-        </div>
-
         {/* Month nav */}
         <div className="px-4 py-2 border-b border-gray-200 bg-white flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -181,43 +239,85 @@ export default function DangKyLichLamViecPage() {
           </div>
         </div>
 
-        {/* Month grid */}
-        <div className="grid grid-cols-7 border-l border-t border-gray-200 bg-white">
+        {/* Month grid — cố định chiều cao, không scroll */}
+        <div className="grid grid-cols-7 border-l border-t border-gray-200 bg-white" style={{ height: 'calc(100vh - 108px)' }}>
           {WEEKDAY_LABELS.map(label => (
-            <div key={label} className="h-10 border-r border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-600 flex items-center justify-center">{label}</div>
+            <div key={label} className="h-9 border-r border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-600 flex items-center justify-center">{label}</div>
           ))}
           {monthCells.map(({ date, inCurrentMonth }) => {
             const isToday = isSameDate(date, new Date())
             const key = formatDateKey(date)
-            const entry = lichRanhList.find(l => l.date === key)
+            const slots = lichRanhByDate[key] || []
+            const hasSlots = slots.length > 0
             const isPast = startOfDay(date) < startOfDay(new Date())
+
+            // Màu nền nhạt cho từng slot (timeline style)
+            const SLOT_BG = [
+              'bg-[#a1001f]/8',
+              'bg-blue-50',
+              'bg-emerald-50',
+              'bg-violet-50',
+            ]
+            const SLOT_TEXT = [
+              'text-[#a1001f]',
+              'text-blue-700',
+              'text-emerald-700',
+              'text-violet-700',
+            ]
+            const SLOT_ICON_BG = [
+              'bg-[#a1001f]',
+              'bg-blue-500',
+              'bg-emerald-500',
+              'bg-violet-500',
+            ]
             return (
               <div
                 key={key}
-                onClick={() => !isPast && inCurrentMonth && openForm(date)}
-                className={`min-h-24 flex flex-col border-r border-b border-gray-200 p-1.5 transition-colors
-                  ${!inCurrentMonth ? 'bg-gray-50 opacity-40 cursor-default' : ''}
-                  ${inCurrentMonth && isPast ? 'bg-gray-50 cursor-not-allowed opacity-60' : ''}
-                  ${inCurrentMonth && !isPast ? 'cursor-pointer hover:bg-[#a1001f]/5' : ''}
+                onClick={() => inCurrentMonth && !isPast && openForm(date)}
+                className={`flex flex-col border-r border-b border-gray-200 p-1 overflow-hidden
+                  ${!inCurrentMonth ? 'bg-gray-50 opacity-30 cursor-default' : ''}
+                  ${inCurrentMonth && isPast ? 'bg-gray-50 opacity-50 cursor-default' : ''}
+                  ${inCurrentMonth && !isPast ? 'cursor-pointer hover:bg-gray-50/60' : ''}
                   ${isToday ? '!bg-yellow-50' : ''}
-                  ${entry && inCurrentMonth ? 'ring-1 ring-inset ring-[#a1001f]/30' : ''}
                 `}
+                style={{ height: 'calc((100vh - 108px - 36px) / 6)' }}
               >
-                <div className="flex items-center justify-between mb-1">
+                {/* Date number */}
+                <div className="mb-1">
                   {isToday
-                    ? <span className="rounded-full bg-[#a1001f] px-1.5 py-0.5 text-xs font-bold text-white">{date.getDate()}</span>
-                    : <span className={`text-xs font-semibold ${inCurrentMonth ? 'text-gray-700' : 'text-gray-400'}`}>{date.getDate()}</span>
+                    ? <span className="rounded-full bg-[#a1001f] w-5 h-5 flex items-center justify-center text-[10px] font-bold text-white">{date.getDate()}</span>
+                    : <span className={`text-[11px] font-semibold ${inCurrentMonth && !isPast ? 'text-gray-700' : 'text-gray-400'}`}>{date.getDate()}</span>
                   }
-                  {entry && inCurrentMonth && !isPast && (
-                    <button onClick={e => { e.stopPropagation(); handleDelete(date) }} className="rounded p-0.5 text-gray-400 hover:text-red-500 hover:bg-red-50">
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
                 </div>
-                {entry && inCurrentMonth && (
-                  <div className="mt-0.5 rounded bg-[#a1001f]/10 px-1.5 py-1 text-[10px] text-[#a1001f]">
-                    <p className="font-semibold">{entry.batDau}–{entry.ketThuc}</p>
-                    <p className="mt-0.5 truncate text-[#a1001f]/80">{entry.coSo.join(', ')}</p>
+
+                {/* Timeline slots */}
+                {inCurrentMonth && !isPast && hasSlots && (
+                  <div className="flex flex-col gap-1 overflow-hidden">
+                    {slots.map((slot, idx) => (
+                      <div
+                        key={slot.id}
+                        onClick={e => e.stopPropagation()}
+                        className="relative flex items-center rounded-lg px-2 py-1.5 bg-[#a1001f]/8"
+                      >
+                        <span className="flex-1 text-[12px] font-bold leading-none text-[#a1001f]">
+                          {slot.batDau} – {slot.ketThuc}
+                        </span>
+                        <div className="ml-auto relative z-10 flex gap-1">
+                          <button
+                            onClick={e => { e.stopPropagation(); openEditForm(slot) }}
+                            className="flex-shrink-0 rounded p-1 bg-[#a1001f] text-white hover:opacity-80 transition-opacity"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); handleDeleteSlot(slot.id, slot.date) }}
+                            className="flex-shrink-0 rounded p-1 bg-[#a1001f] text-white hover:opacity-80 transition-opacity"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -226,13 +326,77 @@ export default function DangKyLichLamViecPage() {
         </div>
       </Card>
 
-      {/* Modal form */}
+      {/* Modal xem danh sách slot */}
+      {viewDate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setViewDate(null)}>
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between rounded-t-2xl bg-[#a1001f] px-5 py-4">
+              <div>
+                <h3 className="text-base font-bold text-white">Lịch rảnh đã đăng ký</h3>
+                <p className="text-xs text-white/80 mt-0.5">{viewDate.toLocaleDateString('vi-VN', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })}</p>
+              </div>
+              <button onClick={() => setViewDate(null)} className="rounded-md p-1 text-white/80 hover:text-white hover:bg-white/10"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              {(lichRanhByDate[formatDateKey(viewDate)] || []).map(slot => (
+                <div key={slot.id} className="rounded-xl border border-gray-200 p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-gray-900">{slot.batDau} – {slot.ketThuc}</p>
+                    <button onClick={() => handleDeleteSlot(slot.id, slot.date)} className="rounded p-1 text-gray-400 hover:text-red-500 hover:bg-red-50">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {slot.coSo.length > 0 && (() => {
+                    // Group theo region, userRegion hiển thị trên
+                    const byRegion: Record<string, { full_name: string; short_code: string }[]> = {}
+                    slot.coSo.forEach(sc => {
+                      const center = centers.find(c => c.short_code === sc)
+                      const region = center?.region || 'other'
+                      if (!byRegion[region]) byRegion[region] = []
+                      byRegion[region].push({ full_name: center?.full_name || sc, short_code: sc })
+                    })
+                    // Sắp xếp: userRegion lên đầu
+                    const sortedRegions = Object.keys(byRegion).sort((a, b) => {
+                      if (a === userRegion) return -1
+                      if (b === userRegion) return 1
+                      return a.localeCompare(b)
+                    })
+                    return (
+                      <div className="mt-2 space-y-2">
+                        {sortedRegions.map(region => (
+                          <div key={region}>
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">{region}</p>
+                            <div className="flex flex-wrap gap-1">
+                              {byRegion[region].map(c => (
+                                <span key={c.short_code} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${region === userRegion ? 'bg-blue-100 text-blue-700' : 'bg-[#a1001f]/10 text-[#a1001f]'}`}>
+                                  {c.full_name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                  {slot.linhHoat && <p className="mt-2 text-xs text-gray-400 italic">Linh hoạt</p>}
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-gray-200 px-5 py-3 flex justify-between">
+              <button onClick={() => { setViewDate(null); openForm(viewDate) }} className="rounded-lg bg-[#a1001f]/10 text-[#a1001f] px-4 py-2 text-sm font-semibold hover:bg-[#a1001f]/20">+ Thêm slot</button>
+              <button onClick={() => setViewDate(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal form đăng ký */}
       {selectedDate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSelectedDate(null)}>
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between rounded-t-2xl bg-[#a1001f] px-5 py-4">
               <div>
-                <h3 className="text-base font-bold text-white">Đăng ký lịch rảnh</h3>
+                <h3 className="text-base font-bold text-white">{editingSlotId ? 'Chỉnh sửa lịch rảnh' : 'Đăng ký lịch rảnh'}</h3>
                 <p className="text-xs text-white/80 mt-0.5">
                   {selectedDate.toLocaleDateString('vi-VN', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })}
                 </p>
@@ -269,7 +433,7 @@ export default function DangKyLichLamViecPage() {
                   const leftCenters = centers.filter(c => c.region === leftRegion)
                   const rightCenters = centers.filter(c => rightRegions.includes(c.region))
                   const renderCheckbox = (c: CenterOption) => {
-                    const disabled = coSoLinhHoat.includes(c.short_code)
+                    const disabled = false
                     return (
                       <label key={c.short_code} className={`flex items-center gap-2 select-none ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
                         <input type="checkbox" checked={coSoChon.includes(c.short_code)} disabled={disabled} onChange={() => toggleCoSo(c.short_code)}
@@ -297,44 +461,12 @@ export default function DangKyLichLamViecPage() {
                 })()}
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Cơ sở linh hoạt</label>
-                <p className="text-[11px] text-gray-400 mb-3">Cơ sở bạn có thể hỗ trợ nếu cần.</p>
-                {centers.length === 0 ? (
-                  <p className="text-xs text-gray-400">Đang tải danh sách cơ sở...</p>
-                ) : (() => {
-                  const regions = Array.from(new Set(centers.map(c => c.region)))
-                  const leftRegion = userRegion && regions.includes(userRegion) ? userRegion : regions[0]
-                  const rightRegions = regions.filter(r => r !== leftRegion)
-                  const leftCenters = centers.filter(c => c.region === leftRegion)
-                  const renderCheckbox = (c: CenterOption) => {
-                    const disabled = coSoChon.includes(c.short_code)
-                    return (
-                      <label key={c.short_code} className={`flex items-center gap-2 select-none ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
-                        <input type="checkbox" checked={coSoLinhHoat.includes(c.short_code)} disabled={disabled} onChange={() => toggleCoSoLinhHoat(c.short_code)}
-                          className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500 cursor-pointer flex-shrink-0" />
-                        <span className="text-sm text-gray-800">{c.full_name}</span>
-                      </label>
-                    )
-                  }
-                  return (
-                    <div className="grid grid-cols-2 gap-x-6">
-                      <div className="flex flex-col gap-y-3">
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{leftRegion}</p>
-                        {leftCenters.map(renderCheckbox)}
-                      </div>
-                      <div className="flex flex-col gap-y-3">
-                        {rightRegions.map((region, ri) => (
-                          <div key={region} className={`flex flex-col gap-y-3 ${ri > 0 ? 'mt-2' : ''}`}>
-                            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{region}</p>
-                            {centers.filter(c => c.region === region).map(renderCheckbox)}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })()}
-              </div>
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input type="checkbox" checked={linhHoat} onChange={e => setLinhHoat(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500 cursor-pointer flex-shrink-0" />
+                <span className="text-sm font-semibold text-gray-700">Linh hoạt</span>
+                <span className="text-xs text-gray-400">(Có thể hỗ trợ cơ sở khác nếu cần)</span>
+              </label>
 
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -354,16 +486,30 @@ export default function DangKyLichLamViecPage() {
                       <input type="date" value={lapDen} onChange={e => setLapDen(e.target.value)} min={lapTu || toInputDate(new Date())}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 outline-none" />
                     </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-2">Kiểu lặp</label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name="kieu_lap" value="ngay" checked={kieuLap === 'ngay'} onChange={() => setKieuLap('ngay')}
+                            className="h-4 w-4 text-[#a1001f] focus:ring-[#a1001f]" />
+                          <span className="text-sm text-gray-700">Theo ngày</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name="kieu_lap" value="tuan" checked={kieuLap === 'tuan'} onChange={() => setKieuLap('tuan')}
+                            className="h-4 w-4 text-[#a1001f] focus:ring-[#a1001f]" />
+                          <span className="text-sm text-gray-700">Theo tuần</span>
+                        </label>
+                      </div>
+                    </div>
                     {lapTu && lapDen && lapTu <= lapDen && (() => {
-                      const targetDay = selectedDate.getDay()
-                      const cur = parseDateKey(lapTu)
-                      const end = parseDateKey(lapDen)
-                      while (cur.getDay() !== targetDay) cur.setDate(cur.getDate() + 1)
-                      let count = 0; const temp = new Date(cur)
-                      while (temp <= end) { count++; temp.setDate(temp.getDate() + 7) }
+                      const dates = buildDates()
                       const dayNames = ['CN','T2','T3','T4','T5','T6','T7']
-                      return count > 0
-                        ? <p className="text-[11px] text-[#a1001f] font-medium">Sẽ set {count} tuần ({dayNames[targetDay]} hàng tuần từ {lapTu} đến {lapDen})</p>
+                      if (kieuLap === 'ngay') {
+                        return <p className="text-[11px] text-[#a1001f] font-medium">Sẽ set lịch cho {dates.length} ngày (từ {lapTu} đến {lapDen})</p>
+                      }
+                      const targetDay = selectedDate?.getDay() ?? 1
+                      return dates.length > 0
+                        ? <p className="text-[11px] text-[#a1001f] font-medium">Sẽ set {dates.length} tuần ({dayNames[targetDay]} hàng tuần từ {lapTu} đến {lapDen})</p>
                         : <p className="text-[11px] text-orange-500 font-medium">Không có ngày phù hợp trong khoảng này.</p>
                     })()}
                   </div>
@@ -375,7 +521,9 @@ export default function DangKyLichLamViecPage() {
 
             <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-5 py-3">
               <button onClick={() => setSelectedDate(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Hủy</button>
-              <button onClick={handleSave} className="rounded-lg bg-[#a1001f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#870019]">Lưu</button>
+              <button onClick={handleSave} disabled={saving} className="rounded-lg bg-[#a1001f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#870019] disabled:opacity-60">
+                {saving ? 'Đang lưu...' : 'Lưu'}
+              </button>
             </div>
           </div>
         </div>
