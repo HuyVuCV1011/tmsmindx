@@ -896,7 +896,7 @@ export default function RichTextEditor({
       setTimeout(() => {
         if (editor.isDestroyed) return
         if (sel instanceof NodeSelection && sel.node.type.name === 'image') {
-          setShowImageControls(true)
+          setShowImageControls(prev => { if (!prev) return true; return prev })
           const w = sel.node.attrs.width
           setSelectedImageWidth(typeof w === 'number' && Number.isFinite(w) ? `${Math.round(w)}px` : 'auto')
           const align = sel.node.attrs.verticalAlign
@@ -904,7 +904,7 @@ export default function RichTextEditor({
           const f = sel.node.attrs.float
           setSelectedImageFloat(typeof f === 'string' && f ? f : 'none')
         } else {
-          setShowImageControls(false)
+          setShowImageControls(prev => { if (prev) return false; return prev })
         }
       }, 0)
     }
@@ -933,7 +933,7 @@ export default function RichTextEditor({
     return () => clearTimeout(timeoutId)
   }, [content, editor])
 
-  useEffect(() => { setShowImageControls(false) }, [content])
+  useEffect(() => { setShowImageControls(false) }, [editor])
 
   // Smart image layout: CSS-only approach, không touch DOM trực tiếp
   // Layout được xử lý hoàn toàn qua CSS class trên paragraph
