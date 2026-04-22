@@ -1,10 +1,10 @@
 import pool from '@/lib/db';
 import { checkTeacherExistsByEmail, isDatabaseUnavailableError } from '@/lib/db-helpers';
+import { getJwtSecret } from '@/lib/jwt-secret';
+import { setSessionCookieOnResponse } from '@/lib/session-cookie';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { NextRequest, NextResponse } from 'next/server';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'tps-app-secret-key-2024';
 
 export async function POST(request: NextRequest) {
   try {
@@ -90,9 +90,15 @@ export async function POST(request: NextRequest) {
     const isAdmin = ['super_admin', 'admin', 'manager'].includes(user.role) || hasAdminPerms;
 
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '24h' }
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        purpose: 'tps_edge',
+        ap: isAdmin,
+      },
+      getJwtSecret(),
+      { expiresIn: '24h' },
     );
 
     let teacherFoundInDb = false;
@@ -104,9 +110,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       appUser: true,
       idToken: token,
+      /** JWT nội bộ HS256 — alias của idToken (cùng giá trị), dùng làm Bearer cho /api/check-admin */
+      accessToken: token,
       email: user.email,
       localId: `app_${user.id}`,
       displayName: user.display_name,
@@ -115,6 +123,8 @@ export async function POST(request: NextRequest) {
       permissions,
       teacherSync: { foundInDatabase: teacherFoundInDb },
     });
+    setSessionCookieOnResponse(res, token);
+    return res;
   } catch (error: unknown) {
     console.error('App auth login error:', error);
     if (isDatabaseUnavailableError(error)) {

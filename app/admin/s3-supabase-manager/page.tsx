@@ -2,6 +2,7 @@
 
 import { PageContainer } from "@/components/PageContainer";
 import { useAuth } from "@/lib/auth-context";
+import { authHeaders } from "@/lib/auth-headers";
 import { File, Filter, Image as ImageIcon, Loader2, RefreshCw, Video } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/app-toast";
@@ -33,7 +34,7 @@ const formatBytes = (bytes: number) => {
 };
 
 export default function S3SupabaseManagerPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [items, setItems] = useState<StorageItem[]>([]);
   const [buckets, setBuckets] = useState<Array<{ name: string; public: boolean }>>([]);
   const [bucket, setBucket] = useState("");
@@ -49,7 +50,6 @@ export default function S3SupabaseManagerPage() {
     try {
       setLoading(true);
       const params = new URLSearchParams({
-        requestEmail: user.email,
         kind: resourceType,
       });
       if (bucket) params.set("bucket", bucket);
@@ -59,6 +59,7 @@ export default function S3SupabaseManagerPage() {
 
       const response = await fetch(`/api/admin/s3-supabase-manager?${params.toString()}`, {
         cache: "no-store",
+        headers: authHeaders(token),
       });
       const data = await response.json();
       if (!response.ok || !data.success) {

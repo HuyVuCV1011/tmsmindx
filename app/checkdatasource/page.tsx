@@ -2,6 +2,7 @@
 
 import AppLayout from "@/components/AppLayout";
 import { useAuth } from "@/lib/auth-context";
+import { authHeaders } from "@/lib/auth-headers";
 import { cn } from "@/lib/utils";
 import { MessageSquareWarning, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -142,7 +143,6 @@ function mapTeacherToOnboardingData(t: Record<string, unknown>): OnboardingData 
 }
 
 const MAX_FEEDBACK_IMAGES = 6;
-const API_SECRET_KEY = process.env.NEXT_PUBLIC_API_SECRET || "mindx-teaching-internal-2025";
 
 function FeedbackImageThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -176,7 +176,7 @@ function FeedbackImageThumb({ file, onRemove }: { file: File; onRemove: () => vo
 }
 
 function CheckDataSourceContent() {
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const router = useRouter();
   const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -258,7 +258,9 @@ function CheckDataSourceContent() {
     const fetchTeacherByEmail = async () => {
       setLoading(true);
       try {
-        const headers: HeadersInit = { "x-api-key": API_SECRET_KEY };
+        const headers: HeadersInit = {
+          ...authHeaders(token),
+        };
 
         // Run both requests in parallel:
         // - DB first for reliability after user has been synced.
@@ -309,7 +311,7 @@ function CheckDataSourceContent() {
     };
 
     fetchTeacherByEmail();
-  }, [user, router, logout, userEmail]);
+  }, [user, router, logout, userEmail, token]);
 
   const continueToApp = async () => {
     if (!user?.email) return;
@@ -317,7 +319,10 @@ function CheckDataSourceContent() {
     try {
       const response = await fetch("/api/checkdatasource/confirm", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(token),
+        },
         body: JSON.stringify({
           userEmail: user.email,
           userName: user.displayName,

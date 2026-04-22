@@ -1,5 +1,10 @@
+import { resolveAppUserAccessForEmail } from '@/lib/app-user-access';
 import pool from '@/lib/db';
 import { checkTeacherExistsByEmail } from '@/lib/db-helpers';
+import { getJwtSecret } from '@/lib/jwt-secret';
+import { clientIpFromRequest, rateLimitOr429 } from '@/lib/rate-limit-memory';
+import { setSessionCookieOnResponse } from '@/lib/session-cookie';
+import jwt from 'jsonwebtoken';
 import { NextRequest, NextResponse } from 'next/server';
 
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || '';
@@ -34,6 +39,13 @@ async function tryFirebaseLogin(email: string, password: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    const rl = rateLimitOr429(
+      `auth-login:${clientIpFromRequest(request)}`,
+      40,
+      60_000,
+    );
+    if (rl) return rl;
+
     if (!FIREBASE_API_KEY?.trim()) {
       return NextResponse.json(
         { error: 'Đăng nhập qua Firebase chưa được cấu hình (thiếu FIREBASE_API_KEY). Liên hệ quản trị hệ thống.' },
@@ -48,7 +60,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Request body không hợp lệ' }, { status: 400 });
     }
 
-    const { email: rawEmail, password, role } = body || {};
+    const { email: rawEmail, password } = body || {};
 
     if (!rawEmail || !password) {
       return NextResponse.json({ error: 'Email và password là bắt buộc' }, { status: 400 });
@@ -126,24 +138,50 @@ export async function POST(request: NextRequest) {
     }
 
     const loginEmail = String(successData.email || '').trim().toLowerCase();
-    let teacherFoundInDb = false;
 
-    if (role === 'teacher' && loginEmail) {
-      teacherFoundInDb = await checkTeacherExistsByEmail(loginEmail);
+    const access = await resolveAppUserAccessForEmail(loginEmail)
+    if (access.found && !access.isActive) {
+      return NextResponse.json(
+        { error: 'Tài khoản đã bị vô hiệu hóa. Liên hệ quản trị hệ thống.' },
+        { status: 403 },
+      );
     }
 
-    return NextResponse.json({
+    const teacherFoundInDb =
+      (access.role === 'teacher' || !access.found) && loginEmail
+        ? await checkTeacherExistsByEmail(loginEmail)
+        : false;
+
+    const edgeSessionJwt = jwt.sign(
+      {
+        email: loginEmail,
+        purpose: 'tps_edge',
+        ap: access.isAdmin === true,
+      },
+      getJwtSecret(),
+      { expiresIn: '1h' }, // Khớp thời hạn Firebase idToken — giảm rủi ro nếu bị đánh cắp
+    );
+
+    const res = NextResponse.json({
       idToken: successData.idToken,
+      /** JWT nội bộ HS256 — dùng làm Bearer cho /api/check-admin và các API bảo vệ thay vì Firebase idToken */
+      accessToken: edgeSessionJwt,
       email: successData.email,
       localId: successData.localId,
       displayName: finalDisplayName || String(successData.email || '').split('@')[0],
       expiresIn: successData.expiresIn,
       refreshToken: successData.refreshToken,
-      role,
+      role: access.role,
+      isAdmin: access.isAdmin,
+      permissions: access.permissions,
+      userRoles: access.userRoles,
+      isAppUser: access.isAppUser,
       teacherSync: {
         foundInDatabase: teacherFoundInDb,
       },
     });
+    setSessionCookieOnResponse(res, edgeSessionJwt);
+    return res;
   } catch (error: unknown) {
     console.error('Login error:', error);
     return NextResponse.json(

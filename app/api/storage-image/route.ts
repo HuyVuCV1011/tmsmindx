@@ -9,9 +9,30 @@
  *
  * Hỗ trợ HTTP Range Requests để video streaming hoạt động đúng.
  */
+import { requireBearerSession } from '@/lib/datasource-api-auth';
+import {
+  TPS_SESSION_COOKIE,
+  verifySessionCookieValue,
+} from '@/lib/session-cookie';
 import { createSupabaseS3Client, isSupabaseS3Configured } from '@/lib/supabase-s3';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { NextRequest, NextResponse } from 'next/server';
+
+/** Cho phép đọc ẩn danh (vd. <img> trang công khai) — bucket còn lại cần phiên đăng nhập. */
+const ANONYMOUS_READ_BUCKETS = new Set([
+  'mindx-posts-content',
+  'mindx-thumbnails',
+  'mindx-videos',
+  'mindx-question-images',
+]);
+
+async function isAuthenticatedRequest(request: NextRequest): Promise<boolean> {
+  const auth = await requireBearerSession(request);
+  if (auth.ok) return true;
+  const raw = request.cookies.get(TPS_SESSION_COOKIE)?.value;
+  if (!raw) return false;
+  return (await verifySessionCookieValue(raw)) !== null;
+}
 
 export async function GET(request: NextRequest) {
   let bucket: string | null = null;
@@ -38,6 +59,13 @@ export async function GET(request: NextRequest) {
 
     if (!bucket || !key) {
       return new NextResponse('Missing bucket or key', { status: 400 });
+    }
+
+    if (
+      !ANONYMOUS_READ_BUCKETS.has(bucket) &&
+      !(await isAuthenticatedRequest(request))
+    ) {
+      return new NextResponse('Unauthorized', { status: 401 });
     }
 
     const isVideo = key.match(/\.(mp4|webm|ogg|mov|avi|mkv)$/i);

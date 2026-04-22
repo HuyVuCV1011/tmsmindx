@@ -1,3 +1,4 @@
+import { rejectIfAnyTeacherCodeForbidden, requireBearerSession } from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -5,6 +6,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const teacherCode = searchParams.get('teacher_code');
     const teacherCodesRaw = searchParams.get('teacher_codes');
@@ -37,6 +41,14 @@ export async function GET(request: NextRequest) {
       .map((c) => c.trim().toLowerCase())
       .filter(Boolean);
     const normalizedPrimary = (teacherCode || '').trim().toLowerCase();
+
+    const allCodes = [...new Set([normalizedPrimary, ...teacherCodes].filter(Boolean))];
+    const denied = await rejectIfAnyTeacherCodeForbidden(
+      auth.sessionEmail,
+      auth.privileged,
+      allCodes,
+    );
+    if (denied) return denied;
 
     // JOIN với chuyen_sau_giaitrinh nếu tồn tại
     const giaitrinh_join = hasGiaitrinh

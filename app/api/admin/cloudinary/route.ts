@@ -2,6 +2,7 @@
  * Admin Storage Manager — thay thế Cloudinary Manager.
  * List và xóa objects trong các Supabase S3 buckets.
  */
+import { requireBearerAdminOrSuper } from '@/lib/auth-server';
 import {
   createSupabaseS3Client,
   getPublicObjectUrl,
@@ -26,6 +27,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function GET(request: NextRequest) {
   try {
+    const gate = await requireBearerAdminOrSuper(request);
+    if (!gate.ok) return gate.response;
+
     if (!isSupabaseS3Configured()) {
       return NextResponse.json(
         { success: false, error: 'Chưa cấu hình Supabase S3 Storage' },
@@ -98,6 +102,9 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const gate = await requireBearerAdminOrSuper(request);
+    if (!gate.ok) return gate.response;
+
     if (!isSupabaseS3Configured()) {
       return NextResponse.json(
         { success: false, error: 'Chưa cấu hình Supabase S3 Storage' },

@@ -1,4 +1,5 @@
 import path from "path";
+import { requireBearerSession } from "@/lib/datasource-api-auth";
 import pool from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -188,17 +189,15 @@ function buildRelativePathByHierarchy(type: "section" | "article", slug: string,
 }
 
 async function ensureSuperAdmin(request: NextRequest) {
-  const queryEmail = request.nextUrl.searchParams.get("email");
-  const headerEmail = request.headers.get("x-user-email");
-  const email = (headerEmail || queryEmail || "").toLowerCase().trim();
-
-  if (!email) {
+  const auth = await requireBearerSession(request);
+  if (!auth.ok) {
     return {
       ok: false,
       email: "",
-      response: NextResponse.json({ success: false, error: "Thiếu thông tin tài khoản" }, { status: 401 }),
+      response: auth.response,
     };
   }
+  const email = auth.sessionEmail;
 
   const result = await pool.query(
     "SELECT role FROM app_users WHERE LOWER(email) = $1 AND is_active = true LIMIT 1",

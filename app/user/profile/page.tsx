@@ -21,8 +21,9 @@ import {
   X,
 } from 'lucide-react'
 import Image from 'next/image'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from '@/lib/app-toast'
+import { authHeaders } from '@/lib/auth-headers'
 import { parseLegacyTeacherFromInfoJson } from '@/lib/teacher-db-mapper'
 import useSWR from 'swr'
 
@@ -50,11 +51,16 @@ interface PrivacySettings {
   updated_at: string
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
 const BIRTHDAY_PRIVACY_SYNC_KEY = 'birthday-privacy-updated-at'
 
 export default function TeacherProfilePage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
+
+  const fetcher = useMemo(
+    () => (url: string) =>
+      fetch(url, { headers: authHeaders(token) }).then((r) => r.json()),
+    [token],
+  )
   const [isUploadingCert, setIsUploadingCert] = useState(false)
   const [showCertModal, setShowCertModal] = useState(false)
   const [selectedCertImage, setSelectedCertImage] = useState<string | null>(

@@ -1,3 +1,7 @@
+import {
+  rejectIfDatasourceLookupForbidden,
+  requireBearerSession,
+} from "@/lib/datasource-api-auth";
 import { withApiProtection } from "@/lib/api-protection";
 import pool from "@/lib/db";
 import { Teacher } from "@/types/teacher";
@@ -548,6 +552,9 @@ async function resolveTeacherFallbackByEmail(email: string): Promise<Teacher | n
 }
 
 export const GET = withApiProtection(async (request: NextRequest) => {
+  const auth = await requireBearerSession(request);
+  if (!auth.ok) return auth.response;
+
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
   const emailParam = searchParams.get("email");
@@ -561,10 +568,13 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     );
   }
 
-  // 🔓 TEMPORARY: Bỏ qua authentication để test
-  // const authHeader = request.headers.get("authorization");
-  // const token = authHeader?.replace("Bearer ", "");
-  // ... (authentication code commented out for testing)
+  const denied = await rejectIfDatasourceLookupForbidden(
+    auth.sessionEmail,
+    auth.privileged,
+    String(emailParam || "").trim().toLowerCase(),
+    String(code || "").trim(),
+  );
+  if (denied) return denied;
 
   // Fetch teachers từ Google Sheets
   const teachers = await fetchTeachersFromSheet();
@@ -579,14 +589,19 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     );
 
     if (!teacher) {
-      // Trả về danh sách mã có sẵn để debug
-      const availableCodes = teachers.slice(0, 10).map(t => t.code).join(", ");
+      if (auth.privileged) {
+        const availableCodes = teachers.slice(0, 10).map(t => t.code).join(", ");
+        return NextResponse.json(
+          { 
+            error: `Không tìm thấy giáo viên với mã "${code}". Một số mã có sẵn: ${availableCodes}...`,
+            totalTeachers: teachers.length,
+            sampleCodes: teachers.slice(0, 20).map(t => ({ code: t.code, name: t.name }))
+          },
+          { status: 404 }
+        );
+      }
       return NextResponse.json(
-        { 
-          error: `Không tìm thấy giáo viên với mã "${code}". Một số mã có sẵn: ${availableCodes}...`,
-          totalTeachers: teachers.length,
-          sampleCodes: teachers.slice(0, 20).map(t => ({ code: t.code, name: t.name }))
-        },
+        { error: `Không tìm thấy giáo viên với mã đã nhập` },
         { status: 404 }
       );
     }
@@ -624,11 +639,6 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       { status: 404 }
     );
   }
-
-  // � TEMPORARY: Bỏ qua authorization check để test
-  // if (!isAdmin) {
-  //   ... (authorization code commented out for testing)
-  // }
 
   // Fetch real monthly metrics từ Google Sheets
   if (isBasicLookup) {

@@ -116,6 +116,7 @@ export default function LoginPage() {
         error?: string;
         dbUnavailable?: boolean;
         idToken?: string;
+        accessToken?: string;
         email?: string;
         displayName?: string;
         role?: string;
@@ -146,7 +147,8 @@ export default function LoginPage() {
           permissions: appAuthData.permissions ?? [],
         };
 
-        updateUser(userData, appAuthData.idToken);
+        // Ưu tiên dùng accessToken (JWT nội bộ) làm Bearer; fallback idToken Firebase
+        updateUser(userData, appAuthData.accessToken || appAuthData.idToken);
 
         const isAdminRole = Boolean(appAuthData.isAdmin);
         const redirectPath = isAdminRole
@@ -177,11 +179,11 @@ export default function LoginPage() {
         throw new Error(appAuthData.error || 'Đăng nhập thất bại');
       }
 
-      // ─── Step 2: Firebase login ───
+      // ─── Step 2: Firebase login (role / isAdmin do server tính từ DB, không tin body) ───
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: trimmedEmail, password, role }),
+        body: JSON.stringify({ email: trimmedEmail, password }),
       });
 
       const data = await response.json();
@@ -190,20 +192,31 @@ export default function LoginPage() {
         throw new Error(data.error || 'Đăng nhập thất bại');
       }
 
+      const serverRole = String(data.role ?? 'teacher') as
+        | 'teacher'
+        | 'manager'
+        | 'super_admin'
+        | 'admin'
+        | 'hr';
+
       const userData: {
         email: string;
         displayName: string;
-        role: 'teacher' | 'manager' | 'super_admin' | 'admin';
+        role: 'teacher' | 'manager' | 'super_admin' | 'admin' | 'hr';
         localId: string;
         isAdmin?: boolean;
         isAppUser?: boolean;
         permissions?: string[];
+        userRoles?: string[];
       } = {
         email: data.email,
         displayName: data.displayName,
-        role: role,
+        role: serverRole,
         localId: data.localId,
-        isAppUser: false,
+        isAppUser: Boolean(data.isAppUser),
+        isAdmin: Boolean(data.isAdmin),
+        permissions: Array.isArray(data.permissions) ? data.permissions : [],
+        userRoles: Array.isArray(data.userRoles) ? data.userRoles : [],
       };
 
       logger.success('Firebase login successful', { email: userData.email, role: userData.role });
@@ -218,26 +231,10 @@ export default function LoginPage() {
 
       let finalRedirectPath = '/user/truyenthong';
 
-      if (role === 'manager') {
-        try {
-          const adminCheckResponse = await fetch(`/api/check-admin?email=${encodeURIComponent(userData.email)}`);
-          const adminData = await adminCheckResponse.json();
-
-          userData.isAdmin = adminData.isAdmin;
-          userData.permissions = adminData.permissions || [];
-
-          if (adminData.isAdmin) {
-            finalRedirectPath = '/admin/dashboard';
-            toast.success(`Chào mừng Admin ${userData.displayName}!`, { icon: '👑' });
-          } else {
-            toast.success(`Chào mừng ${userData.displayName}!`, { icon: '👋', duration: 4000 });
-          }
-        } catch {
-          toast.error('Không thể kiểm tra quyền admin, chuyển đến trang user', { icon: '⚠️' });
-        }
-      } else {
-        // Teacher: use teacherSync from backend (single source of truth)
-        userData.isAdmin = false;
+      if (userData.isAdmin) {
+        finalRedirectPath = '/admin/dashboard';
+        toast.success(`Chào mừng Admin ${userData.displayName}!`, { icon: '👑' });
+      } else if (serverRole === 'teacher') {
         finalRedirectPath = resolveTeacherRedirect(data?.teacherSync, userData.email);
 
         if (!data?.teacherSync?.foundInDatabase) {
@@ -247,10 +244,13 @@ export default function LoginPage() {
           });
         }
         toast.success(`Chào mừng ${userData.displayName}!`, { icon: '👋' });
+      } else {
+        toast.success(`Chào mừng ${userData.displayName}!`, { icon: '👋', duration: 4000 });
       }
 
       persistRememberedAccount(trimmedEmail, role);
-      updateUser(userData, data.idToken);
+      // Ưu tiên dùng accessToken (JWT nội bộ HS256) làm Bearer; fallback idToken Firebase
+      updateUser(userData, data.accessToken || data.idToken);
 
       logger.info('Redirecting to', { path: finalRedirectPath });
       setTimeout(() => { router.replace(finalRedirectPath); }, 500);

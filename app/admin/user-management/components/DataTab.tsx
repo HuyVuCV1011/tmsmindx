@@ -1,4 +1,6 @@
 "use client";
+import { useAuth } from "@/lib/auth-context";
+import { authHeaders } from "@/lib/auth-headers";
 import { getLeaderAreas } from "@/lib/teaching-leaders";
 import { Building2, Database, Edit2, Filter, LayoutGrid, Loader2, MapPin, Plus, Save, Search, Trash2, Users2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -62,6 +64,7 @@ export default function DataTab() {
 
 // ─── COMBINED CENTERS & LEADERS PANEL ───────────────────
 function CentersLeadersPanel() {
+    const { token } = useAuth();
     const [centers, setCenters] = useState<Center[]>([]);
     const [leaders, setLeaders] = useState<Leader[]>([]);
     const [filters, setFilters] = useState<Filters>({ areas: [], roleCodes: [], statuses: [], courses: [] });
@@ -102,8 +105,8 @@ function CentersLeadersPanel() {
         setLoading(true);
         try {
             const [cRes, lRes] = await Promise.all([
-                fetch('/api/app-auth/data?table=centers'),
-                fetch(`/api/app-auth/data?table=teaching_leaders${fStatus ? `&status=${fStatus}` : ''}${fArea ? `&area=${fArea}` : ''}${fRole ? `&roleCode=${fRole}` : ''}`),
+                fetch('/api/app-auth/data?table=centers', { headers: authHeaders(token) }),
+                fetch(`/api/app-auth/data?table=teaching_leaders${fStatus ? `&status=${fStatus}` : ''}${fArea ? `&area=${fArea}` : ''}${fRole ? `&roleCode=${fRole}` : ''}`, { headers: authHeaders(token) }),
             ]);
             const [cData, lData] = await Promise.all([cRes.json(), lRes.json()]);
             if (cData.rows) setCenters(cData.rows);
@@ -135,7 +138,7 @@ function CentersLeadersPanel() {
             const table = statusDlg.type === 'center' ? 'centers_status' : 'teaching_leaders_status';
             const key = statusDlg.type === 'center' ? { id: statusDlg.item.id } : { code: statusDlg.item.code };
             const r = await fetch('/api/app-auth/data', {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({ table, ...key, status: statusDlg.newStatus })
             });
             const d = await r.json();
@@ -158,7 +161,7 @@ function CentersLeadersPanel() {
         try {
             const method = isNew ? 'POST' : 'PUT';
             const r = await fetch('/api/app-auth/data', {
-                method, headers: { 'Content-Type': 'application/json' },
+                method, headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({
                     table: 'teaching_leaders',
                     ...editLeader,
@@ -173,7 +176,7 @@ function CentersLeadersPanel() {
     };
     const handleDeleteLeader = async () => {
         try {
-            const r = await fetch(`/api/app-auth/data?table=teaching_leaders&code=${deleteDlg.code}`, { method: 'DELETE' });
+            const r = await fetch(`/api/app-auth/data?table=teaching_leaders&code=${deleteDlg.code}`, { method: 'DELETE', headers: authHeaders(token) });
             const d = await r.json();
             if (d.success) { toast.success("Đã xóa"); loadAll(); } else toast.error(d.error || "Lỗi");
         } catch { toast.error("Lỗi") } finally { setDeleteDlg({ open: false, code: "", name: "" }) }
@@ -204,7 +207,7 @@ function CentersLeadersPanel() {
         try {
             const r = await fetch('/api/app-auth/data', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({
                     table: 'teaching_leaders_center',
                     code,
@@ -225,7 +228,7 @@ function CentersLeadersPanel() {
         try {
             const r = await fetch('/api/app-auth/data', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({
                     table: 'teaching_leaders_areas',
                     code,
@@ -246,7 +249,7 @@ function CentersLeadersPanel() {
         try {
             const r = await fetch('/api/app-auth/data', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({
                     table: 'centers_region',
                     id: centerId,
@@ -279,7 +282,7 @@ function CentersLeadersPanel() {
         e.preventDefault(); if (!editCenter) return; setSaving(true);
         try {
             const r = await fetch('/api/app-auth/data', {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({ table: 'centers_region', id: editCenter.id, region: editCenter.region })
             });
             const d = await r.json();
@@ -646,6 +649,7 @@ function CentersLeadersPanel() {
 
 // ─── ROLES PANEL ────────────────────────────────────────
 function RolesPanel() {
+    const { token } = useAuth();
     const [roles, setRoles] = useState<any[]>([]);
     const [leaders, setLeaders] = useState<Leader[]>([]);
     const [loading, setLoading] = useState(true);
@@ -656,8 +660,8 @@ function RolesPanel() {
         setLoading(true);
         try {
             const [rolesRes, leadersRes] = await Promise.all([
-                fetch('/api/app-auth/data?table=roles'),
-                fetch('/api/app-auth/data?table=teaching_leaders')
+                fetch('/api/app-auth/data?table=roles', { headers: authHeaders(token) }),
+                fetch('/api/app-auth/data?table=teaching_leaders', { headers: authHeaders(token) })
             ]);
             const rolesData = await rolesRes.json();
             const leadersData = await leadersRes.json();

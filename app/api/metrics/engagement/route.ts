@@ -27,37 +27,63 @@ async function getEngagement(request: NextRequest) {
         dayCount = 7
     }
 
-    // ── 1. DAU (Daily Active Users) ──
+    // ── 1. DAU by hour ──
+    const hourIntervalSql =
+      period === 'today'
+        ? '24 hours'
+        : period === '30d'
+          ? '72 hours'
+          : '48 hours'
+
     const dauRes = await pool.query(`
-      SELECT 
-        DATE(created_at) AS date,
-        COUNT(DISTINCT user_id) AS users
-      FROM system_events
-      WHERE event_name = 'page_view'
-        AND user_id IS NOT NULL
-        AND created_at >= NOW() - INTERVAL '${intervalSql}'
-      GROUP BY DATE(created_at)
-      ORDER BY date ASC
+      WITH hourly AS (
+        SELECT generate_series(
+          date_trunc('hour', NOW() - INTERVAL '${hourIntervalSql}'),
+          date_trunc('hour', NOW()),
+          INTERVAL '1 hour'
+        ) AS hour_start
+      )
+      SELECT
+        hourly.hour_start AS date,
+        COALESCE(COUNT(DISTINCT se.user_id), 0) AS users
+      FROM hourly
+      LEFT JOIN system_events se
+        ON date_trunc('hour', se.created_at) = hourly.hour_start
+        AND se.event_name = 'page_view'
+        AND se.user_id IS NOT NULL
+      GROUP BY hourly.hour_start
+      ORDER BY hourly.hour_start ASC
     `)
     const dau = dauRes.rows.map((r) => ({
       date: r.date,
       users: parseInt(r.users, 10),
     }))
 
-    // ── 2. WAU (Weekly Active Users) — aggregated by week ──
+    // ── 2. WAU by day (rolling 7-day active users) ──
+    const wauWindowDays = period === '30d' ? 30 : 7
+
     const wauRes = await pool.query(`
-      SELECT 
-        DATE_TRUNC('week', created_at)::date AS week_start,
-        COUNT(DISTINCT user_id) AS users
-      FROM system_events
-      WHERE event_name = 'page_view'
-        AND user_id IS NOT NULL
-        AND created_at >= NOW() - INTERVAL '${Math.max(dayCount, 30)} days'
-      GROUP BY DATE_TRUNC('week', created_at)
-      ORDER BY week_start ASC
+      WITH days AS (
+        SELECT generate_series(
+          CURRENT_DATE - INTERVAL '${wauWindowDays - 1} days',
+          CURRENT_DATE,
+          INTERVAL '1 day'
+        )::date AS day
+      )
+      SELECT
+        days.day AS date,
+        COALESCE(COUNT(DISTINCT se.user_id), 0) AS users
+      FROM days
+      LEFT JOIN system_events se
+        ON se.event_name = 'page_view'
+        AND se.user_id IS NOT NULL
+        AND se.created_at >= (days.day - INTERVAL '6 days')
+        AND se.created_at < (days.day + INTERVAL '1 day')
+      GROUP BY days.day
+      ORDER BY days.day ASC
     `)
     const wau = wauRes.rows.map((r) => ({
-      date: r.week_start,
+      date: r.date,
       users: parseInt(r.users, 10),
     }))
 
@@ -210,6 +236,110 @@ async function getEngagement(request: NextRequest) {
           : 0,
     }
 
+    // ── 8. Online users (last 5 minutes) ──
+    const onlineUsersRes = await pool.query(`
+      SELECT
+        se.user_id,
+        MAX(se.created_at) AS last_seen,
+        COUNT(*) AS hits_5m
+      FROM system_events se
+      WHERE se.event_name = 'page_view'
+        AND se.user_id IS NOT NULL
+        AND se.created_at >= NOW() - INTERVAL '5 minutes'
+      GROUP BY se.user_id
+      ORDER BY last_seen DESC
+      LIMIT 20
+    `)
+    const online_users = onlineUsersRes.rows.map((r) => ({
+      user_id: r.user_id,
+      last_seen: r.last_seen,
+      hits_5m: parseInt(r.hits_5m, 10),
+    }))
+
+    // ── 9. User interaction ranking ──
+    const rankingRes = await pool.query(`
+      SELECT
+        se.user_id,
+        COUNT(*) AS interactions,
+        COUNT(DISTINCT DATE(se.created_at)) AS active_days,
+        ROUND(
+          COUNT(*)::numeric / GREATEST(COUNT(DISTINCT DATE(se.created_at)), 1),
+          2
+        ) AS interactions_per_day
+      FROM system_events se
+      WHERE se.user_id IS NOT NULL
+        AND se.created_at >= NOW() - INTERVAL '${intervalSql}'
+        AND se.event_name NOT IN ('session_start', 'session_end')
+      GROUP BY se.user_id
+      ORDER BY interactions DESC
+      LIMIT 20
+    `)
+    const user_interaction_ranking = rankingRes.rows.map((r, idx) => ({
+      rank: idx + 1,
+      user_id: r.user_id,
+      interactions: parseInt(r.interactions, 10),
+      active_days: parseInt(r.active_days, 10),
+      interactions_per_day: parseFloat(r.interactions_per_day || '0'),
+    }))
+
+    // ── 10. Center usage (users + frequency by center) ──
+    const centerUsageRes = await pool.query(`
+      SELECT
+        COALESCE(NULLIF(t.main_centre, ''), 'Chưa rõ cơ sở') AS center,
+        COUNT(DISTINCT se.user_id) AS users,
+        COUNT(*) AS usage_count,
+        ROUND(
+          COUNT(*)::numeric / GREATEST(COUNT(DISTINCT se.user_id), 1),
+          2
+        ) AS usage_per_user
+      FROM system_events se
+      LEFT JOIN teachers t ON LOWER(t.work_email) = LOWER(se.user_id)
+      WHERE se.event_name = 'page_view'
+        AND se.user_id IS NOT NULL
+        AND se.created_at >= NOW() - INTERVAL '${intervalSql}'
+      GROUP BY COALESCE(NULLIF(t.main_centre, ''), 'Chưa rõ cơ sở')
+      ORDER BY usage_count DESC
+      LIMIT 20
+    `)
+    const center_usage = centerUsageRes.rows.map((r) => ({
+      center: r.center,
+      users: parseInt(r.users, 10),
+      usage_count: parseInt(r.usage_count, 10),
+      usage_per_user: parseFloat(r.usage_per_user || '0'),
+    }))
+
+    // ── 11. User details per center ──
+    const centerUserDetailRes = await pool.query(`
+      SELECT
+        COALESCE(NULLIF(t.main_centre, ''), 'Chưa rõ cơ sở') AS center,
+        se.user_id,
+        COUNT(*) AS usage_count,
+        MAX(se.created_at) AS last_seen
+      FROM system_events se
+      LEFT JOIN teachers t ON LOWER(t.work_email) = LOWER(se.user_id)
+      WHERE se.event_name = 'page_view'
+        AND se.user_id IS NOT NULL
+        AND se.created_at >= NOW() - INTERVAL '${intervalSql}'
+      GROUP BY COALESCE(NULLIF(t.main_centre, ''), 'Chưa rõ cơ sở'), se.user_id
+      ORDER BY center ASC, usage_count DESC, last_seen DESC
+    `)
+
+    const center_user_details: Record<
+      string,
+      Array<{ user_id: string; usage_count: number; last_seen: string }>
+    > = {}
+    for (const r of centerUserDetailRes.rows) {
+      const key = r.center
+      if (!center_user_details[key]) {
+        center_user_details[key] = []
+      }
+      center_user_details[key].push({
+        user_id: r.user_id,
+        usage_count: parseInt(r.usage_count, 10),
+        last_seen: r.last_seen,
+      })
+    }
+
     return NextResponse.json({
       dau,
       wau,
@@ -218,6 +348,10 @@ async function getEngagement(request: NextRequest) {
       devices,
       feature_usage,
       retention,
+      online_users,
+      user_interaction_ranking,
+      center_usage,
+      center_user_details,
     })
   } catch (error: any) {
     console.error('[metrics/engagement] Error:', error.message)

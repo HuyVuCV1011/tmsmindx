@@ -24,6 +24,10 @@
 .DS_Store
 *.pem
 fileAccount.txt
+*.log
+temp_*.csv
+*_secrets.txt
+*_pii.txt
 
 # debug
 npm-debug.log*

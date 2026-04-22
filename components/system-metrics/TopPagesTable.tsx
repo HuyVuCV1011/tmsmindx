@@ -1,29 +1,31 @@
-'use client';
+'use client'
 
 interface TopPage {
-  page: string;
-  views: number;
-  percentage: number;
+  page: string
+  views: number
+  percentage: number
 }
 
 interface TopPagesTableProps {
-  pages: TopPage[];
+  pages: TopPage[]
 }
 
 export function TopPagesTable({ pages }: TopPagesTableProps) {
+  const visiblePages = pages.slice(0, 5)
+
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h3 className="text-sm font-semibold text-gray-800 mb-4">
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm max-sm:p-4">
+      <h3 className="mb-4 text-sm font-semibold text-gray-800">
         Trang được truy cập nhiều nhất
       </h3>
 
-      {pages.length === 0 ? (
-        <div className="flex items-center justify-center h-[180px] text-sm text-gray-400">
+      {visiblePages.length === 0 ? (
+        <div className="flex h-45 items-center justify-center text-sm text-gray-400">
           Chưa có dữ liệu
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-gray-100">
-          <table className="w-full text-left">
+        <div className="overflow-hidden rounded-lg border border-gray-100 max-sm:overflow-x-auto">
+          <table className="w-full text-left max-sm:min-w-130">
             <thead>
               <tr className="bg-gray-50">
                 <th className="px-3 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
@@ -38,7 +40,7 @@ export function TopPagesTable({ pages }: TopPagesTableProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {pages.map((page, idx) => (
+              {visiblePages.map((page, idx) => (
                 <tr
                   key={page.page}
                   className="transition-colors duration-150 hover:bg-gray-50/60"
@@ -48,7 +50,7 @@ export function TopPagesTable({ pages }: TopPagesTableProps) {
                       <span className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-100 text-[10px] font-bold text-gray-500">
                         {idx + 1}
                       </span>
-                      <span className="text-xs font-medium text-gray-700 truncate max-w-[200px]">
+                      <span className="max-w-50 truncate text-xs font-medium text-gray-700">
                         {page.page}
                       </span>
                     </div>
@@ -61,7 +63,9 @@ export function TopPagesTable({ pages }: TopPagesTableProps) {
                       <div className="w-16 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                         <div
                           className="h-full rounded-full bg-[#a1001f] transition-all duration-500"
-                          style={{ width: `${Math.min(page.percentage, 100)}%` }}
+                          style={{
+                            width: `${Math.min(page.percentage, 100)}%`,
+                          }}
                         />
                       </div>
                       <span className="text-[11px] font-medium text-gray-500 tabular-nums w-10 text-right">
@@ -76,5 +80,5 @@ export function TopPagesTable({ pages }: TopPagesTableProps) {
         </div>
       )}
     </div>
-  );
+  )
 }

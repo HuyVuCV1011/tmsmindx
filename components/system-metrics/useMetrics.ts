@@ -50,6 +50,32 @@ export interface EngagementData {
     unique_users: number
   }>
   retention: { d1: number; d7: number; d30: number }
+  online_users: Array<{
+    user_id: string
+    last_seen: string
+    hits_5m: number
+  }>
+  user_interaction_ranking: Array<{
+    rank: number
+    user_id: string
+    interactions: number
+    active_days: number
+    interactions_per_day: number
+  }>
+  center_usage: Array<{
+    center: string
+    users: number
+    usage_count: number
+    usage_per_user: number
+  }>
+  center_user_details: Record<
+    string,
+    Array<{
+      user_id: string
+      usage_count: number
+      last_seen: string
+    }>
+  >
 }
 
 export function useEngagement(period: string, requestEmail?: string) {

@@ -1,8 +1,10 @@
+import { getApiSecret } from '@/lib/internal-api-secret';
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * API Protection Middleware
- * Chỉ cho phép request từ giao diện ứng dụng, không cho truy cập trực tiếp
+ * API Protection Middleware — kiểm tra Origin/Referer/User-Agent.
+ * Không thay thế xác thực Bearer/DB role: các route nhạy cảm vẫn phải gọi
+ * `requireBearerSession` / `requireBearerDbRoles` trong handler.
  */
 
 /** Strip trailing slashes; Origin header never includes a trailing slash. */
@@ -19,19 +21,24 @@ function parseAppUrlsFromEnv(raw: string | undefined): string[] {
     .filter(Boolean);
 }
 
+/** Danh sách origin bổ sung (cách nhau bởi dấu phẩy/chấm phẩy/khoảng trắng) — cấu hình trong .env, không gắn cứng trong code. */
+function parseExtraAllowedOrigins(raw: string | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(/[,;\s]+/)
+    .map((s) => normalizeAppOrigin(s))
+    .filter(Boolean);
+}
+
 const ALLOWED_ORIGINS = Array.from(
   new Set<string>([
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'https://tmsmindx.vercel.app',
-    'https://www.tpsmindx.com',
-    'https://tpsmindx.com',
+    ...parseExtraAllowedOrigins(process.env.ALLOWED_API_EXTRA_ORIGINS),
     ...parseAppUrlsFromEnv(process.env.NEXT_PUBLIC_APP_URL),
-  ])
+  ]),
 );
 
-// Secret key để validate request từ client
-const API_SECRET_KEY = process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025';
+// Secret server-only — so khớp header x-api-key (cron / công cụ), không lộ ra bundle
+const API_SECRET_KEY = getApiSecret();
 
 /**
  * Validate request có đến từ giao diện ứng dụng không

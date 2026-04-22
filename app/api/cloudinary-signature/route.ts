@@ -3,12 +3,19 @@
  * Nay chuyển sang tạo presigned PUT URL cho Supabase S3.
  * Client (UploadVideoContext) gọi API này để lấy URL upload trực tiếp lên S3.
  */
+import { requireBearerSession } from '@/lib/datasource-api-auth';
 import { createSupabaseS3Client, getPublicObjectUrl, isSupabaseS3Configured } from '@/lib/supabase-s3';
 import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { NextRequest, NextResponse } from 'next/server';
 
 const BUCKET_NAME = 'mindx-videos';
+
+const ALLOWED_VIDEO_CONTENT_TYPES = new Set([
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+]);
 
 async function ensureBucket() {
   const client = createSupabaseS3Client();
@@ -21,6 +28,9 @@ async function ensureBucket() {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireBearerSession(req);
+    if (!auth.ok) return auth.response;
+
     if (!isSupabaseS3Configured()) {
       return NextResponse.json({ error: 'Chưa cấu hình Supabase S3 Storage' }, { status: 500 });
     }
@@ -28,7 +38,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const folder = body.folder || 'mindx_videos';
     const filename = body.filename || `video-${Date.now()}.mp4`;
-    const contentType = body.contentType || 'video/mp4';
+    const contentType =
+      typeof body.contentType === 'string' ? body.contentType.trim() : 'video/mp4';
+    if (!ALLOWED_VIDEO_CONTENT_TYPES.has(contentType)) {
+      return NextResponse.json(
+        { error: 'Content-Type không được phép cho upload video' },
+        { status: 400 },
+      );
+    }
 
     await ensureBucket();
     const client = createSupabaseS3Client();

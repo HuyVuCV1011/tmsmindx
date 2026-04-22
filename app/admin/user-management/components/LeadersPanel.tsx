@@ -1,4 +1,6 @@
 "use client";
+import { useAuth } from "@/lib/auth-context";
+import { authHeaders } from "@/lib/auth-headers";
 import { getLeaderAreas } from "@/lib/teaching-leaders";
 import { Edit2, Filter, Loader2, MapPin, Plus, Save, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -20,6 +22,7 @@ interface Leader {
 interface Filters { areas: string[]; roleCodes: { role_code: string; role_name: string }[]; statuses: string[]; }
 
 export default function LeadersPanel() {
+    const { token } = useAuth();
     const [data, setData] = useState<Leader[]>([]);
     const [loading, setLoading] = useState(false);
     const [filters, setFilters] = useState<Filters>({ areas: [], roleCodes: [], statuses: [] });
@@ -40,7 +43,7 @@ export default function LeadersPanel() {
             if (fStatus) params.set('status', fStatus);
             if (fArea) params.set('area', fArea);
             if (fRole) params.set('roleCode', fRole);
-            const r = await fetch(`/api/app-auth/data?${params}`);
+            const r = await fetch(`/api/app-auth/data?${params}`, { headers: authHeaders(token) });
             const d = await r.json();
             if (d.rows) setData(d.rows);
             if (d.filters) setFilters(d.filters);
@@ -66,7 +69,7 @@ export default function LeadersPanel() {
         if (!statusDlg.leader) return;
         try {
             const r = await fetch('/api/app-auth/data', {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({ table: 'teaching_leaders_status', code: statusDlg.leader.code, status: statusDlg.newStatus })
             });
             const d = await r.json();
@@ -87,7 +90,7 @@ export default function LeadersPanel() {
         try {
             const method = isNew ? 'POST' : 'PUT';
             const r = await fetch('/api/app-auth/data', {
-                method, headers: { 'Content-Type': 'application/json' },
+                method, headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({
                     table: 'teaching_leaders',
                     ...editLeader,
@@ -103,7 +106,7 @@ export default function LeadersPanel() {
 
     const handleDelete = async () => {
         try {
-            const r = await fetch(`/api/app-auth/data?table=teaching_leaders&code=${confirmDlg.code}`, { method: 'DELETE' });
+            const r = await fetch(`/api/app-auth/data?table=teaching_leaders&code=${confirmDlg.code}`, { method: 'DELETE', headers: authHeaders(token) });
             const d = await r.json();
             if (d.success) { toast.success("Đã xóa"); load(); } else toast.error(d.error || "Lỗi");
         } catch { toast.error("Lỗi") } finally { setConfirmDlg({ open: false, code: "", name: "" }) }

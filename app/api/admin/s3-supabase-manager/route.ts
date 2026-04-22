@@ -1,19 +1,7 @@
-import pool from '@/lib/db';
+import { requireBearerAdminOrSuper } from '@/lib/auth-server';
 import { createSupabaseS3Client, getSignedObjectUrl, isSupabaseS3Configured } from '@/lib/supabase-s3';
 import { ListBucketsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { NextRequest, NextResponse } from 'next/server';
-
-const ALLOWED_ROLES = new Set(['super_admin', 'admin']);
-
-async function ensureAdmin(requestEmail?: string | null) {
-  if (!requestEmail) return false;
-  const result = await pool.query(
-    'SELECT role FROM app_users WHERE email = $1 AND is_active = true LIMIT 1',
-    [requestEmail.toLowerCase()]
-  );
-  if (result.rows.length === 0) return false;
-  return ALLOWED_ROLES.has(result.rows[0].role);
-}
 
 function classifyObject(name: string, mimeType?: string): 'image' | 'video' | 'file' {
   const lower = name.toLowerCase();
@@ -32,16 +20,13 @@ function mapS3ContentTypeToKind(contentType?: string, key?: string) {
 
 export async function GET(request: NextRequest) {
   try {
+    const gate = await requireBearerAdminOrSuper(request);
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(request.url);
-    const requestEmail = searchParams.get('requestEmail');
     const kind = (searchParams.get('kind') || 'all').toLowerCase();
     const selectedBucket = (searchParams.get('bucket') || '').trim();
     const prefix = (searchParams.get('prefix') || '').trim();
-
-    const isAllowed = await ensureAdmin(requestEmail);
-    if (!isAllowed) {
-      return NextResponse.json({ success: false, error: 'Không có quyền truy cập' }, { status: 403 });
-    }
 
     if (!isSupabaseS3Configured()) {
       return NextResponse.json({

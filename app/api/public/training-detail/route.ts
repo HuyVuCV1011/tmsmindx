@@ -1,15 +1,29 @@
+import {
+  rejectIfDatasourceLookupForbidden,
+  requireBearerOrSessionCookie,
+} from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
-// Public route - no auth required
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireBearerOrSessionCookie(request);
+    if (!auth.ok) return auth.response;
+
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
 
     if (!code) {
       return NextResponse.json({ success: false, error: 'Thiếu mã giáo viên' }, { status: 400 });
     }
+
+    const forbidden = await rejectIfDatasourceLookupForbidden(
+      auth.sessionEmail,
+      auth.privileged,
+      '',
+      code,
+    );
+    if (forbidden) return forbidden;
 
     // Get teacher info
     const teacherResult = await pool.query(
@@ -25,10 +39,6 @@ export async function GET(request: NextRequest) {
 
     const teacher = teacherResult.rows[0];
 
-    // Get per-video scores
-    // Debug: Log query execution
-    console.log(`[Public Training Detail API] Fetching scores for ${code}`);
-    
     const scoresResult = await pool.query(
       `SELECT 
          tvs.video_id,

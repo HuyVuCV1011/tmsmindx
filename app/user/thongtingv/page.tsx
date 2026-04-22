@@ -9,6 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/body-scroll-lock'
 import { mapTeachersDbRowToTeacher } from '@/lib/teacher-db-mapper'
 import {
@@ -153,10 +154,6 @@ const InfoItem = memo(
 )
 InfoItem.displayName = 'InfoItem'
 
-// API Secret Key for internal requests
-const API_SECRET_KEY =
-  process.env.NEXT_PUBLIC_API_SECRET || 'mindx-teaching-internal-2025'
-
 /** Gốc API (vd. https://www.tpsmindx.com). Để trống = gọi /api cùng origin (khuyến nghị khi deploy cùng domain). */
 const PROFILE_API_ORIGIN = (
   process.env.NEXT_PUBLIC_TPS_PROFILE_API_ORIGIN ?? ''
@@ -177,7 +174,6 @@ const fetcher = async (url: string) => {
     headers: {
       'Accept-Encoding': 'gzip, deflate, br',
       'Cache-Control': 'max-age=300, stale-while-revalidate=600',
-      'x-api-key': API_SECRET_KEY,
     },
   })
   if (!res.ok) throw new Error('Failed to fetch')
@@ -352,7 +348,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 }
 
 export default function Page1() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const { mutate: globalMutate } = useSWRConfig()
   const router = useRouter()
   const [searchCode, setSearchCode] = useState('')
@@ -424,9 +420,7 @@ export default function Page1() {
     let token = localStorage.getItem('token')
 
     const doFetch = async (tok: string | null) => {
-      const headers: HeadersInit = {
-        'x-api-key': API_SECRET_KEY,
-      }
+      const headers: HeadersInit = {}
       if (tok) headers['Authorization'] = `Bearer ${tok}`
 
       const res = await fetch(url, { headers })
@@ -963,21 +957,28 @@ export default function Page1() {
       toast.error('Vui lòng chọn số sao đánh giá')
       return
     }
+    const email = (user?.email || '').trim().toLowerCase()
+    if (!email) {
+      toast.error('Vui lòng đăng nhập để gửi phản hồi')
+      return
+    }
 
     setFeedbackSubmitting(true)
     try {
+      const content = `Đánh giá ${feedbackRating}/5 sao${feedbackComment.trim() ? `. ${feedbackComment.trim()}` : ''}`
       const response = await fetch('/api/feedback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': API_SECRET_KEY,
+          ...authHeaders(token),
         },
         body: JSON.stringify({
-          rating: feedbackRating,
-          comment: feedbackComment.trim(),
+          requestEmail: email,
+          userName: (user?.displayName || '').trim() || undefined,
+          userCode: submitCode.trim() || undefined,
+          screenPath: '/user/thongtingv',
+          content,
           feature: feedbackFeature.trim(),
-          timestamp: new Date().toISOString(),
-          userCode: submitCode || 'anonymous',
         }),
       })
 
