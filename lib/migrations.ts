@@ -1350,6 +1350,14 @@ const migrations: Migration[] = [
       DROP INDEX IF EXISTS idx_dangky_lich_lam_ma_gv_ngay;
     `,
   },
+  {
+    name: 'V65_teaching_leaders_email',
+    version: 65,
+    sql: `
+      ALTER TABLE teaching_leaders
+        ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+    `,
+  },
 ]
 
 // ========== HÀM CHẠY MIGRATIONS ==========
