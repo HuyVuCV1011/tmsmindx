@@ -1,6 +1,6 @@
 import pool from '@/lib/db';
-import { NextResponse } from 'next/server';
 import { deleteObject, parsePublicUrl } from '@/lib/supabase-s3';
+import { NextResponse } from 'next/server';
 
 /** Xóa ảnh S3 an toàn, không throw */
 async function deleteImageSilently(url: string | null) {
@@ -146,7 +146,9 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    let { id, ...updateData } = body;
+    const { id: initialId, ...updateData } = body;
+
+    let id = initialId;
 
     if (!id) {
       const { searchParams } = new URL(request.url);

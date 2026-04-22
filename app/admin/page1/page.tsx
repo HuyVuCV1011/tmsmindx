@@ -1,35 +1,35 @@
 'use client'
 
 import {
-  Briefcase,
-  Calendar,
-  Clock,
-  Eye,
-  EyeOff,
-  Hash,
-  Mail,
-  MapPin,
-  Phone,
-  Search,
-  Shield,
-  Star,
-  TrendingUp,
-  User,
-  UserCheck,
-  Users,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table'
+import { toast } from '@/lib/app-toast'
+import { lockBodyScroll, unlockBodyScroll } from '@/lib/body-scroll-lock'
+import {
+    Briefcase,
+    Calendar,
+    Clock,
+    Eye,
+    EyeOff,
+    Hash,
+    Mail,
+    MapPin,
+    Phone,
+    Search,
+    Shield,
+    Star,
+    TrendingUp,
+    User,
+    UserCheck,
+    Users,
 } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import { toast } from '@/lib/app-toast'
 import useSWR from 'swr'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { lockBodyScroll, unlockBodyScroll } from '@/lib/body-scroll-lock'
 
 interface TeacherAvailability {
   timestamp: string
@@ -314,7 +314,7 @@ const createSecureFetcher = (): ((url: string) => Promise<any>) => {
       const headers: HeadersInit = {}
       if (tok) headers['Authorization'] = `Bearer ${tok}`
 
-      const res = await fetch(url, { headers })
+      const res = await fetch(url, { headers, credentials: 'include' })
       return res
     }
 

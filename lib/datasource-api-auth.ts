@@ -1,13 +1,13 @@
 import pool from '@/lib/db'
+import {
+    TPS_SESSION_COOKIE,
+    verifySessionCookieValue,
+} from '@/lib/session-cookie'
 import { findTeacherRowByEmailOrCode } from '@/lib/teacher-profile-bundle'
 import {
-  TPS_SESSION_COOKIE,
-  verifySessionCookieValue,
-} from '@/lib/session-cookie'
-import {
-  teacherRowWorkEmail,
-  userCanLookupAnyTeacher,
-  verifyBearerGetSession,
+    teacherRowWorkEmail,
+    userCanLookupAnyTeacher,
+    verifyBearerGetSession,
 } from '@/lib/verify-bearer-session'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -21,68 +21,70 @@ export type DatasourceBearerResult =
   | DatasourceBearerOk
   | { ok: false; response: NextResponse }
 
-export async function requireDatasourceBearer(
+function canUseCookieSession(request: NextRequest): boolean {
+  const secFetchSite = request.headers.get('sec-fetch-site')?.toLowerCase() || ''
+  if (secFetchSite === 'same-origin' || secFetchSite === 'same-site') {
+    return true
+  }
+
+  const origin = request.headers.get('origin')?.trim()
+  if (!origin) return false
+
+  try {
+    return new URL(origin).origin === new URL(request.url).origin
+  } catch {
+    return false
+  }
+}
+
+async function resolveDatasourceSession(
   request: NextRequest,
 ): Promise<DatasourceBearerResult> {
   const authHeader = request.headers.get('authorization') || ''
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
-  if (!bearer) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { success: false, error: 'Yêu cầu đăng nhập (Authorization Bearer)' },
-        { status: 401 },
-      ),
+  const bearer = authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7).trim()
+    : ''
+
+  if (bearer) {
+    const session = await verifyBearerGetSession(bearer)
+    if (session?.email) {
+      const privileged = await userCanLookupAnyTeacher(session.email)
+      return { ok: true, sessionEmail: session.email, privileged }
     }
   }
-  const session = await verifyBearerGetSession(bearer)
-  if (!session?.email) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { success: false, error: 'Token không hợp lệ hoặc đã hết hạn' },
-        { status: 401 },
-      ),
+
+  const raw = request.cookies.get(TPS_SESSION_COOKIE)?.value
+  if (raw && canUseCookieSession(request)) {
+    const edge = await verifySessionCookieValue(raw)
+    if (edge?.email) {
+      const privileged = await userCanLookupAnyTeacher(edge.email)
+      return { ok: true, sessionEmail: edge.email, privileged }
     }
   }
-  const privileged = await userCanLookupAnyTeacher(session.email)
-  return { ok: true, sessionEmail: session.email, privileged }
+
+  return {
+    ok: false,
+    response: NextResponse.json(
+      {
+        success: false,
+        error: 'Yêu cầu đăng nhập (Authorization Bearer hoặc cookie phiên)',
+      },
+      { status: 401 },
+    ),
+  }
+}
+
+export async function requireDatasourceBearer(
+  request: NextRequest,
+): Promise<DatasourceBearerResult> {
+  return resolveDatasourceSession(request)
 }
 
 /** Bearer hoặc cookie phiên edge (cho trang public gọi API bằng fetch + cookie). */
 export async function requireBearerOrSessionCookie(
   request: NextRequest,
 ): Promise<DatasourceBearerResult> {
-  const authHeader = request.headers.get('authorization') || ''
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
-  if (bearer) {
-    return requireDatasourceBearer(request)
-  }
-  const raw = request.cookies.get(TPS_SESSION_COOKIE)?.value
-  if (!raw) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        {
-          success: false,
-          error: 'Yêu cầu đăng nhập (Authorization Bearer hoặc cookie phiên)',
-        },
-        { status: 401 },
-      ),
-    }
-  }
-  const edge = await verifySessionCookieValue(raw)
-  if (!edge?.email) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { success: false, error: 'Phiên không hợp lệ hoặc đã hết hạn' },
-        { status: 401 },
-      ),
-    }
-  }
-  const privileged = await userCanLookupAnyTeacher(edge.email)
-  return { ok: true, sessionEmail: edge.email, privileged }
+  return resolveDatasourceSession(request)
 }
 
 /** Chặn khi `email` trên URL/body khác email trong token (user thường). */

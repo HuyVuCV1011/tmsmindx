@@ -121,6 +121,13 @@ async function hasAreasColumn(client) {
   return (r.rowCount || 0) > 0
 }
 
+async function ensureEmailColumn(client) {
+  await client.query(`
+    ALTER TABLE teaching_leaders
+      ADD COLUMN IF NOT EXISTS email VARCHAR(255)
+  `)
+}
+
 function resolveCenterName(rawCenter, centers) {
   const raw = String(rawCenter || '').trim()
   if (!raw) return null
@@ -184,6 +191,8 @@ async function main() {
   await client.connect()
 
   try {
+    await ensureEmailColumn(client)
+
     const centersRes = await client.query(
       `SELECT full_name, display_name, short_code, region
        FROM centers
@@ -304,6 +313,7 @@ async function main() {
       const courses = Array.from(p.courses).join(', ') || null
       return {
         code: p.code,
+        email: p.email || null,
         full_name: p.full_name,
         role_code: p.role_code,
         role_name: p.role_name,
@@ -319,10 +329,11 @@ async function main() {
       if (useAreas) {
         await client.query(
           `INSERT INTO teaching_leaders
-           (code, full_name, role_code, role_name, center, courses, area, areas, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)`,
+           (code, email, full_name, role_code, role_name, center, courses, area, areas, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)`,
           [
             row.code,
+            row.email,
             row.full_name,
             row.role_code,
             row.role_name,
@@ -336,10 +347,11 @@ async function main() {
       } else {
         await client.query(
           `INSERT INTO teaching_leaders
-           (code, full_name, role_code, role_name, center, courses, area, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+           (code, email, full_name, role_code, role_name, center, courses, area, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
             row.code,
+            row.email,
             row.full_name,
             row.role_code,
             row.role_name,

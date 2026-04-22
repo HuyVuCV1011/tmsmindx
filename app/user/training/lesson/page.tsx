@@ -1,21 +1,21 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
+import { toast as flatToast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 import { useAppDispatch, useAppSelector } from '@/lib/redux/hooks'
 import { useTeacher } from '@/lib/teacher-context'
 import { useToast } from '@/lib/use-toast'
+import { Loader2 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
-  Suspense,
-  useEffect,
-  useRef,
-  useState,
-  useMemo,
-  useCallback,
+    Suspense,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from 'react'
-import { Loader2 } from 'lucide-react'
-import { toast as flatToast } from '@/lib/app-toast'
 
 interface Question {
   id: number
@@ -85,7 +85,7 @@ function LessonContent() {
     videoSegments.forEach((vid: any) => {
       starts.push(total)
       // Sử dụng ưu tiên duration_seconds nếu có, else duration_minutes
-      let segmentSecs =
+      const segmentSecs =
         vid.duration_seconds != null
           ? Number(vid.duration_seconds)
           : (vid.duration_minutes || 0) * 60

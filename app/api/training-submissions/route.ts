@@ -1,8 +1,8 @@
-import {
-  rejectIfDatasourceLookupForbidden,
-  requireBearerSession,
-} from '@/lib/datasource-api-auth';
 import { withApiProtection } from '@/lib/api-protection';
+import {
+    rejectIfDatasourceLookupForbidden,
+    requireBearerSession,
+} from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       assignment_id,
       attempt_number = 1
     } = body;
-    let { teacher_info } = body;
+    const { teacher_info } = body;
 
     if (!teacher_code || !assignment_id) {
       return NextResponse.json(

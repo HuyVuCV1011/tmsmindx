@@ -244,9 +244,6 @@ export default function PostContentRenderer({ html, className = '' }: PostConten
   const openLightbox = useCallback((index: number) => setLightboxIndex(index), [])
   const closeLightbox = useCallback(() => setLightboxIndex(null), [])
 
-  // Tính global offset cho từng group
-  let offset = 0
-
   // Handler click ảnh trong HTML segments (ảnh đơn, mix text+ảnh)
   const handleHtmlClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement
@@ -263,8 +260,11 @@ export default function PostContentRenderer({ html, className = '' }: PostConten
       <div className={`post-content-renderer ProseMirror prose prose-xs sm:prose-sm max-w-none text-gray-900 ${className}`}>
         {segments.map((seg, i) => {
           if (seg.type === 'images') {
-            const groupOffset = offset
-            offset += seg.images.length
+            const groupOffset = segments.slice(0, i).reduce(
+              (count, prevSeg) =>
+                count + (prevSeg.type === 'images' ? prevSeg.images.length : 0),
+              0,
+            )
             return (
               <SmartImageGroup
                 key={i}

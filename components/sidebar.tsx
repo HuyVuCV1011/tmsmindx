@@ -2,27 +2,27 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { useSidebar } from '@/lib/sidebar-context'
+import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import { cn } from '@/lib/utils'
 import {
-  BarChart3,
-  BookOpen,
-  CalendarDays,
-  ChevronDown,
-  DollarSign,
-  FileText,
-  GraduationCap,
-  Home,
-  LogOut,
-  Megaphone,
-  Menu,
-  Settings,
-  Sparkles,
-  Users,
-  X,
+    BarChart3,
+    BookOpen,
+    CalendarDays,
+    ChevronDown,
+    DollarSign,
+    FileText,
+    GraduationCap,
+    Home,
+    LogOut,
+    Megaphone,
+    Menu,
+    Settings,
+    Sparkles,
+    Users,
+    X,
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -404,15 +404,19 @@ export function Sidebar() {
 
   const hasActiveDescendant = useCallback(
     (menuItem: any): boolean => {
-      if (menuItem?.href && isNavLinkActive(menuItem.href)) {
-        return true
+      const checkDescendant = (item: any): boolean => {
+        if (item?.href && isNavLinkActive(item.href)) {
+          return true
+        }
+
+        if (item?.submenu && Array.isArray(item.submenu)) {
+          return item.submenu.some((child: any) => checkDescendant(child))
+        }
+
+        return false
       }
 
-      if (menuItem?.submenu && Array.isArray(menuItem.submenu)) {
-        return menuItem.submenu.some((child: any) => hasActiveDescendant(child))
-      }
-
-      return false
+      return checkDescendant(menuItem)
     },
     [isNavLinkActive],
   )
