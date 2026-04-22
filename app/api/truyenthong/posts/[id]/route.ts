@@ -1,13 +1,13 @@
-import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { generateSlug } from '@/lib/utils';
 import {
-  createSupabaseS3Client,
-  deleteObject,
-  isSupabaseS3Configured,
-  parsePublicUrl,
+    createSupabaseS3Client,
+    deleteObject,
+    isSupabaseS3Configured,
+    parsePublicUrl,
 } from '@/lib/supabase-s3';
+import { generateSlug } from '@/lib/utils';
 import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { NextResponse } from 'next/server';
 
 const BUCKET_NAME = 'mindx-posts-content';
 

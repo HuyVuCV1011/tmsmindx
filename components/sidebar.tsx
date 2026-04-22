@@ -2,27 +2,27 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { useSidebar } from '@/lib/sidebar-context'
+import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import { cn } from '@/lib/utils'
 import {
-  BarChart3,
-  BookOpen,
-  CalendarDays,
-  ChevronDown,
-  DollarSign,
-  FileText,
-  GraduationCap,
-  Home,
-  LogOut,
-  Megaphone,
-  Menu,
-  Settings,
-  Sparkles,
-  Users,
-  X,
+    BarChart3,
+    BookOpen,
+    CalendarDays,
+    ChevronDown,
+    DollarSign,
+    FileText,
+    GraduationCap,
+    Home,
+    LogOut,
+    Megaphone,
+    Menu,
+    Settings,
+    Sparkles,
+    Users,
+    X,
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 

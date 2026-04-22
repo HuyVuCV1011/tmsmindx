@@ -14,7 +14,7 @@ type AppRole = LandingRole | 'super_admin' | 'admin' | 'hr';
 const ADMIN_LANDING_ROLES = new Set<AppRole>(['super_admin', 'admin', 'hr']);
 
 function resolveTeacherLanding(teacherSync?: { foundInDatabase?: boolean }): string {
-  return resolveTeacherRedirect(teacherSync)
+  return teacherSync?.foundInDatabase ? '/user/truyenthong' : '/checkdatasource'
 }
 
 function resolvePostLoginPath(options: {

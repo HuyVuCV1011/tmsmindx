@@ -1,8 +1,8 @@
-import {
-  rejectIfDatasourceLookupForbidden,
-  requireBearerSession,
-} from '@/lib/datasource-api-auth';
 import { withApiProtection } from '@/lib/api-protection';
+import {
+    rejectIfDatasourceLookupForbidden,
+    requireBearerSession,
+} from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
