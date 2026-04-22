@@ -215,6 +215,16 @@ export default function UserFirstLoginOnboarding() {
   }, [tourEnabled])
 
   useEffect(() => {
+    const handleStartTour = () => {
+      setStepIndex(findStepIndexById('sidebar'))
+      setTourEnabled(true)
+      setSessionDismissed(false)
+    }
+    window.addEventListener('start-tour', handleStartTour)
+    return () => window.removeEventListener('start-tour', handleStartTour)
+  }, [])
+
+  useEffect(() => {
     // Preload all frames to tránh "ghosting/overlap" khi Next/Image đổi src liên tục.
     frames.forEach((src) => {
       const img = new window.Image()
