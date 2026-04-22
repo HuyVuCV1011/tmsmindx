@@ -19,6 +19,7 @@ type SubTab = 'centers-leaders' | 'roles' | 'kanban';
 interface Leader {
     code: string;
     full_name: string;
+    email?: string;
     role_code: string;
     role_name: string;
     center: string;
@@ -438,6 +439,10 @@ function CentersLeadersPanel() {
                                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f]" /></div>
                                 <div className="space-y-1"><label className="block text-sm font-medium text-gray-700">Họ tên</label>
                                     <input value={editLeader.full_name} onChange={e => setEditLeader({ ...editLeader, full_name: e.target.value })} required
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f]" /></div>
+                                <div className="space-y-1"><label className="block text-sm font-medium text-gray-700">Email</label>
+                                    <input type="email" value={editLeader.email || ''} onChange={e => setEditLeader({ ...editLeader, email: e.target.value })}
+                                        placeholder="example@mindx.edu.vn"
                                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f]" /></div>
                                 <div className="space-y-1"><label className="block text-sm font-medium text-gray-700">Role</label>
                                     <select value={editLeader.role_code} onChange={e => { const rc = filters.roleCodes.find(r => r.role_code === e.target.value); setEditLeader({ ...editLeader, role_code: e.target.value, role_name: rc?.role_name || '' }); }} required

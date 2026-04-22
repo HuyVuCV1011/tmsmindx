@@ -33,6 +33,19 @@ export const useUploadVideo = () => {
 
 const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3): Promise<Response> => {
   let lastError = "";
+
+  // Attach Bearer token if available
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+  if (token) {
+    options = {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  }
+
   for (let i = 0; i < maxRetries; i++) {
     const controller = new AbortController();
     // Timeout cho mỗi part (ví dụ 2 phút cho 8MB là rất thoải mái)

@@ -312,44 +312,6 @@ export default function UserFirstLoginOnboarding() {
     if (!isOpen) setIsOpen(true)
   }, [isOpen, setIsOpen, tourEnabled])
 
-  useEffect(() => {
-    const bootstrap = async () => {
-      if (isLoading || !user?.email) return
-      if (!pathname.startsWith('/user')) return
-      if (sessionDismissed) return
-      // Prevent re-bootstrap loops when route changes during onboarding.
-      if (tourEnabled) return
-
-      const emailPrefix = user.email.split('@')[0]?.toLowerCase() || ''
-      const forceOnboarding = FORCE_ONBOARDING_EMAIL_PREFIXES.has(emailPrefix)
-
-      if (forceOnboarding) {
-        setStepIndex(findStepIndexById('sidebar'))
-        setTourEnabled(true)
-        return
-      }
-
-      try {
-        const response = await fetch(
-          `/api/onboarding/state?email=${encodeURIComponent(user.email)}`,
-          { cache: 'no-store' },
-        )
-        const data = (await response.json()) as OnboardingStateResponse
-        const completed = Boolean(data?.state?.completed)
-        const tourVersion = Number(data?.state?.tour_version || 1)
-        if (completed && tourVersion >= TOUR_VERSION) {
-          return
-        }
-        setStepIndex(findStepIndexById('sidebar'))
-        setTourEnabled(true)
-      } catch {
-        // Keep the app usable even when onboarding API is unavailable.
-      }
-    }
-
-    bootstrap()
-  }, [isLoading, pathname, sessionDismissed, tourEnabled, user?.email])
-
   const persistState = async (completed: boolean, lastSeenStep: string) => {
     if (!user?.email) return
     const emailPrefix = user.email.split('@')[0]?.toLowerCase() || ''
