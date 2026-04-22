@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     let finalStart = newStart
     let finalEnd = newEnd
-    let finalCoSo = [...newCoSo]
+    const finalCoSo = [...newCoSo]
     let finalLinhHoat = newLinhHoat
 
     if (overlapping.length > 0) {

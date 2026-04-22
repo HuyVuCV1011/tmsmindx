@@ -284,7 +284,7 @@ export async function GET(request: NextRequest) {
         
         console.log(`[Birthdays API] Privacy applied - total: ${weekBirthdays.length}, masked: ${maskedCount}`)
 
-        let birthdays = weekBirthdays
+        const birthdays = weekBirthdays
 
         console.log(`[Birthdays API] Response - count: ${birthdays.length}, fromCache: ${isCached}`)
 

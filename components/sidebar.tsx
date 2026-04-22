@@ -404,15 +404,19 @@ export function Sidebar() {
 
   const hasActiveDescendant = useCallback(
     (menuItem: any): boolean => {
-      if (menuItem?.href && isNavLinkActive(menuItem.href)) {
-        return true
+      const checkDescendant = (item: any): boolean => {
+        if (item?.href && isNavLinkActive(item.href)) {
+          return true
+        }
+
+        if (item?.submenu && Array.isArray(item.submenu)) {
+          return item.submenu.some((child: any) => checkDescendant(child))
+        }
+
+        return false
       }
 
-      if (menuItem?.submenu && Array.isArray(menuItem.submenu)) {
-        return menuItem.submenu.some((child: any) => hasActiveDescendant(child))
-      }
-
-      return false
+      return checkDescendant(menuItem)
     },
     [isNavLinkActive],
   )

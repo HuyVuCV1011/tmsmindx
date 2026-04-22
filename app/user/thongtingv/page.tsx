@@ -1,38 +1,38 @@
 'use client'
 
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table'
+import { toast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/body-scroll-lock'
 import { mapTeachersDbRowToTeacher } from '@/lib/teacher-db-mapper'
 import {
-  Briefcase,
-  Calendar,
-  Clock,
-  Eye,
-  EyeOff,
-  Hash,
-  Mail,
-  MapPin,
-  Phone,
-  Search,
-  Shield,
-  Star,
-  TrendingUp,
-  User,
-  UserCheck,
-  Users,
+    Briefcase,
+    Calendar,
+    Clock,
+    Eye,
+    EyeOff,
+    Hash,
+    Mail,
+    MapPin,
+    Phone,
+    Search,
+    Shield,
+    Star,
+    TrendingUp,
+    User,
+    UserCheck,
+    Users,
 } from 'lucide-react'
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { toast } from '@/lib/app-toast'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 
 // Cache for processed data
@@ -312,7 +312,7 @@ const PROFILE_FIELDS: {
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '')
   if (!digits) return raw
-  let local = digits.startsWith('84') ? `0${digits.slice(2)}` : digits
+  const local = digits.startsWith('84') ? `0${digits.slice(2)}` : digits
   if (local.length === 10)
     return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`
   if (local.length === 11)
@@ -423,7 +423,7 @@ export default function Page1() {
       const headers: HeadersInit = {}
       if (tok) headers['Authorization'] = `Bearer ${tok}`
 
-      const res = await fetch(url, { headers })
+      const res = await fetch(url, { headers, credentials: 'include' })
       return res
     }
 

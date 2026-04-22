@@ -146,7 +146,9 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    let { id, ...updateData } = body;
+    const { id: initialId, ...updateData } = body;
+
+    let id = initialId;
 
     if (!id) {
       const { searchParams } = new URL(request.url);

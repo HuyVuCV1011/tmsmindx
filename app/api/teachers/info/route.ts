@@ -1,10 +1,7 @@
 import { withApiProtection } from "@/lib/api-protection";
+import { requireBearerOrSessionCookie } from "@/lib/datasource-api-auth";
 import pool from "@/lib/db";
-import {
-  teacherRowWorkEmail,
-  userCanLookupAnyTeacher,
-  verifyBearerGetSession,
-} from "@/lib/verify-bearer-session";
+import { teacherRowWorkEmail } from "@/lib/verify-bearer-session";
 import { NextRequest, NextResponse } from "next/server";
 
 /**
@@ -21,7 +18,8 @@ const LEGACY_QUOTED_KEYS_SUPERSEDED_BY_SNAKE_CASE = new Set([
 ]);
 
 function mergeTeacherRow(row: Record<string, unknown>): Record<string, unknown> {
-  const { onboarding_snapshot: _removed, ...rest } = row;
+  const { onboarding_snapshot: removedSnapshot, ...rest } = row;
+  void removedSnapshot;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (LEGACY_QUOTED_KEYS_SUPERSEDED_BY_SNAKE_CASE.has(k)) continue;
@@ -32,28 +30,10 @@ function mergeTeacherRow(row: Record<string, unknown>): Record<string, unknown> 
 
 export const GET = withApiProtection(async (request: NextRequest) => {
   try {
-    const authHeader = request.headers.get("authorization") || "";
-    const bearer = authHeader.startsWith("Bearer ")
-      ? authHeader.slice(7).trim()
-      : "";
+    const auth = await requireBearerOrSessionCookie(request);
+    if (!auth.ok) return auth.response;
 
-    if (!bearer) {
-      return NextResponse.json(
-        { success: false, error: "Yêu cầu đăng nhập (Authorization Bearer)" },
-        { status: 401 },
-      );
-    }
-
-    const session = await verifyBearerGetSession(bearer);
-    if (!session?.email) {
-      return NextResponse.json(
-        { success: false, error: "Token không hợp lệ hoặc đã hết hạn" },
-        { status: 401 },
-      );
-    }
-
-    const sessionEmail = session.email;
-    const privileged = await userCanLookupAnyTeacher(sessionEmail);
+    const { sessionEmail, privileged } = auth;
 
     const code = String(request.nextUrl.searchParams.get("code") || "").trim();
     const emailParam = String(request.nextUrl.searchParams.get("email") || "")
