@@ -1290,6 +1290,44 @@ const migrations: Migration[] = [
         EXECUTE FUNCTION update_updated_at_column();
     `,
   },
+  {
+    name: 'V63_dangky_lich_lam',
+    version: 63,
+    sql: `
+      CREATE TABLE IF NOT EXISTS dangky_lich_lam (
+        id SERIAL PRIMARY KEY,
+        ma_gv VARCHAR(100) NOT NULL,
+        ngay DATE NOT NULL,
+        gio_bat_dau TIME NOT NULL,
+        gio_ket_thuc TIME NOT NULL,
+        co_so_uu_tien TEXT[] DEFAULT '{}',
+        linh_hoat BOOLEAN DEFAULT FALSE,
+        lap_lai_tu_ngay DATE,
+        lap_lai_den_ngay DATE,
+        kieu_lap VARCHAR(10) DEFAULT 'tuan',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_dangky_lich_lam_ma_gv ON dangky_lich_lam(ma_gv);
+      CREATE INDEX IF NOT EXISTS idx_dangky_lich_lam_ngay ON dangky_lich_lam(ngay);
+      -- Không unique (ma_gv, ngay) vì 1 ngày có thể có nhiều slot giờ
+    `,
+  },
+  {
+    name: 'V64_dangky_lich_lam_drop_unique',
+    version: 64,
+    sql: `
+      DROP INDEX IF EXISTS idx_dangky_lich_lam_ma_gv_ngay;
+    `,
+  },
+  {
+    name: 'V65_teaching_leaders_email',
+    version: 65,
+    sql: `
+      ALTER TABLE teaching_leaders
+        ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+    `,
+  },
 ]
 
 // ========== HÀM CHẠY MIGRATIONS ==========

@@ -1,8 +1,8 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { Calendar, Check, X, Clock } from 'lucide-react';
 import { Teacher } from '@/types/teacher';
+import { motion } from 'framer-motion';
+import { Calendar, Check, Clock, X } from 'lucide-react';
 
 interface AvailabilityGridProps {
   teacher: Teacher;
@@ -19,14 +19,13 @@ export default function AvailabilityGrid({ teacher }: AvailabilityGridProps) {
   // For now, I'll use a placeholder logic that matches common formats.
 
   const getStatus = (day: string, shift: string) => {
-    // This is a simplified mapper. In the real integration, 
-    // we'd parse the specific teacher fields.
-    const dayKey = day.replace('Thứ ', 'T').replace('Chủ Nhật', 'CN');
-    const shiftKey = shift.charAt(0); // S, C, T
-    
-    // Example: teacher['T2_S'] or teacher['availability'] containing "T2 Sang"
-    // For this UI demo, I'll mock some data if the real data is missing
-    return Math.random() > 0.4; 
+    const seed = `${teacher.code || teacher.name || teacher.emailMindx || ''}-${day}-${shift}`;
+    let hash = 0;
+    for (let i = 0; i < seed.length; i += 1) {
+      hash = (hash * 31 + seed.charCodeAt(i)) % 9973;
+    }
+
+    return hash % 5 !== 0;
   };
 
   return (

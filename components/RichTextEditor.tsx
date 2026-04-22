@@ -755,11 +755,33 @@ export default function RichTextEditor({
   const uploadImageFile = useCallback(async (file: File): Promise<string> => {
     if (!file.type.startsWith('image/')) throw new Error('Chỉ hỗ trợ định dạng ảnh')
     if (file.size > 5 * 1024 * 1024) throw new Error('Kích thước ảnh tối đa 5MB')
+
+    // Resize + compress trước khi chèn vào editor để tránh lag
     return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(file)
+      const img = new window.Image()
+      const objectUrl = URL.createObjectURL(file)
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl)
+        const MAX_W = 800
+        const MAX_H = 800
+        let { width, height } = img
+        if (width > MAX_W || height > MAX_H) {
+          const ratio = Math.min(MAX_W / width, MAX_H / height)
+          width = Math.round(width * ratio)
+          height = Math.round(height * ratio)
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { reject(new Error('Canvas không khả dụng')); return }
+        ctx.drawImage(img, 0, 0, width, height)
+        // Dùng webp nếu hỗ trợ, fallback jpeg — nhỏ hơn png nhiều
+        const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+        resolve(canvas.toDataURL(mime, 0.75))
+      }
+      img.onerror = reject
+      img.src = objectUrl
     })
   }, [])
 
@@ -896,7 +918,7 @@ export default function RichTextEditor({
       setTimeout(() => {
         if (editor.isDestroyed) return
         if (sel instanceof NodeSelection && sel.node.type.name === 'image') {
-          setShowImageControls(true)
+          setShowImageControls(prev => { if (!prev) return true; return prev })
           const w = sel.node.attrs.width
           setSelectedImageWidth(typeof w === 'number' && Number.isFinite(w) ? `${Math.round(w)}px` : 'auto')
           const align = sel.node.attrs.verticalAlign
@@ -904,7 +926,7 @@ export default function RichTextEditor({
           const f = sel.node.attrs.float
           setSelectedImageFloat(typeof f === 'string' && f ? f : 'none')
         } else {
-          setShowImageControls(false)
+          setShowImageControls(prev => { if (prev) return false; return prev })
         }
       }, 0)
     }
@@ -933,7 +955,7 @@ export default function RichTextEditor({
     return () => clearTimeout(timeoutId)
   }, [content, editor])
 
-  useEffect(() => { setShowImageControls(false) }, [content])
+  useEffect(() => { setShowImageControls(false) }, [editor])
 
   // Smart image layout: CSS-only approach, không touch DOM trực tiếp
   // Layout được xử lý hoàn toàn qua CSS class trên paragraph

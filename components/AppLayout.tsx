@@ -33,7 +33,9 @@ export default function AppLayout({
 
   const hasRedirected = useRef(false)
   const latestUserRef = useRef(user);
-  latestUserRef.current = user;
+  useEffect(() => {
+    latestUserRef.current = user;
+  }, [user]);
   const lastAdminPermRefreshAt = useRef(0);
   const lastTeacherVerifyAt = useRef(0);
   const lastTeacherVerifyPathname = useRef<string | null>(null);

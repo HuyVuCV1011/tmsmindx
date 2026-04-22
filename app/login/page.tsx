@@ -8,17 +8,45 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import toast from 'react-hot-toast';
 
 const SAVED_LOGIN_KEY = 'tps_saved_login_account';
+type LandingRole = 'teacher' | 'manager';
+type AppRole = LandingRole | 'super_admin' | 'admin' | 'hr';
+
+const ADMIN_LANDING_ROLES = new Set<AppRole>(['super_admin', 'admin', 'hr']);
+
+function resolveTeacherLanding(teacherSync?: { foundInDatabase?: boolean }): string {
+  return teacherSync?.foundInDatabase ? '/user/truyenthong' : '/checkdatasource'
+}
+
+function resolvePostLoginPath(options: {
+  accountRole?: AppRole;
+  selectedRole: LandingRole;
+  isAdmin: boolean;
+  teacherSync?: { foundInDatabase?: boolean };
+}): { redirectPath: string; isAdminLanding: boolean } {
+  const { accountRole, selectedRole, isAdmin, teacherSync } = options;
+  const isAdminLanding =
+    Boolean(accountRole && ADMIN_LANDING_ROLES.has(accountRole)) ||
+    (selectedRole === 'manager' && isAdmin);
+
+  return {
+    redirectPath: isAdminLanding
+      ? '/admin/dashboard'
+      : resolveTeacherLanding(teacherSync),
+    isAdminLanding,
+  };
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const { user, isLoading, updateUser } = useAuth();
-  const [role, setRole] = useState<'teacher' | 'manager'>('teacher');
+  const [role, setRole] = useState<LandingRole>('teacher');
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberAccount, setRememberAccount] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [loginPreferenceReady, setLoginPreferenceReady] = useState(false);
   const hasCheckedAuth = useRef(false);
 
   useEffect(() => {
@@ -36,10 +64,12 @@ export default function LoginPage() {
       }
     } catch (e) {
       logger.warn('Unable to load saved login account', { error: (e as Error).message });
+    } finally {
+      setLoginPreferenceReady(true);
     }
   }, []);
 
-  const persistRememberedAccount = useCallback((accountEmail: string, accountRole: 'teacher' | 'manager') => {
+  const persistRememberedAccount = useCallback((accountEmail: string, accountRole: LandingRole) => {
     try {
       if (!rememberAccount) {
         localStorage.removeItem(SAVED_LOGIN_KEY);
@@ -55,15 +85,19 @@ export default function LoginPage() {
   }, [rememberAccount]);
 
   useEffect(() => {
-    if (!isLoading && !hasCheckedAuth.current) {
+    if (!isLoading && loginPreferenceReady && !hasCheckedAuth.current) {
       hasCheckedAuth.current = true;
       if (user) {
-        const redirectPath = user.role === 'teacher' ? '/user/truyenthong' : '/admin/dashboard';
+        const { redirectPath } = resolvePostLoginPath({
+          accountRole: user.role as AppRole | undefined,
+          selectedRole: role,
+          isAdmin: Boolean(user.isAdmin),
+        });
         logger.info('User already logged in, redirecting', { email: user.email, role: user.role, path: redirectPath });
         router.replace(redirectPath);
       }
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, loginPreferenceReady, role, router]);
 
   const handleRoleChange = useCallback((newRole: 'teacher' | 'manager') => {
     setRole(newRole);
@@ -150,22 +184,24 @@ export default function LoginPage() {
         // Ưu tiên dùng accessToken (JWT nội bộ) làm Bearer; fallback idToken Firebase
         updateUser(userData, appAuthData.accessToken || appAuthData.idToken);
 
-        const isAdminRole = Boolean(appAuthData.isAdmin);
-        const redirectPath = isAdminRole
-          ? '/admin/dashboard'
-          : resolveTeacherRedirect(appAuthData.teacherSync, emailResolved);
+        const landing = resolvePostLoginPath({
+          accountRole: appAuthData.role as AppRole | undefined,
+          selectedRole: role,
+          isAdmin: Boolean(appAuthData.isAdmin),
+          teacherSync: appAuthData.teacherSync,
+        });
 
         if (appAuthData.role === 'super_admin') {
           toast.success(`Chào mừng Super Admin ${appAuthData.displayName}!`, { icon: '👑' });
-        } else if (isAdminRole) {
+        } else if (landing.isAdminLanding) {
           toast.success(`Chào mừng Admin ${appAuthData.displayName}!`, { icon: '👑' });
         } else {
           toast.success(`Chào mừng ${appAuthData.displayName}!`, { icon: '👋' });
         }
 
         persistRememberedAccount(appAuthData.email || trimmedEmail, role);
-        logger.info('Redirecting app user', { path: redirectPath, role: userData.role });
-        setTimeout(() => { router.replace(redirectPath); }, 500);
+        logger.info('Redirecting app user', { path: landing.redirectPath, role: userData.role });
+        setTimeout(() => { router.replace(landing.redirectPath); }, 500);
         return;
       }
 
@@ -193,16 +229,12 @@ export default function LoginPage() {
       }
 
       const serverRole = String(data.role ?? 'teacher') as
-        | 'teacher'
-        | 'manager'
-        | 'super_admin'
-        | 'admin'
-        | 'hr';
+        AppRole;
 
       const userData: {
         email: string;
         displayName: string;
-        role: 'teacher' | 'manager' | 'super_admin' | 'admin' | 'hr';
+        role: AppRole;
         localId: string;
         isAdmin?: boolean;
         isAppUser?: boolean;
@@ -229,10 +261,16 @@ export default function LoginPage() {
         logger.warn('Unable to persist refreshToken', { error: (e as Error).message });
       }
 
-      let finalRedirectPath = '/user/truyenthong';
+      const landing = resolvePostLoginPath({
+        accountRole: serverRole,
+        selectedRole: role,
+        isAdmin: Boolean(userData.isAdmin),
+        teacherSync: data?.teacherSync,
+      });
 
-      if (userData.isAdmin) {
-        finalRedirectPath = '/admin/dashboard';
+      let finalRedirectPath = landing.redirectPath;
+
+      if (landing.isAdminLanding) {
         toast.success(`Chào mừng Admin ${userData.displayName}!`, { icon: '👑' });
       } else if (serverRole === 'teacher') {
         finalRedirectPath = resolveTeacherRedirect(data?.teacherSync, userData.email);

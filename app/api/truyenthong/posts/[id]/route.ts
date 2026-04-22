@@ -1,13 +1,13 @@
-import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { generateSlug } from '@/lib/utils';
 import {
-  createSupabaseS3Client,
-  deleteObject,
-  isSupabaseS3Configured,
-  parsePublicUrl,
+    createSupabaseS3Client,
+    deleteObject,
+    isSupabaseS3Configured,
+    parsePublicUrl,
 } from '@/lib/supabase-s3';
+import { generateSlug } from '@/lib/utils';
 import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { NextResponse } from 'next/server';
 
 const BUCKET_NAME = 'mindx-posts-content';
 
@@ -143,7 +143,7 @@ export async function GET(
       const post = result.rows[0];
       let isLiked = false;
       let reaction: string | null = null;
-      let reaction_counts: Record<string, number> = {};
+      const reaction_counts: Record<string, number> = {};
 
       if (userId) {
         const likeCheck = await client.query(
