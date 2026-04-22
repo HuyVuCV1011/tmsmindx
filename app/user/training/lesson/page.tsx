@@ -85,7 +85,7 @@ function LessonContent() {
     videoSegments.forEach((vid: any) => {
       starts.push(total)
       // Sử dụng ưu tiên duration_seconds nếu có, else duration_minutes
-      let segmentSecs =
+      const segmentSecs =
         vid.duration_seconds != null
           ? Number(vid.duration_seconds)
           : (vid.duration_minutes || 0) * 60

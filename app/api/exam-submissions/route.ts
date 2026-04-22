@@ -404,7 +404,7 @@ export async function PUT(request: NextRequest) {
     }> = [];
 
     // Lấy / tạo bainop
-    let bainopRow = await client.query(
+    const bainopRow = await client.query(
       `SELECT id FROM chuyen_sau_bainop WHERE id_ket_qua = $1 ORDER BY tao_luc DESC LIMIT 1`,
       [result_id]
     );

@@ -143,7 +143,7 @@ export async function GET(
       const post = result.rows[0];
       let isLiked = false;
       let reaction: string | null = null;
-      let reaction_counts: Record<string, number> = {};
+      const reaction_counts: Record<string, number> = {};
 
       if (userId) {
         const likeCheck = await client.query(

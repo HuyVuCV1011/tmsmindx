@@ -170,7 +170,9 @@ export function ImageLayoutNodeView(props: NodeViewProps) {
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Ref giữ latest images để dùng trong closures
   const imagesRef = useRef(images)
-  imagesRef.current = images
+  useEffect(() => {
+    imagesRef.current = images
+  }, [images])
 
   const layout = LAYOUTS.find(l => l.id === layoutId) || LAYOUTS[1]
   const slots: (string | null)[] = Array.from({ length: layout.slots }, (_, i) => images[i] ?? null)

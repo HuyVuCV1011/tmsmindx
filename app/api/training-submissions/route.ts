@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       assignment_id,
       attempt_number = 1
     } = body;
-    let { teacher_info } = body;
+    const { teacher_info } = body;
 
     if (!teacher_code || !assignment_id) {
       return NextResponse.json(
