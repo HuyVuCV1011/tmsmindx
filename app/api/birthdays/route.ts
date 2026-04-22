@@ -1,8 +1,8 @@
-import { requireBearerSession } from '@/lib/datasource-api-auth'
-import { NextRequest, NextResponse } from 'next/server'
-import pool from '@/lib/db'
-import { getCacheKey, isCacheValid, setCacheEntry, getCacheEntry, type BirthdaysCacheEntry } from '@/lib/birthday-cache'
+import { getCacheEntry, getCacheKey, isCacheValid, setCacheEntry } from '@/lib/birthday-cache'
 import { getBirthdayRecordsFromDataCache } from '@/lib/birthday-data-cache'
+import { requireBearerSession } from '@/lib/datasource-api-auth'
+import pool from '@/lib/db'
+import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 

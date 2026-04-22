@@ -11,9 +11,9 @@
  */
 
 import {
-  rejectIfChuyenSauResultNotOwned,
-  rejectIfEmailNotSelf,
-  requireBearerSession,
+    rejectIfChuyenSauResultNotOwned,
+    rejectIfEmailNotSelf,
+    requireBearerSession,
 } from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';

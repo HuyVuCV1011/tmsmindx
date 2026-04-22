@@ -1,8 +1,8 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { Calendar, Check, X, Clock } from 'lucide-react';
 import { Teacher } from '@/types/teacher';
+import { motion } from 'framer-motion';
+import { Calendar, Check, Clock, X } from 'lucide-react';
 
 interface AvailabilityGridProps {
   teacher: Teacher;
