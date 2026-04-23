@@ -1225,6 +1225,36 @@ const migrations: Migration[] = [
   },
 
   // ═══════════════════════════════════════════════════════
+  // V51: Center-based access control for managers
+  // Mapping manager email → centers được phân công
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V51_manager_centers',
+    version: 51,
+    sql: `
+      CREATE TABLE IF NOT EXISTS manager_centers (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        assigned_by_email VARCHAR(255),
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, center_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_manager_centers_user_id ON manager_centers(user_id);
+      CREATE INDEX IF NOT EXISTS idx_manager_centers_center_id ON manager_centers(center_id);
+
+      DROP TRIGGER IF EXISTS trg_manager_centers_updated_at ON manager_centers;
+      CREATE TRIGGER trg_manager_centers_updated_at
+      BEFORE UPDATE ON manager_centers
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
   // V48: Add user_name + reaction to communication_likes
   // ═══════════════════════════════════════════════════════
   {
