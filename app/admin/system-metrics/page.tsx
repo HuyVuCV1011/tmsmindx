@@ -27,17 +27,16 @@ import {
   Zap,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 type PeriodFilter = 'today' | '7d' | '30d'
 
-const periodLabels: Record<PeriodFilter, string> = {
-  today: 'Hôm nay',
-  '7d': '7 ngày',
-  '30d': '30 ngày',
-}
-
 const ITEMS_PER_PAGE = 5
+
+function formatDateForInput(date: Date): string {
+  const adjusted = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return adjusted.toISOString().slice(0, 10)
+}
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`
@@ -106,7 +105,12 @@ function NumberedPagination({
 export default function SystemMetricsPage() {
   const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
-  const [period, setPeriod] = useState<PeriodFilter>('7d')
+  const [fromDate, setFromDate] = useState(() => {
+    const date = new Date()
+    date.setDate(date.getDate() - 6)
+    return formatDateForInput(date)
+  })
+  const [toDate, setToDate] = useState(() => formatDateForInput(new Date()))
   const [chartTab, setChartTab] = useState<'dau' | 'wau'>('dau')
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
   const [userSearch, setUserSearch] = useState('')
@@ -131,11 +135,40 @@ export default function SystemMetricsPage() {
     isLoading: healthLoading,
     mutate: refreshHealth,
   } = useSystemHealth(user?.email)
+  const period = useMemo<PeriodFilter>(() => {
+    const start = new Date(fromDate)
+    const end = new Date(toDate)
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return '7d'
+    }
+
+    const diffMs = Math.max(end.getTime() - start.getTime(), 0)
+    const dayCount = Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1
+
+    if (dayCount <= 1) return 'today'
+    if (dayCount <= 7) return '7d'
+    return '30d'
+  }, [fromDate, toDate])
   const {
     data: engagement,
     isLoading: engagementLoading,
     mutate: refreshEngagement,
   } = useEngagement(period, user?.email)
+
+  const handleFromDateChange = (value: string) => {
+    setFromDate(value)
+    if (value > toDate) {
+      setToDate(value)
+    }
+  }
+
+  const handleToDateChange = (value: string) => {
+    setToDate(value)
+    if (value < fromDate) {
+      setFromDate(value)
+    }
+  }
 
   const handleRefresh = useCallback(() => {
     refreshHealth()
@@ -199,13 +232,39 @@ export default function SystemMetricsPage() {
     engagement?.user_interaction_ranking ?? []
   ).filter((u) => u.user_id.toLowerCase().includes(normalizedUserSearch))
 
+  // Get list of center names user has access to
+  const accessibleCenterNames = useMemo(() => {
+    if (user?.role === 'super_admin') return new Set<string>() // empty = show all
+    const names = new Set<string>()
+    if (user?.assignedCenters) {
+      user.assignedCenters.forEach((c) => {
+        names.add(c.full_name)
+        if (c.short_code) names.add(c.short_code)
+      })
+    }
+    return names
+  }, [user?.role, user?.assignedCenters])
+
   const centerOptions = Array.from(
     new Set((engagement?.center_usage ?? []).map((c) => c.center)),
-  ).sort((a, b) => a.localeCompare(b, 'vi'))
-
-  const filteredCenterUsage = (engagement?.center_usage ?? []).filter((c) =>
-    centerFilter === 'all' ? true : c.center === centerFilter,
   )
+    .filter((center) => {
+      // If super_admin or no restricted centers, show all
+      if (user?.role === 'super_admin' || accessibleCenterNames.size === 0)
+        return true
+      // Otherwise, only show accessible centers
+      return accessibleCenterNames.has(center)
+    })
+    .sort((a, b) => a.localeCompare(b, 'vi'))
+
+  const filteredCenterUsage = (engagement?.center_usage ?? []).filter((c) => {
+    // First, check if user has access to this center
+    if (user?.role !== 'super_admin' && accessibleCenterNames.size > 0) {
+      if (!accessibleCenterNames.has(c.center)) return false
+    }
+    // Then apply centerFilter selection
+    return centerFilter === 'all' ? true : c.center === centerFilter
+  })
 
   const errorRows = health?.error_by_page ?? []
   const errorTotalPages = Math.max(
@@ -253,7 +312,7 @@ export default function SystemMetricsPage() {
     setOnlineTablePage(1)
     setRankingTablePage(1)
     setCenterTablePage(1)
-  }, [period])
+  }, [fromDate, toDate])
 
   useEffect(() => {
     setOnlineTablePage(1)
@@ -352,20 +411,31 @@ export default function SystemMetricsPage() {
       )}
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex w-full flex-wrap rounded-lg border border-gray-200 bg-gray-50 p-0.5 sm:w-auto">
-          {(Object.keys(periodLabels) as PeriodFilter[]).map((key) => (
-            <button
-              key={key}
-              onClick={() => setPeriod(key)}
-              className={`flex-1 rounded-md px-4 py-1.5 text-xs font-medium transition-all duration-200 sm:flex-none ${
-                period === key
-                  ? 'bg-[#a1001f] text-white shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {periodLabels[key]}
-            </button>
-          ))}
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 sm:w-auto sm:flex-row sm:items-end">
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium text-gray-500">
+              Từ ngày
+            </span>
+            <input
+              type="date"
+              value={fromDate}
+              max={toDate}
+              onChange={(event) => handleFromDateChange(event.target.value)}
+              className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none transition-colors focus:border-[#a1001f]"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium text-gray-500">
+              Tới ngày
+            </span>
+            <input
+              type="date"
+              value={toDate}
+              min={fromDate}
+              onChange={(event) => handleToDateChange(event.target.value)}
+              className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none transition-colors focus:border-[#a1001f]"
+            />
+          </label>
         </div>
 
         <div className="flex items-center justify-between gap-2 sm:justify-end">

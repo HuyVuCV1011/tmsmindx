@@ -1,15 +1,33 @@
 import pool from '@/lib/db'
 import { withTracking } from '@/lib/withTracking'
+import { requireBearerSession } from '@/lib/datasource-api-auth'
+import { getAccessibleCenterIds } from '@/lib/center-access'
 import { NextRequest, NextResponse } from 'next/server'
 
 /**
  * GET /api/metrics/engagement?period=today|7d|30d
- * Returns user engagement metrics for Super Admin dashboard.
+ * Returns user engagement metrics filtered by user's accessible centers.
  */
 async function getEngagement(request: NextRequest) {
   try {
+    // Check authorization
+    const auth = await requireBearerSession(request)
+    if (!auth.ok) {
+      return auth.response
+    }
+
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') || '7d'
+
+    // Get accessible centers for current user
+    const accessibleCenterIds = await getAccessibleCenterIds(auth.sessionEmail)
+
+    // If user is not super_admin and has no assigned centers, return empty data
+    const isSuperAdmin = auth.privileged
+    const centerFilter =
+      isSuperAdmin || accessibleCenterIds.length === 0
+        ? ''
+        : `AND t.main_centre IN (${accessibleCenterIds.map((id) => `'${id}'`).join(',')})`
 
     let intervalSql: string
     let dayCount: number
@@ -297,6 +315,7 @@ async function getEngagement(request: NextRequest) {
       WHERE se.event_name = 'page_view'
         AND se.user_id IS NOT NULL
         AND se.created_at >= NOW() - INTERVAL '${intervalSql}'
+        ${centerFilter}
       GROUP BY COALESCE(NULLIF(t.main_centre, ''), 'Chưa rõ cơ sở')
       ORDER BY usage_count DESC
       LIMIT 20
@@ -320,6 +339,7 @@ async function getEngagement(request: NextRequest) {
       WHERE se.event_name = 'page_view'
         AND se.user_id IS NOT NULL
         AND se.created_at >= NOW() - INTERVAL '${intervalSql}'
+        ${centerFilter}
       GROUP BY COALESCE(NULLIF(t.main_centre, ''), 'Chưa rõ cơ sở'), se.user_id
       ORDER BY center ASC, usage_count DESC, last_seen DESC
     `)

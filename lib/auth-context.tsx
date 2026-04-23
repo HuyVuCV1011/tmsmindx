@@ -22,6 +22,11 @@ interface User {
   isAppUser?: boolean
   permissions?: string[]
   userRoles?: string[]
+  assignedCenters?: Array<{
+    id: number
+    full_name: string
+    short_code: string | null
+  }>
 }
 
 interface AuthContextType {
