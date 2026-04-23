@@ -1,7 +1,7 @@
 'use client'
 
-import { PageContainer } from '@/components/PageContainer'
-import { CalendarDays, ChevronLeft, ChevronRight, Users, X } from 'lucide-react'
+import { useAuth } from '@/lib/auth-context'
+import { CalendarDays, ChevronLeft, ChevronRight, Filter, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
@@ -13,16 +13,35 @@ const KHUNG_GIO: KhungGio[] = [
   { label: '18:00 – 21:00', from: '18:00', to: '21:00' },
 ]
 
-type Mentor = { ma_gv: string; teacher_name: string; gio_bat_dau: string; gio_ket_thuc: string; khoi_final: string | null }
+const KHOI_OPTIONS = ['Robotics', 'Coding', 'X-Art'] as const
+type KhoiFilter = typeof KHOI_OPTIONS[number] | null
 
-function KhoiBadge({ khoi }: { khoi: string | null }) {
+type Mentor = {
+  ma_gv: string
+  teacher_name: string
+  gio_bat_dau: string
+  gio_ket_thuc: string
+  khoi_final: string | null
+  main_centre_region: string | null
+}
+
+function getKhoiLabel(khoi: string | null): string | null {
   if (!khoi) return null
   const k = khoi.toLowerCase()
-  if (k.includes('robot')) return <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-yellow-100 text-yellow-700">Robotics</span>
-  if (k.includes('cod')) return <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-blue-100 text-blue-700">Coding</span>
-  if (k.includes('art') || k.includes('x-art')) return <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-600">X-Art</span>
-  return <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-500">{khoi}</span>
+  if (k.includes('robot')) return 'Robotics'
+  if (k.includes('cod')) return 'Coding'
+  if (k.includes('art') || k.includes('x-art')) return 'X-Art'
+  return null
 }
+
+function KhoiBadge({ khoi }: { khoi: string | null }) {
+  const label = getKhoiLabel(khoi)
+  if (!label) return null
+  if (label === 'Robotics') return <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-yellow-100 text-yellow-700">Robotics</span>
+  if (label === 'Coding') return <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-blue-100 text-blue-700">Coding</span>
+  return <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-600">X-Art</span>
+}
+
 type CenterData = {
   short_code: string
   full_name: string
@@ -32,11 +51,16 @@ type CenterData = {
   total: number
 }
 
-// Cache key → data
-type CellKey = string // `${date}_${from}_${to}`
+type CellKey = string
 type CellData = CenterData[]
 
-// Region groups — HCM 4 trên, HCM 1 dưới (theo yêu cầu)
+type FilterState = {
+  khungGio: string | null
+  coSo: string | null
+  khoi: KhoiFilter
+  linhHoat: boolean | null
+}
+
 const REGION_ORDER = ['HCM 4', 'HCM 1', 'HCM 3', 'HCM 2', 'HN 1', 'HN 2', 'TỈNH NAM', 'TỈNH BẮC', 'TỈNH TRUNG', 'ONLINE']
 
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
@@ -51,17 +75,298 @@ function formatDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-type DetailModal = {
-  date: Date
-  khung: KhungGio
-  center: CenterData
+type DetailModalData = { date: Date; khung: KhungGio; center: CenterData; pairCenter?: CenterData }
+
+// ── Filter Dialog ─────────────────────────────────────────────────────────────
+function FilterDialog({ filter, setFilter, allCenters, onClose }: {
+  filter: FilterState
+  setFilter: React.Dispatch<React.SetStateAction<FilterState>>
+  allCenters: { short_code: string; full_name: string }[]
+  onClose: () => void
+}) {
+  const resetFilter = () => setFilter({ khungGio: null, coSo: null, khoi: null, linhHoat: null })
+  const isFiltering = filter.khungGio !== null || filter.coSo !== null || filter.khoi !== null || filter.linhHoat !== null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between rounded-t-2xl bg-[#a1001f] px-5 py-4">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-white" />
+            <h3 className="text-sm font-bold text-white">Bộ lọc</h3>
+          </div>
+          <button onClick={onClose} className="rounded-md p-1 text-white/70 hover:text-white hover:bg-white/10"><X className="h-4 w-4" /></button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {/* Khung giờ */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Khung giờ</label>
+            <select
+              value={filter.khungGio ?? ''}
+              onChange={e => setFilter(f => ({ ...f, khungGio: e.target.value || null }))}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[#a1001f]"
+            >
+              <option value="">Tất cả khung giờ</option>
+              {KHUNG_GIO.map(k => <option key={k.from} value={k.from}>{k.label}</option>)}
+            </select>
+          </div>
+
+          {/* Cơ sở */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Cơ sở</label>
+            <select
+              value={filter.coSo ?? ''}
+              onChange={e => setFilter(f => ({ ...f, coSo: e.target.value || null }))}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-[#a1001f]"
+            >
+              <option value="">Tất cả cơ sở</option>
+              {allCenters.map(c => <option key={c.short_code} value={c.short_code}>{c.full_name}</option>)}
+            </select>
+          </div>
+
+          {/* Khối */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Khối</label>
+            <div className="flex flex-wrap gap-2">
+              {([null, 'Robotics', 'Coding', 'X-Art'] as (KhoiFilter | null)[]).map(k => {
+                const label = k ?? 'Tất cả'
+                const active = filter.khoi === k
+                let cls = 'rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors '
+                if (!active) cls += 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
+                else if (k === 'Robotics') cls += 'border-yellow-400 bg-yellow-100 text-yellow-700'
+                else if (k === 'Coding') cls += 'border-blue-400 bg-blue-100 text-blue-700'
+                else if (k === 'X-Art') cls += 'border-red-400 bg-red-100 text-red-600'
+                else cls += 'border-[#a1001f] bg-[#a1001f]/10 text-[#a1001f]'
+                return <button key={label} onClick={() => setFilter(f => ({ ...f, khoi: k as KhoiFilter }))} className={cls}>{label}</button>
+              })}
+            </div>
+          </div>
+
+          {/* Loại */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Loại đăng ký</label>
+            <div className="flex gap-2">
+              {[{ label: 'Tất cả', value: null }, { label: 'Ưu tiên', value: false }, { label: 'Linh hoạt', value: true }].map(opt => (
+                <button
+                  key={opt.label}
+                  onClick={() => setFilter(f => ({ ...f, linhHoat: opt.value }))}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${filter.linhHoat === opt.value ? 'border-[#a1001f] bg-[#a1001f]/10 text-[#a1001f]' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-gray-100 px-5 py-3 flex items-center justify-between">
+          <button onClick={resetFilter} disabled={!isFiltering} className="text-xs font-semibold text-gray-400 hover:text-[#a1001f] disabled:opacity-30 disabled:cursor-not-allowed">
+            Xóa tất cả
+          </button>
+          <button onClick={onClose} className="rounded-lg bg-[#a1001f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#8a001a]">
+            Áp dụng
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
+// ── Detail Modal ──────────────────────────────────────────────────────────────
+function DetailModal({ detail, filter, areas, isSuperAdmin, onClose }: {
+  detail: DetailModalData
+  filter: FilterState
+  areas: string[] | null
+  isSuperAdmin: boolean
+  onClose: () => void
+}) {
+  const hasKhoiFilter = filter.khoi !== null
+
+  const renderMentorItem = (m: Mentor, i: number) => (
+    <li key={m.ma_gv} className="flex items-center gap-2 py-1 text-sm text-gray-700">
+      <span className="text-xs text-gray-400 w-4 text-right flex-shrink-0">{i + 1}.</span>
+      <span className="font-medium truncate">{m.teacher_name}</span>
+      <span className="ml-auto text-xs text-gray-400 whitespace-nowrap flex-shrink-0">{m.gio_bat_dau?.slice(0, 5)} – {m.gio_ket_thuc?.slice(0, 5)}</span>
+    </li>
+  )
+
+  // Sub-section theo khối — label có màu theo khối, không in nghiêng, không đếm số
+  const KhoiSubSection = ({ mentors }: { mentors: Mentor[] }) => {
+    const KHOI_LIST = ['Robotics', 'Coding', 'X-Art'] as const
+    const khoiColors: Record<string, string> = {
+      Robotics: 'text-yellow-700',
+      Coding: 'text-blue-600',
+      'X-Art': 'text-red-600',
+    }
+    return (
+      <div className="space-y-2">
+        {KHOI_LIST.map(khoi => {
+          const group = mentors.filter(m => getKhoiLabel(m.khoi_final) === khoi)
+          if (group.length === 0) return null
+          return (
+            <div key={khoi}>
+              <p className={`text-[10px] font-semibold mb-0.5 ${khoiColors[khoi]}`}>{khoi}</p>
+              <ul className="space-y-0.5">
+                {group.map((m, i) => renderMentorItem(m, i))}
+              </ul>
+            </div>
+          )
+        })}
+        {(() => {
+          const unknown = mentors.filter(m => !getKhoiLabel(m.khoi_final))
+          if (unknown.length === 0) return null
+          return (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 mb-0.5">Khác</p>
+              <ul className="space-y-0.5">
+                {unknown.map((m, i) => renderMentorItem(m, i))}
+              </ul>
+            </div>
+          )
+        })()}
+      </div>
+    )
+  }
+
+  // Column section — Ưu tiên và Linh hoạt cố định, mỗi phần scroll riêng
+  const ColumnSection = ({ title, uuTien, linhHoat }: { title: string; uuTien: Mentor[]; linhHoat: Mentor[] }) => (
+    <div className="flex flex-col h-full overflow-hidden">
+      <p className="text-xs font-bold uppercase tracking-wide text-gray-500 border-b border-gray-100 pb-2 mb-3 flex-shrink-0">{title}</p>
+      <div className="flex flex-col flex-1 min-h-0 gap-3">
+        {/* Ưu tiên — cố định header, scroll nội dung */}
+        <div className="flex flex-col flex-1 min-h-0">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-[#a1001f] mb-1.5 flex-shrink-0">
+            Ưu tiên {uuTien.length > 0 && <span className="font-normal text-gray-400">({uuTien.length})</span>}
+          </p>
+          <div className="flex-1 overflow-y-auto min-h-[60px]">
+            {uuTien.length > 0
+              ? <KhoiSubSection mentors={uuTien} />
+              : <p className="text-xs text-gray-300 italic">Không có mentor rảnh khung này.</p>
+            }
+          </div>
+        </div>
+        {/* Divider */}
+        <div className="border-t border-gray-100 flex-shrink-0" />
+        {/* Linh hoạt — cố định header, scroll nội dung */}
+        <div className="flex flex-col flex-1 min-h-0">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-1.5 flex-shrink-0">
+            Linh hoạt {linhHoat.length > 0 && <span className="font-normal text-gray-400">({linhHoat.length})</span>}
+          </p>
+          <div className="flex-1 overflow-y-auto min-h-[60px]">
+            {linhHoat.length > 0
+              ? <KhoiSubSection mentors={linhHoat} />
+              : <p className="text-xs text-gray-300 italic">Không có mentor rảnh khung này.</p>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
+  // Khu vực admin quản lý
+  const managesHCM4 = isSuperAdmin || areas === null || (areas || []).includes('HCM 4')
+  const managesHCM1 = isSuperAdmin || areas === null || (areas || []).includes('HCM 1')
+  const twoColumns = managesHCM4 && managesHCM1
+  const getMentorRegion = (m: Mentor) => m.main_centre_region || detail.center.region
+  const hcm4UuTien = detail.center.uu_tien.filter(m => getMentorRegion(m) === 'HCM 4')
+  const hcm4LinhHoat = detail.center.linh_hoat.filter(m => getMentorRegion(m) === 'HCM 4')
+  const hcm1UuTien = detail.center.uu_tien.filter(m => getMentorRegion(m) === 'HCM 1')
+  const hcm1LinhHoat = detail.center.linh_hoat.filter(m => getMentorRegion(m) === 'HCM 1')
+  const otherUuTien = detail.center.uu_tien.filter(m => getMentorRegion(m) !== 'HCM 4' && getMentorRegion(m) !== 'HCM 1')
+  const otherLinhHoat = detail.center.linh_hoat.filter(m => getMentorRegion(m) !== 'HCM 4' && getMentorRegion(m) !== 'HCM 1')
+  const allMentors = [...detail.center.uu_tien, ...detail.center.linh_hoat]
+  const cungKhoi = hasKhoiFilter ? allMentors.filter(m => getKhoiLabel(m.khoi_final) === filter.khoi) : []
+  const khacKhoi = hasKhoiFilter ? allMentors.filter(m => getKhoiLabel(m.khoi_final) !== filter.khoi) : []
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className={`w-full rounded-2xl bg-white shadow-2xl flex flex-col ${twoColumns ? 'max-w-5xl' : 'max-w-lg'}`}
+        style={{ height: '884px', maxHeight: '90vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between rounded-t-2xl bg-[#a1001f] px-5 py-4 flex-shrink-0">
+          <div>
+            <h3 className="text-base font-bold text-white">{detail.center.full_name}</h3>
+            <p className="text-xs text-white/80 mt-0.5">
+              {detail.khung.label} · {detail.date.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' })}
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-md p-1 text-white/80 hover:text-white hover:bg-white/10"><X className="h-5 w-5" /></button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {hasKhoiFilter ? (
+            // Filter khối — 1 cột scroll
+            <div className="h-full overflow-y-auto px-5 py-4 space-y-4">
+              {cungKhoi.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-[#a1001f] mb-2">Giáo viên cùng khối — {filter.khoi} ({cungKhoi.length})</p>
+                  <ul className="space-y-1.5">{cungKhoi.map((m, i) => renderMentorItem(m, i))}</ul>
+                </div>
+              )}
+              {khacKhoi.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Giáo viên khác khối ({khacKhoi.length})</p>
+                  <ul className="space-y-1.5">{khacKhoi.map((m, i) => renderMentorItem(m, i))}</ul>
+                </div>
+              )}
+              {cungKhoi.length === 0 && khacKhoi.length === 0 && <p className="text-sm text-gray-400">Không có giáo viên nào.</p>}
+            </div>
+          ) : twoColumns ? (
+            // 2 cột HCM 4 | HCM 1
+            <div className="grid grid-cols-2 divide-x divide-gray-100 h-full">
+              <div className="px-4 py-4 h-full overflow-hidden">
+                <ColumnSection
+                  title="Khu vực HCM 4"
+                  uuTien={[...hcm4UuTien, ...(detail.center.region !== 'HCM 1' ? otherUuTien : [])]}
+                  linhHoat={[...hcm4LinhHoat, ...(detail.center.region !== 'HCM 1' ? otherLinhHoat : [])]}
+                />
+              </div>
+              <div className="px-4 py-4 h-full overflow-hidden">
+                <ColumnSection
+                  title="Khu vực HCM 1"
+                  uuTien={[...hcm1UuTien, ...(detail.center.region === 'HCM 1' ? otherUuTien : [])]}
+                  linhHoat={[...hcm1LinhHoat, ...(detail.center.region === 'HCM 1' ? otherLinhHoat : [])]}
+                />
+              </div>
+            </div>
+          ) : (
+            // 1 cột thông thường
+            <div className="h-full overflow-hidden px-5 py-4 flex flex-col">
+              <ColumnSection
+                title={detail.center.region || 'Khu vực'}
+                uuTien={detail.center.uu_tien}
+                linhHoat={detail.center.linh_hoat}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-gray-200 px-5 py-3 flex justify-end flex-shrink-0">
+          <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Đóng</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function QuanLyLichLamViecPage() {
+  const { user } = useAuth()
   const [focusDate, setFocusDate] = useState(() => new Date())
   const [cache, setCache] = useState<Record<CellKey, CellData>>({})
   const [loading, setLoading] = useState<Record<CellKey, boolean>>({})
-  const [detail, setDetail] = useState<DetailModal | null>(null)
+  const [detail, setDetail] = useState<DetailModalData | null>(null)
+  const [showFilter, setShowFilter] = useState(false)
+  const [filter, setFilter] = useState<FilterState>({ khungGio: null, coSo: null, khoi: null, linhHoat: null })
+  const [allCenters, setAllCenters] = useState<{ short_code: string; full_name: string }[]>([])
+  const [myAreas, setMyAreas] = useState<string[] | null>(null)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
   const weekStart = useMemo(() => getWeekStartMonday(focusDate), [focusDate])
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => {
@@ -75,34 +380,59 @@ export default function QuanLyLichLamViecPage() {
 
   const stepWeek = (delta: number) => {
     const next = new Date(focusDate); next.setDate(next.getDate() + delta * 7); setFocusDate(next)
+    setCache({}) // xóa cache để force re-fetch tuần mới
   }
 
   const cellKey = (date: Date, khung: KhungGio) => `${formatDateKey(date)}_${khung.from}_${khung.to}`
 
   const fetchCell = useCallback(async (date: Date, khung: KhungGio) => {
     const key = cellKey(date, khung)
-    if (cache[key] !== undefined || loading[key]) return
-    setLoading(prev => ({ ...prev, [key]: true }))
+    setLoading(prev => {
+      if (prev[key]) return prev
+      return { ...prev, [key]: true }
+    })
     try {
       const res = await fetch(`/api/admin/lich-lam-viec?date=${formatDateKey(date)}&from=${khung.from}&to=${khung.to}`)
       const data = await res.json()
       if (res.ok && data.success) {
-        setCache(prev => ({ ...prev, [key]: data.data || [] }))
+        setCache(prev => {
+          if (prev[key] !== undefined) return prev
+          return { ...prev, [key]: data.data || [] }
+        })
       }
     } catch {}
-    finally { setLoading(prev => ({ ...prev, [key]: false })) }
-  }, [cache, loading])
+    finally {
+      setLoading(prev => ({ ...prev, [key]: false }))
+    }
+  }, [])
 
-  // Fetch tất cả cells khi tuần thay đổi
   useEffect(() => {
-    weekDays.forEach(date => {
-      KHUNG_GIO.forEach(khung => fetchCell(date, khung))
-    })
+    weekDays.forEach(date => KHUNG_GIO.forEach(khung => fetchCell(date, khung)))
   }, [weekStart])
+
+  useEffect(() => {
+    fetch('/api/admin/lich-lam-viec/centers')
+      .then(r => r.json())
+      .then(d => { if (d.success) setAllCenters(d.centers) })
+      .catch(() => {})
+  }, [])
+
+  // Lấy khu vực quản lý của admin hiện tại
+  useEffect(() => {
+    if (!user?.email) return
+    fetch(`/api/admin/my-areas?email=${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setIsSuperAdmin(d.isSuperAdmin || false)
+          setMyAreas(d.isSuperAdmin ? null : (d.areas || []))
+        }
+      })
+      .catch(() => {})
+  }, [user?.email])
 
   const getCellData = (date: Date, khung: KhungGio): CellData => cache[cellKey(date, khung)] || []
 
-  // Group centers theo region, sort theo REGION_ORDER
   const groupByRegion = (centers: CenterData[]) => {
     const groups: Record<string, CenterData[]> = {}
     centers.forEach(c => {
@@ -110,80 +440,118 @@ export default function QuanLyLichLamViecPage() {
       groups[c.region].push(c)
     })
     return Object.entries(groups).sort(([a], [b]) => {
-      const ai = REGION_ORDER.indexOf(a)
-      const bi = REGION_ORDER.indexOf(b)
+      const ai = REGION_ORDER.indexOf(a), bi = REGION_ORDER.indexOf(b)
       if (ai === -1 && bi === -1) return a.localeCompare(b)
-      if (ai === -1) return 1
-      if (bi === -1) return -1
+      if (ai === -1) return 1; if (bi === -1) return -1
       return ai - bi
     })
   }
 
+  const isFiltering = filter.khungGio !== null || filter.coSo !== null || filter.khoi !== null || filter.linhHoat !== null
+  const activeFilterCount = [filter.khungGio, filter.coSo, filter.khoi, filter.linhHoat].filter(v => v !== null).length
+
+  function applyFilterToCenter(center: CenterData): CenterData | null {
+    if (filter.coSo && center.short_code !== filter.coSo) return null
+    const matchTime = (m: Mentor) => {
+      if (!filter.khungGio) return true
+      const k = KHUNG_GIO.find(x => x.from === filter.khungGio)
+      if (!k) return true
+      const f = m.gio_bat_dau?.slice(0, 5) || '', t = m.gio_ket_thuc?.slice(0, 5) || ''
+      return f <= k.to && t >= k.from
+    }
+    const matchKhoi = (m: Mentor) => !filter.khoi || getKhoiLabel(m.khoi_final) === filter.khoi
+    let uu = center.uu_tien.filter(m => matchTime(m) && matchKhoi(m))
+    let lh = center.linh_hoat.filter(m => matchTime(m) && matchKhoi(m))
+    if (filter.linhHoat === true) uu = []
+    if (filter.linhHoat === false) lh = []
+    if (uu.length === 0 && lh.length === 0) return null
+    return { ...center, uu_tien: uu, linh_hoat: lh, total: uu.length + lh.length }
+  }
+
   return (
-    <PageContainer title="Quản lý lịch làm việc" maxWidth="full">
-      <div className="flex flex-col" style={{ height: 'calc(100vh - 64px)' }}>
-        {/* Header */}
-        <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 bg-white flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <CalendarDays className="h-5 w-5 text-gray-700" />
-            <span className="text-sm font-semibold text-gray-700">{periodLabel}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => stepWeek(-1)} className="rounded-md border border-gray-300 bg-white p-2 hover:bg-gray-50"><ChevronLeft className="h-4 w-4" /></button>
-            <button onClick={() => setFocusDate(new Date())} className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Hôm nay</button>
-            <button onClick={() => stepWeek(1)} className="rounded-md border border-gray-300 bg-white p-2 hover:bg-gray-50"><ChevronRight className="h-4 w-4" /></button>
-          </div>
+    <div className="flex flex-col h-screen bg-white">
+      {/* PageHeader — tiêu đề riêng như các page khác */}
+      <div className="flex-shrink-0 px-4 pt-4 pb-4 border-b border-gray-200 bg-white">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">Quản lý lịch làm việc</h1>
+      </div>
+
+      {/* Toolbar — ngày tháng + nút điều hướng */}
+      <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 bg-white flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-5 w-5 text-gray-700" />
+          <span className="text-sm font-semibold text-gray-700">{periodLabel}</span>
         </div>
-
-        {/* Table */}
-        <div className="flex-1 overflow-auto">
-          <table className="w-full border-collapse table-fixed text-sm h-full">
-            <colgroup>
-              <col className="w-28" />
-              {weekDays.map((_, i) => <col key={i} />)}
-            </colgroup>
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 border-r border-gray-200">Khung giờ</th>
+        <div className="flex items-center gap-2">
+          <button onClick={() => stepWeek(-1)} className="rounded-md border border-gray-300 bg-white p-2 hover:bg-gray-50"><ChevronLeft className="h-4 w-4" /></button>
+          <button
+            onClick={() => setShowFilter(true)}
+            className={`relative flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors ${isFiltering ? 'border-[#a1001f] bg-[#a1001f]/5 text-[#a1001f]' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+          >
+            <Filter className="h-4 w-4" />
+            Bộ lọc
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-[#a1001f] text-white text-[10px] font-bold flex items-center justify-center">{activeFilterCount}</span>
+            )}
+          </button>
+          <button onClick={() => setFocusDate(new Date())} className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Hôm nay</button>
+          <button onClick={() => stepWeek(1)} className="rounded-md border border-gray-300 bg-white p-2 hover:bg-gray-50"><ChevronRight className="h-4 w-4" /></button>
+        </div>
+      </div>
+      {/* Table */}
+      <div className="flex-1 overflow-auto">
+        <table className="w-full border-collapse table-fixed text-sm h-full">
+          <colgroup>
+            <col className="w-28" />
+            {weekDays.map((_, i) => <col key={i} />)}
+          </colgroup>
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 border-r border-gray-200">Khung giờ</th>
+              {weekDays.map((date, i) => {
+                const isToday = isSameDate(date, new Date())
+                return (
+                  <th key={i} className={`px-2 py-2 text-center text-xs font-semibold border-r border-gray-200 ${isToday ? 'bg-[#a1001f]/5 text-[#a1001f]' : 'text-gray-600'}`}>
+                    <div>{WEEKDAY_LABELS[i]}</div>
+                    <div className={`mt-0.5 text-sm font-bold ${isToday ? 'text-[#a1001f]' : 'text-gray-800'}`}>{date.getDate()}/{date.getMonth() + 1}</div>
+                  </th>
+                )
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {KHUNG_GIO.map(khung => (
+              <tr key={khung.label} className="border-b border-gray-200 h-1/3">
+                <td className="px-3 py-3 border-r border-gray-200 bg-gray-50 align-top" style={{ height: '30vh' }}>
+                  <span className="text-xs font-bold text-gray-700 whitespace-nowrap">{khung.label}</span>
+                </td>
                 {weekDays.map((date, i) => {
-                  const isToday = isSameDate(date, new Date())
+                  const rawCenters = getCellData(date, khung)
+                  const key = cellKey(date, khung)
+                  const isLoading = loading[key]
+                  const centers = isFiltering
+                    ? rawCenters.map(c => applyFilterToCenter(c)).filter((c): c is CenterData => c !== null)
+                    : rawCenters
+                  const regionGroups = groupByRegion(centers)
                   return (
-                    <th key={i} className={`px-2 py-2 text-center text-xs font-semibold border-r border-gray-200 ${isToday ? 'bg-[#a1001f]/5 text-[#a1001f]' : 'text-gray-600'}`}>
-                      <div>{WEEKDAY_LABELS[i]}</div>
-                      <div className={`mt-0.5 text-sm font-bold ${isToday ? 'text-[#a1001f]' : 'text-gray-800'}`}>{date.getDate()}/{date.getMonth() + 1}</div>
-                    </th>
-                  )
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {KHUNG_GIO.map(khung => (
-                <tr key={khung.label} className="border-b border-gray-200 h-1/3">
-                  <td className="px-3 py-3 border-r border-gray-200 bg-gray-50 align-top">
-                    <span className="text-xs font-bold text-gray-700 whitespace-nowrap">{khung.label}</span>
-                  </td>
-                  {weekDays.map((date, i) => {
-                    const centers = getCellData(date, khung)
-                    const key = cellKey(date, khung)
-                    const isLoading = loading[key]
-                    const regionGroups = groupByRegion(centers)
-
-                    return (
-                      <td key={i} className="px-2 py-2 border-r border-gray-200 align-top">
-                        {isLoading ? (
-                          <span className="text-[10px] text-gray-300">...</span>
-                        ) : centers.length === 0 ? (
-                          <span className="text-[11px] text-gray-300">—</span>
-                        ) : (
-                          <div className="space-y-2">
-                            {regionGroups.map(([region, regionCenters]) => (
-                              <div key={region}>
-                                <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400 mb-1">{region}</p>
-                                <div className="space-y-1">
-                                  {regionCenters.map(center => (
+                    <td key={i} className="px-2 py-2 border-r border-gray-200 align-top">
+                      {isLoading ? (
+                        <span className="text-[10px] text-gray-300">...</span>
+                      ) : centers.length === 0 ? (
+                        <span className="text-[11px] text-gray-300">—</span>
+                      ) : (
+                        <div className="space-y-2">
+                          {regionGroups.map(([region, regionCenters]) => (
+                            <div key={region}>
+                              <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400 mb-1">{region}</p>
+                              <div className="space-y-1">
+                                {regionCenters.map(center => (
+                                  <div key={center.short_code} className="relative group">
                                     <button
-                                      key={center.short_code}
-                                      onClick={() => setDetail({ date, khung, center })}
+                                      onClick={() => {
+                                        const pairRegion = center.region === 'HCM 4' ? 'HCM 1' : center.region === 'HCM 1' ? 'HCM 4' : null
+                                        const pairCenter = pairRegion ? centers.find(c => c.region === pairRegion) : undefined
+                                        setDetail({ date, khung, center, pairCenter })
+                                      }}
                                       className="w-full flex items-center justify-between gap-1 rounded-lg bg-[#a1001f]/8 border border-[#a1001f]/20 px-2 py-1 text-left hover:bg-[#a1001f]/15 transition-colors"
                                     >
                                       <span className="text-[11px] font-semibold text-[#a1001f] truncate">{center.full_name}</span>
@@ -192,86 +560,49 @@ export default function QuanLyLichLamViecPage() {
                                         {center.linh_hoat.length > 0 && <span className="text-gray-400">+{center.linh_hoat.length}</span>}
                                       </span>
                                     </button>
-                                  ))}
-                                </div>
+                                    {/* Hover tooltip — danh sách ưu tiên */}
+                                    {center.uu_tien.length > 0 && (
+                                      <div className="absolute left-full top-0 ml-2 z-30 hidden group-hover:block w-52 rounded-xl bg-white border border-gray-200 shadow-xl p-3">
+                                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#a1001f] mb-2">
+                                          Ưu tiên ({center.uu_tien.length})
+                                        </p>
+                                        <ul className="space-y-1">
+                                          {center.uu_tien.map((m, idx) => (
+                                            <li key={m.ma_gv} className="flex items-center gap-1.5 text-[11px] text-gray-700">
+                                              <span className="h-4 w-4 rounded-full bg-[#a1001f]/10 text-[#a1001f] text-[9px] font-bold flex items-center justify-center flex-shrink-0">{idx + 1}</span>
+                                              <span className="truncate font-medium">{m.teacher_name}</span>
+                                              <span className="ml-auto text-[10px] text-gray-400 italic whitespace-nowrap flex-shrink-0">{m.gio_bat_dau}–{m.gio_ket_thuc}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      {/* Detail modal */}
-      {detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setDetail(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between rounded-t-2xl bg-[#a1001f] px-5 py-4">
-              <div>
-                <h3 className="text-base font-bold text-white">{detail.center.full_name}</h3>
-                <p className="text-xs text-white/80 mt-0.5">
-                  {detail.khung.label} · {detail.date.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' })}
-                </p>
-              </div>
-              <button onClick={() => setDetail(null)} className="rounded-md p-1 text-white/80 hover:text-white hover:bg-white/10"><X className="h-5 w-5" /></button>
-            </div>
-
-            <div className="px-5 py-4 space-y-4">
-              {/* Ưu tiên */}
-              {detail.center.uu_tien.length > 0 && (
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
-                    Cơ sở ưu tiên ({detail.center.uu_tien.length})
-                  </p>
-                  <ul className="space-y-1.5">
-                    {detail.center.uu_tien.map((m, i) => (
-                      <li key={m.ma_gv} className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800">
-                        <span className="h-6 w-6 rounded-full bg-[#a1001f]/10 text-[#a1001f] text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
-                        <span className="font-medium">{m.teacher_name}</span>
-                        <KhoiBadge khoi={m.khoi_final} />
-                        <span className="ml-auto text-xs text-gray-400 italic">{m.gio_bat_dau?.slice(0, 5)} – {m.gio_ket_thuc?.slice(0, 5)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Linh hoạt */}
-              {detail.center.linh_hoat.length > 0 && (
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">
-                    Khác — Linh hoạt ({detail.center.linh_hoat.length})
-                  </p>
-                  <ul className="space-y-1.5">
-                    {detail.center.linh_hoat.map((m, i) => (
-                      <li key={m.ma_gv} className="flex items-center gap-2 rounded-lg border border-dashed border-gray-200 px-3 py-2 text-sm text-gray-600">
-                        <span className="h-6 w-6 rounded-full bg-gray-100 text-gray-500 text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
-                        <span>{m.teacher_name}</span>
-                        <KhoiBadge khoi={m.khoi_final} />
-                        <span className="ml-auto text-xs text-gray-400 italic">{m.gio_bat_dau?.slice(0, 5)} – {m.gio_ket_thuc?.slice(0, 5)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {detail.center.uu_tien.length === 0 && detail.center.linh_hoat.length === 0 && (
-                <p className="text-sm text-gray-400">Không có mentor nào.</p>
-              )}
-            </div>
-
-            <div className="border-t border-gray-200 px-5 py-3 flex justify-end">
-              <button onClick={() => setDetail(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Đóng</button>
-            </div>
-          </div>
-        </div>
+      {showFilter && (
+        <FilterDialog
+          filter={filter}
+          setFilter={setFilter}
+          allCenters={allCenters}
+          onClose={() => setShowFilter(false)}
+        />
       )}
-    </PageContainer>
+
+      {detail && <DetailModal detail={detail} filter={filter} areas={myAreas} isSuperAdmin={isSuperAdmin} onClose={() => setDetail(null)} />}
+    </div>
   )
 }

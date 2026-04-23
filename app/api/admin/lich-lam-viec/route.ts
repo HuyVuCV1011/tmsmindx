@@ -66,8 +66,18 @@ export async function GET(request: NextRequest) {
     for (const row of lichResult.rows) {
       const mc = row.main_centre?.trim()
       if (!mc || mainCentreRegionCache[mc] !== undefined) continue
+      // Match exact full_name, hoặc short_code, hoặc ILIKE partial
       const r = await pool.query(
-        `SELECT region FROM centers WHERE LOWER(TRIM(full_name)) = LOWER(TRIM($1)) LIMIT 1`,
+        `SELECT region FROM centers 
+         WHERE LOWER(TRIM(full_name)) = LOWER(TRIM($1))
+            OR LOWER(TRIM(short_code)) = LOWER(TRIM($1))
+            OR LOWER(TRIM(full_name)) ILIKE '%' || LOWER(TRIM($1)) || '%'
+            OR LOWER(TRIM($1)) ILIKE '%' || LOWER(TRIM(full_name)) || '%'
+         ORDER BY 
+           CASE WHEN LOWER(TRIM(full_name)) = LOWER(TRIM($1)) THEN 0
+                WHEN LOWER(TRIM(short_code)) = LOWER(TRIM($1)) THEN 1
+                ELSE 2 END
+         LIMIT 1`,
         [mc]
       )
       mainCentreRegionCache[mc] = r.rows[0]?.region?.trim() || null
@@ -77,8 +87,8 @@ export async function GET(request: NextRequest) {
     type CenterData = {
       full_name: string
       region: string
-      uu_tien: { ma_gv: string; teacher_name: string; gio_bat_dau: string; gio_ket_thuc: string; khoi_final: string | null }[]
-      linh_hoat: { ma_gv: string; teacher_name: string; gio_bat_dau: string; gio_ket_thuc: string; khoi_final: string | null }[]
+      uu_tien: { ma_gv: string; teacher_name: string; gio_bat_dau: string; gio_ket_thuc: string; khoi_final: string | null; main_centre_region: string | null }[]
+      linh_hoat: { ma_gv: string; teacher_name: string; gio_bat_dau: string; gio_ket_thuc: string; khoi_final: string | null; main_centre_region: string | null }[]
     }
     const centerMap: Record<string, CenterData> = {}
     allCenters.forEach(c => {
@@ -89,7 +99,14 @@ export async function GET(request: NextRequest) {
     lichResult.rows.forEach(row => {
       const uuTien: string[] = row.co_so_uu_tien || []
       const isLinhHoat: boolean = row.linh_hoat || false
-      const mentor = { ma_gv: row.ma_gv, teacher_name: row.teacher_name || row.ma_gv, gio_bat_dau: row.gio_bat_dau, gio_ket_thuc: row.gio_ket_thuc, khoi_final: row.khoi_final || null }
+      const mentor = {
+        ma_gv: row.ma_gv,
+        teacher_name: row.teacher_name || row.ma_gv,
+        gio_bat_dau: String(row.gio_bat_dau || '').slice(0, 5),
+        gio_ket_thuc: String(row.gio_ket_thuc || '').slice(0, 5),
+        khoi_final: row.khoi_final || null,
+        main_centre_region: mainCentreRegionCache[row.main_centre?.trim()] || null
+      }
 
       // Ưu tiên: thêm vào các cơ sở đã chọn
       uuTien.forEach(cs => {
