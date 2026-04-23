@@ -158,7 +158,7 @@ function FeedbackImageThumb({ file, onRemove }: { file: File; onRemove: () => vo
   return (
     <div className="relative aspect-square overflow-hidden rounded-lg border border-gray-200 bg-gray-100 shadow-sm">
       {url ? (
-        /* eslint-disable-next-line @next/next/no-img-element */
+
         <img src={url} alt="" className="h-full w-full object-cover" />
       ) : (
         <div className="h-full w-full animate-pulse bg-gray-200" aria-hidden />
@@ -431,7 +431,7 @@ function CheckDataSourceContent() {
       >
         <header className="flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:pb-3">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img src="/logo.svg" alt="MindX" className="h-8 w-auto shrink-0 sm:h-9" />
             <div className="min-w-0 leading-tight">
               <p className="text-sm font-bold text-[#a1001f]">TPS</p>

@@ -194,13 +194,13 @@ function UserFeedbackManagePanelWithOptions({
 
   useEffect(() => {
     loadMyFeedback()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [user?.email])
 
   useEffect(() => {
     if (externalRefreshSignal === undefined) return
     loadMyFeedback()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [externalRefreshSignal])
 
   useEffect(() => {
@@ -450,7 +450,7 @@ function UserFeedbackManagePanelWithOptions({
                         }}
                         className="w-24 h-24 shrink-0 border border-gray-200 rounded-lg overflow-hidden"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        { }
                         <img
                           src={url}
                           alt="feedback-image"
@@ -497,7 +497,7 @@ function UserFeedbackManagePanelWithOptions({
                         }}
                         className="w-24 h-24 shrink-0 border border-emerald-200 rounded-lg overflow-hidden"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        { }
                         <img
                           src={url}
                           alt="admin-image"
@@ -530,7 +530,7 @@ function UserFeedbackManagePanelWithOptions({
               <X className="h-6 w-6" />
             </button>
             <div className="bg-black rounded-xl overflow-hidden border border-white/20">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img
                 src={previewImages[previewIndex]}
                 alt={`feedback-${previewIndex + 1}`}

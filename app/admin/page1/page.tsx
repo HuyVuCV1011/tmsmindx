@@ -99,6 +99,7 @@ interface Teacher {
 interface TrainingLesson {
   name: string
   score: number
+  link?: string
 }
 
 interface TrainingData {
@@ -115,6 +116,51 @@ interface TrainingData {
   averageScore: number
   lessons: TrainingLesson[]
 }
+
+type AvailabilityPeriod = 'week' | 'month' | 'year'
+
+type FetchError = Error & {
+  info?: unknown
+  status?: number
+}
+
+interface ProfileBundleResponse {
+  success?: boolean
+  exists?: boolean
+  teacher?: unknown
+  certificates?: {
+    data?: unknown[]
+  }
+  training?: {
+    data?: TrainingData[]
+  }
+  expertise?: {
+    monthlyData?: MonthlyAverage[]
+  }
+  experience?: {
+    monthlyData?: MonthlyAverage[]
+  }
+}
+
+interface ScoresBundleResponse {
+  success?: boolean
+  expertise?: {
+    monthlyData?: MonthlyAverage[]
+  }
+  experience?: {
+    monthlyData?: MonthlyAverage[]
+  }
+}
+
+interface AvailabilityDataResponse {
+  teachers?: TeacherAvailability[]
+}
+
+const AVAILABILITY_PERIOD_OPTIONS = [
+  { value: 'week', label: 'Tuần' },
+  { value: 'month', label: 'Tháng' },
+  { value: 'year', label: 'Năm' },
+] as const
 
 // Memoized InfoItem component
 const InfoItem = memo(
@@ -306,9 +352,9 @@ const PROFILE_API_ORIGIN = (
 ).replace(/\/$/, '')
 
 // Custom fetcher với Authorization header và token refresh
-const createSecureFetcher = (): ((url: string) => Promise<any>) => {
+const createSecureFetcher = <TResponse,>(): ((url: string) => Promise<TResponse>) => {
   return async (url: string) => {
-    let token = localStorage.getItem('token')
+    const token = localStorage.getItem('token')
 
     const doFetch = async (tok: string | null) => {
       const headers: HeadersInit = {}
@@ -318,42 +364,14 @@ const createSecureFetcher = (): ((url: string) => Promise<any>) => {
       return res
     }
 
-    let response = await doFetch(token)
+    const response = await doFetch(token)
 
-    // Handle 401 -> attempt silent refresh with refreshToken
     if (response.status === 401) {
-      const refreshToken = localStorage.getItem('refreshToken')
-      if (refreshToken) {
-        try {
-          const FIREBASE_API_KEY =
-            process.env.NEXT_PUBLIC_FIREBASE_API_KEY || ''
-          const refreshRes = await fetch(
-            `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `grant_type=refresh_token&refresh_token=${refreshToken}`,
-            },
-          )
-
-          if (refreshRes.ok) {
-            const refreshData = await refreshRes.json()
-            const newIdToken = refreshData.id_token
-            const newRefreshToken = refreshData.refresh_token
-
-            if (newIdToken) {
-              localStorage.setItem('token', newIdToken)
-              if (newRefreshToken)
-                localStorage.setItem('refreshToken', newRefreshToken)
-              token = newIdToken
-              // retry original request
-              response = await doFetch(token)
-            }
-          }
-        } catch (e) {
-          console.warn('Silent token refresh failed', e)
-        }
-      }
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('refreshToken')
+      window.location.href = '/login'
+      throw new Error('Unauthorized')
     }
 
     if (!response.ok) {
@@ -366,19 +384,23 @@ const createSecureFetcher = (): ((url: string) => Promise<any>) => {
         throw new Error('Unauthorized')
       }
 
-      const error: any = new Error('An error occurred while fetching the data.')
+      const error = new Error('An error occurred while fetching the data.') as FetchError
       try {
         error.info = await response.json()
-      } catch (e) {
+      } catch {
         error.info = null
       }
       error.status = response.status
       throw error
     }
 
-    return response.json()
+    return response.json() as TResponse
   }
 }
+
+const profileFetcher = createSecureFetcher<ProfileBundleResponse>()
+const scoresFetcher = createSecureFetcher<ScoresBundleResponse>()
+const availabilityFetcher = createSecureFetcher<AvailabilityDataResponse>()
 
 export default function Page1() {
   const [searchCode, setSearchCode] = useState('')
@@ -404,9 +426,7 @@ export default function Page1() {
     useState(false)
   const [hasFeedback, setHasFeedback] = useState(false)
   const [isFirstTimeFeedback, setIsFirstTimeFeedback] = useState(false)
-  const [availabilityPeriod, setAvailabilityPeriod] = useState<
-    'week' | 'month' | 'year'
-  >('month')
+  const [availabilityPeriod, setAvailabilityPeriod] = useState<AvailabilityPeriod>('month')
   const [notFoundModalOpen, setNotFoundModalOpen] = useState(false)
   const [registrationCheckModalOpen, setRegistrationCheckModalOpen] =
     useState(false)
@@ -425,9 +445,6 @@ export default function Page1() {
     }
   }, [])
 
-  // Create secure fetcher instance
-  const secureFetcher = createSecureFetcher()
-
   // Bundle nhanh: teacher + chứng chỉ + training (không chờ CSV/query điểm chuyên sâu–trải nghiệm)
   const profileUrl = submitCode.trim()
     ? `${PROFILE_API_ORIGIN}/api/checkdatasource/status?code=${encodeURIComponent(submitCode.trim())}&fast=1`
@@ -438,7 +455,7 @@ export default function Page1() {
     isLoading: isLoadingProfile,
     error: profileError,
     mutate: mutateProfile,
-  } = useSWR(profileUrl, secureFetcher, {
+  } = useSWR<ProfileBundleResponse, FetchError>(profileUrl, profileFetcher, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     dedupingInterval: 300000,
@@ -456,34 +473,30 @@ export default function Page1() {
   const scoresUrl =
     !isLoadingProfile &&
     profileBundle &&
-    (profileBundle as { success?: boolean }).success !== false &&
+    profileBundle.success !== false &&
     profileBundle.exists &&
     teacherLmsCode
       ? `${PROFILE_API_ORIGIN}/api/checkdatasource/scores?code=${encodeURIComponent(teacherLmsCode)}`
       : null
 
-  const { data: scoresBundle, isLoading: isLoadingScores } = useSWR(
-    scoresUrl,
-    secureFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 300000,
-      shouldRetryOnError: false,
-      revalidateIfStale: false,
-    },
-  )
+  const { data: scoresBundle, isLoading: isLoadingScores } = useSWR<
+    ScoresBundleResponse,
+    FetchError
+  >(scoresUrl, scoresFetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    dedupingInterval: 300000,
+    shouldRetryOnError: false,
+    revalidateIfStale: false,
+  })
 
-  const mergedProfileBundle = useMemo(() => {
+  const mergedProfileBundle = useMemo<ProfileBundleResponse | undefined>(() => {
     if (!profileBundle) return undefined
-    const s = scoresBundle as
-      | { success?: boolean; expertise?: unknown; experience?: unknown }
-      | undefined
-    if (!s?.success) return profileBundle
+    if (!scoresBundle?.success) return profileBundle
     return {
       ...profileBundle,
-      expertise: s.expertise ?? profileBundle.expertise,
-      experience: s.experience ?? profileBundle.experience,
+      expertise: scoresBundle.expertise ?? profileBundle.expertise,
+      experience: scoresBundle.experience ?? profileBundle.experience,
     }
   }, [profileBundle, scoresBundle])
 
@@ -493,28 +506,29 @@ export default function Page1() {
       : null
 
   // Map database row to Teacher interface - simplified version for admin
-  const teacher: Teacher | null = dbRow
-    ? ({
-        stt: String(dbRow.stt ?? ''),
-        name: String(dbRow.full_name ?? dbRow.name ?? ''),
-        code: String(dbRow.code ?? ''),
-        emailMindx: String(dbRow.work_email ?? ''),
-        emailPersonal: String(dbRow.personal_email ?? ''),
-        status: String(dbRow.status ?? 'Active'),
-        branchIn: String(dbRow.centers ?? ''),
-        programIn: String(dbRow.khoi ?? 'K12'),
-        branchCurrent: String(dbRow.main_centre ?? ''),
-        programCurrent: String(dbRow.khoi_final ?? 'K12'),
-        manager: String(dbRow.te_quan_ly ?? ''),
-        responsible: String(dbRow.leader_quan_ly ?? ''),
-        position: String(dbRow.role ?? ''),
-        startDate: String(dbRow.joined_date ?? ''),
-        onboardBy: String(dbRow.onboard_by ?? ''),
-      } as Teacher)
-    : null
+  const teacher = useMemo<Teacher | null>(() => {
+    if (!dbRow) return null
+
+    return {
+      stt: String(dbRow.stt ?? ''),
+      name: String(dbRow.full_name ?? dbRow.name ?? ''),
+      code: String(dbRow.code ?? ''),
+      emailMindx: String(dbRow.work_email ?? ''),
+      emailPersonal: String(dbRow.personal_email ?? ''),
+      status: String(dbRow.status ?? 'Active'),
+      branchIn: String(dbRow.centers ?? ''),
+      programIn: String(dbRow.khoi ?? 'K12'),
+      branchCurrent: String(dbRow.main_centre ?? ''),
+      programCurrent: String(dbRow.khoi_final ?? 'K12'),
+      manager: String(dbRow.te_quan_ly ?? ''),
+      responsible: String(dbRow.leader_quan_ly ?? ''),
+      position: String(dbRow.role ?? ''),
+      startDate: String(dbRow.joined_date ?? ''),
+      onboardBy: String(dbRow.onboard_by ?? ''),
+    }
+  }, [dbRow])
 
   const {
-    certificates: _cert,
     trainingData,
     expertiseData,
     experienceData,
@@ -522,7 +536,6 @@ export default function Page1() {
     isLoadingTraining,
   } = useMemo(() => {
     const bundle = mergedProfileBundle
-    const certificates = bundle?.certificates?.data ?? []
     const trainingStat = bundle?.training?.data?.[0] ?? null
     const trainingData = trainingStat as TrainingData | null
     const expertiseData = bundle?.expertise?.monthlyData ?? []
@@ -534,7 +547,6 @@ export default function Page1() {
       (!teacherLmsCode || !isLoadingScores)
     const isLoadingTraining = isLoadingProfile
     return {
-      certificates,
       trainingData,
       expertiseData,
       experienceData,
@@ -595,11 +607,11 @@ export default function Page1() {
   // Load availability AFTER scores are loaded - filter by teacher name on server side
   // This allows UI to render first, then load availability data later
   const { data: availabilityDataRes, isLoading: isLoadingAvailabilityData } =
-    useSWR(
+    useSWR<AvailabilityDataResponse, FetchError>(
       teacher && scoresLoaded
         ? `${PROFILE_API_ORIGIN}/api/availability?fromDate=${availabilityFromDate}&toDate=${availabilityToDate}&teacherName=${encodeURIComponent(teacher.name || '')}`
         : null,
-      secureFetcher,
+      availabilityFetcher,
       {
         revalidateOnFocus: false,
         revalidateOnReconnect: false,
@@ -651,43 +663,9 @@ export default function Page1() {
   useEffect(() => {
     ;(async () => {
       if (profileError) {
-        // If unauthorized, try silent refresh and revalidate once
-        const status = (profileError as any)?.status
+        // If unauthorized, invalidate the cached session and require login again
+        const status = profileError.status
         if (status === 401) {
-          const refreshToken = localStorage.getItem('refreshToken')
-          if (refreshToken) {
-            try {
-              const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || ''
-              const refreshRes = await fetch(
-                `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
-                {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                  },
-                  body: `grant_type=refresh_token&refresh_token=${refreshToken}`,
-                },
-              )
-
-              if (refreshRes.ok) {
-                const refreshData = await refreshRes.json()
-                const newIdToken = refreshData.id_token
-                const newRefreshToken = refreshData.refresh_token
-                if (newIdToken) {
-                  localStorage.setItem('token', newIdToken)
-                  if (newRefreshToken)
-                    localStorage.setItem('refreshToken', newRefreshToken)
-                  // Revalidate teacher data
-                  if (profileUrl) await mutateProfile()
-                  return
-                }
-              }
-            } catch (e) {
-              console.warn('Silent refresh failed', e)
-            }
-          }
-
-          // If refresh not possible or failed, force logout
           localStorage.removeItem('token')
           localStorage.removeItem('user')
           localStorage.removeItem('refreshToken')
@@ -807,7 +785,7 @@ export default function Page1() {
       } else {
         toast.error('Gửi feedback thất bại. Vui lòng thử lại.')
       }
-    } catch (error) {
+    } catch {
       toast.error('Lỗi kết nối. Vui lòng thử lại.')
     } finally {
       setFeedbackSubmitting(false)
@@ -1668,7 +1646,7 @@ export default function Page1() {
                       <div className="text-right text-xs text-gray-600">
                         <div>
                           Hoàn thành:{' '}
-                          {trainingData.lessons?.filter((l: any) => l.score > 0)
+                          {trainingData.lessons?.filter((lesson) => lesson.score > 0)
                             .length || 0}
                           /10
                         </div>
@@ -1677,7 +1655,7 @@ export default function Page1() {
                             <div
                               className="h-full bg-[#a1001f] rounded-full transition-all"
                               style={{
-                                width: `${((trainingData.lessons?.filter((l: any) => l.score > 0).length || 0) / 10) * 100}%`,
+                                width: `${((trainingData.lessons?.filter((lesson) => lesson.score > 0).length || 0) / 10) * 100}%`,
                               }}
                             />
                           </div>
@@ -1688,92 +1666,85 @@ export default function Page1() {
 
                   {/* Lessons Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {(trainingData.lessons || []).map(
-                      (lesson: any, idx: number) => {
-                        const score = lesson.score || 0
-                        const hasScore = score > 0
-                        const isPerfect = score >= 10
-                        const needsImprovement = hasScore && !isPerfect
-                        const notStarted = !hasScore
+                    {(trainingData.lessons || []).map((lesson, idx) => {
+                      const score = lesson.score || 0
+                      const hasScore = score > 0
+                      const isPerfect = score >= 10
+                      const notStarted = !hasScore
 
-                        const scoreColor = hasScore
-                          ? 'text-[#a1001f]'
-                          : 'text-gray-400'
-                        const bgColor = hasScore
-                          ? 'bg-[#f3f3f3] border-gray-300'
-                          : 'bg-gray-50 border-gray-200'
+                      const scoreColor = hasScore
+                        ? 'text-[#a1001f]'
+                        : 'text-gray-400'
+                      const bgColor = hasScore
+                        ? 'bg-[#f3f3f3] border-gray-300'
+                        : 'bg-gray-50 border-gray-200'
 
-                        return (
-                          <div
-                            key={idx}
-                            className={`border rounded-lg p-3 transition-all hover:shadow-md ${bgColor}`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="text-xs font-bold text-[#a1001f] mb-1">
-                                  Lesson {idx + 1}
-                                </div>
-                                <div className="text-xs text-gray-700 line-clamp-2 mb-2">
-                                  {lesson.name.replace(/^Lesson \d+:\s*/, '')}
-                                </div>
-
-                                {/* Buttons - Show only for lessons not perfect (< 10 points) */}
-                                {!isPerfect &&
-                                  (lesson.link ? (
-                                    <a
-                                      href={lesson.link}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded transition-colors ${
-                                        notStarted
-                                          ? 'bg-[#a1001f] hover:bg-[#870019] text-white cursor-pointer'
-                                          : 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
-                                      }`}
-                                    >
-                                      <svg
-                                        className="w-3 h-3"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                                        />
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                        />
-                                      </svg>
-                                      {notStarted
-                                        ? 'Xem đào tạo'
-                                        : 'Cải thiện điểm'}
-                                    </a>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded bg-gray-300 text-gray-500 cursor-not-allowed">
-                                      Chưa có link
-                                    </span>
-                                  ))}
+                      return (
+                        <div
+                          key={idx}
+                          className={`border rounded-lg p-3 transition-all hover:shadow-md ${bgColor}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-bold text-[#a1001f] mb-1">
+                                Lesson {idx + 1}
                               </div>
-                              <div className="text-right flex-shrink-0">
-                                <div
-                                  className={`text-xl font-bold ${scoreColor}`}
-                                >
-                                  {hasScore ? score?.toFixed(1) || '—' : '—'}
-                                </div>
-                                <div className="text-[10px] text-gray-500">
-                                  {hasScore ? '/10' : 'Chưa học'}
-                                </div>
+                              <div className="text-xs text-gray-700 line-clamp-2 mb-2">
+                                {lesson.name.replace(/^Lesson \d+:\s*/, '')}
+                              </div>
+
+                              {/* Buttons - Show only for lessons not perfect (< 10 points) */}
+                              {!isPerfect &&
+                                (lesson.link ? (
+                                  <a
+                                    href={lesson.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded transition-colors ${
+                                      notStarted
+                                        ? 'bg-[#a1001f] hover:bg-[#870019] text-white cursor-pointer'
+                                        : 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
+                                    }`}
+                                  >
+                                    <svg
+                                      className="w-3 h-3"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                                      />
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                      />
+                                    </svg>
+                                    {notStarted ? 'Xem đào tạo' : 'Cải thiện điểm'}
+                                  </a>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded bg-gray-300 text-gray-500 cursor-not-allowed">
+                                    Chưa có link
+                                  </span>
+                                ))}
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <div className={`text-xl font-bold ${scoreColor}`}>
+                                {hasScore ? score?.toFixed(1) || '—' : '—'}
+                              </div>
+                              <div className="text-[10px] text-gray-500">
+                                {hasScore ? '/10' : 'Chưa học'}
                               </div>
                             </div>
                           </div>
-                        )
-                      },
-                    )}
+                        </div>
+                      )
+                    })}
                   </div>
 
                   {/* Legend */}
@@ -1818,14 +1789,10 @@ export default function Page1() {
 
                 {/* Period Filter */}
                 <div className="flex gap-1 sm:gap-2">
-                  {[
-                    { value: 'week', label: 'Tuần' },
-                    { value: 'month', label: 'Tháng' },
-                    { value: 'year', label: 'Năm' },
-                  ].map(({ value, label }) => (
+                  {AVAILABILITY_PERIOD_OPTIONS.map(({ value, label }) => (
                     <button
                       key={value}
-                      onClick={() => setAvailabilityPeriod(value as any)}
+                      onClick={() => setAvailabilityPeriod(value)}
                       className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded text-xs sm:text-sm font-medium transition-all ${
                         availabilityPeriod === value
                           ? 'bg-white text-[#a1001f] shadow-md'

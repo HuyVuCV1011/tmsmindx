@@ -106,15 +106,16 @@ export function withTracking(
       })
 
       return response
-    } catch (error: any) {
+    } catch (error: unknown) {
       const responseTime = Date.now() - startedAt
+      const errorMessage = error instanceof Error ? error.message : 'Unhandled error'
 
       await trackServerEvent('error', request, {
         endpoint: options.endpoint,
         method: request.method,
         code: 500,
         response_time: responseTime,
-        message: error?.message || 'Unhandled error',
+        message: errorMessage,
         user_id: requestEmail || null,
       })
 

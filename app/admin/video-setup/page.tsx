@@ -1,12 +1,13 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { useRouter, useSearchParams } from "next/navigation";
-import React, { Suspense, useEffect, useRef, useState } from "react";
-import { useToast } from "@/lib/use-toast";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { authHeaders } from "@/lib/auth-headers";
+import { useToast } from "@/lib/use-toast";
+import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
+import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 interface Video {
   id: number;
@@ -33,6 +34,88 @@ interface Question {
   options: string[];
   answer: number;
 }
+
+interface AssignmentLink {
+  id: number;
+  assignment_title: string;
+  assignment_type: string;
+  total_points: number;
+  time_limit_minutes: number;
+  video_id?: number | string | null;
+}
+
+interface TrainingVideoQuestionRow {
+  id: number;
+  time_in_video: number;
+  question_text: string;
+  options: string[] | string | null;
+  correct_answer: number | string | null;
+}
+
+const parseCloudinaryAsset = (assetUrl: string) => {
+  try {
+    const parsed = new URL(assetUrl);
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    // /<cloud>/video/upload/<transform...>/v123/folder/file.mp4
+    if (parts.length < 5 || parts[1] !== 'video' || parts[2] !== 'upload') {
+      return null;
+    }
+
+    const cloudName = parts[0];
+    const uploadIndex = 2;
+    let startPublicIdIndex = uploadIndex + 1;
+
+    for (let i = uploadIndex + 1; i < parts.length; i += 1) {
+      if (/^v\d+$/.test(parts[i])) {
+        startPublicIdIndex = i + 1;
+        break;
+      }
+    }
+
+    const publicPath = parts.slice(startPublicIdIndex).join('/');
+    if (!publicPath) return null;
+
+    const dotIndex = publicPath.lastIndexOf('.');
+    const publicId = dotIndex > 0 ? publicPath.slice(0, dotIndex) : publicPath;
+    if (!publicId) return null;
+
+    return { cloudName, publicId };
+  } catch {
+    return null;
+  }
+};
+
+const buildUnifiedCloudinaryStreamUrl = (videos: Video[]) => {
+  if (videos.length <= 1) return null;
+
+  const parsedVideos = videos
+    .map((item) => parseCloudinaryAsset(item.video_link))
+    .filter((item): item is { cloudName: string; publicId: string } => !!item);
+
+  if (parsedVideos.length !== videos.length) return null;
+
+  const cloudName = parsedVideos[0].cloudName;
+  if (parsedVideos.some((item) => item.cloudName !== cloudName)) return null;
+
+  const basePublicId = parsedVideos[0].publicId
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+
+  const spliceTransforms = parsedVideos
+    .slice(1)
+    .map((item) => {
+      const layerPublicId = item.publicId
+        .split('/')
+        .map((segment) => encodeURIComponent(segment))
+        .join(':');
+      return `l_video:${layerPublicId},fl_splice`;
+    })
+    .join('/');
+
+  const transformPath = spliceTransforms ? `${spliceTransforms}/` : '';
+  return `https://res.cloudinary.com/${cloudName}/video/upload/sp_auto/${transformPath}${basePublicId}.m3u8`;
+};
 
 function VideoSetupContent() {
   const { token } = useAuth();
@@ -98,80 +181,15 @@ function VideoSetupContent() {
   const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
 
   // Assignment selection state
-  const [allAssignments, setAllAssignments] = useState<any[]>([]);
+  const [allAssignments, setAllAssignments] = useState<AssignmentLink[]>([]);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>("");
-  const [currentAssignment, setCurrentAssignment] = useState<any>(null);
+  const [currentAssignment, setCurrentAssignment] = useState<AssignmentLink | null>(null);
 
   const NEXT_PRELOAD_LEAD_SECONDS = 25;
   const EARLY_SWITCH_SECONDS = 0.18;
 
   const normalizeGroupTitle = (title: string) => {
     return title.replace(/\s*[-–—]?\s*P\d+\s*$/i, '').trim();
-  };
-
-  const parseCloudinaryAsset = (assetUrl: string) => {
-    try {
-      const parsed = new URL(assetUrl);
-      const parts = parsed.pathname.split('/').filter(Boolean);
-      // /<cloud>/video/upload/<transform...>/v123/folder/file.mp4
-      if (parts.length < 5 || parts[1] !== 'video' || parts[2] !== 'upload') {
-        return null;
-      }
-
-      const cloudName = parts[0];
-      const uploadIndex = 2;
-      let startPublicIdIndex = uploadIndex + 1;
-
-      for (let i = uploadIndex + 1; i < parts.length; i += 1) {
-        if (/^v\d+$/.test(parts[i])) {
-          startPublicIdIndex = i + 1;
-          break;
-        }
-      }
-
-      const publicPath = parts.slice(startPublicIdIndex).join('/');
-      if (!publicPath) return null;
-
-      const dotIndex = publicPath.lastIndexOf('.');
-      const publicId = dotIndex > 0 ? publicPath.slice(0, dotIndex) : publicPath;
-      if (!publicId) return null;
-
-      return { cloudName, publicId };
-    } catch {
-      return null;
-    }
-  };
-
-  const buildUnifiedCloudinaryStreamUrl = (videos: Video[]) => {
-    if (videos.length <= 1) return null;
-
-    const parsedVideos = videos
-      .map((item) => parseCloudinaryAsset(item.video_link))
-      .filter((item): item is { cloudName: string; publicId: string } => !!item);
-
-    if (parsedVideos.length !== videos.length) return null;
-
-    const cloudName = parsedVideos[0].cloudName;
-    if (parsedVideos.some((item) => item.cloudName !== cloudName)) return null;
-
-    const basePublicId = parsedVideos[0].publicId
-      .split('/')
-      .map((segment) => encodeURIComponent(segment))
-      .join('/');
-
-    const spliceTransforms = parsedVideos
-      .slice(1)
-      .map((item) => {
-        const layerPublicId = item.publicId
-          .split('/')
-          .map((segment) => encodeURIComponent(segment))
-          .join(':');
-        return `l_video:${layerPublicId},fl_splice`;
-      })
-      .join('/');
-
-    const transformPath = spliceTransforms ? `${spliceTransforms}/` : '';
-    return `https://res.cloudinary.com/${cloudName}/video/upload/sp_auto/${transformPath}${basePublicId}.m3u8`;
   };
 
   const ensureHlsManifestUrl = (url: string | null) => {
@@ -214,18 +232,16 @@ function VideoSetupContent() {
 
   useEffect(() => {
     if (allAssignments.length > 0 && videoId) {
-        const vid = parseInt(videoId, 10);
-        // So sánh cả number và string để tránh type mismatch
-        const linked = allAssignments.find((a: any) =>
-          Number(a.video_id) === vid
-        );
-        if (linked) {
-            setCurrentAssignment(linked);
-            setSelectedAssignmentId(linked.id.toString());
-        } else {
-            // Không có assignment nào linked với video này
-            setCurrentAssignment(null);
-        }
+      const vid = parseInt(videoId, 10);
+      // So sánh cả number và string để tránh type mismatch
+      const linked = allAssignments.find((assignment) => Number(assignment.video_id) === vid);
+      if (linked) {
+        setCurrentAssignment(linked);
+        setSelectedAssignmentId(linked.id.toString());
+      } else {
+        // Không có assignment nào linked với video này
+        setCurrentAssignment(null);
+      }
     }
   }, [allAssignments, videoId]);
 
@@ -321,13 +337,16 @@ function VideoSetupContent() {
     try {
       const response = await fetch(`/api/training-video-questions?video_id=${vId}`);
       const data = await response.json();
-      if (data.success && data.data) {
-        const loadedQuestions = data.data.map((q: any) => ({
-          id: q.id,
-          time: q.time_in_video,
-          question: q.question_text,
-          options: typeof q.options === 'string' ? JSON.parse(q.options) : (q.options || []),
-          answer: parseInt(q.correct_answer) || 0
+      if (data.success && Array.isArray(data.data)) {
+        const loadedQuestions = data.data.map((question: TrainingVideoQuestionRow) => ({
+          id: question.id,
+          time: question.time_in_video,
+          question: question.question_text,
+          options:
+            typeof question.options === 'string'
+              ? (JSON.parse(question.options) as string[])
+              : question.options || [],
+          answer: Number.parseInt(String(question.correct_answer ?? 0), 10) || 0,
         }));
         setQuestions(loadedQuestions);
         console.log('[Video Setup] Loaded questions:', loadedQuestions);
@@ -391,8 +410,10 @@ function VideoSetupContent() {
     return activeBuffer === 'A' ? videoRefA.current : videoRefB.current;
   };
 
+  const currentVideoId = video?.id ?? null;
+
   useEffect(() => {
-    const videoElement = getActiveVideoElement();
+    const videoElement = activeBuffer === 'A' ? videoRefA.current : videoRefB.current;
     if (videoElement) {
       const handleLoadedMetadata = () => {
         const durationInMinutes = Math.ceil(videoElement.duration / 60);
@@ -416,15 +437,8 @@ function VideoSetupContent() {
 
   // Auto-sync time from video when form is open
   useEffect(() => {
-    const videoElement = getActiveVideoElement();
+    const videoElement = activeBuffer === 'A' ? videoRefA.current : videoRefB.current;
     if (!videoElement || !showQuestionForm) return;
-
-    const handleTimeUpdate = () => {
-        // Only update if user is strictly seeking or pausing, 
-        // but 'timeupdate' fires too often. 
-        // User asked: "click on timeline". 
-        // Standard video clicking timeline fires 'seeking' -> 'seeked'.
-    };
 
     const handleSeeked = () => {
         // Round to 1 decimal place or integer
@@ -446,12 +460,12 @@ function VideoSetupContent() {
     setIsNextBufferReady(false);
     setPendingSwitchOnReady(false);
     setShouldAutoPlayNextPart(false);
-    if (video) {
-      setActivePreviewVideoId(video.id);
-      setBufferVideoIds({ A: video.id, B: null });
+    if (currentVideoId !== null) {
+      setActivePreviewVideoId(currentVideoId);
+      setBufferVideoIds({ A: currentVideoId, B: null });
       setActiveBuffer('A');
     }
-  }, [video?.id]);
+  }, [currentVideoId]);
 
   useEffect(() => {
     if (groupVideos.length > 1) {
@@ -509,6 +523,7 @@ function VideoSetupContent() {
 
   const currentPreviewVideo =
     groupVideos.find((item) => item.id === activePreviewVideoId) || video;
+  const currentPreviewVideoId = currentPreviewVideo?.id ?? null;
 
   const useUnifiedStream = Boolean(unifiedStreamUrl) && !disableUnifiedStream;
 
@@ -523,23 +538,25 @@ function VideoSetupContent() {
   };
 
   const inactiveBuffer: 'A' | 'B' = activeBuffer === 'A' ? 'B' : 'A';
-  const activeBufferVideo = resolveVideoById(bufferVideoIds[activeBuffer]) || currentPreviewVideo;
   const inactiveBufferVideo = resolveVideoById(bufferVideoIds[inactiveBuffer]);
+  const inactiveBufferVideoId = inactiveBufferVideo?.id ?? null;
 
-  const getVideoElementByBuffer = (buffer: 'A' | 'B') => {
-    if (useUnifiedStream) {
-      return videoRefA.current;
-    }
-    return buffer === 'A' ? videoRefA.current : videoRefB.current;
-  };
+  const getNextPartVideo = useCallback(() => {
+    if (!currentPreviewVideoId || groupVideos.length <= 1) return null;
+    const currentIndex = groupVideos.findIndex((item) => item.id === currentPreviewVideoId);
+    if (currentIndex < 0) return null;
+    const nextIndex = currentIndex + 1;
+    if (nextIndex >= groupVideos.length) return null;
+    return groupVideos[nextIndex];
+  }, [currentPreviewVideoId, groupVideos]);
 
-  const switchToNextPart = () => {
+  const switchToNextPart = useCallback(() => {
     if (useUnifiedStream) return;
     const nextPart = getNextPartVideo();
     if (!nextPart || isTransitioningRef.current || !isNextBufferReady) return;
 
-    const currentEl = getVideoElementByBuffer(activeBuffer);
-    const nextEl = getVideoElementByBuffer(inactiveBuffer);
+    const currentEl = activeBuffer === 'A' ? videoRefA.current : videoRefB.current;
+    const nextEl = inactiveBuffer === 'A' ? videoRefA.current : videoRefB.current;
     if (currentEl && nextEl) {
       nextEl.volume = currentEl.volume;
       nextEl.muted = currentEl.muted;
@@ -557,20 +574,7 @@ function VideoSetupContent() {
     setShouldAutoPlayNextPart(true);
     setActiveBuffer(inactiveBuffer);
     setActivePreviewVideoId(nextPart.id);
-  };
-
-  const getCurrentPartIndex = () => {
-    if (!currentPreviewVideo || groupVideos.length <= 1) return -1;
-    return groupVideos.findIndex((item) => item.id === currentPreviewVideo.id);
-  };
-
-  const getNextPartVideo = () => {
-    const currentIndex = getCurrentPartIndex();
-    if (currentIndex < 0) return null;
-    const nextIndex = currentIndex + 1;
-    if (nextIndex >= groupVideos.length) return null;
-    return groupVideos[nextIndex];
-  };
+  }, [activeBuffer, getNextPartVideo, inactiveBuffer, isNextBufferReady, useUnifiedStream]);
 
   useEffect(() => {
     if (useUnifiedStream) return;
@@ -587,7 +591,7 @@ function VideoSetupContent() {
       [inactiveBuffer]: nextPart.id,
     }));
     setShouldPreloadNextPart(true);
-  }, [useUnifiedStream, activePreviewVideoId, inactiveBuffer, groupVideos.length]);
+  }, [useUnifiedStream, inactiveBuffer, getNextPartVideo]);
 
   const handlePreviewTimeUpdate = () => {
     if (useUnifiedStream) return;
@@ -629,12 +633,12 @@ function VideoSetupContent() {
   useEffect(() => {
     if (!pendingSwitchOnReady || useUnifiedStream || !isNextBufferReady) return;
     switchToNextPart();
-  }, [pendingSwitchOnReady, useUnifiedStream, isNextBufferReady]);
+  }, [pendingSwitchOnReady, switchToNextPart, useUnifiedStream, isNextBufferReady]);
 
   useEffect(() => {
     if (useUnifiedStream) return;
-    const inactiveVideoEl = getVideoElementByBuffer(inactiveBuffer);
-    if (!inactiveVideoEl || !inactiveBufferVideo || !shouldPreloadNextPart) return;
+    const inactiveVideoEl = inactiveBuffer === 'A' ? videoRefA.current : videoRefB.current;
+    if (!inactiveVideoEl || !inactiveBufferVideoId || !shouldPreloadNextPart) return;
 
     const markReady = () => setIsNextBufferReady(true);
     const markLoading = () => setIsNextBufferReady(false);
@@ -669,11 +673,11 @@ function VideoSetupContent() {
       inactiveVideoEl.removeEventListener('loadeddata', markReady);
       inactiveVideoEl.removeEventListener('waiting', markLoading);
     };
-  }, [inactiveBuffer, inactiveBufferVideo?.id, shouldPreloadNextPart, useUnifiedStream]);
+  }, [inactiveBuffer, inactiveBufferVideoId, shouldPreloadNextPart, useUnifiedStream]);
 
   useEffect(() => {
     if (useUnifiedStream) return;
-    const videoElement = getActiveVideoElement();
+    const videoElement = activeBuffer === 'A' ? videoRefA.current : videoRefB.current;
     if (!videoElement || !shouldAutoPlayNextPart || loading) return;
 
     const attemptAutoPlay = async () => {
@@ -780,14 +784,18 @@ function VideoSetupContent() {
         toast.success('Đã liên kết assignment thành công!');
         // Refresh assignments list
         try {
-            const res = await fetch('/api/training-assignments');
-            const assignmentsData = await res.json();
-            if (assignmentsData.success) {
-                setAllAssignments(assignmentsData.data);
-                const updated = assignmentsData.data.find((a: any) => a.id.toString() === selectedAssignmentId);
-                if (updated) setCurrentAssignment(updated);
-            }
-        } catch(e) {}
+          const res = await fetch('/api/training-assignments');
+          const assignmentsData = await res.json();
+          if (assignmentsData.success) {
+            setAllAssignments(assignmentsData.data);
+            const refreshedAssignments = Array.isArray(assignmentsData.data)
+              ? (assignmentsData.data as AssignmentLink[])
+              : [];
+            const updated = refreshedAssignments.find((assignment) => assignment.id.toString() === selectedAssignmentId);
+            if (updated) setCurrentAssignment(updated);
+          }
+        } catch {
+        }
       } else {
         toast.error('Lỗi: ' + data.error);
       }
@@ -875,8 +883,7 @@ function VideoSetupContent() {
         if (isGroupedVideo) {
           const siblings = groupVideos.filter((item) => item.id !== video!.id);
           await Promise.all(
-            siblings.map((partVideo, index) => {
-              const chunkIndex = partVideo.chunk_index || index + 1;
+            siblings.map((partVideo) => {
               return fetch('/api/training-videos', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -890,7 +897,7 @@ function VideoSetupContent() {
           );
 
           setGroupVideos((prev) =>
-            prev.map((item, index) => {
+            prev.map((item) => {
               return {
                 ...item,
                 title: baseTitle,
@@ -1230,7 +1237,7 @@ function VideoSetupContent() {
                   <div className="flex gap-4 items-center p-4 border border-dashed border-gray-300 rounded-xl bg-gray-50">
                     {thumbnailPreview ? (
                       <div className="relative w-40 h-24 bg-white rounded-lg overflow-hidden shadow-sm border border-gray-200 group">
-                        <img src={thumbnailPreview} alt="Thumbnail" className="w-full h-full object-cover" />
+                        <Image src={thumbnailPreview} alt="Thumbnail" fill unoptimized className="object-cover" />
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <button
                             type="button"

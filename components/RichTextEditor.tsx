@@ -301,7 +301,7 @@ function ResizableImageNodeView(props: NodeViewProps) {
       onPointerDown={onPointerDownWrapper}
     >
       {selected && <ImageFloatControls float={float} onFloat={handleFloat} onDelete={handleDelete} />}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      { }
       <img
         src={normalizeStorageUrl(node.attrs.src)} alt={node.attrs.alt || ''} title={node.attrs.title || ''}
         className="tiptap-image" draggable={false}
@@ -595,7 +595,7 @@ function ImageGalleryNodeView(props: NodeViewProps) {
             onDrop={e => onDropItem(e, idx)}
             onDragEnd={onDragEnd}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img src={img.src} alt={img.alt} className="gallery-img" draggable={false} />
             <div className="gallery-item-overlay">
               <GripVertical className="h-4 w-4 text-white opacity-70" />

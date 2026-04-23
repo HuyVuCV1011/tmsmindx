@@ -1,13 +1,15 @@
 import pool from '@/lib/db';
+import { sanitizeHtml, sanitizeText } from '@/lib/server-sanitize-html';
 import {
     createSupabaseS3Client,
     deleteObject,
     isSupabaseS3Configured,
     parsePublicUrl,
 } from '@/lib/supabase-s3';
+import { findCommunicationPostByIdentifier, requireTruyenThongPostAdmin } from '@/lib/truyenthong-posts';
 import { generateSlug } from '@/lib/utils';
 import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 const BUCKET_NAME = 'mindx-posts-content';
 
@@ -122,25 +124,34 @@ async function cleanupOrphanedImages(oldHtml: string, newHtml: string) {
 }
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
-
     const client = await pool.connect();
+
     try {
-      let result = await client.query('SELECT * FROM communications WHERE slug = $1', [id]);
-      if (result.rows.length === 0) {
-        result = await client.query('SELECT * FROM communications WHERE id = $1', [id]);
+      const lookup = await findCommunicationPostByIdentifier(client, id);
+      if (lookup.invalid) {
+        return NextResponse.json({ error: 'Post identifier is invalid' }, { status: 400 });
       }
-      if (result.rows.length === 0) {
+      if (!lookup.post) {
         return NextResponse.json({ error: 'Post not found' }, { status: 404 });
       }
 
-      const post = result.rows[0];
+      const post = lookup.post;
+
+      if (post.status !== 'published') {
+        const rawSession = request.cookies.get('tps_session')?.value;
+        const session = rawSession ? await import('@/lib/session-cookie').then(({ verifySessionCookieValue }) => verifySessionCookieValue(rawSession)) : null;
+        if (!session?.canAdminPortal) {
+          return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+        }
+      }
+
       let isLiked = false;
       let reaction: string | null = null;
       const reaction_counts: Record<string, number> = {};
@@ -195,6 +206,8 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
+    const denied = await requireTruyenThongPostAdmin(request as NextRequest);
+    if (denied) return denied;
     const body = await request.json();
     const {
       title,
@@ -209,41 +222,64 @@ export async function PUT(
       thumbnail_position,
     } = body;
 
+    const normalizedTitle = typeof title === 'string' ? title.trim() : '';
+    const normalizedDescription =
+      typeof description === 'string' ? description.trim() : '';
+    const rawContent = typeof content === 'string' ? content : '';
+
+    if (!normalizedTitle || !normalizedDescription || !rawContent) {
+      return NextResponse.json(
+        { error: 'title, description và content là bắt buộc' },
+        { status: 400 },
+      );
+    }
+
     await ensureBucket();
 
-    let processedContent = content;
+    let processedContent = rawContent;
     try {
-      processedContent = await processBase64Images(content);
+      processedContent = await processBase64Images(rawContent);
     } catch (err) {
       console.error('Error processing base64 images in PUT:', err);
     }
 
+    const safeTitle = sanitizeText(normalizedTitle);
+    const safeDescription = sanitizeText(normalizedDescription);
+    const safeContent = sanitizeHtml(processedContent);
+
+    if (!safeTitle || !safeDescription || !safeContent.trim()) {
+      return NextResponse.json(
+        { error: 'Nội dung bài viết không hợp lệ sau khi làm sạch' },
+        { status: 400 },
+      );
+    }
+
     const client = await pool.connect();
     try {
-      let postResult = await client.query('SELECT * FROM communications WHERE slug = $1', [id]);
-      if (postResult.rows.length === 0) {
-        postResult = await client.query('SELECT * FROM communications WHERE id = $1', [id]);
+      const lookup = await findCommunicationPostByIdentifier(client, id);
+      if (lookup.invalid) {
+        return NextResponse.json({ error: 'Post identifier is invalid' }, { status: 400 });
       }
-      if (postResult.rows.length === 0) {
+      if (!lookup.post) {
         return NextResponse.json({ error: 'Post not found' }, { status: 404 });
       }
 
-      const currentPost = postResult.rows[0];
+      const currentPost = lookup.post;
 
       // Lưu URL cũ để xóa sau khi update thành công (chỉ xóa nếu URL thực sự thay đổi)
       const oldFeaturedImage = (featured_image !== currentPost.featured_image) ? currentPost.featured_image : null;
       const oldBannerImage = (banner_image !== currentPost.banner_image) ? currentPost.banner_image : null;
 
       let newSlug = currentPost.slug;
-      if (title !== currentPost.title) {
-        newSlug = generateSlug(title);
+      if (safeTitle !== currentPost.title) {
+        newSlug = generateSlug(safeTitle);
         let slugExists = await client.query(
           'SELECT 1 FROM communications WHERE slug = $1 AND id != $2',
           [newSlug, currentPost.id]
         );
         let counter = 1;
         while (slugExists.rows.length > 0) {
-          newSlug = `${generateSlug(title)}-${counter}`;
+          newSlug = `${generateSlug(safeTitle)}-${counter}`;
           slugExists = await client.query(
             'SELECT 1 FROM communications WHERE slug = $1 AND id != $2',
             [newSlug, currentPost.id]
@@ -260,7 +296,7 @@ export async function PUT(
           thumbnail_position = $11, updated_at = NOW()
         WHERE id = $12 RETURNING *`,
         [
-          title, newSlug, description, processedContent, featured_image, banner_image,
+          safeTitle, newSlug, safeDescription, safeContent, featured_image, banner_image,
           post_type, audience, status, published_at,
           thumbnail_position || '50% 50%', currentPost.id,
         ]
@@ -274,7 +310,7 @@ export async function PUT(
       }
 
       // 2. Xóa các ảnh trong nội dung bài viết đã bị gỡ bỏ
-      cleanupOrphanedImages(currentPost.content, processedContent);
+      await cleanupOrphanedImages(currentPost.content, safeContent);
 
       return NextResponse.json(result.rows[0]);
     } finally {
@@ -292,21 +328,22 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const denied = await requireTruyenThongPostAdmin(request as NextRequest);
+    if (denied) return denied;
     const client = await pool.connect();
     try {
-      let result = await client.query(
-        'DELETE FROM communications WHERE slug = $1 RETURNING *',
-        [id]
-      );
-      if (result.rows.length === 0) {
-        result = await client.query(
-          'DELETE FROM communications WHERE id = $1 RETURNING *',
-          [id]
-        );
+      const lookup = await findCommunicationPostByIdentifier(client, id);
+      if (lookup.invalid) {
+        return NextResponse.json({ error: 'Post identifier is invalid' }, { status: 400 });
       }
-      if (result.rows.length === 0) {
+      if (!lookup.post) {
         return NextResponse.json({ error: 'Post not found' }, { status: 404 });
       }
+
+      const result = await client.query(
+        'DELETE FROM communications WHERE id = $1 RETURNING *',
+        [lookup.post.id]
+      );
 
       const deletedPost = result.rows[0];
 

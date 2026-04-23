@@ -1,30 +1,30 @@
 "use client";
 
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PageContainer } from "@/components/PageContainer";
 import RichTextEditor from "@/components/RichTextEditor";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { toast } from "@/lib/app-toast";
 import { useAuth } from "@/lib/auth-context";
 import { authHeaders } from "@/lib/auth-headers";
 import { cn } from "@/lib/utils";
 import {
-  AlertTriangle,
-  BookOpenText,
-  ChevronDown,
-  ChevronRight,
-  FilePlus2,
-  FileText,
-  GripVertical,
-  History,
-  Plus,
-  Save,
-  Search,
-  Send,
-  ShieldAlert,
-  Trash2,
+    AlertTriangle,
+    BookOpenText,
+    ChevronDown,
+    ChevronRight,
+    FilePlus2,
+    FileText,
+    GripVertical,
+    History,
+    Plus,
+    Save,
+    Search,
+    Send,
+    ShieldAlert,
+    Trash2,
 } from "lucide-react";
 import { marked } from "marked";
 import Link from "next/link";
-import { toast } from "@/lib/app-toast";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 interface K12DocRow {
@@ -1062,7 +1062,7 @@ export default function ManageK12DocsPage() {
 
     setPendingParentSlug(parentSlug);
     setDraftPreviewParentSlug(parentSlug);
-    setDraftPreviewToken(Date.now());
+    setDraftPreviewToken((current) => current + 1);
     setSelectedSlug("");
     setForm(EMPTY_FORM);
     if (parentSlug) {
@@ -1078,7 +1078,7 @@ export default function ManageK12DocsPage() {
     }
 
     loadDocuments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [isLoading, isSuperAdmin, user?.email]);
 
   useEffect(() => {
@@ -1086,7 +1086,7 @@ export default function ManageK12DocsPage() {
     if (!isSuperAdmin || !user?.email) return;
 
     loadPublishHistory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [isLoading, isSuperAdmin, user?.email]);
 
   useEffect(() => {

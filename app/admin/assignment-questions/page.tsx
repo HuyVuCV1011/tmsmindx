@@ -2,11 +2,11 @@
 
 import { PageContainer } from '@/components/PageContainer';
 import { AssignmentPreview, QuestionBuilder, QuestionList } from '@/components/assignments';
+import { toast } from '@/lib/app-toast';
 import { Question } from '@/types/assignment';
 import { ArrowLeft, Download, Eye, FileText, HelpCircle, Upload, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useRef, useState } from 'react';
-import { toast } from '@/lib/app-toast';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 
 type DbDifficulty = 'easy' | 'medium' | 'hard';
 
@@ -22,6 +22,22 @@ interface AssignmentQuestionRequestPayload {
   order_number: number;
   difficulty: DbDifficulty;
 }
+
+interface AssignmentPreviewData {
+  assignment_title: string;
+  assignment_description?: string;
+  assignment_type?: string;
+  time_limit?: number;
+  video_title?: string;
+}
+
+const csvQuote = String.fromCharCode(34);
+const csvExample = [
+  'question_text,question_type,correct_answer,options,points,difficulty,explanation,image_url',
+  `${csvQuote}Python là gì?${csvQuote},multiple_choice,${csvQuote}Ngôn ngữ thông dịch${csvQuote},${csvQuote}Ngôn ngữ thông dịch|Ngôn ngữ biên dịch|Ngôn ngữ máy${csvQuote},1,easy,${csvQuote}Python là ngôn ngữ thông dịch${csvQuote},`,
+  `${csvQuote}JS chỉ chạy trên browser${csvQuote},true_false,${csvQuote}Sai${csvQuote},${csvQuote}Đúng|Sai${csvQuote},1,medium,${csvQuote}JS có thể chạy trên Node.js${csvQuote},`,
+  `${csvQuote}HTML là viết tắt của gì?${csvQuote},short_answer,${csvQuote}HyperText Markup Language${csvQuote},,2,easy,${csvQuote}${csvQuote},`
+].join('\n');
 
 const mapDifficultyToDb = (difficulty?: Question['difficulty'] | string): DbDifficulty => {
   switch (difficulty) {
@@ -45,31 +61,36 @@ function AssignmentQuestionsContent() {
   const [loading, setLoading] = useState(true);
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
-  const [assignmentInfo, setAssignmentInfo] = useState<any>(null);
+  const [assignmentInfo, setAssignmentInfo] = useState<AssignmentPreviewData | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [importing, setImporting] = useState(false);
   const [showImportGuide, setShowImportGuide] = useState(false);
 
-  useEffect(() => {
-    if (assignmentId) {
-      fetchQuestions();
-      fetchAssignmentInfo();
+  const fetchAssignmentInfo = useCallback(async () => {
+    if (!assignmentId) {
+      return;
     }
-  }, [assignmentId]);
 
-  const fetchAssignmentInfo = async () => {
     try {
       const response = await fetch(`/api/training-assignments?id=${assignmentId}`);
-      const data = await response.json();
-      if (data.success && data.data.length > 0) {
+      const data = (await response.json()) as {
+        success?: boolean;
+        data?: AssignmentPreviewData[];
+      };
+
+      if (data.success && data.data && data.data.length > 0) {
         setAssignmentInfo(data.data[0]);
       }
     } catch (error) {
       console.error('Error fetching assignment:', error);
     }
-  };
+  }, [assignmentId]);
 
-  const fetchQuestions = async (silent = false) => {
+  const fetchQuestions = useCallback(async (silent = false) => {
+    if (!assignmentId) {
+      return;
+    }
+
     try {
       if (!silent) setLoading(true);
       const response = await fetch(`/api/training-assignment-questions?assignment_id=${assignmentId}`);
@@ -83,7 +104,14 @@ function AssignmentQuestionsContent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [assignmentId]);
+
+  useEffect(() => {
+    if (assignmentId) {
+      fetchQuestions();
+      fetchAssignmentInfo();
+    }
+  }, [assignmentId, fetchAssignmentInfo, fetchQuestions]);
 
   const handleSaveQuestion = async (questionData: Partial<Question>) => {
     try {
@@ -152,7 +180,7 @@ function AssignmentQuestionsContent() {
           id: -Date.now(), // Temporary ID
           ...payload,
           assignment_id: 0, // Satisfy Question type
-          difficulty: payload.difficulty as any
+          difficulty: payload.difficulty
         };
         setQuestions(prev => [...prev, optimisticQuestion]);
       } else {
@@ -514,11 +542,11 @@ function AssignmentQuestionsContent() {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h3 className="font-semibold text-blue-900 mb-2">🚀 Bắt đầu nhanh</h3>
                 <ol className="list-decimal list-inside space-y-1 text-blue-800">
-                  <li>Click <strong>"File mẫu"</strong> để download file CSV mẫu</li>
+                  <li>Click <strong>&quot;File mẫu&quot;</strong> để download file CSV mẫu</li>
                   <li>Mở file bằng Excel hoặc Google Sheets</li>
                   <li>Thêm câu hỏi của bạn (giữ nguyên dòng header)</li>
                   <li>Lưu file dạng CSV (UTF-8)</li>
-                  <li>Click <strong>"Import"</strong> và chọn file vừa tạo</li>
+                  <li>Click <strong>&quot;Import&quot;</strong> và chọn file vừa tạo</li>
                 </ol>
               </div>
 
@@ -530,7 +558,7 @@ function AssignmentQuestionsContent() {
                     <h4 className="font-semibold text-gray-900 mb-2">multiple_choice - Trắc nghiệm</h4>
                     <p className="text-sm text-gray-600 mb-2">Câu hỏi có nhiều lựa chọn, chỉ 1 đáp án đúng</p>
                     <div className="bg-gray-50 p-2 rounded text-xs font-mono overflow-x-auto">
-                      options: "Đáp án A|Đáp án B|Đáp án C|Đáp án D"
+                      options: &quot;Đáp án A|Đáp án B|Đáp án C|Đáp án D&quot;
                     </div>
                   </div>
 
@@ -538,8 +566,8 @@ function AssignmentQuestionsContent() {
                     <h4 className="font-semibold text-gray-900 mb-2">true_false - Đúng/Sai</h4>
                     <p className="text-sm text-gray-600 mb-2">Câu hỏi đúng hoặc sai</p>
                     <div className="bg-gray-50 p-2 rounded text-xs font-mono overflow-x-auto">
-                      options: "Đúng|Sai"<br />
-                      correct_answer: "Đúng" hoặc "Sai"
+                      options: &quot;Đúng|Sai&quot;<br />
+                      correct_answer: &quot;Đúng&quot; hoặc &quot;Sai&quot;
                     </div>
                   </div>
 
@@ -590,10 +618,7 @@ function AssignmentQuestionsContent() {
                 <h3 className="font-semibold text-gray-900 mb-3">📝 Ví dụ</h3>
                 <div className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto">
                   <pre className="text-xs">
-{`question_text,question_type,correct_answer,options,points,difficulty,explanation,image_url
-"Python là gì?",multiple_choice,"Ngôn ngữ thông dịch","Ngôn ngữ thông dịch|Ngôn ngữ biên dịch|Ngôn ngữ máy",1,easy,"Python là ngôn ngữ thông dịch",
-"JS chỉ chạy trên browser",true_false,"Sai","Đúng|Sai",1,medium,"JS có thể chạy trên Node.js",
-"HTML là viết tắt của gì?",short_answer,"HyperText Markup Language",,2,easy,"",`}
+                    {csvExample}
                   </pre>
                 </div>
               </div>

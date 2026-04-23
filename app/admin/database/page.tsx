@@ -1,11 +1,11 @@
 'use client';
 
 import { PageContainer } from '@/components/PageContainer';
+import { toast } from '@/lib/app-toast';
 import { useAuth } from '@/lib/auth-context';
 import { authHeaders } from '@/lib/auth-headers';
 import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Columns, Copy, Database, Download, Eye, Hash, Key, Link2, Play, Plus, RefreshCw, Search, Terminal, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from '@/lib/app-toast';
 
 interface TableInfo { name: string; size: string; column_count: number; row_count: number; }
 interface ColumnInfo { column_name: string; data_type: string; is_nullable: string; column_default: string | null; character_maximum_length: number | null; }
@@ -13,7 +13,28 @@ interface IndexInfo { indexname: string; indexdef: string; }
 interface MigrationInfo { id: number; name: string; version: number; applied_at: string; }
 interface ForeignKeyInfo { column_name: string; foreign_table: string; foreign_column: string; }
 
+type DatabaseCellValue = string | number | boolean | null;
+type DatabaseRow = Record<string, DatabaseCellValue>;
+
+interface DatabaseOverviewResponse { tables?: TableInfo[]; migrationHistory?: MigrationInfo[]; totalMigrations?: number; appliedMigrations?: number; dbSize?: string; error?: string; }
+interface DatabaseColumnsResponse { columns?: ColumnInfo[]; indexes?: IndexInfo[]; primaryKeys?: string[]; foreignKeys?: ForeignKeyInfo[]; error?: string; }
+interface DatabasePreviewResponse { rows?: DatabaseRow[]; total?: number; error?: string; }
+interface DatabaseQueryResponse { error?: string; detail?: string; code?: string | number; command?: string; rowCount?: number; rows?: DatabaseRow[]; duration?: number; }
+interface DatabaseMutationResponse { success?: boolean; error?: string; detail?: string; code?: string | number; applied?: unknown[]; errors?: string[]; }
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
+const parseJson = async <T,>(response: Response): Promise<T> => (await response.json()) as T;
+
+const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+        const message = (error as { message?: unknown }).message;
+        if (typeof message === 'string') return message;
+    }
+    return 'Đã xảy ra lỗi';
+};
 
 export default function DatabasePage() {
     const { token } = useAuth();
@@ -31,7 +52,7 @@ export default function DatabasePage() {
     const [foreignKeys, setForeignKeys] = useState<ForeignKeyInfo[]>([]);
 
     // Data view
-    const [previewData, setPreviewData] = useState<any[]>([]);
+    const [previewData, setPreviewData] = useState<DatabaseRow[]>([]);
     const [previewTotal, setPreviewTotal] = useState(0);
     const [dataPage, setDataPage] = useState(0);
     const [dataSearch, setDataSearch] = useState('');
@@ -41,7 +62,7 @@ export default function DatabasePage() {
 
     // SQL Editor
     const [sqlQuery, setSqlQuery] = useState('');
-    const [sqlResult, setSqlResult] = useState<any>(null);
+    const [sqlResult, setSqlResult] = useState<DatabaseQueryResponse | null>(null);
     const [sqlRunning, setSqlRunning] = useState(false);
     const [sqlHistory, setSqlHistory] = useState<string[]>([]);
 
@@ -55,9 +76,9 @@ export default function DatabasePage() {
     const [insertData, setInsertData] = useState<Record<string, string>>({});
     const sqlInputRef = useRef<HTMLTextAreaElement>(null);
 
-    const dbAuthHeaders = (): HeadersInit => ({
+    const dbAuthHeaders = useCallback((): HeadersInit => ({
         ...authHeaders(token),
-    });
+    }), [token]);
 
     // ─── Fetch overview ───────────────────────────────────
     const fetchOverview = useCallback(async () => {
@@ -66,19 +87,19 @@ export default function DatabasePage() {
             const res = await fetch('/api/database?action=overview', {
                 headers: dbAuthHeaders(),
             });
-            const data = await res.json();
+            const data = await parseJson<DatabaseOverviewResponse>(res);
             if (data.error) throw new Error(data.error);
             setTables(data.tables || []);
             setMigrationHistory(data.migrationHistory || []);
             setTotalMigrations(data.totalMigrations || 0);
             setAppliedMigrations(data.appliedMigrations || 0);
             setDbSize(data.dbSize || '');
-        } catch (err: any) {
-            toast.error('Lỗi tải dữ liệu: ' + err.message);
+        } catch (err) {
+            toast.error('Lỗi tải dữ liệu: ' + getErrorMessage(err));
         } finally {
             setLoading(false);
         }
-    }, [token]);
+    }, [dbAuthHeaders]);
 
     useEffect(() => { fetchOverview(); }, [fetchOverview]);
 
@@ -93,17 +114,17 @@ export default function DatabasePage() {
             const colRes = await fetch(`/api/database?action=columns&table=${tableName}`, {
                 headers: dbAuthHeaders(),
             });
-            const colData = await colRes.json();
+            const colData = await parseJson<DatabaseColumnsResponse>(colRes);
             setColumns(colData.columns || []);
             setIndexes(colData.indexes || []);
             setPrimaryKeys(colData.primaryKeys || []);
             setForeignKeys(colData.foreignKeys || []);
             await fetchTableData(tableName, 0, '', '', 'desc');
-        } catch (err: any) { toast.error(err.message); }
+        } catch (err) { toast.error(getErrorMessage(err)); }
     };
 
     // ─── Fetch table data with pagination ─────────────────
-    const fetchTableData = async (table: string, page: number, search: string, sort: string, order: string) => {
+    const fetchTableData = async (table: string, page: number, search: string, sort: string, order: 'asc' | 'desc') => {
         try {
             const params = new URLSearchParams({
                 action: 'preview', table,
@@ -115,10 +136,10 @@ export default function DatabasePage() {
             const res = await fetch(`/api/database?${params}`, {
                 headers: dbAuthHeaders(),
             });
-            const data = await res.json();
+            const data = await parseJson<DatabasePreviewResponse>(res);
             setPreviewData(data.rows || []);
             setPreviewTotal(data.total || 0);
-        } catch (err: any) { toast.error(err.message); }
+        } catch (err) { toast.error(getErrorMessage(err)); }
     };
 
     // Refetch current table data
@@ -149,7 +170,7 @@ export default function DatabasePage() {
     };
 
     // ─── Run SQL ──────────────────────────────────────────
-    const runSQL = async () => {
+    const runSQL = useCallback(async () => {
         if (!sqlQuery.trim()) return;
         setSqlRunning(true);
         try {
@@ -158,7 +179,7 @@ export default function DatabasePage() {
                 headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({ action: 'query', sql: sqlQuery }),
             });
-            const data = await res.json();
+            const data = await parseJson<DatabaseQueryResponse>(res);
             if (data.error) {
                 setSqlResult({ error: data.error, detail: data.detail, code: data.code });
                 toast.error(data.error);
@@ -168,23 +189,24 @@ export default function DatabasePage() {
                 setSqlHistory(prev => [sqlQuery, ...prev.filter(q => q !== sqlQuery)].slice(0, 20));
                 fetchOverview(); // Refresh stats
             }
-        } catch (err: any) {
-            setSqlResult({ error: err.message });
-            toast.error(err.message);
+        } catch (err) {
+            const message = getErrorMessage(err);
+            setSqlResult({ error: message });
+            toast.error(message);
         } finally {
             setSqlRunning(false);
         }
-    };
+    }, [fetchOverview, sqlQuery, token]);
 
     // ─── Delete row ───────────────────────────────────────
-    const deleteRow = async (row: any) => {
+    const deleteRow = async (row: DatabaseRow) => {
         if (!selectedTable || primaryKeys.length === 0) {
             toast.error('Không thể xoá: table không có primary key');
             return;
         }
         if (!confirm('Bạn chắc chắn muốn xoá row này?')) return;
 
-        const where: Record<string, any> = {};
+        const where: Record<string, DatabaseCellValue> = {};
         primaryKeys.forEach(pk => { where[pk] = row[pk]; });
 
         try {
@@ -193,7 +215,7 @@ export default function DatabasePage() {
                 headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({ action: 'deleteRow', table: selectedTable, where }),
             });
-            const data = await res.json();
+            const data = await parseJson<DatabaseMutationResponse>(res);
             if (data.success) {
                 toast.success('Đã xoá!');
                 refetchData();
@@ -201,13 +223,13 @@ export default function DatabasePage() {
             } else {
                 toast.error(data.error || 'Lỗi xoá');
             }
-        } catch (err: any) { toast.error(err.message); }
+        } catch (err) { toast.error(getErrorMessage(err)); }
     };
 
     // ─── Insert row ───────────────────────────────────────
     const handleInsert = async () => {
         if (!selectedTable) return;
-        const cleanData: Record<string, any> = {};
+        const cleanData: Record<string, string> = {};
         Object.entries(insertData).forEach(([k, v]) => {
             if (v !== '') cleanData[k] = v;
         });
@@ -221,7 +243,7 @@ export default function DatabasePage() {
                 headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({ action: 'insertRow', table: selectedTable, data: cleanData }),
             });
-            const data = await res.json();
+            const data = await parseJson<DatabaseMutationResponse>(res);
             if (data.success) {
                 toast.success('Đã thêm row!');
                 setShowInsertModal(false);
@@ -231,7 +253,7 @@ export default function DatabasePage() {
             } else {
                 toast.error(data.error || 'Lỗi thêm');
             }
-        } catch (err: any) { toast.error(err.message); }
+        } catch (err) { toast.error(getErrorMessage(err)); }
     };
 
     // ─── Export ────────────────────────────────────────────
@@ -248,7 +270,7 @@ export default function DatabasePage() {
                 a.href = url; a.download = `${selectedTable}.csv`; a.click();
                 URL.revokeObjectURL(url);
             } else {
-                const data = await res.json();
+                const data = await parseJson<{ rows?: DatabaseRow[] }>(res);
                 const blob = new Blob([JSON.stringify(data.rows, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -256,11 +278,11 @@ export default function DatabasePage() {
                 URL.revokeObjectURL(url);
             }
             toast.success(`Exported ${selectedTable}.${format}`);
-        } catch (err: any) { toast.error(err.message); }
+        } catch (err) { toast.error(getErrorMessage(err)); }
     };
 
     // ─── Copy cell ────────────────────────────────────────
-    const copyCell = (val: any) => {
+    const copyCell = (val: DatabaseCellValue) => {
         navigator.clipboard.writeText(String(val ?? ''));
         toast.success('Copied!', { duration: 1000 });
     };
@@ -274,12 +296,13 @@ export default function DatabasePage() {
                 headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({ action: 'migrate' }),
             });
-            const data = await res.json();
+            const data = await parseJson<DatabaseMutationResponse>(res);
             if (data.success) {
-                toast.success(data.applied.length > 0 ? `✅ Applied ${data.applied.length} migration(s)` : 'Database đã cập nhật!');
+                const appliedCount = data.applied?.length ?? 0;
+                toast.success(appliedCount > 0 ? `✅ Applied ${appliedCount} migration(s)` : 'Database đã cập nhật!');
                 fetchOverview();
             } else { toast.error(data.errors?.[0] || 'Error'); }
-        } catch (err: any) { toast.error(err.message); }
+        } catch (err) { toast.error(getErrorMessage(err)); }
         finally { setMigrating(false); }
     };
 
@@ -293,10 +316,13 @@ export default function DatabasePage() {
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [sqlQuery, activeTab]);
+    }, [activeTab, runSQL]);
 
     const filteredTables = tables.filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
     const totalPages = Math.ceil(previewTotal / PAGE_SIZE);
+    const firstPreviewRow = previewData[0];
+    const sqlRows = sqlResult?.rows ?? [];
+    const firstSqlRow = sqlRows[0];
 
     if (loading) {
         return (
@@ -422,26 +448,26 @@ export default function DatabasePage() {
                                         <span className="text-xs text-green-700 font-semibold">
                                             ✅ {sqlResult.command} — {sqlResult.rows?.length ?? sqlResult.rowCount ?? 0} rows · {sqlResult.duration}ms
                                         </span>
-                                        {sqlResult.rows?.length > 0 && (
+                                        {firstSqlRow && (
                                             <button onClick={() => {
-                                                navigator.clipboard.writeText(JSON.stringify(sqlResult.rows, null, 2));
+                                                navigator.clipboard.writeText(JSON.stringify(sqlRows, null, 2));
                                                 toast.success('Copied results!');
                                             }} className="text-[10px] text-green-600 hover:underline flex items-center gap-1">
                                                 <Copy className="w-3 h-3" /> Copy JSON
                                             </button>
                                         )}
                                     </div>
-                                    {sqlResult.rows?.length > 0 && (
+                                    {firstSqlRow && (
                                         <div className="overflow-x-auto max-h-[400px]">
                                             <Table className="text-xs">
                                                 <TableHeader className="bg-gray-50 sticky top-0">
-                                                    <TableRow>{Object.keys(sqlResult.rows[0]).map(k => (
+                                                    <TableRow>{Object.keys(firstSqlRow).map(k => (
                                                         <TableHead key={k} className="text-left py-1.5 px-2 text-gray-700 whitespace-nowrap">{k}</TableHead>
                                                     ))}</TableRow>
                                                 </TableHeader>
-                                                <TableBody>{sqlResult.rows.map((row: any, i: number) => (
+                                                <TableBody>{sqlRows.map((row, i) => (
                                                     <TableRow key={i} className="hover:bg-blue-50/30">
-                                                        {Object.values(row).map((val: any, j: number) => (
+                                                        {Object.values(row).map((val, j) => (
                                                             <TableCell key={j} onClick={() => copyCell(val)} className="py-1.5 px-2 text-gray-700 whitespace-nowrap max-w-[250px] truncate cursor-pointer hover:bg-yellow-50" title="Click to copy">
                                                                 {val === null ? <span className="text-gray-400 italic">null</span> : String(val)}
                                                             </TableCell>
@@ -550,12 +576,12 @@ export default function DatabasePage() {
 
                                         {/* Data table */}
                                         <div className="overflow-x-auto max-h-[55vh]">
-                                            {previewData.length > 0 ? (
+                                            {firstPreviewRow ? (
                                                 <Table className="text-xs">
                                                     <TableHeader className="bg-gray-50 sticky top-0 z-10">
                                                         <TableRow>
                                                             <TableHead className="px-2 py-1.5 text-[10px] w-8">#</TableHead>
-                                                            {Object.keys(previewData[0]).map((key) => (
+                                                            {Object.keys(firstPreviewRow).map((key) => (
                                                                 <TableHead key={key} onClick={() => handleSort(key)}
                                                                     className="text-left px-2 py-1.5 text-gray-700 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none">
                                                                     <span className="flex items-center gap-1">
@@ -573,7 +599,7 @@ export default function DatabasePage() {
                                                         {previewData.map((row, i) => (
                                                             <TableRow key={i} className="hover:bg-blue-50/20 group">
                                                                 <TableCell className="px-2 py-1.5 text-gray-400 text-[10px]">{dataPage * PAGE_SIZE + i + 1}</TableCell>
-                                                                {Object.entries(row).map(([key, val]: [string, any], j) => (
+                                                                {Object.entries(row).map(([, val], j) => (
                                                                     <TableCell key={j} onClick={() => copyCell(val)}
                                                                         className="px-2 py-1.5 whitespace-nowrap max-w-[200px] truncate cursor-pointer hover:bg-yellow-50/50"
                                                                         title={val === null ? 'null' : String(val)}>

@@ -239,7 +239,7 @@ export default function AdminCloudinaryPage() {
             <div key={resource.asset_id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
               <div className="h-44 bg-gray-100 flex items-center justify-center">
                 {resource.resource_type === 'image' ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+
                   <img src={resource.secure_url} alt={resource.public_id} className="w-full h-full object-cover" />
                 ) : resource.resource_type === 'video' ? (
                   <video src={resource.secure_url} className="w-full h-full object-cover" controls preload="metadata" />
