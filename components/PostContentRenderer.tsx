@@ -147,7 +147,7 @@ function SmartImageGroup({ images, globalOffset, onOpenLightbox }: SmartImageGro
           style={{ position: 'relative', cursor: 'pointer', display: 'inline-block', width: '100%' }}
           onClick={() => onOpenLightbox(globalOffset)}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+          { }
           <img
             src={img.src}
             alt={img.alt}
@@ -191,7 +191,7 @@ function SmartImageGroup({ images, globalOffset, onOpenLightbox }: SmartImageGro
             }}
             onClick={() => onOpenLightbox(globalOffset + idx)}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img
               src={img.src}
               alt={img.alt}

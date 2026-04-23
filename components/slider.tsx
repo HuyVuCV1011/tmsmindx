@@ -75,7 +75,7 @@ export default function Slider({ posts }: SliderProps) {
                     {/* Image — sử dụng CroppedImage để hiển thị đúng vùng thumbnail đã cập nhật */}
                     <div className="absolute inset-0">
                         {/* Background blur để tăng độ sâu (depth) */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        { }
                         <img
                             src={normalizeStorageUrl(post.banner_image || post.featured_image) || "/placeholder-banner.jpg"}
                             alt={post.title}

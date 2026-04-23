@@ -1,6 +1,7 @@
 import pool from '@/lib/db';
 import { checkTeacherExistsByEmail, isDatabaseUnavailableError } from '@/lib/db-helpers';
 import { getJwtSecret } from '@/lib/jwt-secret';
+import { clientIpFromRequest, rateLimitOr429 } from '@/lib/rate-limit-memory';
 import { setSessionCookieOnResponse } from '@/lib/session-cookie';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -8,6 +9,13 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
+    const rl = rateLimitOr429(
+      `app-auth-login:${clientIpFromRequest(request)}`,
+      40,
+      60_000,
+    );
+    if (rl) return rl;
+
     let body: { email?: string; password?: string };
     try {
       body = await request.json();

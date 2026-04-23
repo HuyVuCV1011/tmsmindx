@@ -55,7 +55,7 @@ export function MascotSpriteCycle({
     <div
       className={`bao-tri-mascot-wrap relative flex h-32 w-[7.5rem] items-end justify-center sm:h-40 sm:w-36 ${wrapperClassName}`}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- đổi frame liên tục, tránh flash Image optimize */}
+      { }
       <img
         src={frames[index]}
         alt={alt}

@@ -1369,9 +1369,10 @@ export async function runMigrations(
           console.log(
             `  ✅ Migration applied: ${migration.name} (v${migration.version})`,
           )
-        } catch (err: any) {
+        } catch (err: unknown) {
           await client.query('ROLLBACK')
-          const errorMsg = `Migration ${migration.name} failed: ${err.message}`
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          const errorMsg = `Migration ${migration.name} failed: ${errorMessage}`
           errors.push(errorMsg)
           console.error(`  ❌ ${errorMsg}`)
         }
@@ -1380,9 +1381,10 @@ export async function runMigrations(
     } finally {
       client.release()
     }
-  } catch (err: any) {
-    console.error('❌ Migration system error:', err.message)
-    return { success: false, applied, errors: [err.message] }
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    console.error('❌ Migration system error:', errorMessage)
+    return { success: false, applied, errors: [errorMessage] }
   }
 }
 

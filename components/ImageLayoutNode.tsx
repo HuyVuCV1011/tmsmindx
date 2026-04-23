@@ -113,7 +113,7 @@ function SlotItem({
     >
       {src ? (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+          { }
           <img src={src} alt="" className="il-img" draggable={false} />
           <div className="il-slot-overlay">
             <button
@@ -196,7 +196,7 @@ export function ImageLayoutNodeView(props: NodeViewProps) {
       setLayoutId(node.attrs.layoutId || '1+1')
       setImages(node.attrs.images || [])
     }
-  }, [node.attrs.layoutId, node.attrs.images]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [node.attrs.layoutId, node.attrs.images])
 
   // Cleanup timer khi unmount
   useEffect(() => () => { if (commitTimerRef.current) clearTimeout(commitTimerRef.current) }, [])

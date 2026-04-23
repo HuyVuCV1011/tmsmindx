@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { toast as flatToast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
-import { useAppDispatch, useAppSelector } from '@/lib/redux/hooks'
+import { useAppSelector } from '@/lib/redux/hooks'
 import { useTeacher } from '@/lib/teacher-context'
 import { useToast } from '@/lib/use-toast'
 import { Loader2 } from 'lucide-react'
@@ -25,9 +25,33 @@ interface Question {
   answer: number
 }
 
+interface TrainingVideoSegment {
+  id: string | number
+  url: string
+  duration_seconds?: number | null
+  duration_minutes?: number | null
+}
+
+interface TrainingAssignment {
+  id: string | number
+  [key: string]: unknown
+}
+
+interface TrainingQuestionRecord {
+  id: number
+  time_in_video?: number | null
+  question_text: string
+  options?: string[] | string | null
+  correct_answer?: string | number | null
+}
+
+type LessonUser = {
+  role?: string
+  isAdmin?: boolean
+}
+
 function LessonContent() {
   const router = useRouter()
-  const dispatch = useAppDispatch()
   const { user } = useAuth()
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher()
   const toast = useToast()
@@ -55,8 +79,8 @@ function LessonContent() {
     : 0
 
   const videoSegments = useMemo(() => {
-    return isSessionValid && segments && segments.length > 0
-      ? segments
+    return isSessionValid && Array.isArray(segments) && segments.length > 0
+      ? (segments as TrainingVideoSegment[])
       : videoLink
         ? [
             {
@@ -75,14 +99,18 @@ function LessonContent() {
   ])
 
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [localTime, setLocalTime] = useState(0) // Thời gian của video hiện tại
+  const currentIndexRef = useRef(currentIndex)
+  useEffect(() => {
+    currentIndexRef.current = currentIndex
+  }, [currentIndex])
+
   const [pendingSeekTime, setPendingSeekTime] = useState<number | null>(null)
 
   // Tính toán trước mốc thời gian bắt đầu của từng video và tổng thời lượng từ DB / Redux
   const { totalDurationMap, startTimes } = useMemo(() => {
     let total = 0
     const starts: number[] = []
-    videoSegments.forEach((vid: any) => {
+    videoSegments.forEach((vid) => {
       starts.push(total)
       // Sử dụng ưu tiên duration_seconds nếu có, else duration_minutes
       const segmentSecs =
@@ -97,12 +125,19 @@ function LessonContent() {
     return { totalDurationMap: total, startTimes: starts }
   }, [videoSegments, overrideDurationSeconds])
 
-  // globalTime sẽ là thời gian thực tế trong chuỗi video (để match với tracking progress API)
-  const globalTime = (startTimes[currentIndex] ?? 0) + localTime
+  const startTimesRef = useRef(startTimes)
+  useEffect(() => {
+    startTimesRef.current = startTimes
+  }, [startTimes])
+
+  const totalDurationMapRef = useRef(totalDurationMap)
+  useEffect(() => {
+    totalDurationMapRef.current = totalDurationMap
+  }, [totalDurationMap])
+
   const videoUrl = videoSegments[currentIndex]?.url || null
 
   const [progress, setProgress] = useState(0)
-  const [showQuiz, setShowQuiz] = useState(false)
   const [videoCompleted, setVideoCompleted] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -119,10 +154,9 @@ function LessonContent() {
   const [videoPaused, setVideoPaused] = useState(false)
   const [showResult, setShowResult] = useState(false)
   const [isCorrectAnswer, setIsCorrectAnswer] = useState(false)
-  const [hasNextLesson, setHasNextLesson] = useState<boolean>(true)
-  const [nextLessonData, setNextLessonData] = useState<any>(null)
-  const [currentAssignment, setCurrentAssignment] = useState<any>(null) // Trạng thái bài tập của video hiện tại
-  const [maxWatchedTime, setMaxWatchedTime] = useState(0)
+  const [currentAssignment, setCurrentAssignment] = useState<TrainingAssignment | null>(
+    null,
+  ) // Trạng thái bài tập của video hiện tại
 
   // Ref to track user for event handlers
   const userRef = useRef(user)
@@ -141,8 +175,9 @@ function LessonContent() {
     if (!user) return
     if (isTeacherLoading) return
 
+    const currentUser = user as LessonUser | null
     const isAdmin =
-      (user as any).role === 'admin' || (user as any).isAdmin === true
+      currentUser?.role === 'admin' || currentUser?.isAdmin === true
     if (isAdmin) return
 
     // Check if teacher profile is valid
@@ -186,7 +221,10 @@ function LessonContent() {
         const res = await fetch(
           `/api/training-assignments?video_id=${lessonId}&status=published`,
         )
-        const data = await res.json()
+        const data = (await res.json()) as {
+          success: boolean
+          data?: TrainingAssignment[]
+        }
 
         if (data.success && data.data && data.data.length > 0) {
           // Lấy bài tập đầu tiên (hoặc có thể thêm logic chọn bài tập phù hợp)
@@ -219,7 +257,6 @@ function LessonContent() {
   // 3. Penalty: lùi đúng 15s từ lastSafePosition, cooldown 3s
   // ═══════════════════════════════════════════════════════════════════════
 
-  const PENALTY_SECONDS = 15
   const VIOLATION_LIMIT = 3
   const PENALTY_COOLDOWN = 3000
   const CHECK_INTERVAL = 500 // ms — check mỗi 500ms thay vì 60fps
@@ -405,13 +442,6 @@ function LessonContent() {
     }
   }, [])
 
-  const startRateGuard = useCallback((_v: HTMLVideoElement) => {
-    /* prototype patch */
-  }, [])
-  const stopRateGuard = useCallback(() => {
-    /* prototype patch */
-  }, [])
-
   const resetWallClock = useCallback((video: HTMLVideoElement) => {
     const offset = video.seekable.length > 0 ? video.seekable.start(0) : 0
     const pos = Math.max(0, video.currentTime - offset)
@@ -419,10 +449,6 @@ function LessonContent() {
     videoTimeAtWallRef.current = pos
     lastSafePositionRef.current = pos
     isLockedRef.current = false
-  }, [])
-
-  const checkSpeedHack = useCallback((_v: HTMLVideoElement) => {
-    /* handled by interval */
   }, [])
 
   // Ref to track if we are in quiz mode (to prevent auto-resume)
@@ -451,7 +477,6 @@ function LessonContent() {
     setVideoPaused(false)
     setShowResult(false)
     setIsCorrectAnswer(false)
-    setMaxWatchedTime(0)
     setIsPlaying(false)
     playbackAllowedRef.current = false
 
@@ -470,7 +495,7 @@ function LessonContent() {
         // Safari legacy
         !!(document as Document & { webkitHidden?: boolean }).webkitHidden)
 
-    const pauseAllVideos = (reason: string) => {
+    const pauseAllVideos = () => {
       playbackAllowedRef.current = false
       isPlayingRef.current = false
       setIsPlaying(false)
@@ -480,15 +505,15 @@ function LessonContent() {
     }
 
     const handleVisibilityChange = () => {
-      if (docHidden()) pauseAllVideos('visibility')
+      if (docHidden()) pauseAllVideos()
     }
 
-    const handlePageHide = () => pauseAllVideos('pagehide')
+    const handlePageHide = () => pauseAllVideos()
 
     // Bổ sung khi visibility không đổi (ví dụ focus sang app/cửa sổ khác) — document mất focus → dừng phát
     const handleWindowBlur = () => {
       if (typeof document !== 'undefined' && !document.hasFocus()) {
-        pauseAllVideos('window-blur')
+        pauseAllVideos()
       }
     }
 
@@ -505,7 +530,6 @@ function LessonContent() {
       window.removeEventListener('pagehide', handlePageHide)
       window.removeEventListener('blur', handleWindowBlur)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Load saved progress
@@ -521,19 +545,28 @@ function LessonContent() {
           `/api/training-progress?teacherCode=${teacherCode}&videoId=${lessonId}`,
           { signal: controller.signal },
         )
-        const data = await res.json()
+        const data = (await res.json()) as {
+          success: boolean
+          data?: {
+            time_spent_seconds: number
+            completion_status?: string | null
+          }
+        }
 
         if (data.success && data.data) {
           const { time_spent_seconds, completion_status } = data.data
+          const currentIndexSnapshot = currentIndexRef.current
+          const startTimesSnapshot = startTimesRef.current
+          const totalDurationSnapshot = totalDurationMapRef.current
 
           if (time_spent_seconds > 0) {
             // Find target video segment
             let targetIndex = 0
             let timeInTargetVideo = time_spent_seconds
 
-            for (let i = 0; i < startTimes.length; i++) {
-              const start = startTimes[i]
-              const nextStart = startTimes[i + 1] || totalDurationMap
+            for (let i = 0; i < startTimesSnapshot.length; i++) {
+              const start = startTimesSnapshot[i]
+              const nextStart = startTimesSnapshot[i + 1] || totalDurationSnapshot
 
               if (
                 time_spent_seconds >= start &&
@@ -545,7 +578,7 @@ function LessonContent() {
               }
             }
 
-            if (targetIndex === currentIndex) {
+            if (targetIndex === currentIndexSnapshot) {
               if (videoRef.current) {
                 const offset =
                   videoRef.current.seekable.length > 0
@@ -556,7 +589,6 @@ function LessonContent() {
                 lastSafePositionRef.current = timeInTargetVideo
                 wallStartRef.current = null
                 videoRef.current.currentTime = timeInTargetVideo + offset
-                setLocalTime(timeInTargetVideo)
                 setTimeout(() => {
                   isReplayingRef.current = false
                 }, 800)
@@ -581,8 +613,12 @@ function LessonContent() {
             setProgress(100)
           }
         }
-      } catch (err: any) {
-        if (err?.name !== 'AbortError') {
+      } catch (err: unknown) {
+        const errorName =
+          typeof err === 'object' && err !== null && 'name' in err
+            ? String((err as { name?: unknown }).name)
+            : ''
+        if (errorName !== 'AbortError') {
           console.error('[Lesson] Failed to load progress:', err)
         }
       }
@@ -642,24 +678,28 @@ function LessonContent() {
         const response = await fetch(
           `/api/training-video-questions?video_id=${lessonId}`,
         )
-        const data = await response.json()
+        const data = (await response.json()) as {
+          success: boolean
+          data?: TrainingQuestionRecord[]
+        }
 
         if (data.success && data.data && data.data.length > 0) {
-          const loadedQuestions = data.data.map((q: any) => ({
-            id: q.id,
-            time: q.time_in_video || 0,
-            question: q.question_text,
+          const loadedQuestions = data.data.map((question) => ({
+            id: Number(question.id),
+            time: question.time_in_video || 0,
+            question: question.question_text,
             options:
-              typeof q.options === 'string'
-                ? JSON.parse(q.options)
-                : q.options || [],
-            answer: parseInt(q.correct_answer) || 0,
+              typeof question.options === 'string'
+                ? (JSON.parse(question.options) as string[])
+                : question.options || [],
+            answer:
+              Number.parseInt(String(question.correct_answer ?? 0), 10) || 0,
           }))
           setQuestions(loadedQuestions)
         } else {
           setQuestions([])
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('[Lesson] ❌ Error loading questions:', err)
         setQuestions([])
       }
@@ -673,38 +713,6 @@ function LessonContent() {
       videoRef.current.playbackRate = playbackSpeed
     }
   }, [playbackSpeed])
-
-  // Check for next lesson
-  useEffect(() => {
-    const checkNextLesson = async () => {
-      if (!lessonId) return
-
-      try {
-        const response = await fetch('/api/training-videos')
-        const data = await response.json()
-
-        if (data.success && data.data && data.data.length > 0) {
-          const videos = data.data
-          const currentIndex = videos.findIndex(
-            (v: any) => v.id.toString() === lessonId,
-          )
-
-          if (currentIndex !== -1 && currentIndex < videos.length - 1) {
-            // Has next lesson
-            setHasNextLesson(true)
-            setNextLessonData(videos[currentIndex + 1])
-          } else {
-            // No next lesson (completed all)
-            setHasNextLesson(false)
-          }
-        }
-      } catch (err) {
-        console.error('[Lesson] Error checking next lesson:', err)
-      }
-    }
-
-    checkNextLesson()
-  }, [lessonId])
 
   // Check for questions at current time
   useEffect(() => {
@@ -724,6 +732,7 @@ function LessonContent() {
     }
   }, [
     currentTime,
+    duration,
     questions,
     answeredQuestions,
     videoPaused,
@@ -787,9 +796,7 @@ function LessonContent() {
       }
 
       lastValidTimeRef.current = gTime
-      setLocalTime(localCrtTime)
       setCurrentTime(gTime)
-      setMaxWatchedTime((prev) => Math.max(prev, gTime))
 
       // Early switch to next segment
       if (currentIndex < videoSegments.length - 1 && video.duration > 0) {
@@ -946,7 +953,6 @@ function LessonContent() {
       }
       // Lock playbackRate và reset wall-clock baseline mỗi khi bắt đầu play
       lockPlaybackRate(video)
-      startRateGuard(video)
       resetWallClock(video)
       isLockedRef.current = false
       setIsWaiting(false)
@@ -971,14 +977,16 @@ function LessonContent() {
       }
     }
 
-    const handleError = (e: any) => {
-      console.error('[Lesson] Video error:', video.error, e)
+    const handleError = (errorEvent: Event) => {
+      console.error('[Lesson] Video error:', video.error, errorEvent)
       if (video.error && video.error.code === 4) {
-        toast.error(
+        toastRef.current?.error(
           'Không thể ghép nối video trên bộ nhớ Cloudinary (Vượt size 100MB!).',
         )
       } else {
-        toast.error('Lỗi tải luồng trình phát video, vui lòng tải lại trang.')
+        toastRef.current?.error(
+          'Lỗi tải luồng trình phát video, vui lòng tải lại trang.',
+        )
       }
     }
 
@@ -1211,7 +1219,7 @@ function LessonContent() {
           {/* Multi-video buffering logic: We render ALL video segments but only ONE is visible and attached to videoRef.
               This guarantees the browser completes DNS handshake, preload cache, and audio initialization bounds BEFORE they appear.
           */}
-          {videoSegments.map((segment: any, idx: number) => {
+          {videoSegments.map((segment, idx) => {
             const isActive = idx === currentIndex
             const isNext = idx === currentIndex + 1
 
@@ -1281,7 +1289,7 @@ function LessonContent() {
 
                 {/* Question markers */}
                 <div className="absolute left-0 right-0 h-10 flex items-center top-1/2 transform -translate-y-1/2">
-                  {questions.map((q, idx) => (
+                  {questions.map((q) => (
                     <div
                       key={q.id}
                       className="absolute transform -translate-x-1/2"

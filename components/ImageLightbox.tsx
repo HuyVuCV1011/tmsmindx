@@ -104,7 +104,7 @@ export default function ImageLightbox({ images, initialIndex, onClose }: ImageLi
         onPointerUp={onPointerUp}
         style={{ cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        { }
         <img
           src={img.src}
           alt={img.alt}
@@ -133,7 +133,7 @@ export default function ImageLightbox({ images, initialIndex, onClose }: ImageLi
               className={`lightbox-thumb${i === current ? ' active' : ''}`}
               onClick={() => { setCurrent(i); setZoom(1); setOffset({ x: 0, y: 0 }) }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img src={im.src} alt={im.alt} draggable={false} />
             </button>
           ))}

@@ -1,12 +1,12 @@
 "use client";
 
-import { Teacher } from '@/types/teacher';
-import { parseLegacyTeacherFromInfoJson } from '@/lib/teacher-db-mapper';
-import { createContext, useContext, useMemo } from 'react';
-import { useAuth } from './auth-context';
 import { authHeaders } from '@/lib/auth-headers';
-import { logger } from './logger';
+import { parseLegacyTeacherFromInfoJson } from '@/lib/teacher-db-mapper';
+import { Teacher } from '@/types/teacher';
+import { createContext, useContext, useMemo } from 'react';
 import useSWR from 'swr';
+import { useAuth } from './auth-context';
+import { logger } from './logger';
 
 interface TeacherContextType {
   teacherProfile: Teacher | null;
@@ -78,7 +78,7 @@ export function TeacherProvider({ children }: { children: React.ReactNode }) {
       currentBranch: teacherProfile?.branchCurrent || null,
       currentCode: teacherProfile?.code || null,
     }),
-    [teacherProfile, user?.email, isLoading, data, mutate],
+    [teacherProfile, user?.email, isLoading, mutate],
   );
 
   return (

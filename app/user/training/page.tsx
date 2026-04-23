@@ -1,21 +1,21 @@
 'use client'
 
+import { PageContainer } from '@/components/PageContainer'
 import { Button } from '@/components/ui/button'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table'
-import { PageContainer } from '@/components/PageContainer'
 import { useAuth } from '@/lib/auth-context'
 import { setVideo } from '@/lib/redux/features/trainingSlice'
 import { useAppDispatch } from '@/lib/redux/hooks'
 import { useTeacher } from '@/lib/teacher-context'
-import { BookOpen, CheckCircle, Clock, FileText } from 'lucide-react'
-import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { BookOpen, Clock, FileText } from 'lucide-react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 import AssignmentsPage from '../assignments/page'
@@ -40,15 +40,25 @@ interface TrainingLesson {
   time_spent_seconds?: number
 }
 
+interface TrainingSubmission {
+  score?: number | string | null
+  total_points?: number | string | null
+  percentage?: number | string | null
+  is_passed?: boolean | null
+  submitted_at?: string | null
+}
+
 interface TrainingAssignment {
   id: number
   assignment_title: string
-  description: string
+  description?: string
   video_id: number
-  assignment_type: string
-  passing_score: number
-  max_attempts: number
-  time_limit_minutes: number
+  assignment_type?: string
+  passing_score?: number
+  max_attempts?: number
+  time_limit_minutes?: number
+  question_count?: number
+  recent_submission?: TrainingSubmission | null
 }
 
 interface TrainingData {
@@ -62,7 +72,7 @@ interface TrainingData {
   centers: string
   khoiFinal: string
   position: string
-  averageScore: number
+  averageScore?: number
   lessons: TrainingLesson[]
 }
 
@@ -71,6 +81,24 @@ interface Teacher {
   name: string
   emailMindx: string
   emailPersonal: string
+}
+
+interface TeacherLookupResponse {
+  teacher?: Teacher | null
+}
+
+interface TrainingAssignmentsResponse {
+  data?: TrainingAssignment[]
+}
+
+interface FetchError extends Error {
+  info: unknown
+  status?: number
+}
+
+type UserAccessLike = {
+  role?: string
+  isAdmin?: boolean
 }
 
 function extractCodeFromEmail(email: string): string {
@@ -87,25 +115,6 @@ export default function TrainingPage() {
   const startAssignmentId = searchParams.get('start_assignment_id')
   const { mutate } = useSWRConfig()
 
-  // Khi startAssignmentId biến mất (user quay về từ bài kiểm tra) → refetch ngay
-  const prevStartAssignmentIdRef = useRef(startAssignmentId)
-  useEffect(() => {
-    const prev = prevStartAssignmentIdRef.current
-    prevStartAssignmentIdRef.current = startAssignmentId
-    // Chỉ refetch khi chuyển từ có startAssignmentId → không có (tức là vừa quay về)
-    if (prev && !startAssignmentId) {
-      const code = submitCodeRef.current
-      if (code) {
-        mutate(`/api/training-db?code=${code}`)
-        if (teacherCodeRef.current) {
-          mutate(
-            `/api/training-assignments?status=published&teacher_code=${teacherCodeRef.current}`,
-          )
-        }
-      }
-    }
-  }, [startAssignmentId, mutate])
-
   const [tab, setTab] = useState<'lessons' | 'stats' | 'tests'>('lessons')
   const [submitCode, setSubmitCode] = useState('')
   const [hasAutoSearched, setHasAutoSearched] = useState(false)
@@ -115,17 +124,33 @@ export default function TrainingPage() {
   const prewarmInFlightRef = useRef<Map<string, Promise<void>>>(new Map())
   const prewarmLastAtRef = useRef<Map<string, number>>(new Map())
   const prewarmTimerByLessonRef = useRef<Map<number, NodeJS.Timeout>>(new Map())
-  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher()
-
-  // Refs để event listeners luôn đọc được giá trị mới nhất
-  const submitCodeRef = useRef(submitCode)
-  const teacherCodeRef = useRef<string | null>(null)
-  useEffect(() => {
-    submitCodeRef.current = submitCode
-  }, [submitCode])
+  const { teacherProfile, isLoading: isTeacherLoading } = useTeacher() as {
+    teacherProfile: Teacher | null | undefined
+    isLoading: boolean
+  }
 
   // ── Guard: block non-admin users if teacher profile is missing ──
   const [missingProfile, setMissingProfile] = useState(false)
+
+  const refetchTrainingData = useCallback(() => {
+    if (!submitCode) return
+
+    mutate(`/api/training-db?code=${submitCode}`)
+    if (teacherProfile?.code) {
+      mutate(`/api/training-assignments?status=published&teacher_code=${teacherProfile.code}`)
+    }
+  }, [mutate, submitCode, teacherProfile?.code])
+
+  // Khi startAssignmentId biến mất (user quay về từ bài kiểm tra) → refetch ngay
+  const prevStartAssignmentIdRef = useRef(startAssignmentId)
+  useEffect(() => {
+    const prev = prevStartAssignmentIdRef.current
+    prevStartAssignmentIdRef.current = startAssignmentId
+    // Chỉ refetch khi chuyển từ có startAssignmentId → không có (tức là vừa quay về)
+    if (prev && !startAssignmentId) {
+      refetchTrainingData()
+    }
+  }, [startAssignmentId, refetchTrainingData])
 
   useEffect(() => {
     if (!user) return
@@ -133,8 +158,8 @@ export default function TrainingPage() {
     // Skip check while loading
     if (isTeacherLoading) return
 
-    const isAdmin =
-      (user as any).role === 'admin' || (user as any).isAdmin === true
+    const authUser = user as UserAccessLike
+    const isAdmin = authUser.role === 'admin' || authUser.isAdmin === true
     if (isAdmin) return
 
     if (!teacherProfile) {
@@ -154,7 +179,7 @@ export default function TrainingPage() {
   }
 
   const secureFetcher = useCallback(async (url: string) => {
-    let token = localStorage.getItem('token')
+    const token = localStorage.getItem('token')
 
     const doFetch = async (tok: string | null) => {
       const headers: HeadersInit = {}
@@ -164,55 +189,21 @@ export default function TrainingPage() {
       return res
     }
 
-    let response = await doFetch(token)
+    const response = await doFetch(token)
 
     if (response.status === 401) {
-      const refreshToken = localStorage.getItem('refreshToken')
-      if (refreshToken) {
-        try {
-          const FIREBASE_API_KEY =
-            process.env.NEXT_PUBLIC_FIREBASE_API_KEY || ''
-          const refreshRes = await fetch(
-            `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `grant_type=refresh_token&refresh_token=${refreshToken}`,
-            },
-          )
-
-          if (refreshRes.ok) {
-            const refreshData = await refreshRes.json()
-            const newIdToken = refreshData.id_token
-            const newRefreshToken = refreshData.refresh_token
-
-            if (newIdToken) {
-              localStorage.setItem('token', newIdToken)
-              if (newRefreshToken)
-                localStorage.setItem('refreshToken', newRefreshToken)
-              token = newIdToken
-              response = await doFetch(token)
-            }
-          }
-        } catch (e) {
-          console.warn('Silent token refresh failed', e)
-        }
-      }
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('refreshToken')
+      window.location.href = '/login'
+      throw new Error('Unauthorized')
     }
 
     if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        localStorage.removeItem('refreshToken')
-        window.location.href = '/login'
-        throw new Error('Unauthorized')
-      }
-
-      const error: any = new Error('An error occurred while fetching the data.')
+      const error = new Error('An error occurred while fetching the data.') as FetchError
       try {
         error.info = await response.json()
-      } catch (e) {
+      } catch {
         error.info = null
       }
       error.status = response.status
@@ -239,15 +230,15 @@ export default function TrainingPage() {
 
     ;(async () => {
       try {
-        const res = await secureFetcher(
+        const res = (await secureFetcher(
           `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
-        )
+        )) as TeacherLookupResponse
         if (res?.teacher?.code) {
           setSubmitCode(res.teacher.code)
           setIsResolvingCode(false)
           return
         }
-      } catch (err) {
+      } catch {
         console.warn(
           'Email-based lookup failed, falling back to code extraction',
         )
@@ -269,7 +260,7 @@ export default function TrainingPage() {
     secureFetcher,
   ])
 
-  const { data: teacherData, isLoading: isLoadingTeacher } = useSWR(
+  const { data: teacherData, isLoading: isLoadingTeacher } = useSWR<TeacherLookupResponse>(
     submitCode && user ? `/api/teachers/info?code=${submitCode}` : null,
     secureFetcher,
     {      revalidateOnFocus: false,
@@ -281,44 +272,23 @@ export default function TrainingPage() {
 
   const teacher = teacherData?.teacher || null
 
-  // Cập nhật ref khi teacher thay đổi
-  useEffect(() => {
-    teacherCodeRef.current = teacher?.code || null
-  }, [teacher])
-
   // Refetch khi pathname thay đổi (user navigate về /user/dao-tao-nang-cao từ lesson page)
   useEffect(() => {
-    const code = submitCodeRef.current
-    if (!code) return
-    mutate(`/api/training-db?code=${code}`)
-    if (teacherCodeRef.current) {
-      mutate(
-        `/api/training-assignments?status=published&teacher_code=${teacherCodeRef.current}`,
-      )
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname])
+    refetchTrainingData()
+  }, [pathname, refetchTrainingData])
 
   // Refetch khi tab được focus lại (switch tab, alt-tab, v.v.)
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState !== 'visible') return
-      const code = submitCodeRef.current
-      if (!code) return
-      mutate(`/api/training-db?code=${code}`)
-      if (teacherCodeRef.current) {
-        mutate(
-          `/api/training-assignments?status=published&teacher_code=${teacherCodeRef.current}`,
-        )
-      }
+      refetchTrainingData()
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () =>
       document.removeEventListener('visibilitychange', handleVisibility)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [refetchTrainingData])
 
-  const { data: trainingData, isLoading: isLoadingTraining } = useSWR(
+  const { data: trainingData, isLoading: isLoadingTraining } = useSWR<TrainingData>(
     teacher && user ? `/api/training-db?code=${submitCode}` : null,
     secureFetcher,
     {
@@ -328,7 +298,7 @@ export default function TrainingPage() {
       shouldRetryOnError: false,
     },
   )
-  const { data: assignmentsData, isLoading: isLoadingAssignments } = useSWR(
+  const { data: assignmentsData, isLoading: isLoadingAssignments } = useSWR<TrainingAssignmentsResponse>(
     teacher && user
       ? `/api/training-assignments?status=published&teacher_code=${teacher.code}`
       : null,
@@ -419,9 +389,10 @@ export default function TrainingPage() {
   )
 
   useEffect(() => {
+    const timers = prewarmTimerByLessonRef.current
     return () => {
-      prewarmTimerByLessonRef.current.forEach((timer) => clearTimeout(timer))
-      prewarmTimerByLessonRef.current.clear()
+      timers.forEach((timer) => clearTimeout(timer))
+      timers.clear()
     }
   }, [])
 
@@ -611,16 +582,19 @@ export default function TrainingPage() {
                           <div className="relative w-full shrink-0 sm:w-40">
                             <div className="w-full h-40 bg-gray-200 rounded-lg overflow-hidden sm:w-40 sm:h-24">
                               {lesson.thumbnail_url ? (
-                                <img
-                                  src={lesson.thumbnail_url}
-                                  alt={lesson.name}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement
-                                    target.src =
-                                      'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiIGZpbGw9IiNlNWU3ZWIiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzljYTNhZiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0Ij5WaWRlbzwvdGV4dD48L3N2Zz4='
-                                  }}
-                                />
+                                <>
+                                  { }
+                                  <img
+                                    src={lesson.thumbnail_url}
+                                    alt={lesson.name}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement
+                                      target.src =
+                                        'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiIGZpbGw9IiNlNWU3ZWIiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzljYTNhZiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0Ij5WaWRlbzwvdGV4dD48L3N2Zz4='
+                                    }}
+                                  />
+                                </>
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-rose-100 to-red-100">
                                   <svg
@@ -758,7 +732,7 @@ export default function TrainingPage() {
                             {(() => {
                               const assignmentList = assignmentsData?.data || []
                               const assignment = assignmentList.find(
-                                (a: any) => a.video_id === lesson.id,
+                                (a) => a.video_id === lesson.id,
                               )
 
                               if (!assignment) return null
@@ -990,10 +964,10 @@ export default function TrainingPage() {
                 (() => {
                   const filteredAssignments = (
                     assignmentsData?.data || []
-                  ).filter((a: any) => {
+                  ).filter((a) => {
                     if (!a.video_id) return false
                     return !!trainingData?.lessons?.find(
-                      (l: any) => l.id === a.video_id,
+                      (l) => l.id === a.video_id,
                     )
                   })
 
@@ -1007,9 +981,9 @@ export default function TrainingPage() {
 
                   return (
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                      {filteredAssignments.map((assignment: any) => {
+                      {filteredAssignments.map((assignment) => {
                         const linkedVideo = trainingData?.lessons?.find(
-                          (l: any) => l.id === assignment.video_id,
+                          (l) => l.id === assignment.video_id,
                         )
                         const isLocked =
                           !linkedVideo ||

@@ -208,7 +208,7 @@ export default function AdminFeedbackPage() {
   }
   useEffect(() => {
     fetchItems()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [user?.email])
 
   useEffect(() => {
@@ -581,7 +581,7 @@ export default function AdminFeedbackPage() {
                         }}
                         className="w-24 h-24 shrink-0 border border-gray-200 rounded-lg overflow-hidden"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        { }
                         <img
                           src={url}
                           alt="feedback-user-image"
@@ -663,7 +663,7 @@ export default function AdminFeedbackPage() {
                         }}
                         className="block h-full w-full"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        { }
                         <img
                           src={url}
                           alt="feedback-admin-image"
@@ -739,7 +739,7 @@ export default function AdminFeedbackPage() {
               <X className="h-6 w-6" />
             </button>
             <div className="overflow-hidden rounded-xl border border-white/20 bg-black">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img
                 src={previewImages[previewIndex]}
                 alt={`feedback-${previewIndex + 1}`}
