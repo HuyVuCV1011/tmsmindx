@@ -11,6 +11,13 @@
 
 const SUPABASE_STORAGE_PATTERN = /https?:\/\/[^/]+\.supabase\.co\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+)/;
 
+/** Parse s3://bucket/key → proxy URL */
+function s3UriToProxyUrl(url: string): string | null {
+  const match = url.match(/^s3:\/\/([^/]+)\/(.+)$/);
+  if (!match) return null;
+  return `/api/storage-image?bucket=${encodeURIComponent(match[1])}&key=${encodeURIComponent(match[2])}`;
+}
+
 /**
  * Normalize một URL ảnh/video:
  * - Nếu là Supabase storage URL → chuyển sang proxy URL
@@ -21,6 +28,11 @@ export function normalizeStorageUrl(url: string | null | undefined): string {
 
   // Đã là proxy URL → giữ nguyên
   if (url.startsWith('/api/storage-image')) return url;
+
+  // s3://bucket/key → proxy URL
+  if (url.startsWith('s3://')) {
+    return s3UriToProxyUrl(url) ?? url;
+  }
 
   // Supabase storage URL → chuyển sang proxy
   const match = url.match(SUPABASE_STORAGE_PATTERN);

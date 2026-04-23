@@ -238,14 +238,10 @@ function VideoSetupContent() {
 
     const fetchData = async () => {
       try {
-        // Fetch current video
+        // Fetch current video first (cần video_group_id trước)
         const videoResponse = await fetch(`/api/training-videos?id=${videoId}`);
         const videoData = await videoResponse.json();
-        
-        // Fetch all videos to calculate next lesson number
-        const allVideosResponse = await fetch('/api/training-videos');
-        const allVideosData = await allVideosResponse.json();
-        
+
         if (videoData.success && videoData.data.length > 0) {
           const currentVideo = videoData.data[0];
           setVideo(currentVideo);
@@ -255,10 +251,29 @@ function VideoSetupContent() {
 
           const baseTitle = normalizeGroupTitle(currentVideo.title || "");
 
+          // Chạy song song: max lesson number + group videos (nếu có)
+          const parallelFetches: Promise<any>[] = [
+            fetch('/api/training-videos?maxLessonNumber=true')
+              .then(r => r.json()).catch(() => null),
+          ];
+
           if (currentVideo.video_group_id) {
-            const groupResponse = await fetch(`/api/training-videos?video_group_id=${encodeURIComponent(currentVideo.video_group_id)}`);
-            const groupData = await groupResponse.json();
-            if (groupData.success && Array.isArray(groupData.data)) {
+            parallelFetches.push(
+              fetch(`/api/training-videos?video_group_id=${encodeURIComponent(currentVideo.video_group_id)}`)
+                .then(r => r.json()).catch(() => null)
+            );
+          }
+
+          const [maxLessonData, groupData] = await Promise.all(parallelFetches);
+
+          // Calculate next lesson number
+          let maxLesson = 0;
+          if (maxLessonData?.success) {
+            maxLesson = Number(maxLessonData.max) || 0;
+          }
+          const nextLesson = maxLesson + 1;
+
+          if (groupData?.success && Array.isArray(groupData.data)) {
               const sortedGroupVideos = [...groupData.data].sort((a: Video, b: Video) => {
                 const left = a.chunk_index ?? 0;
                 const right = b.chunk_index ?? 0;
@@ -266,17 +281,9 @@ function VideoSetupContent() {
                 return a.id - b.id;
               });
               setGroupVideos(sortedGroupVideos);
-            }
           } else {
             setGroupVideos([currentVideo]);
           }
-          
-          // Calculate next lesson number (max lesson number + 1)
-          let maxLesson = 0;
-          if (allVideosData.success && allVideosData.data.length > 0) {
-            maxLesson = Math.max(...allVideosData.data.map((v: Video) => v.lesson_number || 0));
-          }
-          const nextLesson = maxLesson + 1;
           
           // Set form with current video data or defaults
           setVideoForm({
@@ -293,8 +300,8 @@ function VideoSetupContent() {
             setThumbnailPreview(currentVideo.thumbnail_url);
           }
           
-          // Load questions from database
-          await loadQuestions(videoId);
+          // Load questions không block UI — chạy song song
+          loadQuestions(videoId);
         } else {
           setError("Không tìm thấy video");
         }

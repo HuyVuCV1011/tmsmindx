@@ -87,6 +87,6 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
   } catch (error: any) {
     console.error('Upload video error:', error);
-    return NextResponse.json({ error: 'Lỗi upload video' }, { status: 500 });
+    return NextResponse.json({ error: 'Lỗi upload video', detail: error?.message || String(error) }, { status: 500 });
   }
 }
