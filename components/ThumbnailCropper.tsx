@@ -117,7 +117,7 @@ export default function ThumbnailCropper({
     const fx = imgRendered.left + crop.x * imgRendered.w
     const fy = imgRendered.top + crop.y * imgRendered.h
     setFrame(clampFrame({ x: fx, y: fy, w: fw, h: fh }))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [imgRendered.w, imgRendered.h, aspectRatio])
 
   // Clamp frame trong bounds ảnh, giữ tỷ lệ aspectRatio
@@ -271,7 +271,7 @@ export default function ThumbnailCropper({
             onPointerCancel={handlePointerUp}
           >
             {/* Ảnh gốc — contain */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img
               src={normalizeStorageUrl(src)}
               alt="Original"

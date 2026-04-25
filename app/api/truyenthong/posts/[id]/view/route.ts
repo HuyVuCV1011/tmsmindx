@@ -1,24 +1,34 @@
-import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { verifySessionCookieValue } from '@/lib/session-cookie';
+import { findCommunicationPostByIdentifier } from '@/lib/truyenthong-posts';
+import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(
-    request: Request,
+    request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const { id } = await params;
         const client = await pool.connect();
         try {
-            // Find post by slug or id
-            let postResult = await client.query('SELECT id FROM communications WHERE slug = $1', [id]);
-            if (postResult.rows.length === 0) {
-                postResult = await client.query('SELECT id FROM communications WHERE id = $1', [id]);
+            const lookup = await findCommunicationPostByIdentifier(client, id);
+            if (lookup.invalid) {
+                return NextResponse.json({ error: 'Post identifier is invalid' }, { status: 400 });
             }
-            if (postResult.rows.length === 0) {
+            if (!lookup.post) {
                 return NextResponse.json({ error: 'Post not found' }, { status: 404 });
             }
-            
-            const postId = postResult.rows[0].id;
+
+            const post = lookup.post;
+            if (post.status !== 'published') {
+                const rawSession = request.cookies.get('tps_session')?.value;
+                const session = rawSession ? await verifySessionCookieValue(rawSession) : null;
+                if (!session?.canAdminPortal) {
+                    return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+                }
+            }
+
+            const postId = post.id;
             
             const result = await client.query(
                 'UPDATE communications SET view_count = view_count + 1 WHERE id = $1 RETURNING view_count',

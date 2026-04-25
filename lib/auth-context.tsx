@@ -1,17 +1,17 @@
 'use client'
 
+import { toast } from '@/lib/app-toast'
 import { authHeaders } from '@/lib/auth-headers'
 import { logger } from '@/lib/logger'
 import { useRouter } from 'next/navigation'
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
 } from 'react'
-import { toast } from '@/lib/app-toast'
 
 interface User {
   email: string
@@ -22,6 +22,11 @@ interface User {
   isAppUser?: boolean
   permissions?: string[]
   userRoles?: string[]
+  assignedCenters?: Array<{
+    id: number
+    full_name: string
+    short_code: string | null
+  }>
 }
 
 interface AuthContextType {
@@ -91,28 +96,92 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
 
   useEffect(() => {
-    // Check authentication status - only run once on mount
+    let cancelled = false
+
+    const bootstrapAuth = async () => {
+      let cachedUser: User | null = null
+
     try {
       logger.info('Initializing auth context...')
 
-      const storedToken = localStorage.getItem('token')
       const storedUser = localStorage.getItem('user')
 
-      if (storedToken && storedUser) {
-        const parsedUser = JSON.parse(storedUser)
-        setToken(storedToken)
-        setUser(parsedUser)
-        logger.success('Auth restored from localStorage')
-      } else {
-        logger.info('No stored auth found')
+      localStorage.removeItem('token')
+      localStorage.removeItem('refreshToken')
+
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser)
+          if (isStoredUserShapeValid(parsedUser)) {
+            cachedUser = parsedUser
+            if (!cancelled) {
+              setUser(parsedUser)
+            }
+            logger.success('Auth restored from localStorage user cache')
+          } else {
+            localStorage.removeItem('user')
+          }
+        } catch {
+          localStorage.removeItem('user')
+        }
+      }
+
+      const response = await fetch('/api/auth/me', { cache: 'no-store' })
+      if (cancelled) return
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data?.success) {
+          const nextUser: User = {
+            email: data.email ?? cachedUser?.email ?? '',
+            displayName:
+              cachedUser?.displayName ??
+              (data.email ? String(data.email).split('@')[0] : '') ??
+              data.email ??
+              '',
+            role: (data.role ?? cachedUser?.role ?? 'teacher') as User['role'],
+            localId: cachedUser?.localId ?? data.email ?? '',
+            isAdmin: Boolean(data.isAdmin ?? cachedUser?.isAdmin),
+            isAppUser: Boolean(data.isAppUser ?? cachedUser?.isAppUser),
+            permissions: Array.isArray(data.permissions)
+              ? data.permissions
+              : cachedUser?.permissions ?? [],
+            userRoles: Array.isArray(data.userRoles)
+              ? data.userRoles
+              : cachedUser?.userRoles ?? [],
+            assignedCenters: Array.isArray(data.assignedCenters)
+              ? data.assignedCenters
+              : cachedUser?.assignedCenters ?? [],
+          }
+
+          setUser(nextUser)
+          localStorage.setItem('user', JSON.stringify(nextUser))
+          logger.success('Auth restored from session cookie')
+        } else if (!cachedUser) {
+          setUser(null)
+        }
+      } else if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('user')
+        setUser(null)
+        setToken(null)
+        logger.info('No active auth session')
       }
     } catch (error: any) {
       logger.error('Error initializing auth', { error: error.message })
-      // Clear corrupted data
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
+      if (!cachedUser) {
+        setUser(null)
+      }
     } finally {
-      setIsLoading(false)
+      if (!cancelled) {
+        setIsLoading(false)
+      }
+    }
+    }
+
+    void bootstrapAuth()
+
+    return () => {
+      cancelled = true
     }
   }, []) // Empty dependency array - only run once
 
@@ -122,8 +191,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       void fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
 
-      localStorage.removeItem('token')
       localStorage.removeItem('user')
+      localStorage.removeItem('token')
       localStorage.removeItem('refreshToken')
       setUser(null)
       setToken(null)
@@ -142,8 +211,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       logger.info('Updating user in auth context')
 
-      localStorage.setItem('token', newToken)
       localStorage.setItem('user', JSON.stringify(newUser))
+      localStorage.removeItem('token')
+      localStorage.removeItem('refreshToken')
       setUser(newUser)
       setToken(newToken)
 
@@ -155,11 +225,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const refreshPermissions = useCallback(async () => {
-    if (!user || !token) return
+    if (!user) return
 
     try {
+      const requestInit: RequestInit = token
+        ? { headers: authHeaders(token) }
+        : {}
       const response = await fetch('/api/check-admin', {
-        headers: authHeaders(token),
+        ...requestInit,
       })
       const data = await response.json()
 

@@ -78,7 +78,7 @@ export default function S3SupabaseManagerPage() {
 
   useEffect(() => {
     fetchItems();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [resourceType, appliedPrefix, bucket, user?.email]);
 
   const stats = useMemo(() => {
@@ -195,7 +195,7 @@ export default function S3SupabaseManagerPage() {
               <div className="h-44 bg-gray-100 flex items-center justify-center">
                 {item.kind === "image" ? (
                   item.previewUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
+
                     <img src={item.previewUrl} alt={item.name} className="w-full h-full object-cover" />
                   ) : (
                     <ImageIcon className="w-10 h-10 text-blue-500" />

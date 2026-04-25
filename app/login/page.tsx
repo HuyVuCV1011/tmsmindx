@@ -1,11 +1,11 @@
 "use client";
 
+import { toast } from '@/lib/app-toast';
 import { useAuth } from "@/lib/auth-context";
 import { logger } from '@/lib/logger';
 import { Eye, EyeOff } from 'lucide-react';
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import toast from 'react-hot-toast';
 
 const SAVED_LOGIN_KEY = 'tps_saved_login_account';
 type LandingRole = 'teacher' | 'manager';
@@ -192,11 +192,11 @@ export default function LoginPage() {
         });
 
         if (appAuthData.role === 'super_admin') {
-          toast.success(`Chào mừng Super Admin ${appAuthData.displayName}!`, { icon: '👑' });
+          toast.success(`Chào mừng Super Admin ${appAuthData.displayName}!`);
         } else if (landing.isAdminLanding) {
-          toast.success(`Chào mừng Admin ${appAuthData.displayName}!`, { icon: '👑' });
+          toast.success(`Chào mừng Admin ${appAuthData.displayName}!`);
         } else {
-          toast.success(`Chào mừng ${appAuthData.displayName}!`, { icon: '👋' });
+          toast.success(`Chào mừng ${appAuthData.displayName}!`);
         }
 
         persistRememberedAccount(appAuthData.email || trimmedEmail, role);
@@ -253,14 +253,6 @@ export default function LoginPage() {
 
       logger.success('Firebase login successful', { email: userData.email, role: userData.role });
 
-      try {
-        if (data.refreshToken) {
-          localStorage.setItem('refreshToken', data.refreshToken);
-        }
-      } catch (e) {
-        logger.warn('Unable to persist refreshToken', { error: (e as Error).message });
-      }
-
       const landing = resolvePostLoginPath({
         accountRole: serverRole,
         selectedRole: role,
@@ -271,19 +263,19 @@ export default function LoginPage() {
       let finalRedirectPath = landing.redirectPath;
 
       if (landing.isAdminLanding) {
-        toast.success(`Chào mừng Admin ${userData.displayName}!`, { icon: '👑' });
+        toast.success(`Chào mừng Admin ${userData.displayName}!`);
       } else if (serverRole === 'teacher') {
         finalRedirectPath = resolveTeacherRedirect(data?.teacherSync, userData.email);
 
         if (!data?.teacherSync?.foundInDatabase) {
-          toast('Chưa tìm thấy thông tin giáo viên trong database, vui lòng kiểm tra ở bước tiếp theo.', {
-            icon: '⚠️',
+          toast.info('Chưa tìm thấy thông tin giáo viên trong database.', {
+            message: 'Vui lòng kiểm tra ở bước tiếp theo.',
             duration: 4500,
           });
         }
-        toast.success(`Chào mừng ${userData.displayName}!`, { icon: '👋' });
+        toast.success(`Chào mừng ${userData.displayName}!`);
       } else {
-        toast.success(`Chào mừng ${userData.displayName}!`, { icon: '👋', duration: 4000 });
+        toast.success(`Chào mừng ${userData.displayName}!`, { duration: 4000 });
       }
 
       persistRememberedAccount(trimmedEmail, role);
@@ -298,11 +290,11 @@ export default function LoginPage() {
       logger.error('Login error', { error: errorMessage });
 
       if (errorMessage.toLowerCase().includes('password') || errorMessage.toLowerCase().includes('mật khẩu')) {
-        toast.error('Mật khẩu không chính xác!', { icon: '🔒' });
+        toast.error('Mật khẩu không chính xác!');
       } else if (errorMessage.toLowerCase().includes('email') || errorMessage.toLowerCase().includes('tài khoản')) {
-        toast.error('Tài khoản không tồn tại!', { icon: '❓' });
+        toast.error('Tài khoản không tồn tại!');
       } else {
-        toast.error(errorMessage, { icon: '❌' });
+        toast.error(errorMessage);
       }
     } finally {
       setIsSubmitting(false);
@@ -323,7 +315,7 @@ export default function LoginPage() {
         {/* Left side: Banner */}
         <div className="hidden md:flex flex-col justify-between items-start bg-linear-to-br from-[#800000] to-[#E31F26] w-1/3 h-full p-8 text-white">
           <div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img src="/logo_white.svg" alt="logo" className="h-20 mb-8 animate-fade-in" />
             <h2 className="text-2xl font-bold mb-4 leading-tight animate-slide-up"> Teaching<br />Portal System (TPS)</h2>
             <p className="text-sm opacity-90 mb-8 animate-slide-up animation-delay-200">Hệ thống quản lý thông tin giáo viên, theo dõi tiến độ đào tạo, xử lý yêu cầu tra cứu thông tin nội bộ.</p>
@@ -337,7 +329,7 @@ export default function LoginPage() {
         <div className="flex-1 flex flex-col justify-center px-4 sm:px-8 md:px-12 py-4 sm:py-6 animate-fade-in animation-delay-200">
           <div className="flex flex-col gap-4 mb-2">
             <div className="flex justify-center md:hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img src="/logo.svg" alt="MindX logo" className="h-14 w-auto" />
             </div>
             <h2 className="hidden md:block text-xl font-bold text-center text-[#800000] animate-slide-up">MindX Technology School</h2>

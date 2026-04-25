@@ -1,11 +1,10 @@
 import { withApiProtection } from "@/lib/api-protection";
-import { checkTeacherExistsByEmailDetailed } from "@/lib/db-helpers";
 import {
-  rejectIfDatasourceLookupForbidden,
-  rejectIfEmailNotSelf,
-  requireDatasourceBearer,
+    rejectIfDatasourceLookupForbidden,
+    requireDatasourceBearer,
 } from "@/lib/datasource-api-auth";
 import pool from "@/lib/db";
+import { checkTeacherExistsByEmailDetailed } from "@/lib/db-helpers";
 import { loadTeacherProfileBundle } from "@/lib/teacher-profile-bundle";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -31,7 +30,12 @@ export const GET = withApiProtection(async (request: NextRequest) => {
           { status: 400 },
         );
       }
-      const denied = rejectIfEmailNotSelf(sessionEmail, privileged, email);
+      const denied = await rejectIfDatasourceLookupForbidden(
+        sessionEmail,
+        privileged,
+        email,
+        "",
+      );
       if (denied) return denied;
 
       const { exists, dbUnavailable } = await checkTeacherExistsByEmailDetailed(

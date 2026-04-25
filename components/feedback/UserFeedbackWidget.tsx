@@ -1,19 +1,19 @@
 'use client'
+import { toast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/body-scroll-lock'
-import {
-  ChevronLeft,
-  ChevronRight,
-  Map,
-  MessageCircleMore,
-  UploadCloud,
-  X,
-} from 'lucide-react'
-import { createPortal } from 'react-dom'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
-import { toast } from '@/lib/app-toast'
 import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
+import {
+    ChevronLeft,
+    ChevronRight,
+    Map,
+    MessageCircleMore,
+    UploadCloud,
+    X,
+} from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 // ─── Mascot constants ────────────────────────────────────────────────────────
 const WALK_FRAMES = Array.from({ length: 25 }, (_, i) => `/mascot/walk/frame-${i + 1}.png`)
@@ -35,8 +35,8 @@ const FEEDBACK_PAGE_OPTIONS = [
   { path: '/user/truyenthong', title: 'Truyền thông nội bộ' },
   { path: '/user/thong-tin-giao-vien', title: 'Thông tin của tôi' },
   { path: '/user/hoat-dong-hang-thang', title: 'Hoạt động hàng tháng' },
-  { path: '/user/xin-nghi-mot-buoi', title: 'Tạo yêu cầu xin nghỉ' },
-  { path: '/user/nhan-lop-1-buoi', title: 'Danh sách nhận lớp dạy thay' },
+  { path: '/user/xin-nghi-mot-buoi', title: 'Tạo yêu cầu xin nghỉ 1 buổi' },
+  { path: '/user/nhan-lop-1-buoi', title: 'Tiếp nhận xin nghỉ 1 buổi' },
   { path: '/user/dao-tao-nang-cao', title: 'Đào tạo nâng cao' },
   { path: '/user/assignments', title: 'Quản lý kiểm tra' },
   { path: '/user/giaitrinh', title: 'Giải trình điểm kiểm tra' },
@@ -116,12 +116,12 @@ function MascotWalker({ onFeedback, onTour }: { onFeedback: () => void; onTour: 
   }, [])
 
   // Bubble scheduler
-  const scheduleBubble = useCallback(() => {
+  const scheduleBubble = useCallback(function pumpBubble() {
     const delay = (45 + Math.random() * 15) * 1000
     bubbleTimerRef.current = setTimeout(() => {
       setBubble(true)
       setTimeout(() => setBubble(false), 8000)
-      scheduleBubble()
+      pumpBubble()
     }, delay)
   }, [])
 
@@ -236,7 +236,7 @@ function MascotWalker({ onFeedback, onTour }: { onFeedback: () => void; onTour: 
       cancelAnimationFrame(st.rafId)
       clearTimeout(st.jumpTimer)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [])
 
   return (
@@ -416,7 +416,7 @@ function MascotWalker({ onFeedback, onTour }: { onFeedback: () => void; onTour: 
         {/* Bóng tròn hiện thực rọi dưới chân (Bằng đúng sải chân mascot) */}
         <div className="absolute bottom-[16px] w-[36px] h-[6px] bg-black/20 mix-blend-multiply rounded-[100%] blur-[3px] pointer-events-none z-0" />
 
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        { }
         <img
           src={display.src}
           alt="mascot"
@@ -695,7 +695,7 @@ export default function UserFeedbackWidget() {
                         key={file.name + file.size + idx}
                         className="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden border border-gray-200 bg-gray-100"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        { }
                         <img
                           src={URL.createObjectURL(file)}
                           alt={file.name}
@@ -755,7 +755,7 @@ export default function UserFeedbackWidget() {
               <X className="h-6 w-6" />
             </button>
             <div className="bg-black rounded-xl overflow-hidden border border-white/20">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img
                 src={previewImages[previewIndex]}
                 alt={`feedback-${previewIndex + 1}`}
