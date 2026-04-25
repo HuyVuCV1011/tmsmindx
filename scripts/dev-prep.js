@@ -1,5 +1,5 @@
 /**
- * Frees PORT (default 3000) and removes .next before `npm run dev`.
+ * Frees PORT (default 3000) and optionally removes .next before `npm run dev`.
  *
  * On Windows, Next.js often fails with ENOTEMPTY / EPERM when cleaning
  * the .next directory because file handles haven't been released yet.
@@ -44,5 +44,10 @@ async function removeDotNext(retries = 3) {
     // Port already free
   }
 
-  await removeDotNext();
+  const shouldCleanNext = process.env.DEV_PREP_CLEAN === "1";
+  if (shouldCleanNext) {
+    await removeDotNext();
+  } else {
+    console.log("[dev-prep] Skip .next cleanup (set DEV_PREP_CLEAN=1 to force clean)");
+  }
 })();

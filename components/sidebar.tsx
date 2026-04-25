@@ -242,8 +242,8 @@ export function Sidebar() {
       submenu: [
         { href: '/user/hoat-dong-hang-thang', label: 'Hoạt động hàng tháng' },
         { href: '/user/dang-ky-lich-lam-viec', label: 'Đăng ký lịch làm việc' },
-        { href: '/user/xin-nghi-mot-buoi', label: 'Tạo yêu cầu xin nghỉ' },
-        { href: '/user/nhan-lop-1-buoi', label: 'Danh sách nhận lớp dạy thay' },
+        { href: '/user/xin-nghi-mot-buoi', label: 'Tạo yêu cầu xin nghỉ 1 buổi' },
+        { href: '/user/nhan-lop-1-buoi', label: 'Tiếp nhận xin nghỉ 1 buổi' },
       ].filter((item) => !isTempHiddenUserRoute(item.href)),
     },
     {

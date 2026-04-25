@@ -1,14 +1,13 @@
 'use client'
 
 import { useAuth } from '@/lib/auth-context'
-import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import { useSidebar } from '@/lib/sidebar-context'
+import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
-import { useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 type MascotAction = 'walk' | 'jump'
 
@@ -92,9 +91,9 @@ const ALL_TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'xinnghi',
-    title: 'Tạo yêu cầu xin nghỉ',
+    title: 'Tạo yêu cầu xin nghỉ 1 buổi',
     description:
-      'Tạo yêu cầu xin nghỉ và theo dõi trạng thái xử lý từ đội ngũ Quản Lí.',
+      'Tạo yêu cầu xin nghỉ 1 buổi và theo dõi trạng thái xử lý từ đội ngũ Quản Lí.',
     target: 'tour-nav-xinnghi',
     route: '/user/xin-nghi-mot-buoi',
     submenuLabels: ['Lịch & Hoạt động'],
@@ -102,8 +101,8 @@ const ALL_TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'nhanlop',
-    title: 'Nhận lớp một buổi',
-    description: 'Xem và nhận các lớp dạy một buổi theo nhu cầu.',
+    title: 'Tiếp nhận xin nghỉ 1 buổi',
+    description: 'Xem danh sách tiếp nhận xin nghỉ 1 buổi theo cơ sở được phân công.',
     target: 'tour-nav-nhanlop',
     route: '/user/nhan-lop-1-buoi',
     submenuLabels: ['Lịch & Hoạt động'],

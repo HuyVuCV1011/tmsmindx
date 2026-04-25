@@ -57,8 +57,9 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     webpackBuildWorker: false,
+    /** Keeps dev server bundles from emitting extra server source maps (can reduce noisy logs). */
     serverSourceMaps: false,
-    proxyClientMaxBodySize: "512mb",
+    proxyClientMaxBodySize: "32mb",
   },
   serverExternalPackages: ['ffprobe-static'],
 

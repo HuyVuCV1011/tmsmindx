@@ -33,14 +33,14 @@ export default function AppLayout({
   const pathname = usePathname()
 
   const hasRedirected = useRef(false)
-  const latestUserRef = useRef(user);
+  const latestUserRef = useRef(user)
   useEffect(() => {
-    latestUserRef.current = user;
-  }, [user]);
-  const lastAdminPermRefreshAt = useRef(0);
-  const lastTeacherVerifyAt = useRef(0);
-  const lastTeacherVerifyPathname = useRef<string | null>(null);
-  const [noPermission, setNoPermission] = useState(false);
+    latestUserRef.current = user
+  }, [user])
+  const lastAdminPermRefreshAt = useRef(0)
+  const lastTeacherVerifyAt = useRef(0)
+  const lastTeacherVerifyPathname = useRef<string | null>(null)
+  const [noPermission, setNoPermission] = useState(false)
   /** DB tạm không trả lời — cho qua cổng (không kẹt skeleton), không coi là đã xác nhận trong teachers. */
   const [teacherGateAllowUnknown, setTeacherGateAllowUnknown] = useState(false)
 
@@ -135,25 +135,15 @@ export default function AppLayout({
     // Đã xác thực trong phiên này — không gọi lại API khi chỉ đổi route con
     if (adminAccessState === 'allowed') return
 
-    const bearer = token?.trim()
-    if (!bearer) {
-      setAdminAccessState('denied')
-      if (!hasRedirected.current) {
-        hasRedirected.current = true
-        logout()
-        router.replace(redirectPath)
-      }
-      return
-    }
-
     const verifyEmail = user.email.trim().toLowerCase()
     let cancelled = false
     setAdminAccessState('checking')
     ;(async () => {
       try {
+        const bearer = token?.trim()
         const res = await fetch('/api/check-admin', {
           cache: 'no-store',
-          headers: authHeaders(bearer),
+          headers: bearer ? authHeaders(bearer) : {},
         })
         const data = (await res.json()) as {
           success?: boolean
@@ -206,17 +196,19 @@ export default function AppLayout({
             : String((r as { role_code?: string }).role_code ?? ''),
         )
 
-        updateUser(
-          {
-            ...cur,
-            role,
-            isAdmin: true,
-            permissions: data.permissions || [],
-            userRoles: userRolesFlat,
-            assignedCenters: data.assignedCenters || [],
-          },
-          bearer,
-        )
+        if (bearer) {
+          updateUser(
+            {
+              ...cur,
+              role,
+              isAdmin: true,
+              permissions: data.permissions || [],
+              userRoles: userRolesFlat,
+              assignedCenters: data.assignedCenters || [],
+            },
+            bearer,
+          )
+        }
         setAdminAccessState('allowed')
         hasRedirected.current = false
       } catch {

@@ -149,6 +149,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             userRoles: Array.isArray(data.userRoles)
               ? data.userRoles
               : cachedUser?.userRoles ?? [],
+            assignedCenters: Array.isArray(data.assignedCenters)
+              ? data.assignedCenters
+              : cachedUser?.assignedCenters ?? [],
           }
 
           setUser(nextUser)

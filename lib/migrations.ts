@@ -1,4 +1,5 @@
 import { Pool } from 'pg'
+import { DEFAULT_SCREEN_CATALOG_JSON } from './default-screen-catalog'
 
 // ============================================================
 // Hệ thống Migration tự động cho TPS
@@ -1442,6 +1443,41 @@ const migrations: Migration[] = [
       FROM app_users u
       WHERE u.role = 'super_admin'
       ON CONFLICT (user_id, route_path) DO NOTHING;
+    `,
+  },
+  {
+    name: 'V67_app_screens_catalog',
+    version: 67,
+    sql: `
+      CREATE TABLE IF NOT EXISTS app_screens (
+        id SERIAL PRIMARY KEY,
+        route_path VARCHAR(255) NOT NULL UNIQUE,
+        label VARCHAR(255) NOT NULL,
+        group_name VARCHAR(100) NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS label VARCHAR(255) NOT NULL DEFAULT '';
+      ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS group_name VARCHAR(100) NOT NULL DEFAULT 'Hệ thống';
+      ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+      ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+      ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+      CREATE INDEX IF NOT EXISTS idx_app_screens_group_name ON app_screens(group_name);
+      CREATE INDEX IF NOT EXISTS idx_app_screens_is_active ON app_screens(is_active);
+      CREATE INDEX IF NOT EXISTS idx_app_screens_sort_order ON app_screens(sort_order);
+
+      DROP TRIGGER IF EXISTS trg_app_screens_updated_at ON app_screens;
+      CREATE TRIGGER trg_app_screens_updated_at
+        BEFORE UPDATE ON app_screens
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
     `,
   },
 ]

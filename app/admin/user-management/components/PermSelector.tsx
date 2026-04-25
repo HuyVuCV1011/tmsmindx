@@ -1,89 +1,189 @@
 "use client";
-import { ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
-
-export const AVAILABLE_ROUTES = [
-    { path: "/admin/dashboard", label: "Dashboard", group: "Tổng quan" },
-    { path: "/admin/page1", label: "Thông tin GV", group: "Quản lý" },
-    { path: "/admin/page2", label: "Quy trình quy định K12 Teaching", group: "Quản lý" },
-    { path: "/admin/page3", label: "Màn hình 3", group: "Quản lý" },
-    { path: "/admin/hr-candidates", label: "Đào tạo đầu vào (module)", group: "Đào tạo đầu vào" },
-    { path: "/admin/hr-candidates/gen-planner", label: "GEN Planner (trang)", group: "Đào tạo đầu vào" },
-    { path: "/admin/hr-candidates/gen-planner/planner", label: "Tab: GEN Planner", group: "Đào tạo đầu vào" },
-    { path: "/admin/hr-candidates/gen-planner/tracking", label: "Tab: Theo dõi đào tạo", group: "Đào tạo đầu vào" },
-    { path: "/admin/hr-candidates/gen-planner/scheduling", label: "Tab: Xếp lịch training", group: "Đào tạo đầu vào" },
-    { path: "/admin/hr-candidates/gen-planner/overview", label: "Tab: Theo dõi lịch training", group: "Đào tạo đầu vào" },
-    { path: "/admin/page4/quan-ly-lich-lam-viec", label: "Quản lý lịch làm việc", group: "Sự kiện" },
-    { path: "/admin/page4/lich-danh-gia", label: "Lịch sự kiện", group: "Sự kiện" },
-    { path: "/admin/page4/danh-sach-dang-ky", label: "Danh sách đăng ký", group: "Đánh giá năng lực GV" },
-    { path: "/admin/thu-vien-de", label: "Library đề chuyên môn", group: "Đánh giá năng lực GV" },
-    { path: "/admin/page5", label: "QL đào tạo nâng cao", group: "Đào tạo" },
-    { path: "/admin/training-dashboard", label: "Thống kê đào tạo", group: "Đào tạo" },
-    { path: "/admin/assignments", label: "QL Assignments", group: "Đào tạo" },
-    { path: "/admin/assignment-questions", label: "Câu hỏi Assignment", group: "Đào tạo" },
-    { path: "/admin/video-setup", label: "Cài đặt Video", group: "Đào tạo" },
-    { path: "/admin/video-detail", label: "Chi tiết Video", group: "Đào tạo" },
-    { path: "/admin/training-studio", label: "Training Studio", group: "Đào tạo" },
-    { path: "/admin/giaitrinh", label: "QL Giải trình", group: "Nội dung" },
-    { path: "/admin/xin-nghi-mot-buoi", label: "Tiếp nhận xin nghỉ 1 buổi", group: "Quản lý" },
-    { path: "/admin/truyenthong", label: "QL truyền thông", group: "Nội dung" },
-    { path: "/admin/database", label: "Database Manager", group: "Hệ thống" },
-    { path: "/admin/cloudinary", label: "Cloudinary Manager", group: "Hệ thống" },
-    { path: "/admin/user-management", label: "QL tài khoản", group: "Hệ thống" },
-];
-
-export const ROUTE_GROUPS = [...new Set(AVAILABLE_ROUTES.map(r => r.group))];
+import { useAuth } from "@/lib/auth-context";
+import { authHeaders } from "@/lib/auth-headers";
+import { DEFAULT_SCREEN_CATALOG, type ScreenCatalogItem } from "@/lib/default-screen-catalog";
+import { ChevronDown, ChevronUp, Loader2, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 export default function PermSelector({ perms, setPerms }: { perms: string[]; setPerms: (v: string[]) => void }) {
-    const [expanded, setExpanded] = useState<string[]>(ROUTE_GROUPS);
+    const { token } = useAuth();
+    const [screens, setScreens] = useState<ScreenCatalogItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [expanded, setExpanded] = useState<string[]>([]);
+    const [search, setSearch] = useState("");
 
-    const toggleGroup = (g: string) => setExpanded(p => p.includes(g) ? p.filter(x => x !== g) : [...p, g]);
-    const togglePerm = (path: string) => setPerms(perms.includes(path) ? perms.filter(p => p !== path) : [...perms, path]);
-    const toggleAllGroup = (group: string) => {
-        const gp = AVAILABLE_ROUTES.filter(r => r.group === group).map(r => r.path);
-        setPerms(gp.every(p => perms.includes(p)) ? perms.filter(p => !gp.includes(p)) : [...new Set([...perms, ...gp])]);
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadScreens = async () => {
+            try {
+                setLoading(true);
+                const res = await fetch('/api/app-auth/screens?includeInactive=true', {
+                    headers: authHeaders(token),
+                });
+                const data = await res.json();
+                const nextScreens = Array.isArray(data.screens) && data.screens.length > 0 ? data.screens : DEFAULT_SCREEN_CATALOG;
+                if (!cancelled) {
+                    setScreens(nextScreens);
+                }
+            } catch {
+                if (!cancelled) {
+                    setScreens(DEFAULT_SCREEN_CATALOG);
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        loadScreens();
+        return () => {
+            cancelled = true;
+        };
+    }, [token]);
+
+    const groups = useMemo(() => {
+        const byGroup = new Map<string, ScreenCatalogItem[]>();
+        for (const screen of screens) {
+            const next = byGroup.get(screen.group_name) || [];
+            next.push(screen);
+            byGroup.set(screen.group_name, next);
+        }
+
+        return Array.from(byGroup.entries())
+            .map(([groupName, items]) => ({
+                groupName,
+                items: items.sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label)),
+                order: Math.min(...items.map((item) => item.sort_order)),
+            }))
+            .sort((a, b) => a.order - b.order || a.groupName.localeCompare(b.groupName));
+    }, [screens]);
+
+    useEffect(() => {
+        if (expanded.length === 0 && groups.length > 0) {
+            setExpanded(groups.map((group) => group.groupName));
+        }
+    }, [expanded.length, groups]);
+
+    const visibleGroups = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return groups;
+
+        return groups
+            .map((group) => ({
+                ...group,
+                items: group.items.filter((item) =>
+                    item.label.toLowerCase().includes(q) ||
+                    item.route_path.toLowerCase().includes(q) ||
+                    item.group_name.toLowerCase().includes(q) ||
+                    (item.description || '').toLowerCase().includes(q),
+                ),
+            }))
+            .filter((group) => group.items.length > 0);
+    }, [groups, search]);
+
+    const toggleGroup = (groupName: string) => {
+        setExpanded((current) => (current.includes(groupName) ? current.filter((item) => item !== groupName) : [...current, groupName]));
     };
-    const selectAll = () => setPerms(perms.length === AVAILABLE_ROUTES.length ? [] : AVAILABLE_ROUTES.map(r => r.path));
+
+    const togglePerm = (path: string) => setPerms(perms.includes(path) ? perms.filter((item) => item !== path) : [...perms, path]);
+
+    const toggleAllGroup = (groupName: string) => {
+        const groupPaths = screens.filter((screen) => screen.group_name === groupName).map((screen) => screen.route_path);
+        const allSelected = groupPaths.every((path) => perms.includes(path));
+        setPerms(allSelected ? perms.filter((path) => !groupPaths.includes(path)) : [...new Set([...perms, ...groupPaths])]);
+    };
+
+    const selectAll = () => setPerms(perms.length === screens.length ? [] : screens.map((screen) => screen.route_path));
 
     return (
-        <div className="space-y-2">
-            <div className="flex items-center justify-between pb-2 border-b border-gray-200">
-                <button type="button" onClick={selectAll} className="text-xs font-medium text-[#a1001f] hover:underline">
-                    {perms.length === AVAILABLE_ROUTES.length ? "Bỏ chọn tất cả" : "Chọn tất cả"}
-                </button>
-                <span className="text-xs text-gray-500">{perms.length}/{AVAILABLE_ROUTES.length}</span>
+        <div className="space-y-3">
+            <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative w-full sm:max-w-sm">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Tìm màn hình, đường dẫn, nhóm..."
+                        className="w-full rounded-lg border border-gray-200 bg-gray-50/80 py-2 pl-10 pr-3 text-sm outline-none transition focus:border-[#a1001f] focus:bg-white focus:ring-2 focus:ring-[#a1001f]/15"
+                    />
+                </div>
+                <div className="flex items-center justify-between gap-3 sm:justify-end">
+                    <button type="button" onClick={selectAll} className="text-xs font-medium text-[#a1001f] hover:underline">
+                        {perms.length === screens.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                    </button>
+                    <span className="text-xs text-gray-500">{perms.length}/{screens.length}</span>
+                </div>
             </div>
-            {ROUTE_GROUPS.map(group => {
-                const gr = AVAILABLE_ROUTES.filter(r => r.group === group);
-                const cnt = gr.filter(r => perms.includes(r.path)).length;
-                const exp = expanded.includes(group);
-                return (
-                    <div key={group} className="rounded-lg border border-gray-200 overflow-hidden">
-                        <button type="button" onClick={() => toggleGroup(group)}
-                            className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors">
-                            <div className="flex items-center gap-2">
-                                <input type="checkbox" checked={cnt === gr.length} onChange={() => toggleAllGroup(group)}
-                                    onClick={e => e.stopPropagation()} className="rounded border-gray-300 text-[#a1001f] focus:ring-[#a1001f]" />
-                                <span className="text-xs font-bold text-gray-700">{group}</span>
-                                <span className="text-xs text-gray-400">({cnt}/{gr.length})</span>
-                            </div>
-                            {exp ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" /> : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />}
-                        </button>
-                        {exp && (
-                            <div className="px-3 py-2 space-y-1">
-                                {gr.map(r => (
-                                    <label key={`${r.path}-${r.label}`} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-1 transition-colors">
-                                        <input type="checkbox" checked={perms.includes(r.path)} onChange={() => togglePerm(r.path)}
-                                            className="rounded border-gray-300 text-[#a1001f] focus:ring-[#a1001f]" />
-                                        <span className="text-xs text-gray-700">{r.label}</span>
-                                        <span className="text-xs text-gray-400 ml-auto">{r.path}</span>
-                                    </label>
-                                ))}
-                            </div>
-                        )}
+
+            {loading && screens.length === 0 ? (
+                <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-[#a1001f]" />
+                </div>
+            ) : null}
+
+            <div className="space-y-2">
+                {visibleGroups.map(({ groupName, items }) => {
+                    const groupPaths = items.map((item) => item.route_path);
+                    const selectedCount = items.filter((item) => perms.includes(item.route_path)).length;
+                    const expandedGroup = expanded.includes(groupName);
+
+                    return (
+                        <div key={groupName} className="overflow-hidden rounded-lg border border-gray-200">
+                            <button
+                                type="button"
+                                onClick={() => toggleGroup(groupName)}
+                                className="flex w-full items-center justify-between bg-gray-50 px-3 py-2 transition-colors hover:bg-gray-100"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={groupPaths.length > 0 && groupPaths.every((path) => perms.includes(path))}
+                                        onChange={() => toggleAllGroup(groupName)}
+                                        onClick={(event) => event.stopPropagation()}
+                                        className="rounded border-gray-300 text-[#a1001f] focus:ring-[#a1001f]"
+                                    />
+                                    <span className="text-xs font-bold text-gray-700">{groupName}</span>
+                                    <span className="text-xs text-gray-400">({selectedCount}/{items.length})</span>
+                                </div>
+                                {expandedGroup ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" /> : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />}
+                            </button>
+
+                            {expandedGroup && (
+                                <div className="space-y-1 px-3 py-2">
+                                    {items.map((item) => (
+                                        <label
+                                            key={`${item.route_path}-${item.label}`}
+                                            className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 transition-colors hover:bg-gray-50 ${item.is_active ? '' : 'opacity-70'}`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.includes(item.route_path)}
+                                                onChange={() => togglePerm(item.route_path)}
+                                                className="rounded border-gray-300 text-[#a1001f] focus:ring-[#a1001f]"
+                                            />
+                                            <span className="text-xs text-gray-700">{item.label}</span>
+                                            <span className="text-xs text-gray-400 ml-auto">{item.route_path}</span>
+                                            {!item.is_active && (
+                                                <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                                                    Ẩn
+                                                </span>
+                                            )}
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+
+                {!loading && visibleGroups.length === 0 && (
+                    <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+                        Không tìm thấy màn hình phù hợp.
                     </div>
-                );
-            })}
+                )}
+            </div>
         </div>
     );
 }

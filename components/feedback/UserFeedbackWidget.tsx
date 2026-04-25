@@ -4,12 +4,12 @@ import { useAuth } from '@/lib/auth-context'
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/body-scroll-lock'
 import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import {
-  ChevronLeft,
-  ChevronRight,
-  Map,
-  MessageCircleMore,
-  UploadCloud,
-  X,
+    ChevronLeft,
+    ChevronRight,
+    Map,
+    MessageCircleMore,
+    UploadCloud,
+    X,
 } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -35,8 +35,8 @@ const FEEDBACK_PAGE_OPTIONS = [
   { path: '/user/truyenthong', title: 'Truyền thông nội bộ' },
   { path: '/user/thong-tin-giao-vien', title: 'Thông tin của tôi' },
   { path: '/user/hoat-dong-hang-thang', title: 'Hoạt động hàng tháng' },
-  { path: '/user/xin-nghi-mot-buoi', title: 'Tạo yêu cầu xin nghỉ' },
-  { path: '/user/nhan-lop-1-buoi', title: 'Danh sách nhận lớp dạy thay' },
+  { path: '/user/xin-nghi-mot-buoi', title: 'Tạo yêu cầu xin nghỉ 1 buổi' },
+  { path: '/user/nhan-lop-1-buoi', title: 'Tiếp nhận xin nghỉ 1 buổi' },
   { path: '/user/dao-tao-nang-cao', title: 'Đào tạo nâng cao' },
   { path: '/user/assignments', title: 'Quản lý kiểm tra' },
   { path: '/user/giaitrinh', title: 'Giải trình điểm kiểm tra' },
@@ -243,44 +243,93 @@ function MascotWalker({ onFeedback, onTour }: { onFeedback: () => void; onTour: 
     <div
       className="fixed z-[999]"
       style={{
-        bottom: 'calc(env(safe-area-inset-bottom, 0px) - 20px)',
+        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 0px)',
         right: 'calc(env(safe-area-inset-right, 0px) + 1rem)',
         transform: `translateX(${display.posX}px)`,
         willChange: 'transform',
         // Extend hover area upward to include cloud bubble
-        paddingTop: '280px',
+        paddingTop: '130px',
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Menu Actions khi hover — gắn liền với wrapper nên không bị ẩn khi di chuột */}
+      {/* Thought bubble khi hover — gắn liền với wrapper nên không bị ẩn khi di chuột */}
       {hovered && (
         <div
-          className="absolute select-none flex flex-col items-end animate-in fade-in slide-in-from-bottom-2 zoom-in-95 duration-200 ease-out pointer-events-none"
+          className="absolute select-none flex flex-col items-center animate-in fade-in slide-in-from-bottom-2 zoom-in-95 duration-200 ease-out pointer-events-none"
           style={{
             zIndex: 1001,
-            bottom: '160px',
-            right: '25px',
-            transformOrigin: 'bottom right',
+            bottom: '85px',
+            right: '-6px',
+            transformOrigin: 'calc(100% - 66px) 100%',
           }}
         >
-          <div className="flex flex-col gap-2.5 pointer-events-auto w-[160px]">
-            <button
-              onClick={onTour}
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition-all"
+          {/* Main Cloud Bubble */}
+          <div className="relative w-[220px] h-[150px]">
+            <svg
+              viewBox="0 0 220 150"
+              width="220"
+              height="150"
+              xmlns="http://www.w3.org/2000/svg"
+              className="drop-shadow-[0_8px_16px_rgba(0,0,0,0.12)] filter absolute inset-0 z-10"
             >
-              <Map className="w-4 h-4 text-gray-500" />
-              Xem hướng dẫn
-            </button>
-            <button
-              onClick={onFeedback}
-              data-tour="tour-feedback-button"
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-[#a1001f] text-white text-sm font-medium hover:bg-[#870019] shadow-sm transition-all"
+              {/* Lớp viền bao ngoài (Stroke union trick) */}
+              <g stroke="#e5e7eb" strokeWidth="3" fill="#ffffff">
+                <ellipse cx="110" cy="75" rx="75" ry="40" />
+                <circle cx="110" cy="45" r="35" />
+                <circle cx="110" cy="110" r="30" />
+                <circle cx="50" cy="60" r="30" />
+                <circle cx="170" cy="60" r="30" />
+                <circle cx="65" cy="40" r="25" />
+                <circle cx="155" cy="40" r="25" />
+                <circle cx="65" cy="110" r="25" />
+                <circle cx="155" cy="105" r="25" />
+                <circle cx="35" cy="85" r="20" />
+                <circle cx="185" cy="80" r="20" />
+              </g>
+              {/* Lớp nền trắng đè lên trên để che đi nét gạch chéo bên trong */}
+              <g fill="#ffffff">
+                <ellipse cx="110" cy="75" rx="75" ry="40" />
+                <circle cx="110" cy="45" r="35" />
+                <circle cx="110" cy="110" r="30" />
+                <circle cx="50" cy="60" r="30" />
+                <circle cx="170" cy="60" r="30" />
+                <circle cx="65" cy="40" r="25" />
+                <circle cx="155" cy="40" r="25" />
+                <circle cx="65" cy="110" r="25" />
+                <circle cx="155" cy="105" r="25" />
+                <circle cx="35" cy="85" r="20" />
+                <circle cx="185" cy="80" r="20" />
+              </g>
+            </svg>
+
+            {/* Buttons Content */}
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 z-20 pointer-events-auto"
+              style={{ top: '15px', bottom: '15px' }} // Có thể tuỳ chỉnh, tâm của ellipse là y=75
             >
-              <MessageCircleMore className="w-4 h-4" />
-              Gửi phản hồi
-            </button>
+              <button
+                onClick={onTour}
+                className="group flex items-center justify-center gap-1.5 bg-gradient-to-b from-white to-gray-50/80 hover:from-gray-50 hover:to-gray-100 border border-gray-200/80 shadow-[0_2px_6px_rgba(0,0,0,0.03)] rounded-[10px] px-3 py-1.5 text-[11.5px] font-semibold text-gray-600 hover:text-gray-900 transition-all duration-200 hover:-translate-y-[1.5px] active:scale-95 active:translate-y-0 w-full max-w-[135px]"
+              >
+                <Map className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                Xem hướng dẫn
+              </button>
+              <button
+                onClick={onFeedback}
+                data-tour="tour-feedback-button"
+                className="flex items-center justify-center gap-1.5 bg-gradient-to-b from-[#bc0023] to-[#870019] hover:from-[#c90026] hover:to-[#99001d] border border-[#6b0014] rounded-[10px] px-3 py-1.5 text-[11.5px] font-semibold text-white shadow-[0_3px_8px_rgba(161,0,31,0.25)] hover:shadow-[0_5px_12px_rgba(161,0,31,0.35)] transition-all duration-200 ring-1 ring-inset ring-white/20 hover:-translate-y-[1.5px] active:scale-95 active:translate-y-0 w-full max-w-[135px]"
+              >
+                <MessageCircleMore className="w-3.5 h-3.5 stroke-[2.5]" />
+                Gửi phản hồi
+              </button>
+            </div>
           </div>
+
+          {/* 3 chấm đuôi hệt như comic (xuất phát từ góc phải dưới mây vuốt thẳng tới đỉnh đầu) */}
+          <div className="absolute w-4 h-4 bg-white rounded-full border-[1.5px] border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '13px', right: '86px' }} />
+          <div className="absolute w-2.5 h-2.5 bg-white rounded-full border-[1.5px] border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '2px', right: '76px' }} />
+          <div className="absolute w-1.5 h-1.5 bg-white rounded-full border border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '-9px', right: '66px' }} />
         </div>
       )}
 
@@ -290,9 +339,9 @@ function MascotWalker({ onFeedback, onTour }: { onFeedback: () => void; onTour: 
           className="absolute flex flex-col items-center animate-in fade-in slide-in-from-bottom-2 zoom-in-95 duration-300 ease-out pointer-events-none"
           style={{
             zIndex: 1001,
-            bottom: '130px',
-            right: '0px',
-            transformOrigin: 'bottom center',
+            bottom: '85px',
+            right: '-6px',
+            transformOrigin: 'calc(100% - 66px) 100%',
           }}
         >
           {/* Main Cloud Bubble */}
@@ -352,10 +401,10 @@ function MascotWalker({ onFeedback, onTour }: { onFeedback: () => void; onTour: 
             </button>
           </div>
 
-          {/* 3 chấm đuôi — nối từ đáy bubble xuống đầu mascot */}
-          <div className="w-4 h-4 bg-white rounded-full border-[1.5px] border-[#e5e7eb] shadow-sm mt-1" />
-          <div className="w-2.5 h-2.5 bg-white rounded-full border-[1.5px] border-[#e5e7eb] shadow-sm mt-1" />
-          <div className="w-1.5 h-1.5 bg-white rounded-full border border-[#e5e7eb] shadow-sm mt-1" />
+          {/* 3 chấm đuôi */}
+          <div className="absolute w-4 h-4 bg-white rounded-full border-[1.5px] border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '13px', right: '86px' }} />
+          <div className="absolute w-2.5 h-2.5 bg-white rounded-full border-[1.5px] border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '2px', right: '76px' }} />
+          <div className="absolute w-1.5 h-1.5 bg-white rounded-full border border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '-9px', right: '66px' }} />
         </div>
       )}
 
@@ -365,16 +414,16 @@ function MascotWalker({ onFeedback, onTour }: { onFeedback: () => void; onTour: 
         onClick={() => setBubble(false)}
       >
         {/* Bóng tròn hiện thực rọi dưới chân (Bằng đúng sải chân mascot) */}
-        <div className="absolute bottom-[22px] w-[36px] h-[6px] bg-black/20 mix-blend-multiply rounded-[100%] blur-[3px] pointer-events-none z-0" />
+        <div className="absolute bottom-[16px] w-[36px] h-[6px] bg-black/20 mix-blend-multiply rounded-[100%] blur-[3px] pointer-events-none z-0" />
 
         { }
         <img
           src={display.src}
           alt="mascot"
-          width={200}
-          height={200}
-          style={{ transform: `scaleX(${display.scaleX}) translateY(3px)` }}
-          className="h-[200px] w-auto object-contain drop-shadow-sm relative z-10"
+          width={120}
+          height={120}
+          style={{ transform: `scaleX(${display.scaleX})` }}
+          className="h-[100px] w-auto object-contain drop-shadow-sm relative z-10"
           draggable={false}
         />
       </div>

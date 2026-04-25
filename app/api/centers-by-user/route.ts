@@ -1,3 +1,4 @@
+import { requireBearerSession } from '@/lib/datasource-api-auth'
 import pool from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -17,7 +18,18 @@ const REGION_GROUPS: Record<string, string> = {
 
 export async function GET(request: NextRequest) {
   try {
-    const email = request.nextUrl.searchParams.get('email')?.trim().toLowerCase()
+    const auth = await requireBearerSession(request)
+    if (!auth.ok) return auth.response
+
+    const requestedEmail = request.nextUrl.searchParams.get('email')?.trim().toLowerCase()
+    if (!auth.privileged && requestedEmail && requestedEmail !== auth.sessionEmail) {
+      return NextResponse.json({ success: false, error: 'Không có quyền xem cơ sở của email này' }, { status: 403 })
+    }
+
+    const email = auth.privileged
+      ? (requestedEmail || auth.sessionEmail)
+      : auth.sessionEmail
+
     if (!email) {
       return NextResponse.json({ success: false, error: 'Thiếu email' }, { status: 400 })
     }

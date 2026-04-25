@@ -1,7 +1,9 @@
 import { requireBearerDbRoles } from '@/lib/auth-server';
+import { normalizeText as normalizeCampusText } from '@/lib/campus-data';
+import { getAccessibleCenters } from '@/lib/center-access';
 import {
-  rejectIfEmailNotSelf,
-  requireBearerSession,
+    rejectIfEmailNotSelf,
+    requireBearerSession,
 } from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
@@ -21,17 +23,105 @@ const VALID_STATUS: LeaveStatus[] = [
   'substitute_confirmed'
 ];
 
+type AccessibleCenter = {
+  id: number;
+  full_name: string;
+  short_code: string | null;
+  region: string | null;
+};
+
+function normalizeCampusKey(value: unknown): string {
+  return normalizeCampusText(String(value ?? ''));
+}
+
+function buildAccessibleCampusKeys(centers: AccessibleCenter[]): string[] {
+  const keys = new Set<string>();
+
+  for (const center of centers) {
+    const candidates = [
+      center.full_name,
+      center.short_code ?? '',
+    ];
+
+    for (const candidate of candidates) {
+      const key = normalizeCampusKey(candidate);
+      if (key) keys.add(key);
+    }
+  }
+
+  return Array.from(keys);
+}
+
+function campusIsAccessible(
+  campus: string | null | undefined,
+  allowedCampusKeys: string[],
+): boolean {
+  if (allowedCampusKeys.length === 0) return false;
+  const campusKey = normalizeCampusKey(campus);
+  if (!campusKey) return false;
+  return allowedCampusKeys.includes(campusKey);
+}
+
+async function getAllowedCampusKeysForSession(
+  sessionEmail: string,
+  privileged: boolean,
+): Promise<string[]> {
+  if (privileged) return [];
+  const centers = await getAccessibleCenters(sessionEmail);
+  return buildAccessibleCampusKeys(centers as AccessibleCenter[]);
+}
+
+async function rejectIfLeaveRequestNotAccessible(
+  sessionEmail: string,
+  privileged: boolean,
+  id: string | number,
+): Promise<NextResponse | null> {
+  if (privileged) return null;
+
+  const targetId = Number(id);
+  if (!Number.isFinite(targetId) || targetId <= 0) {
+    return NextResponse.json(
+      { success: false, error: 'Yêu cầu không hợp lệ' },
+      { status: 400 },
+    );
+  }
+
+  const requestResult = await pool.query(
+    'SELECT campus FROM leave_requests WHERE id = $1 LIMIT 1',
+    [targetId],
+  );
+
+  if (requestResult.rowCount === 0) {
+    return NextResponse.json(
+      { success: false, error: 'Không tìm thấy yêu cầu' },
+      { status: 404 },
+    );
+  }
+
+  const allowedCampusKeys = await getAllowedCampusKeysForSession(
+    sessionEmail,
+    privileged,
+  );
+
+  if (!campusIsAccessible(requestResult.rows[0]?.campus, allowedCampusKeys)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Không có quyền xử lý yêu cầu thuộc cơ sở này',
+      },
+      { status: 403 },
+    );
+  }
+
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   let client;
 
   try {
-    const auth = await requireBearerSession(request);
-    if (!auth.ok) return auth.response;
-
     const { searchParams } = request.nextUrl;
-    const email = searchParams.get('email');
     const mode = searchParams.get('mode');
-    const status = searchParams.get('status');
 
     if (mode === 'admin') {
       const gate = await requireBearerDbRoles(request, [
@@ -40,7 +130,74 @@ export async function GET(request: NextRequest) {
         'manager',
       ]);
       if (!gate.ok) return gate.response;
-    } else if (mode === 'substitute' && email) {
+
+      const allowedCampusKeys = await getAllowedCampusKeysForSession(
+        gate.sessionEmail,
+        gate.role === 'super_admin',
+      );
+      if (gate.role !== 'super_admin' && allowedCampusKeys.length === 0) {
+        console.log('[leave-requests admin] no allowed campuses', {
+          sessionEmail: gate.sessionEmail,
+          role: gate.role,
+        })
+
+        return NextResponse.json({
+          success: true,
+          data: [],
+          count: 0,
+        });
+      }
+
+      client = await pool.connect();
+
+      let query = 'SELECT * FROM leave_requests';
+      const conditions: string[] = [];
+      const values: unknown[] = [];
+      let idx = 1;
+
+      const status = searchParams.get('status');
+      if (status && VALID_STATUS.includes(status as LeaveStatus)) {
+        conditions.push(`status = $${idx}`);
+        values.push(status);
+        idx += 1;
+      }
+
+      if (conditions.length > 0) {
+        query += ` WHERE ${conditions.join(' AND ')}`;
+      }
+
+      query += ' ORDER BY created_at DESC';
+
+      const result = await client.query(query, values);
+      const visibleRows =
+        gate.role === 'super_admin'
+          ? result.rows
+          : result.rows.filter((row) =>
+              campusIsAccessible(row?.campus, allowedCampusKeys),
+            )
+
+      console.log('[leave-requests admin] resolved rows', {
+        sessionEmail: gate.sessionEmail,
+        role: gate.role,
+        allowedCampusKeys,
+        dbRowCount: result.rowCount,
+        visibleRowCount: visibleRows.length,
+      })
+
+      return NextResponse.json({
+        success: true,
+        data: visibleRows,
+        count: visibleRows.length,
+      });
+    }
+
+    const auth = await requireBearerSession(request);
+    if (!auth.ok) return auth.response;
+
+    const email = searchParams.get('email');
+    const status = searchParams.get('status');
+
+    if (mode === 'substitute' && email) {
       const denied = rejectIfEmailNotSelf(
         auth.sessionEmail,
         auth.privileged,
@@ -71,9 +228,7 @@ export async function GET(request: NextRequest) {
     const values: Array<string> = [];
     let idx = 1;
 
-    if (mode === 'admin') {
-      // Admin sees all records.
-    } else if (mode === 'substitute' && email) {
+    if (mode === 'substitute' && email) {
       conditions.push(`LOWER(substitute_email) = LOWER($${idx})`);
       values.push(email);
       idx += 1;
@@ -309,6 +464,13 @@ export async function PATCH(request: NextRequest) {
       ]);
       if (!gate.ok) return gate.response;
 
+      const campusDenied = await rejectIfLeaveRequestNotAccessible(
+        gate.sessionEmail,
+        gate.role === 'super_admin',
+        id,
+      );
+      if (campusDenied) return campusDenied;
+
       const sessionAdminEmail = gate.sessionEmail;
       const {
         decision,
@@ -394,6 +556,13 @@ export async function PATCH(request: NextRequest) {
         'manager',
       ]);
       if (!gate.ok) return gate.response;
+      const campusDenied = await rejectIfLeaveRequestNotAccessible(
+        gate.sessionEmail,
+        gate.role === 'super_admin',
+        id,
+      );
+      if (campusDenied) return campusDenied;
+
       const sessionAdminEmail = gate.sessionEmail;
 
       const { substitute_teacher, substitute_email, admin_name } = body;

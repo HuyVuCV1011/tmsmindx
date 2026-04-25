@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 /**
  * GET /api/app-auth/manager-centers?userId=123
- * Get centers assigned to a specific manager
+ * Get centers assigned to a specific manager (from manager_centers and teaching_leaders)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -18,16 +18,43 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
 
-    const result = await pool.query(
-      `SELECT c.id, c.full_name, c.short_code, mc.assigned_at AS "assignedAt"
+    // Get user email
+    const userResult = await pool.query('SELECT email FROM app_users WHERE id = $1', [userId])
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+    const userEmail = userResult.rows[0].email
+
+    // Get centers from manager_centers
+    const managerCentersResult = await pool.query(
+      `SELECT c.id, c.full_name, c.short_code, c.region, mc.assigned_at AS "assignedAt", 'manager_centers' AS source
        FROM manager_centers mc
        JOIN centers c ON c.id = mc.center_id
-       WHERE mc.user_id = $1
-       ORDER BY c.full_name`,
+       WHERE mc.user_id = $1`,
       [userId],
     )
 
-    return NextResponse.json({ success: true, centers: result.rows })
+    // Get centers from teaching_leaders if user is a teaching_leader
+    const leaderCentersResult = await pool.query(
+      `SELECT DISTINCT c.id, c.full_name, c.short_code, c.region, tl.created_at AS "assignedAt", 'teaching_leaders' AS source
+       FROM teaching_leaders tl
+       JOIN centers c ON c.region = ANY(
+         COALESCE(
+           (SELECT ARRAY(SELECT jsonb_array_elements_text(tl.areas)) WHERE tl.areas IS NOT NULL AND jsonb_typeof(tl.areas) = 'array'),
+           string_to_array(COALESCE(tl.area, ''), ',')
+         )
+       )
+       WHERE tl.email = $1 AND tl.status = 'Active'`,
+      [userEmail],
+    )
+
+    // Combine and deduplicate centers
+    const allCenters = [...managerCentersResult.rows, ...leaderCentersResult.rows]
+    const uniqueCenters = allCenters.filter((center, index, self) =>
+      index === self.findIndex(c => c.id === center.id)
+    ).sort((a, b) => a.full_name.localeCompare(b.full_name))
+
+    return NextResponse.json({ success: true, centers: uniqueCenters })
   } catch (error: any) {
     console.error('Error getting manager centers:', error)
     return NextResponse.json({ error: 'Server error' }, { status: 500 })

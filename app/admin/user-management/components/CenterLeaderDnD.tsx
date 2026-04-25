@@ -36,10 +36,24 @@ export function regionDropId(region: string) {
   return `region-${encodeURIComponent(region)}`
 }
 
+export function regionManagersDropId(region: string) {
+  return `region-managers-${encodeURIComponent(region)}`
+}
+
 function parseRegionDropId(overId: string): string | null {
   const p = 'region-'
   if (!overId.startsWith(p)) return null
   return decodeURIComponent(overId.slice(p.length))
+}
+
+function parseRegionManagersDropId(overId: string): string | null {
+  const p = 'region-managers-'
+  if (!overId.startsWith(p)) return null
+  return decodeURIComponent(overId.slice(p.length))
+}
+
+function parseLeaderRegionDropId(overId: string): string | null {
+  return parseRegionManagersDropId(overId) ?? parseRegionDropId(overId)
 }
 
 export interface CenterDragLeader {
@@ -93,6 +107,31 @@ export function DroppableRegion({
   )
 }
 
+export function DroppableRegionManagers({
+  regionKey,
+  className,
+  children,
+}: {
+  regionKey: string
+  className?: string
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: regionManagersDropId(regionKey),
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`${className ?? ''} ${
+        isOver ? 'rounded-xl ring-2 ring-[#a1001f]/35 ring-inset' : ''
+      }`}
+    >
+      {children}
+    </div>
+  )
+}
+
 export function DroppableCenterCard({
   centerId,
   className,
@@ -107,7 +146,7 @@ export function DroppableCenterCard({
   return (
     <div
       ref={setNodeRef}
-      className={`${className ?? ''} transition-[box-shadow] ${
+      className={`${className ?? ''} transition-shadow ${
         isOver ? 'ring-2 ring-[#a1001f]/35 ring-inset' : ''
       }`}
     >
@@ -201,23 +240,18 @@ export function CenterCardDragHeader({
   onEdit: (e: React.MouseEvent) => void
   onToggleStatus: (e: React.MouseEvent) => void
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    setActivatorNodeRef,
-    isDragging,
-  } = useDraggable({
-    id: `${DRAG_CENTER_MOVE_PREFIX}${center.id}`,
-    data: {
-      kind: 'center' as const,
-      center,
-      grouped,
-      showLeaderCount,
-      activeL,
-      centerLeadersCount,
-    },
-  })
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } =
+    useDraggable({
+      id: `${DRAG_CENTER_MOVE_PREFIX}${center.id}`,
+      data: {
+        kind: 'center' as const,
+        center,
+        grouped,
+        showLeaderCount,
+        activeL,
+        centerLeadersCount,
+      },
+    })
 
   return (
     <div
@@ -310,7 +344,7 @@ export function LeaderRowDragPreview({
         <div
           className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${
             active
-              ? 'bg-gradient-to-br from-indigo-500 to-purple-600'
+              ? 'bg-linear-to-br from-indigo-500 to-purple-600'
               : 'bg-gray-400'
           }`}
         >
@@ -348,9 +382,7 @@ export function LeaderRowDragPreview({
         <div className="flex shrink-0 items-center gap-1" aria-hidden>
           <span
             className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-              active
-                ? 'bg-green-100 text-green-700'
-                : 'bg-red-100 text-red-700'
+              active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
             }`}
           >
             {leader.status}
@@ -378,16 +410,11 @@ export function DraggableLeaderRow({
   sourceRegion: string
   children: React.ReactNode
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    setActivatorNodeRef,
-    isDragging,
-  } = useDraggable({
-    id: `${DRAG_LEADER_MOVE_PREFIX}${leader.code}`,
-    data: { kind: 'leader' as const, leader, sourceRegion },
-  })
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } =
+    useDraggable({
+      id: `${DRAG_LEADER_MOVE_PREFIX}${leader.code}`,
+      data: { kind: 'leader' as const, leader, sourceRegion },
+    })
 
   return (
     <div
@@ -557,11 +584,17 @@ export function LeaderCenterDndProvider({
     const leader = leaders.find((l) => l.code === code)
     if (!leader) return
 
-    const toRegion = parseRegionDropId(oid)
+    const toRegion = parseLeaderRegionDropId(oid)
     if (toRegion != null) {
       const src =
         (active.data.current as { sourceRegion?: string } | undefined)
           ?.sourceRegion ?? ''
+      if (src.trim() === toRegion.trim()) {
+        if ((leader.center || '').trim()) {
+          await onAssignCenter(code, '')
+        }
+        return
+      }
       const next = computeAreasAfterRegionMove(leader, src, toRegion)
       if (areasEqual(getLeaderAreas(leader), next)) return
       await onAssignLeaderAreas(code, next)

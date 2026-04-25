@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "predev": "node scripts/dev-prep.js",
-    "dev": "next dev --port 3000 --webpack",
-    "dev:turbo": "next dev --port 3000 --turbopack",
+    "dev": "next dev --port 3000 --turbopack",
     "dev:webpack": "next dev --port 3000 --webpack",
+    "dev:turbo": "next dev --port 3000 --turbopack",
     "build": "cross-env NODE_OPTIONS=--require=./scripts/suppress-baseline-warning.cjs BASELINE_BROWSER_MAPPING_IGNORE_OLD_DATA=true BROWSERSLIST_IGNORE_OLD_DATA=true next build",
     "start": "next start",
     "lint": "eslint",
