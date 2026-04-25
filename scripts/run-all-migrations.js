@@ -16,6 +16,8 @@ const pool = new Pool({
     },
 });
 
+const defaultScreenCatalog = require('../lib/default-screen-catalog.json');
+
 async function main() {
     console.log('🔌 Connecting to database...');
     console.log(`   Host: ${process.env.DB_HOST}`);
@@ -78,8 +80,42 @@ async function main() {
         { name: 'create_explanations', file: 'create_explanations_table.sql' },
         { name: 'create_teacher_certificates', file: 'create_teacher_certificates_table.sql' },
         { name: 'create_teacher_privacy_settings', file: 'create_teacher_privacy_settings_table.sql' },
-        { name: 'create_truyenthong_comments', file: 'create_truyenthong_comments_tables.sql' },
-        { name: 'create_training_tables', file: 'create_training_tables_postgres.sql' },        { name: 'fix_assignment_answers_constraint', file: 'fix_assignment_answers_constraint.sql' }    ];
+                { name: 'create_truyenthong_comments', file: 'create_truyenthong_comments_tables.sql' },
+                { name: 'create_training_tables', file: 'create_training_tables_postgres.sql' },
+                { name: 'create_app_screens', file: null, sql: `
+            CREATE TABLE IF NOT EXISTS app_screens (
+                id SERIAL PRIMARY KEY,
+                route_path VARCHAR(255) NOT NULL UNIQUE,
+                label VARCHAR(255) NOT NULL,
+                group_name VARCHAR(100) NOT NULL,
+                sort_order INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT true,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS label VARCHAR(255) NOT NULL DEFAULT '';
+            ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS group_name VARCHAR(100) NOT NULL DEFAULT 'Hệ thống';
+            ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+            ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+            ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS description TEXT;
+            ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+            ALTER TABLE app_screens ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+            CREATE INDEX IF NOT EXISTS idx_app_screens_group_name ON app_screens(group_name);
+            CREATE INDEX IF NOT EXISTS idx_app_screens_is_active ON app_screens(is_active);
+            CREATE INDEX IF NOT EXISTS idx_app_screens_sort_order ON app_screens(sort_order);
+
+            INSERT INTO app_screens (route_path, label, group_name, sort_order, description, is_active)
+            SELECT route_path, label, group_name, sort_order, description, is_active
+            FROM jsonb_to_recordset('${JSON.stringify(defaultScreenCatalog).replace(/'/g, "''")}'::jsonb)
+                AS x(route_path text, label text, group_name text, sort_order integer, description text, is_active boolean)
+            ON CONFLICT (route_path) DO NOTHING;
+        ` },
+                { name: 'fix_assignment_answers_constraint', file: 'fix_assignment_answers_constraint.sql' }
+        ];
+
 
     let appliedCount = 0;
     let errorCount = 0;

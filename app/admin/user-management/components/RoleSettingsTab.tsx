@@ -1,9 +1,9 @@
 "use client";
+import { toast } from "@/lib/app-toast";
 import { useAuth } from "@/lib/auth-context";
 import { authHeaders } from "@/lib/auth-headers";
 import { Loader2, Save, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "@/lib/app-toast";
 import PermSelector from "./PermSelector";
 
 interface RoleData {
@@ -44,7 +44,7 @@ export default function RoleSettingsTab() {
     const loadRoles = async () => {
         try {
             setLoading(true);
-            const res = await fetch('/api/app-auth/role-permissions', { headers: authHeaders(token) });
+            const res = await fetch('/api/app-auth/reference-data', { headers: authHeaders(token) });
             const data = await res.json();
             if (data.roles) setRoles(data.roles);
         } catch { toast.error("Lỗi tải roles"); }

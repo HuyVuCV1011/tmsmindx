@@ -1,5 +1,6 @@
-import pool from '@/lib/db';
+import { resolveAppUserAccessForEmail } from '@/lib/app-user-access';
 import { requireBearerSession } from '@/lib/datasource-api-auth';
+import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 export type DbRoleResult =
@@ -15,7 +16,13 @@ export async function getDbRoleForEmail(
       `SELECT role FROM app_users WHERE LOWER(email) = $1 AND is_active = true LIMIT 1`,
       [normalized],
     );
-    return (r.rows[0]?.role as string) ?? null;
+    const dbRole = (r.rows[0]?.role as string) ?? null
+    if (dbRole && ['super_admin', 'admin', 'manager'].includes(dbRole)) {
+      return dbRole
+    }
+
+    const access = await resolveAppUserAccessForEmail(normalized)
+    return access.found && access.isActive ? access.role : null
   } catch {
     return null;
   }

@@ -7,28 +7,29 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { StepItem, Stepper } from '@/components/ui/stepper'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table'
+import { toast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
-import { findMatchingCampus } from '@/lib/campus-data'
+import { CAMPUS_LIST, findMatchingCampus, normalizeText } from '@/lib/campus-data'
 import { useTeacher } from '@/lib/teacher-context'
 import {
-  AlertCircle,
-  CalendarClock,
-  CheckCircle2,
-  ChevronDown,
-  CircleX,
-  Plus,
-  RefreshCcw,
+    AlertCircle,
+    CalendarClock,
+    CheckCircle2,
+    ChevronDown,
+    CircleX,
+    Plus,
+    RefreshCcw,
+    Search,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { toast } from '@/lib/app-toast'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 interface LeaveRequest {
   id: number
@@ -89,6 +90,12 @@ const MIN_ADVANCE_HOURS = 72
 const MAX_REQUESTS_PER_CLASS = 2
 
 type StatFilter = 'pending' | 'done' | 'rejected'
+
+type CampusOption = {
+  label: string
+  value: string
+  shortCode?: string | null
+}
 
 /** Chuẩn hoá "8:0:0" | "08:30" -> "08:30" */
 function normalizeHhMm(iso: string): string {
@@ -181,6 +188,7 @@ function getWorkflowSteps(status: LeaveRequest['status']): StepItem[] {
 export default function XinNghiMotBuoiPage() {
   const { user, token } = useAuth()
   const { teacherProfile } = useTeacher()
+  const campusPickerRef = useRef<HTMLDivElement | null>(null)
 
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([])
   const [campusFilter, setCampusFilter] = useState<string[]>([])
@@ -188,6 +196,8 @@ export default function XinNghiMotBuoiPage() {
   const [toDate, setToDate] = useState<string>('')
   const [showCampusDropdown, setShowCampusDropdown] = useState(false)
   const [campusSearchText, setCampusSearchText] = useState('')
+  const [showCampusPicker, setShowCampusPicker] = useState(false)
+  const [campusPickerSearchText, setCampusPickerSearchText] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadingError, setLoadingError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
@@ -250,6 +260,42 @@ export default function XinNghiMotBuoiPage() {
     class_status: '',
   })
 
+  const campusSelectionOptions = useMemo<CampusOption[]>(() => {
+    const assignedCenters = user?.assignedCenters ?? []
+    const options =
+      assignedCenters.length > 0
+        ? assignedCenters.map((center) => ({
+            label: center.full_name,
+            value: center.full_name,
+            shortCode: center.short_code,
+          }))
+        : CAMPUS_LIST.map((label) => ({ label, value: label }))
+
+    return Array.from(
+      new Map(options.map((option) => [option.value, option])).values(),
+    ).sort((a, b) => normalizeText(a.label).localeCompare(normalizeText(b.label)))
+  }, [user?.assignedCenters])
+
+  const filteredCampusSelectionOptions = useMemo(() => {
+    const search = normalizeText(campusPickerSearchText)
+    if (!search) return campusSelectionOptions
+
+    return campusSelectionOptions.filter((option) => {
+      return (
+        normalizeText(option.label).includes(search) ||
+        normalizeText(option.shortCode ?? '').includes(search)
+      )
+    })
+  }, [campusPickerSearchText, campusSelectionOptions])
+
+  const selectedCampusOption = useMemo(
+    () =>
+      campusSelectionOptions.find(
+        (option) => option.value === formData.campus,
+      ),
+    [campusSelectionOptions, formData.campus],
+  )
+
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (!saved) return
@@ -261,6 +307,48 @@ export default function XinNghiMotBuoiPage() {
       console.error('Error loading leave request cache', error)
     }
   }, [])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        campusPickerRef.current &&
+        !campusPickerRef.current.contains(event.target as Node)
+      ) {
+        setShowCampusPicker(false)
+      }
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowCampusPicker(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    window.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [])
+
+  const saveFormDraft = (next: {
+    teacher_name: string
+    lms_code: string
+    email: string
+    campus: string
+  }) => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        teacher_name: next.teacher_name,
+        lms_code: next.lms_code,
+        email: next.email,
+        campus: next.campus,
+      }),
+    )
+  }
 
   useEffect(() => {
     if (!teacherProfile) {
@@ -276,6 +364,15 @@ export default function XinNghiMotBuoiPage() {
     const matchedCampus = findMatchingCampus(teacherBranch)
 
     setFormData((prev) => {
+      const preservedCampus = campusSelectionOptions.some(
+        (option) => option.value === prev.campus,
+      )
+        ? prev.campus
+        : ''
+      const matchedCampusAllowed = campusSelectionOptions.some(
+        (option) => option.value === matchedCampus,
+      )
+
       const updated = {
         ...prev,
         teacher_name: teacherProfile.name || prev.teacher_name || '',
@@ -286,22 +383,24 @@ export default function XinNghiMotBuoiPage() {
           prev.email ||
           user?.email ||
           '',
-        campus: matchedCampus || prev.campus || '',
+        campus: preservedCampus || (matchedCampusAllowed ? matchedCampus : ''),
       }
 
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          teacher_name: updated.teacher_name,
-          lms_code: updated.lms_code,
-          email: updated.email,
-          campus: updated.campus,
-        }),
-      )
+      saveFormDraft(updated)
 
       return updated
     })
-  }, [teacherProfile, user?.email])
+  }, [campusSelectionOptions, teacherProfile, user?.email])
+
+  const handleCampusSelect = (campus: string) => {
+    setFormData((prev) => {
+      const next = { ...prev, campus }
+      saveFormDraft(next)
+      return next
+    })
+    setShowCampusPicker(false)
+    setCampusPickerSearchText('')
+  }
 
   const fetchLeaveRequests = useCallback(
     async (showRefreshToast = false) => {
@@ -458,6 +557,8 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
     }))
     setClassTimeStart(null)
     setClassTimeEnd(null)
+    setShowCampusPicker(false)
+    setCampusPickerSearchText('')
   }
 
   const validateForm = () => {
@@ -623,6 +724,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
                 size="lg"
                 onClick={() => {
                   resetFormForNew()
+                  setShowCampusPicker(false)
                   setShowModal(true)
                 }}
                 className="whitespace-nowrap border-2 border-[#a1001f] bg-[#a1001f] text-white shadow-md hover:bg-[#8a001a]"
@@ -950,7 +1052,11 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
 
       <Modal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => {
+          setShowCampusPicker(false)
+          setCampusPickerSearchText('')
+          setShowModal(false)
+        }}
         title="Tạo mail xin nghỉ 1 buổi"
         maxWidth="4xl"
       >
@@ -999,6 +1105,101 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
                 className={TEXTAREA_BASE_CLASS}
               />
             </div>
+
+            <div ref={campusPickerRef} className="relative md:col-span-2">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Cơ sở *
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextOpen = !showCampusPicker
+                  setShowCampusPicker(nextOpen)
+                  if (nextOpen) {
+                    setCampusPickerSearchText('')
+                  }
+                }}
+                className={`${SELECT_BASE_CLASS} flex items-center justify-between text-left`}
+                aria-expanded={showCampusPicker}
+                aria-haspopup="listbox"
+              >
+                <span className="min-w-0 truncate">
+                  {selectedCampusOption?.label || formData.campus || 'Chọn cơ sở'}
+                </span>
+                <ChevronDown className="ml-3 h-4 w-4 shrink-0 text-gray-400" />
+              </button>
+              <p className="mt-1.5 text-xs text-gray-500">
+                Chỉ hiển thị các cơ sở bạn được phân công. Gõ để tìm nhanh.
+              </p>
+
+              {showCampusPicker && (
+                <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl">
+                  <div className="border-b border-gray-100 p-3">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={campusPickerSearchText}
+                        onChange={(e) => setCampusPickerSearchText(e.target.value)}
+                        placeholder="Tìm kiếm cơ sở..."
+                        className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 pl-10 text-sm outline-none transition focus:border-[#a1001f] focus:bg-white focus:ring-2 focus:ring-[#a1001f]/20"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto p-2">
+                    {filteredCampusSelectionOptions.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-sm text-gray-500">
+                        Không tìm thấy cơ sở phù hợp.
+                      </div>
+                    ) : (
+                      filteredCampusSelectionOptions.map((option) => {
+                        const isSelected = option.value === formData.campus
+
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => handleCampusSelect(option.value)}
+                            className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-gray-50 ${
+                              isSelected ? 'bg-[#a1001f]/5 ring-1 ring-[#a1001f]/10' : ''
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-gray-900">
+                                {option.label}
+                              </p>
+                              {option.shortCode ? (
+                                <p className="mt-0.5 text-xs text-gray-500">
+                                  {option.shortCode}
+                                </p>
+                              ) : null}
+                            </div>
+                            {isSelected ? (
+                              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                            ) : null}
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+
+                  {formData.campus && (
+                    <div className="border-t border-gray-100 p-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCampusSelect('')}
+                        className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+                      >
+                        Xóa lựa chọn cơ sở
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
                 Mã lớp *
@@ -1028,7 +1229,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
                 Thời gian học *
               </label>
               <p className="mb-3 text-xs text-gray-500">
-                Dùng ô giờ chuẩn của trình duyệt (mobile sẽ mở bánh xe giờ/phút). Bước 1 phút.
+                Dùng định dạng 24 giờ (00:00 - 23:59). Mobile sẽ mở bánh xe giờ/phút.
               </p>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="min-w-0">
@@ -1042,6 +1243,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
                     id="class-time-start"
                     type="time"
                     step={60}
+                    lang="en-GB"
                     value={classTimeStart ?? ''}
                     onChange={(e) => {
                       const v = e.target.value
@@ -1062,6 +1264,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
                     id="class-time-end"
                     type="time"
                     step={60}
+                    lang="en-GB"
                     value={classTimeEnd ?? ''}
                     onChange={(e) => {
                       const v = e.target.value

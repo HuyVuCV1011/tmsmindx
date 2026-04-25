@@ -1,9 +1,14 @@
-import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { isDegradedDatabaseQueryError } from '@/lib/db-unavailable';
+import { sanitizeHtml, sanitizeText } from '@/lib/server-sanitize-html';
+import { TPS_SESSION_COOKIE, verifySessionCookieValue } from '@/lib/session-cookie';
+import { createSupabaseS3Client, isSupabaseS3Configured } from '@/lib/supabase-s3';
+import {
+    requireTruyenThongPostAdmin,
+} from '@/lib/truyenthong-posts';
 import { generateSlug } from '@/lib/utils';
-import { createSupabaseS3Client, isSupabaseS3Configured, parsePublicUrl } from '@/lib/supabase-s3';
 import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { NextRequest, NextResponse } from 'next/server';
 
 const BUCKET_NAME = 'mindx-posts-content';
 
@@ -81,12 +86,18 @@ async function processBase64Images(htmlContent: string): Promise<string> {
   return newContent;
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');
     const status = searchParams.get('status');
     const search = searchParams.get('search');
+    const sessionToken = request.cookies.get(TPS_SESSION_COOKIE)?.value;
+    const session = sessionToken
+      ? await verifySessionCookieValue(sessionToken)
+      : null;
+    const canSeeDrafts = session?.canAdminPortal === true;
+    const effectiveStatus = canSeeDrafts ? status : 'published';
 
     let queryText = `
 SELECT c.*,
@@ -110,9 +121,9 @@ WHERE 1=1`;
       paramIndex++;
     }
 
-    if (status && status !== 'all') {
+    if (effectiveStatus && effectiveStatus !== 'all') {
       queryText += ` AND c.status = $${paramIndex}`;
-      queryParams.push(status);
+      queryParams.push(effectiveStatus);
       paramIndex++;
     }
 
@@ -150,8 +161,11 @@ WHERE 1=1`;
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const denied = await requireTruyenThongPostAdmin(request);
+    if (denied) return denied;
+
     const body = await request.json();
     const {
       title,
@@ -166,28 +180,51 @@ export async function POST(request: Request) {
       thumbnail_position,
     } = body;
 
+    const normalizedTitle = typeof title === 'string' ? title.trim() : '';
+    const normalizedDescription =
+      typeof description === 'string' ? description.trim() : '';
+    const rawContent = typeof content === 'string' ? content : '';
+
+    if (!normalizedTitle || !normalizedDescription || !rawContent) {
+      return NextResponse.json(
+        { error: 'title, description và content là bắt buộc' },
+        { status: 400 },
+      );
+    }
+
     // Đảm bảo bucket tồn tại trước khi xử lý ảnh
     await ensureBucket();
 
-    let processedContent = content;
+    let processedContent = rawContent;
     try {
-      processedContent = await processBase64Images(content);
+      processedContent = await processBase64Images(rawContent);
     } catch (err) {
       console.error('Error processing base64 images in POST:', err);
     }
 
+    const safeTitle = sanitizeText(normalizedTitle);
+    const safeDescription = sanitizeText(normalizedDescription);
+    const safeContent = sanitizeHtml(processedContent);
+
+    if (!safeTitle || !safeDescription || !safeContent.trim()) {
+      return NextResponse.json(
+        { error: 'Nội dung bài viết không hợp lệ sau khi làm sạch' },
+        { status: 400 },
+      );
+    }
+
     const client = await pool.connect();
     try {
-      const duplicateCheck = await client.query('SELECT 1 FROM communications WHERE title = $1', [title]);
+      const duplicateCheck = await client.query('SELECT 1 FROM communications WHERE title = $1', [safeTitle]);
       if (duplicateCheck.rows.length > 0) {
         return NextResponse.json({ error: 'Tiêu đề bài viết đã tồn tại' }, { status: 409 });
       }
 
-      let slug = generateSlug(title);
+      let slug = generateSlug(safeTitle);
       let slugExists = await client.query('SELECT 1 FROM communications WHERE slug = $1', [slug]);
       let counter = 1;
       while (slugExists.rows.length > 0) {
-        slug = `${generateSlug(title)}-${counter}`;
+        slug = `${generateSlug(safeTitle)}-${counter}`;
         slugExists = await client.query('SELECT 1 FROM communications WHERE slug = $1', [slug]);
         counter++;
       }
@@ -198,7 +235,7 @@ export async function POST(request: Request) {
           post_type, audience, status, published_at, thumbnail_position
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
         [
-          title, slug, description, processedContent, featured_image, banner_image,
+          safeTitle, slug, safeDescription, safeContent, featured_image, banner_image,
           post_type, audience, status, published_at || new Date(),
           thumbnail_position || '50% 50%',
         ]

@@ -63,6 +63,21 @@ type FilterState = {
 
 const REGION_ORDER = ['HCM 4', 'HCM 1', 'HCM 3', 'HCM 2', 'HN 1', 'HN 2', 'TỈNH NAM', 'TỈNH BẮC', 'TỈNH TRUNG', 'ONLINE']
 
+// Màu nhạt theo khu vực — button + text
+const REGION_COLORS: Record<string, { btn: string; text: string; count: string }> = {
+  'HCM 4': { btn: 'bg-rose-50 border-rose-200 hover:bg-rose-100',       text: 'text-rose-700',   count: 'text-rose-500' },
+  'HCM 1': { btn: 'bg-sky-50 border-sky-200 hover:bg-sky-100',          text: 'text-sky-700',    count: 'text-sky-500' },
+  'HCM 2': { btn: 'bg-violet-50 border-violet-200 hover:bg-violet-100', text: 'text-violet-700', count: 'text-violet-500' },
+  'HCM 3': { btn: 'bg-teal-50 border-teal-200 hover:bg-teal-100',       text: 'text-teal-700',   count: 'text-teal-500' },
+  'HN 1':  { btn: 'bg-amber-50 border-amber-200 hover:bg-amber-100',    text: 'text-amber-700',  count: 'text-amber-500' },
+  'HN 2':  { btn: 'bg-orange-50 border-orange-200 hover:bg-orange-100', text: 'text-orange-700', count: 'text-orange-500' },
+  'TỈNH NAM':  { btn: 'bg-lime-50 border-lime-200 hover:bg-lime-100',   text: 'text-lime-700',   count: 'text-lime-500' },
+  'TỈNH BẮC':  { btn: 'bg-cyan-50 border-cyan-200 hover:bg-cyan-100',   text: 'text-cyan-700',   count: 'text-cyan-500' },
+  'TỈNH TRUNG': { btn: 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100', text: 'text-indigo-700', count: 'text-indigo-500' },
+  'ONLINE': { btn: 'bg-gray-50 border-gray-200 hover:bg-gray-100',      text: 'text-gray-600',   count: 'text-gray-400' },
+}
+const DEFAULT_REGION_COLOR = { btn: 'bg-gray-50 border-gray-200 hover:bg-gray-100', text: 'text-gray-600', count: 'text-gray-400' }
+
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
 function isSameDate(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
@@ -544,7 +559,11 @@ export default function QuanLyLichLamViecPage() {
                             <div key={region}>
                               <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400 mb-1">{region}</p>
                               <div className="space-y-1">
-                                {regionCenters.map(center => (
+                                {regionCenters.map(center => {
+                                  const rc = REGION_COLORS[center.region] || DEFAULT_REGION_COLOR
+                                  // Cột >= 5 (T7, CN) → tooltip hiện bên trái
+                                  const tipSide = i >= 5 ? 'right-full mr-2' : 'left-full ml-2'
+                                  return (
                                   <div key={center.short_code} className="relative group">
                                     <button
                                       onClick={() => {
@@ -552,33 +571,33 @@ export default function QuanLyLichLamViecPage() {
                                         const pairCenter = pairRegion ? centers.find(c => c.region === pairRegion) : undefined
                                         setDetail({ date, khung, center, pairCenter })
                                       }}
-                                      className="w-full flex items-center justify-between gap-1 rounded-lg bg-[#a1001f]/8 border border-[#a1001f]/20 px-2 py-1 text-left hover:bg-[#a1001f]/15 transition-colors"
+                                      className={`w-full flex items-center justify-between gap-1 rounded-lg border px-2 py-1 text-left transition-colors ${rc.btn}`}
                                     >
-                                      <span className="text-[11px] font-semibold text-[#a1001f] truncate">{center.full_name}</span>
-                                      <span className="flex items-center gap-0.5 text-[10px] font-semibold text-[#a1001f]/80 flex-shrink-0">
+                                      <span className={`text-[11px] font-semibold truncate ${rc.text}`}>{center.full_name}</span>
+                                      <span className={`flex items-center gap-0.5 text-[10px] font-semibold flex-shrink-0 ${rc.count}`}>
                                         <Users className="h-3 w-3" />{center.uu_tien.length}
-                                        {center.linh_hoat.length > 0 && <span className="text-gray-400">+{center.linh_hoat.length}</span>}
+                                        {center.linh_hoat.length > 0 && <span className="opacity-60">+{center.linh_hoat.length}</span>}
                                       </span>
                                     </button>
-                                    {/* Hover tooltip — danh sách ưu tiên */}
                                     {center.uu_tien.length > 0 && (
-                                      <div className="absolute left-full top-0 ml-2 z-30 hidden group-hover:block w-52 rounded-xl bg-white border border-gray-200 shadow-xl p-3">
-                                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#a1001f] mb-2">
+                                      <div className={`absolute top-0 ${tipSide} z-30 hidden group-hover:block w-52 rounded-xl bg-white border border-gray-200 shadow-xl p-3`}>
+                                        <p className={`text-[10px] font-bold uppercase tracking-wide mb-2 ${rc.text}`}>
                                           Ưu tiên ({center.uu_tien.length})
                                         </p>
                                         <ul className="space-y-1">
                                           {center.uu_tien.map((m, idx) => (
                                             <li key={m.ma_gv} className="flex items-center gap-1.5 text-[11px] text-gray-700">
-                                              <span className="h-4 w-4 rounded-full bg-[#a1001f]/10 text-[#a1001f] text-[9px] font-bold flex items-center justify-center flex-shrink-0">{idx + 1}</span>
+                                              <span className={`h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center flex-shrink-0 ${rc.btn} ${rc.text}`}>{idx + 1}</span>
                                               <span className="truncate font-medium">{m.teacher_name}</span>
-                                              <span className="ml-auto text-[10px] text-gray-400 italic whitespace-nowrap flex-shrink-0">{m.gio_bat_dau}–{m.gio_ket_thuc}</span>
+                                              <span className="ml-auto text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">{m.gio_bat_dau}–{m.gio_ket_thuc}</span>
                                             </li>
                                           ))}
                                         </ul>
                                       </div>
                                     )}
                                   </div>
-                                ))}
+                                  )
+                                })}
                               </div>
                             </div>
                           ))}

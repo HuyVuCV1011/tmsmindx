@@ -1,3 +1,4 @@
+import { getAccessibleCenters } from '@/lib/center-access'
 import pool from '@/lib/db'
 
 export type AppUserAccess = {
@@ -10,6 +11,12 @@ export type AppUserAccess = {
   userRoles: string[]
   isAppUser: boolean
   isActive: boolean
+  /** Centers assigned to this manager/admin */
+  assignedCenters: Array<{
+    id: number
+    full_name: string
+    short_code: string | null
+  }>
 }
 
 /**
@@ -22,11 +29,32 @@ export async function resolveAppUserAccessForEmail(
 
   try {
     const dbResult = await pool.query(
-      `SELECT id, role, is_active, auth_type FROM app_users WHERE email = $1`,
+      'SELECT id, role, is_active, auth_type FROM app_users WHERE email = $1',
       [normalized],
     )
 
     if (dbResult.rows.length === 0) {
+      const leaderResult = await pool.query(
+        'SELECT status FROM teaching_leaders WHERE LOWER(TRIM(email)) = $1 LIMIT 1',
+        [normalized],
+      )
+
+      if (leaderResult.rows.length > 0) {
+        const leaderRow = leaderResult.rows[0] as { status?: string }
+        const isActive = leaderRow.status !== 'Deactive'
+        return {
+          found: true,
+          email: normalized,
+          role: 'manager',
+          isAdmin: isActive,
+          permissions: [],
+          userRoles: [],
+          isAppUser: false,
+          isActive,
+          assignedCenters: await getAccessibleCenters(normalized),
+        }
+      }
+
       return {
         found: false,
         email: normalized,
@@ -36,6 +64,7 @@ export async function resolveAppUserAccessForEmail(
         userRoles: [],
         isAppUser: false,
         isActive: true,
+        assignedCenters: [],
       }
     }
 
@@ -45,6 +74,8 @@ export async function resolveAppUserAccessForEmail(
       is_active: boolean
       auth_type: string
     }
+
+    const assignedCenters = await getAccessibleCenters(normalized)
 
     const directPerms = await pool.query(
       'SELECT route_path FROM app_permissions WHERE user_id = $1 AND can_access = true',
@@ -82,21 +113,27 @@ export async function resolveAppUserAccessForEmail(
       (code) => code === 'HR' || code === 'TE' || code === 'TF',
     )
     const hasAdminPerms = permissions.some((p) => p.startsWith('/admin'))
+    const effectiveRole =
+      assignedCenters.length > 0 &&
+      !['super_admin', 'admin', 'manager'].includes(appUser.role)
+        ? 'manager'
+        : appUser.role
     const isAdmin =
       appUser.is_active &&
-      (['super_admin', 'admin', 'manager'].includes(appUser.role) ||
+      (['super_admin', 'admin', 'manager'].includes(effectiveRole) ||
         hasAdminPerms ||
         hasTrainingInputRole)
 
     return {
       found: true,
       email: normalized,
-      role: appUser.role,
+      role: effectiveRole,
       isAdmin,
       permissions,
       userRoles: userRoles.rows.map((r: { role_code: string }) => r.role_code),
       isAppUser: appUser.auth_type === 'app',
       isActive: Boolean(appUser.is_active),
+      assignedCenters,
     }
   } catch (e) {
     console.error('resolveAppUserAccessForEmail:', e)
@@ -109,6 +146,7 @@ export async function resolveAppUserAccessForEmail(
       userRoles: [],
       isAppUser: false,
       isActive: true,
+      assignedCenters: [],
     }
   }
 }

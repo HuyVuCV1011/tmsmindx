@@ -1,14 +1,14 @@
-import { Analytics } from "@vercel/analytics/react"
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PersistentLayout } from "@/components/PersistentLayout";
 import { TrackerProvider } from "@/components/TrackerProvider";
 import { AuthProvider } from "@/lib/auth-context";
 import { TeacherProvider } from "@/lib/teacher-context";
-import StoreProvider from "./StoreProvider";
+import { Analytics } from "@vercel/analytics/react";
 import type { Metadata } from "next";
 import { Exo } from "next/font/google";
 import { Toaster } from 'react-hot-toast';
 import "./globals.css";
+import StoreProvider from "./StoreProvider";
 
 const exo = Exo({
   subsets: ["latin"],
@@ -31,6 +31,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const showAnalytics = process.env.NODE_ENV === 'production'
   return (
     <html lang="vi">
       <head>
@@ -69,7 +70,7 @@ export default function RootLayout({
             },
           }}
         />
-        <Analytics />
+        {showAnalytics ? <Analytics /> : null}
       </body>
     </html>
   );

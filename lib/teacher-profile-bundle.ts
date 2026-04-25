@@ -10,9 +10,9 @@ const LEGACY_QUOTED_KEYS_SUPERSEDED_BY_SNAKE_CASE = new Set([
 ]);
 
 export function mergeTeacherRow(row: Record<string, unknown>): Record<string, unknown> {
-  const { onboarding_snapshot: _removed, ...rest } = row;
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(rest)) {
+  for (const [k, v] of Object.entries(row)) {
+    if (k === 'onboarding_snapshot') continue;
     if (LEGACY_QUOTED_KEYS_SUPERSEDED_BY_SNAKE_CASE.has(k)) continue;
     out[k] = v;
   }
