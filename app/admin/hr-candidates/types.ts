@@ -1,34 +1,27 @@
+// ─── Row từ database hr_candidates ───────────────────────────────────────────
 export interface HrCandidateRow {
-  rowNumber: number;
-  candidateKey: string;
-  candidateFingerprint: string;
-  candidateCode: string;
-  regionCode: '1' | '2' | '3' | '4' | '5' | '';
-  name: string;
+  id: number;
+  full_name: string;
   email: string;
   phone: string;
-  status: string;
-  desiredCampus: string;
-  workBlock: string;
-  desiredProgram: string;
-  sheetGen: string;
-  effectiveGen: string;
-  isSheetGenMissing: boolean;
-  isUnassigned: boolean;
-  hasManualAssignment: boolean;
-  assignedByEmail: string | null;
-  assignedAt: string | null;
-  updatedAt: string | null;
-  note: string | null;
-  raw: Record<string, string>;
+  region_code: '1' | '2' | '3' | '4' | '5' | '';
+  desired_campus: string;
+  work_block: string;
+  subject_code: string;
+  gen_id: number | null;
+  gen_name: string;       // join từ hr_gen_catalog
+  status: 'new' | 'in_training' | 'passed' | 'failed' | 'dropped';
+  source: 'manual' | 'csv';
+  created_by_email: string;
+  updated_by_email: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface HrSummary {
   total: number;
   assigned: number;
   unassigned: number;
-  missingSheetGen: number;
-  manualAssigned: number;
   byGen: Record<string, number>;
   byRegion: Record<'1' | '2' | '3' | '4' | '5', number>;
 }
@@ -40,16 +33,6 @@ export interface HrPagination {
   totalPages: number;
 }
 
-export interface HrSource {
-  sheetId: string;
-  gid: string;
-  fetchedAt: string;
-}
-
-export interface DraftAssignment {
-  gen: string;
-  note: string;
-}
 export interface GenEntry {
   key: string;
   genCode: string;

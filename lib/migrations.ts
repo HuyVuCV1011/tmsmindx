@@ -1225,6 +1225,36 @@ const migrations: Migration[] = [
   },
 
   // ═══════════════════════════════════════════════════════
+  // V51: Center-based access control for managers
+  // Mapping manager email → centers được phân công
+  // ═══════════════════════════════════════════════════════
+  {
+    name: 'V51_manager_centers',
+    version: 51,
+    sql: `
+      CREATE TABLE IF NOT EXISTS manager_centers (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        assigned_by_email VARCHAR(255),
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, center_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_manager_centers_user_id ON manager_centers(user_id);
+      CREATE INDEX IF NOT EXISTS idx_manager_centers_center_id ON manager_centers(center_id);
+
+      DROP TRIGGER IF EXISTS trg_manager_centers_updated_at ON manager_centers;
+      CREATE TRIGGER trg_manager_centers_updated_at
+      BEFORE UPDATE ON manager_centers
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
+
+  // ═══════════════════════════════════════════════════════
   // V48: Add user_name + reaction to communication_likes
   // ═══════════════════════════════════════════════════════
   {
@@ -1326,6 +1356,92 @@ const migrations: Migration[] = [
     sql: `
       ALTER TABLE teaching_leaders
         ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+    `,
+  },
+  {
+    name: 'V66_hr_onboarding_training',
+    version: 66,
+    sql: `
+      -- Bảng ứng viên đào tạo đầu vào
+      CREATE TABLE IF NOT EXISTS hr_candidates (
+        id                SERIAL PRIMARY KEY,
+        full_name         VARCHAR(255) NOT NULL,
+        email             VARCHAR(255) NOT NULL,
+        phone             VARCHAR(50),
+        region_code       VARCHAR(10),
+        desired_campus    VARCHAR(255),
+        work_block        VARCHAR(100),
+        subject_code      VARCHAR(100),
+        gen_id            INTEGER REFERENCES hr_gen_catalog(id) ON DELETE SET NULL,
+        status            VARCHAR(20) NOT NULL DEFAULT 'new'
+                          CHECK (status IN ('new', 'in_training', 'passed', 'failed', 'dropped')),
+        source            VARCHAR(20) NOT NULL DEFAULT 'manual'
+                          CHECK (source IN ('manual', 'csv')),
+        created_by_email  VARCHAR(255) NOT NULL,
+        updated_by_email  VARCHAR(255),
+        created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_hr_candidates_email_gen UNIQUE (email, gen_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_hr_candidates_gen_id ON hr_candidates(gen_id);
+      CREATE INDEX IF NOT EXISTS idx_hr_candidates_status ON hr_candidates(status);
+      CREATE INDEX IF NOT EXISTS idx_hr_candidates_email ON hr_candidates(email);
+
+      -- Bảng buổi training (tối đa 4 buổi/GEN)
+      CREATE TABLE IF NOT EXISTS hr_training_sessions (
+        id                SERIAL PRIMARY KEY,
+        gen_id            INTEGER NOT NULL REFERENCES hr_gen_catalog(id) ON DELETE CASCADE,
+        session_number    INTEGER NOT NULL CHECK (session_number BETWEEN 1 AND 4),
+        title             VARCHAR(500) NOT NULL,
+        session_date      DATE,
+        video_id          INTEGER REFERENCES training_videos(id) ON DELETE SET NULL,
+        created_by_email  VARCHAR(255) NOT NULL,
+        created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_hr_training_sessions_gen_session UNIQUE (gen_id, session_number)
+      );
+      CREATE INDEX IF NOT EXISTS idx_hr_training_sessions_gen_id ON hr_training_sessions(gen_id);
+
+      -- Bảng điểm danh + điểm kiểm tra từng buổi
+      CREATE TABLE IF NOT EXISTS hr_candidate_training_records (
+        id                SERIAL PRIMARY KEY,
+        candidate_id      INTEGER NOT NULL REFERENCES hr_candidates(id) ON DELETE CASCADE,
+        session_id        INTEGER NOT NULL REFERENCES hr_training_sessions(id) ON DELETE CASCADE,
+        attendance        BOOLEAN NOT NULL DEFAULT FALSE,
+        score             DECIMAL(4,2) CHECK (score >= 0 AND score <= 10),
+        recorded_by_email VARCHAR(255) NOT NULL,
+        created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_hr_training_record UNIQUE (candidate_id, session_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_hr_training_records_candidate ON hr_candidate_training_records(candidate_id);
+      CREATE INDEX IF NOT EXISTS idx_hr_training_records_session ON hr_candidate_training_records(session_id);
+
+      -- Thêm cột source vào teachers để ghi nhận nguồn gốc
+      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS source VARCHAR(50);
+
+      -- Triggers updated_at
+      DROP TRIGGER IF EXISTS trg_hr_candidates_updated_at ON hr_candidates;
+      CREATE TRIGGER trg_hr_candidates_updated_at
+        BEFORE UPDATE ON hr_candidates
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+      DROP TRIGGER IF EXISTS trg_hr_training_sessions_updated_at ON hr_training_sessions;
+      CREATE TRIGGER trg_hr_training_sessions_updated_at
+        BEFORE UPDATE ON hr_training_sessions
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+      DROP TRIGGER IF EXISTS trg_hr_candidate_training_records_updated_at ON hr_candidate_training_records;
+      CREATE TRIGGER trg_hr_candidate_training_records_updated_at
+        BEFORE UPDATE ON hr_candidate_training_records
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+      -- Permissions cho route /admin/hr-onboarding
+      INSERT INTO app_permissions (user_id, route_path, can_access)
+      SELECT u.id, '/admin/hr-onboarding', true
+      FROM app_users u
+      WHERE u.role = 'super_admin'
+      ON CONFLICT (user_id, route_path) DO NOTHING;
     `,
   },
 ]

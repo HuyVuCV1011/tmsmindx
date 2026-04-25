@@ -922,36 +922,28 @@ function VideoSetupContent() {
 
   const handleSaveVideo = async (status: 'draft' | 'active') => {
     if (!video) return;
-    
-    if (status === 'active' && !currentAssignment && questions.length === 0) {
-        // If neither assignment nor questions, warn user it's just a raw video
+
+    if (status === 'active') {
+      // Kiểm tra thumbnail
+      const hasThumbnail = !!(thumbnailPreview || videoForm.thumbnail_url || video.thumbnail_url);
+      if (!hasThumbnail) {
+        toast.error('Vui lòng thêm ảnh thumbnail trước khi giao bài');
+        return;
+      }
+
+      // Kiểm tra assignment
+      if (!currentAssignment) {
         setConfirmDialog({
-            isOpen: true,
-            title: "Xác nhận công khai",
-            message: "Video này chưa có Assignment (bài tập) và chưa có câu hỏi pop-up nào. Học viên sẽ được tính hoàn thành ngay sau khi xem xong video. Bạn có chắc muốn tiếp tục?",
-            type: "warning",
-            onConfirm: () => {
-                setConfirmDialog(p => ({...p, isOpen: false}));
-                executeSaveVideo(status);
-            }
+          isOpen: true,
+          title: 'Yêu cầu Assignment',
+          message: 'Video này chưa có Assignment (bài tập). Bạn không được phép Giao bài (Active) khi không có Assignment kèm theo. Vui lòng liên kết bài tập trước.',
+          type: 'warning',
+          onConfirm: () => { setConfirmDialog(p => ({ ...p, isOpen: false })); }
         });
         return;
+      }
     }
 
-
-    if (status === 'active' && !currentAssignment) {
-        setConfirmDialog({
-            isOpen: true,
-            title: "Yêu cầu Assignment",
-            message: "Video này chưa có Assignment (bài tập). Bạn không được phép Giao bài (Active) khi không có Assignment kèm theo. Vui lòng liên kết bài tập trước.",
-            type: "warning",
-            onConfirm: () => {
-                setConfirmDialog(p => ({...p, isOpen: false}));
-            }
-        });
-        return;
-    }
-    
     executeSaveVideo(status);
   };
 

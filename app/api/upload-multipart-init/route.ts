@@ -34,7 +34,15 @@ export async function POST(req: NextRequest) {
     const client = createSupabaseS3Client();
 
     const ext = filename.includes('.') ? filename.split('.').pop() : 'mp4';
-    const key = `videos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const baseName = filename
+      .replace(/\.[^/.]+$/, '')
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // bỏ dấu tiếng Việt
+      .replace(/đ/g, 'd').replace(/Đ/g, 'd')             // đ không bị NFD
+      .replace(/[^a-z0-9]+/g, '-')                       // chỉ giữ a-z0-9
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80) || 'video';
+    const key = `video_dtnc/${Date.now()}-${baseName}.${ext}`;
 
     const result = await client.send(
       new CreateMultipartUploadCommand({

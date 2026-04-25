@@ -86,7 +86,7 @@ const handleGet = async (request: NextRequest) => {
     }
 
     const catalogResult = await pool.query(
-      `SELECT gen_name
+      `SELECT id, gen_name
        FROM hr_gen_catalog
        WHERE is_active = true
        ORDER BY gen_name ASC`
@@ -94,7 +94,8 @@ const handleGet = async (request: NextRequest) => {
 
     return NextResponse.json({
       success: true,
-      gens: catalogResult.rows.map((row: { gen_name: string }) => row.gen_name),
+      gens: catalogResult.rows.map((row: { id: number; gen_name: string }) => row.gen_name),
+      catalog: catalogResult.rows as Array<{ id: number; gen_name: string }>,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Loi khong xac dinh';
