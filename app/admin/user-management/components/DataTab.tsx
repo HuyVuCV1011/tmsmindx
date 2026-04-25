@@ -1,4 +1,5 @@
 'use client'
+import { toast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
 import { getLeaderAreas } from '@/lib/teaching-leaders'
@@ -17,17 +18,16 @@ import {
   Users2,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { toast } from '@/lib/app-toast'
-import ConfirmDialog from './ConfirmDialog'
-import KanbanLeadersPanel from './KanbanLeadersPanel'
 import {
   CenterCardDragHeader,
   DraggableLeaderRow,
   DroppableCenterCard,
-  DroppableRegionManagers,
   DroppableRegion,
+  DroppableRegionManagers,
   LeaderCenterDndProvider,
 } from './CenterLeaderDnD'
+import ConfirmDialog from './ConfirmDialog'
+import KanbanLeadersPanel from './KanbanLeadersPanel'
 
 type SubTab = 'centers-leaders' | 'roles' | 'kanban'
 interface Leader {
@@ -1276,6 +1276,13 @@ function RolesPanel() {
   const [roles, setRoles] = useState<any[]>([])
   const [leaders, setLeaders] = useState<Leader[]>([])
   const [loading, setLoading] = useState(true)
+  const [editRole, setEditRole] = useState<{
+    role_code: string
+    role_name: string
+    department: string
+    description: string
+  } | null>(null)
+  const [savingRoleMeta, setSavingRoleMeta] = useState(false)
 
   useEffect(() => {
     load()
@@ -1285,7 +1292,7 @@ function RolesPanel() {
     setLoading(true)
     try {
       const [rolesRes, leadersRes] = await Promise.all([
-        fetch('/api/app-auth/data?table=roles', {
+        fetch('/api/app-auth/reference-data', {
           headers: authHeaders(token),
         }),
         fetch('/api/app-auth/data?table=teaching_leaders', {
@@ -1294,7 +1301,7 @@ function RolesPanel() {
       ])
       const rolesData = await rolesRes.json()
       const leadersData = await leadersRes.json()
-      if (rolesData.rows) setRoles(rolesData.rows)
+      if (rolesData.roles) setRoles(rolesData.roles)
       if (leadersData.rows) setLeaders(leadersData.rows)
     } catch {
       toast.error('Lỗi tải dữ liệu')
@@ -1311,6 +1318,36 @@ function RolesPanel() {
     )
 
   const depts = [...new Set(roles.map((r) => r.department))].sort()
+
+  const handleSaveRoleMeta = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editRole) return
+    setSavingRoleMeta(true)
+    try {
+      const res = await fetch('/api/app-auth/role-permissions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({
+          roleCode: editRole.role_code,
+          roleName: editRole.role_name,
+          department: editRole.department,
+          description: editRole.description,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`Đã cập nhật role ${editRole.role_code}`)
+        setEditRole(null)
+        load()
+      } else {
+        toast.error(data.error || 'Không thể cập nhật role')
+      }
+    } catch {
+      toast.error('Lỗi kết nối')
+    } finally {
+      setSavingRoleMeta(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -1339,9 +1376,26 @@ function RolesPanel() {
                         <span className="text-base font-bold text-[#a1001f]">
                           {r.role_code}
                         </span>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">
-                          {activeCount}/{roleLeaders.length} members
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">
+                            {activeCount}/{roleLeaders.length} members
+                          </span>
+                          <button
+                            type="button"
+                            className="p-1 rounded hover:bg-blue-100"
+                            title="Chỉnh sửa role"
+                            onClick={() =>
+                              setEditRole({
+                                role_code: r.role_code,
+                                role_name: r.role_name || '',
+                                department: r.department || '',
+                                description: r.description || '',
+                              })
+                            }
+                          >
+                            <Edit2 className="h-3.5 w-3.5 text-blue-600" />
+                          </button>
+                        </div>
                       </div>
                       <p className="text-sm font-medium text-gray-900">
                         {r.role_name}
@@ -1414,6 +1468,118 @@ function RolesPanel() {
           </div>
         </div>
       ))}
+
+      {editRole && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setEditRole(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-lg rounded-xl border border-gray-200 bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between rounded-t-xl bg-[#a1001f] px-6 py-4">
+              <h3 className="text-lg font-bold text-white">
+                Chỉnh sửa role tham chiếu: {editRole.role_code}
+              </h3>
+              <button
+                aria-label="Đóng form"
+                onClick={() => setEditRole(null)}
+                className="rounded-lg p-1.5 text-white transition-colors hover:bg-white/10"
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleSaveRoleMeta} className="space-y-4 px-6 py-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mã role
+                </label>
+                <input
+                  value={editRole.role_code}
+                  disabled
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tên role
+                </label>
+                <input
+                  value={editRole.role_name}
+                  onChange={(e) =>
+                    setEditRole({ ...editRole, role_name: e.target.value })
+                  }
+                  required
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Phòng ban
+                </label>
+                <input
+                  value={editRole.department}
+                  onChange={(e) =>
+                    setEditRole({ ...editRole, department: e.target.value })
+                  }
+                  required
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mô tả
+                </label>
+                <textarea
+                  rows={3}
+                  value={editRole.description}
+                  onChange={(e) =>
+                    setEditRole({ ...editRole, description: e.target.value })
+                  }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f] resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditRole(null)}
+                  className="px-5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingRoleMeta}
+                  className="px-5 py-2 text-sm font-medium text-white bg-[#a1001f] hover:bg-[#c41230] rounded-lg shadow disabled:opacity-50 flex items-center gap-2 transition-colors"
+                >
+                  {savingRoleMeta ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Lưu role tham chiếu
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,5 +1,75 @@
 import pool from '@/lib/db'
 
+let teachingLeadersHasAreasColumn: boolean | null = null
+
+async function getTeachingLeadersHasAreasColumn(): Promise<boolean> {
+  if (teachingLeadersHasAreasColumn !== null) return teachingLeadersHasAreasColumn
+
+  try {
+    const result = await pool.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'teaching_leaders'
+         AND column_name = 'areas'
+       LIMIT 1`,
+    )
+    teachingLeadersHasAreasColumn = (result.rowCount ?? 0) > 0
+  } catch {
+    teachingLeadersHasAreasColumn = false
+  }
+
+  return teachingLeadersHasAreasColumn
+}
+
+type CenterRow = {
+  id: number
+  full_name: string
+  short_code: string | null
+  region: string | null
+}
+
+function dedupeCenters(rows: CenterRow[]) {
+  const seen = new Set<number>()
+  return rows.filter((center) => {
+    if (seen.has(center.id)) return false
+    seen.add(center.id)
+    return true
+  })
+}
+
+function sortCenters(rows: CenterRow[]) {
+  return rows.sort((a, b) => a.full_name.localeCompare(b.full_name))
+}
+
+async function queryLeaderCenters(email: string): Promise<CenterRow[]> {
+  const hasAreas = await getTeachingLeadersHasAreasColumn()
+  const leaderQuery = hasAreas
+    ? `SELECT DISTINCT c.id, c.full_name, c.short_code, c.region
+       FROM teaching_leaders tl
+       JOIN centers c ON c.region = ANY(
+         COALESCE(
+           (SELECT ARRAY(SELECT jsonb_array_elements_text(tl.areas))
+            WHERE tl.areas IS NOT NULL AND jsonb_typeof(tl.areas) = 'array'),
+           string_to_array(COALESCE(tl.area, ''), ',')
+         )
+       )
+       WHERE LOWER(TRIM(tl.email)) = $1
+         AND tl.status = 'Active'
+       ORDER BY c.full_name`
+    : `SELECT DISTINCT c.id, c.full_name, c.short_code, c.region
+       FROM teaching_leaders tl
+       JOIN centers c ON c.region = ANY(
+         string_to_array(COALESCE(tl.area, ''), ',')
+       )
+       WHERE LOWER(TRIM(tl.email)) = $1
+         AND tl.status = 'Active'
+       ORDER BY c.full_name`
+
+  const result = await pool.query(leaderQuery, [email])
+  return result.rows as CenterRow[]
+}
+
 /**
  * Get list of centers accessible by a user.
  * - super_admin: all centers
@@ -9,46 +79,61 @@ import pool from '@/lib/db'
 export async function getAccessibleCenters(
   email: string | undefined | null,
 ): Promise<
-  Array<{ id: number; full_name: string; short_code: string | null }>
+  Array<{
+    id: number
+    full_name: string
+    short_code: string | null
+    region: string | null
+  }>
 > {
   if (!email?.trim()) return []
 
   const normalized = email.trim().toLowerCase()
 
   try {
-    const dbResult = await pool.query(
+    const userResult = await pool.query(
       `SELECT id, role FROM app_users WHERE email = $1 AND is_active = true`,
       [normalized],
     )
 
-    if (dbResult.rows.length === 0) return []
+    const appUser = userResult.rows[0] as { id: number; role: string } | undefined
 
-    const appUser = dbResult.rows[0] as { id: number; role: string }
-
-    // super_admin sees all centers
-    if (appUser.role === 'super_admin') {
-      const allCenters = await pool.query(`
-        SELECT id, full_name, short_code FROM centers WHERE status = 'Active'
-        ORDER BY full_name
-      `)
-      return allCenters.rows
+    if (!appUser) {
+      const leaderCenters = await queryLeaderCenters(normalized)
+      return dedupeCenters(leaderCenters).sort((a, b) =>
+        a.full_name.localeCompare(b.full_name),
+      )
     }
 
-    // admin/manager see assigned centers
-    if (['admin', 'manager'].includes(appUser.role)) {
-      const assignedCenters = await pool.query(
-        `SELECT DISTINCT c.id, c.full_name, c.short_code
+    if (appUser.role === 'super_admin') {
+      const allCenters = await pool.query(
+        `SELECT id, full_name, short_code, region
+         FROM centers
+         WHERE status = 'Active'
+         ORDER BY full_name`,
+      )
+
+      return allCenters.rows as CenterRow[]
+    }
+
+    const [managerCenters, leaderCenters] = await Promise.all([
+      pool.query(
+        `SELECT DISTINCT c.id, c.full_name, c.short_code, c.region
          FROM manager_centers mc
          JOIN centers c ON c.id = mc.center_id
          WHERE mc.user_id = $1 AND c.status = 'Active'
          ORDER BY c.full_name`,
         [appUser.id],
-      )
-      return assignedCenters.rows
-    }
+      ),
+      queryLeaderCenters(normalized),
+    ])
 
-    // others see no centers
-    return []
+    return sortCenters(
+      dedupeCenters([
+        ...(managerCenters.rows as CenterRow[]),
+        ...leaderCenters,
+      ]),
+    )
   } catch (e) {
     console.error('getAccessibleCenters:', e)
     return []

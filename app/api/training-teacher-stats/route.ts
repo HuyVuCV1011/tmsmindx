@@ -1,9 +1,35 @@
-import { NextResponse } from 'next/server';
+import { withApiProtection } from '@/lib/api-protection';
+import { requireDatasourceBearer } from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+
+type AccessibleCenter = {
+  id: number;
+  full_name: string;
+  short_code: string | null;
+};
+
+function normalizeCenterToken(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function collectCenterTokens(centers: AccessibleCenter[]): string[] {
+  return Array.from(
+    new Set(
+      centers
+        .flatMap((center) => [center.full_name, center.short_code ?? ''])
+        .map(normalizeCenterToken)
+        .filter(Boolean),
+    ),
+  );
+}
 
 // GET: Lấy thống kê giáo viên - kết hợp từ table teachers và training stats
-export async function GET(request: Request) {
+export const GET = withApiProtection(async (request: NextRequest) => {
   try {
+    const auth = await requireDatasourceBearer(request);
+    if (!auth.ok) return auth.response;
+
     const tableCheck = await pool.query(`SELECT to_regclass('public.teachers') AS teachers_table`);
     if (!tableCheck.rows[0]?.teachers_table) {
       return NextResponse.json({
@@ -17,6 +43,24 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const teacher_code = searchParams.get('teacher_code');
     const center = searchParams.get('center');
+
+    const allowedCenters = auth.privileged
+      ? []
+      : collectCenterTokens(auth.accessibleCenters);
+    const requestedCenters = center ? collectCenterTokens([{ id: 0, full_name: center, short_code: null }]) : [];
+    const effectiveCenters = auth.privileged
+      ? requestedCenters
+      : requestedCenters.length > 0
+        ? requestedCenters.filter((value) => allowedCenters.includes(value))
+        : allowedCenters;
+
+    if (!auth.privileged && effectiveCenters.length === 0) {
+      return NextResponse.json({
+        success: true,
+        data: [],
+        count: 0,
+      });
+    }
 
     // Query kết hợp teachers table với training_teacher_stats
     let query = `
@@ -41,6 +85,22 @@ export async function GET(request: Request) {
     
     const params: unknown[] = [];
     const conditions: string[] = [];
+
+    if (!auth.privileged) {
+      conditions.push(
+        `EXISTS (
+          SELECT 1
+          FROM unnest(
+            string_to_array(
+              regexp_replace(COALESCE(t.main_centre, t."Main centre", t.centers, tts.center, ''), '[\\n;|]+', ',', 'g'),
+              ','
+            )
+          ) AS teacher_center
+          WHERE LOWER(TRIM(teacher_center)) = ANY($${params.length + 1}::text[])
+        )`,
+      );
+      params.push(effectiveCenters);
+    }
 
     if (teacher_code) {
       conditions.push(`t.code = $${params.length + 1}`);
@@ -71,4 +131,4 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-}
+});

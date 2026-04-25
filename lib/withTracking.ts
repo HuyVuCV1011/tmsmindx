@@ -1,4 +1,5 @@
 import { withApiProtection } from '@/lib/api-protection'
+import { requireBearerSession } from '@/lib/datasource-api-auth'
 import pool from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -71,6 +72,7 @@ export function withTracking(
 ): RouteHandler {
   return withApiProtection(async (request: NextRequest) => {
     const startedAt = Date.now()
+    let trackingEmail = ''
 
     let parsedBody: unknown
     if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -84,13 +86,19 @@ export function withTracking(
     const requestEmail = getRequestEmail(request, parsedBody)
 
     if (options.requireSuperAdmin) {
-      const role = await getUserRole(requestEmail)
-      if (role !== 'super_admin') {
+      const auth = await requireBearerSession(request)
+      if (!auth.ok) {
+        return auth.response
+      }
+      if (!auth.privileged) {
         return NextResponse.json(
           { success: false, error: 'Không có quyền truy cập' },
           { status: 403 },
         )
       }
+      trackingEmail = auth.sessionEmail
+    } else {
+      trackingEmail = requestEmail
     }
 
     try {
@@ -102,7 +110,7 @@ export function withTracking(
         method: request.method,
         status: response.status,
         response_time: responseTime,
-        user_id: requestEmail || null,
+        user_id: trackingEmail || null,
       })
 
       return response
@@ -116,7 +124,7 @@ export function withTracking(
         code: 500,
         response_time: responseTime,
         message: errorMessage,
-        user_id: requestEmail || null,
+        user_id: trackingEmail || null,
       })
 
       throw error

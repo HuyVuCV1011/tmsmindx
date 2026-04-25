@@ -1,8 +1,8 @@
-import {
-  rejectIfEmailNotSelf,
-  requireBearerSession,
-} from '@/lib/datasource-api-auth'
 import { resolveAppUserAccessForEmail } from '@/lib/app-user-access'
+import {
+    rejectIfEmailNotSelf,
+    requireBearerSession,
+} from '@/lib/datasource-api-auth'
 import { clientIpFromRequest, rateLimitOr429 } from '@/lib/rate-limit-memory'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
   if (rl) return rl
 
   try {
+    console.log('[check-admin] request start', request.nextUrl.pathname)
+
     const auth = await requireBearerSession(request)
     if (!auth.ok) return auth.response
 
@@ -35,6 +37,21 @@ export async function GET(request: NextRequest) {
     const access = await resolveAppUserAccessForEmail(lookupEmail)
 
     if (!access.found) {
+      console.log(
+        '[check-admin] resolved access',
+        JSON.stringify(
+          {
+            email: lookupEmail,
+            found: false,
+            role: 'teacher',
+            isAdmin: false,
+            assignedCenters: [],
+          },
+          null,
+          2,
+        ),
+      )
+
       return NextResponse.json({
         success: true,
         email: lookupEmail,
@@ -47,6 +64,23 @@ export async function GET(request: NextRequest) {
         message: 'Email not found',
       })
     }
+
+    console.log(
+      '[check-admin] resolved access',
+      JSON.stringify(
+        {
+          email: lookupEmail,
+          found: true,
+          role: access.role,
+          isAdmin: access.isAdmin,
+          isAppUser: access.isAppUser,
+          centerCount: access.assignedCenters.length,
+          assignedCenters: access.assignedCenters,
+        },
+        null,
+        2,
+      ),
+    )
 
     return NextResponse.json({
       success: true,

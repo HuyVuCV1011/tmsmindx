@@ -124,3 +124,46 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: 'Lỗi server: ' + error.message }, { status: 500 });
     }
 }
+
+// PATCH: Update role metadata from reference-data management
+export async function PATCH(request: NextRequest) {
+    try {
+        const gate = await requireBearerSuperAdmin(request);
+        if (!gate.ok) return gate.response;
+
+        const { roleCode, roleName, department, description } = await request.json();
+
+        if (!roleCode || !roleName || !department) {
+            return NextResponse.json(
+                { error: 'roleCode, roleName và department là bắt buộc' },
+                { status: 400 }
+            );
+        }
+
+        const normalizedCode = String(roleCode).trim().toUpperCase();
+
+        const updated = await pool.query(
+            `UPDATE roles
+             SET role_name = $2,
+                 department = $3,
+                 description = $4
+             WHERE role_code = $1
+             RETURNING role_code, role_name, department, description`,
+            [
+                normalizedCode,
+                String(roleName).trim(),
+                String(department).trim(),
+                String(description || '').trim(),
+            ]
+        );
+
+        if (updated.rowCount === 0) {
+            return NextResponse.json({ error: 'Không tìm thấy role' }, { status: 404 });
+        }
+
+        return NextResponse.json({ success: true, role: updated.rows[0] });
+    } catch (error: any) {
+        console.error('Error updating role metadata:', error);
+        return NextResponse.json({ error: 'Lỗi server: ' + error.message }, { status: 500 });
+    }
+}

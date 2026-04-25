@@ -1,3 +1,5 @@
+import { requireBearerDbRoles } from '@/lib/auth-server'
+import { getAccessibleCenters } from '@/lib/center-access'
 import pool from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -24,15 +26,62 @@ function getGroupRegions(region: string): string[] {
     .map(([r]) => r)
 }
 
+type AccessibleCenter = {
+  id: number
+  full_name: string
+  short_code: string | null
+}
+
+type CenterData = {
+  full_name: string
+  region: string
+  uu_tien: { ma_gv: string; teacher_name: string; gio_bat_dau: string; gio_ket_thuc: string; khoi_final: string | null }[]
+  linh_hoat: { ma_gv: string; teacher_name: string; gio_bat_dau: string; gio_ket_thuc: string; khoi_final: string | null }[]
+}
+
+function normalizeKey(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function buildAllowedCenterKeys(centers: AccessibleCenter[]): Set<string> {
+  return new Set(
+    centers
+      .flatMap((center) => [center.short_code ?? '', center.full_name])
+      .map(normalizeKey)
+      .filter(Boolean),
+  )
+}
+
 export async function GET(request: NextRequest) {
   try {
+    const gate = await requireBearerDbRoles(request, [
+      'super_admin',
+      'admin',
+      'manager',
+    ])
+    if (!gate.ok) return gate.response
+
     const { searchParams } = new URL(request.url)
     const date = searchParams.get('date')
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
     if (!date || !from || !to) {
-      return NextResponse.json({ success: false, error: 'Thiếu date, from, to' }, { status: 400 })
+      return NextResponse.json(
+        { success: false, error: 'Thiếu date, from, to' },
+        { status: 400 },
+      )
+    }
+
+    const allowedCenterKeys =
+      gate.role === 'super_admin'
+        ? null
+        : buildAllowedCenterKeys(
+            (await getAccessibleCenters(gate.sessionEmail)) as AccessibleCenter[],
+          )
+
+    if (gate.role !== 'super_admin' && !allowedCenterKeys?.size) {
+      return NextResponse.json({ success: true, data: [] })
     }
 
     // 1. Lấy tất cả lịch rảnh overlap khung giờ, kèm main_centre của teacher
@@ -49,17 +98,14 @@ export async function GET(request: NextRequest) {
          AND d.gio_bat_dau < $2::time
          AND d.gio_ket_thuc > $3::time
        ORDER BY d.ma_gv`,
-      [date, to, from]
+      [date, to, from],
     )
 
     // 2. Lấy tất cả cơ sở active kèm region
     const centersResult = await pool.query(
-      `SELECT short_code, full_name, region FROM centers WHERE status = 'Active' ORDER BY region, full_name`
+      `SELECT short_code, full_name, region FROM centers WHERE status = 'Active' ORDER BY region, full_name`,
     )
     const allCenters = centersResult.rows
-    // Map short_code → region
-    const centerRegionMap: Record<string, string> = {}
-    allCenters.forEach(c => { centerRegionMap[c.short_code] = c.region })
 
     // 3. Lookup region của main_centre từng user
     const mainCentreRegionCache: Record<string, string | null> = {}
@@ -68,32 +114,46 @@ export async function GET(request: NextRequest) {
       if (!mc || mainCentreRegionCache[mc] !== undefined) continue
       const r = await pool.query(
         `SELECT region FROM centers WHERE LOWER(TRIM(full_name)) = LOWER(TRIM($1)) LIMIT 1`,
-        [mc]
+        [mc],
       )
       mainCentreRegionCache[mc] = r.rows[0]?.region?.trim() || null
     }
 
     // 4. Build center map
-    type CenterData = {
-      full_name: string
-      region: string
-      uu_tien: { ma_gv: string; teacher_name: string; gio_bat_dau: string; gio_ket_thuc: string; khoi_final: string | null }[]
-      linh_hoat: { ma_gv: string; teacher_name: string; gio_bat_dau: string; gio_ket_thuc: string; khoi_final: string | null }[]
-    }
     const centerMap: Record<string, CenterData> = {}
-    allCenters.forEach(c => {
-      centerMap[c.short_code] = { full_name: c.full_name, region: c.region, uu_tien: [], linh_hoat: [] }
+    allCenters.forEach((c: { short_code: string; full_name: string; region: string }) => {
+      centerMap[c.short_code] = {
+        full_name: c.full_name,
+        region: c.region,
+        uu_tien: [],
+        linh_hoat: [],
+      }
     })
 
     // 5. Phân loại
-    lichResult.rows.forEach(row => {
+    lichResult.rows.forEach((row: {
+      ma_gv: string
+      co_so_uu_tien: string[] | null
+      linh_hoat: boolean | null
+      teacher_name: string | null
+      gio_bat_dau: string
+      gio_ket_thuc: string
+      khoi_final: string | null
+      main_centre: string | null
+    }) => {
       const uuTien: string[] = row.co_so_uu_tien || []
       const isLinhHoat: boolean = row.linh_hoat || false
-      const mentor = { ma_gv: row.ma_gv, teacher_name: row.teacher_name || row.ma_gv, gio_bat_dau: row.gio_bat_dau, gio_ket_thuc: row.gio_ket_thuc, khoi_final: row.khoi_final || null }
+      const mentor = {
+        ma_gv: row.ma_gv,
+        teacher_name: row.teacher_name || row.ma_gv,
+        gio_bat_dau: row.gio_bat_dau,
+        gio_ket_thuc: row.gio_ket_thuc,
+        khoi_final: row.khoi_final || null,
+      }
 
       // Ưu tiên: thêm vào các cơ sở đã chọn
-      uuTien.forEach(cs => {
-        if (centerMap[cs] && !centerMap[cs].uu_tien.find(m => m.ma_gv === mentor.ma_gv)) {
+      uuTien.forEach((cs) => {
+        if (centerMap[cs] && !centerMap[cs].uu_tien.find((m) => m.ma_gv === mentor.ma_gv)) {
           centerMap[cs].uu_tien.push(mentor)
         }
       })
@@ -104,21 +164,28 @@ export async function GET(request: NextRequest) {
         const userRegion = mc ? mainCentreRegionCache[mc] : null
         const groupRegions = userRegion ? getGroupRegions(userRegion) : []
 
-        Object.keys(centerMap).forEach(cs => {
+        Object.keys(centerMap).forEach((cs) => {
           // Chỉ apply nếu cơ sở đó thuộc cùng group region với user
           if (!groupRegions.includes(centerMap[cs].region)) return
           // Không apply nếu đã là uu_tien
           if (uuTien.includes(cs)) return
-          if (!centerMap[cs].linh_hoat.find(m => m.ma_gv === mentor.ma_gv)) {
+          if (!centerMap[cs].linh_hoat.find((m) => m.ma_gv === mentor.ma_gv)) {
             centerMap[cs].linh_hoat.push(mentor)
           }
         })
       }
     })
 
-    // 6. Chỉ trả về cơ sở có người
+    // 6. Chỉ trả về cơ sở có người và thuộc phạm vi center được gán
     const result = Object.entries(centerMap)
       .filter(([, v]) => v.uu_tien.length > 0 || v.linh_hoat.length > 0)
+      .filter(([short_code, v]) => {
+        if (!allowedCenterKeys) return true
+        return (
+          allowedCenterKeys.has(normalizeKey(short_code)) ||
+          allowedCenterKeys.has(normalizeKey(v.full_name))
+        )
+      })
       .map(([short_code, v]) => ({
         short_code,
         full_name: v.full_name,

@@ -4,12 +4,12 @@ import { useAuth } from '@/lib/auth-context'
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/body-scroll-lock'
 import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import {
-  ChevronLeft,
-  ChevronRight,
-  Map,
-  MessageCircleMore,
-  UploadCloud,
-  X,
+    ChevronLeft,
+    ChevronRight,
+    Map,
+    MessageCircleMore,
+    UploadCloud,
+    X,
 } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -35,8 +35,8 @@ const FEEDBACK_PAGE_OPTIONS = [
   { path: '/user/truyenthong', title: 'Truyền thông nội bộ' },
   { path: '/user/thong-tin-giao-vien', title: 'Thông tin của tôi' },
   { path: '/user/hoat-dong-hang-thang', title: 'Hoạt động hàng tháng' },
-  { path: '/user/xin-nghi-mot-buoi', title: 'Tạo yêu cầu xin nghỉ' },
-  { path: '/user/nhan-lop-1-buoi', title: 'Danh sách nhận lớp dạy thay' },
+  { path: '/user/xin-nghi-mot-buoi', title: 'Tạo yêu cầu xin nghỉ 1 buổi' },
+  { path: '/user/nhan-lop-1-buoi', title: 'Tiếp nhận xin nghỉ 1 buổi' },
   { path: '/user/dao-tao-nang-cao', title: 'Đào tạo nâng cao' },
   { path: '/user/assignments', title: 'Quản lý kiểm tra' },
   { path: '/user/giaitrinh', title: 'Giải trình điểm kiểm tra' },
