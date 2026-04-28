@@ -33,23 +33,14 @@ export default function AppLayout({
   const pathname = usePathname()
 
   const hasRedirected = useRef(false)
-<<<<<<< HEAD
   const latestUserRef = useRef(user)
-  latestUserRef.current = user
+  useEffect(() => {
+    latestUserRef.current = user
+  }, [user])
   const lastAdminPermRefreshAt = useRef(0)
   const lastTeacherVerifyAt = useRef(0)
   const lastTeacherVerifyPathname = useRef<string | null>(null)
   const [noPermission, setNoPermission] = useState(false)
-=======
-  const latestUserRef = useRef(user);
-  useEffect(() => {
-    latestUserRef.current = user;
-  }, [user]);
-  const lastAdminPermRefreshAt = useRef(0);
-  const lastTeacherVerifyAt = useRef(0);
-  const lastTeacherVerifyPathname = useRef<string | null>(null);
-  const [noPermission, setNoPermission] = useState(false);
->>>>>>> 9eceb7beae53303fcd674e3ff5c65a0645cca616
   /** DB tạm không trả lời — cho qua cổng (không kẹt skeleton), không coi là đã xác nhận trong teachers. */
   const [teacherGateAllowUnknown, setTeacherGateAllowUnknown] = useState(false)
 

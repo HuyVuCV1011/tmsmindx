@@ -49,6 +49,7 @@ interface Center {
   short_code: string
   full_name: string
   display_name: string
+  email?: string
   status: string
 }
 interface Filters {
@@ -397,6 +398,7 @@ function CentersLeadersPanel() {
           table: 'centers_region',
           id: editCenter.id,
           region: editCenter.region,
+          email: editCenter.email || null,
         }),
       })
       const d = await r.json()
@@ -1072,6 +1074,7 @@ function CentersLeadersPanel() {
                             display_name: center.display_name,
                             region: center.region,
                             short_code: center.short_code,
+                            email: center.email,
                             status: center.status || 'Active',
                           }}
                           grouped={grouped}
@@ -1206,6 +1209,20 @@ function CentersLeadersPanel() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email contact
+                </label>
+                <input
+                  type="email"
+                  value={editCenter.email || ''}
+                  onChange={(e) =>
+                    setEditCenter({ ...editCenter, email: e.target.value })
+                  }
+                  placeholder="contact.center@mindx.com.vn"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#a1001f]/20 focus:border-[#a1001f]"
+                />
               </div>
               <div className="flex justify-end gap-3 pt-4 mt-2 border-t font-medium">
                 <button
