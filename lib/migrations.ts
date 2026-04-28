@@ -90,11 +90,13 @@ const migrations: Migration[] = [
         short_code VARCHAR(50) UNIQUE,
         full_name VARCHAR(255) NOT NULL,
         display_name VARCHAR(255),
+        email VARCHAR(255),
         status VARCHAR(20) DEFAULT 'Active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE centers ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Active';
+      ALTER TABLE centers ADD COLUMN IF NOT EXISTS email VARCHAR(255);
 
       CREATE TABLE IF NOT EXISTS teaching_leaders (
         code VARCHAR(50) PRIMARY KEY,
@@ -1478,6 +1480,81 @@ const migrations: Migration[] = [
         BEFORE UPDATE ON app_screens
         FOR EACH ROW
         EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
+  {
+    name: 'V68_centers_contact_email',
+    version: 68,
+    sql: `
+      ALTER TABLE centers
+        ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+      ALTER TABLE centers
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+      WITH mappings(short_code, display_name, email) AS (
+        VALUES
+          ('toky', 'Tô Ký', 'contact.toky@mindx.com.vn'),
+          ('phanvantri', 'Phan Văn Trị', 'contact.phanvantri@mindx.com.vn'),
+          ('quangtrung', 'Quang Trung', 'contact.quangtrung@mindx.com.vn'),
+          ('truongchinh', 'Trường Chinh', 'contact.truongchinh@mindx.com.vn'),
+          ('songhanh', 'Song Hành', 'contact.songhanh@mindx.com.vn'),
+          ('phanxichlong', 'Phan Xích Long', 'contact.phanxichlong@mindx.com.vn'),
+          ('nguyenxi', 'Nguyễn Xí', 'contact.nguyenxi@mindx.com.vn'),
+          ('phamvandong', 'Phạm Văn Đồng', 'contact.phamvandong@mindx.com.vn'),
+          ('levanviet', 'Lê Văn Việt', 'contact.levanviet@mindx.com.vn'),
+          ('phamngulao', 'Phạm Ngũ Lão', 'contact.phamngulao@mindx.com.vn'),
+          ('haithuonglanong', 'HTLO (Hải Thượng Lãn Ông)', 'contact.haithuonglanong@mindx.com.vn'),
+          ('haithuonglanong', 'Hải Thượng Lãn Ông', 'contact.haithuonglanong@mindx.com.vn'),
+          ('3thang2', '3T2 (3 Tháng 2)', 'contact.3thang2@mindx.com.vn'),
+          ('3thang2', '3 Tháng 2', 'contact.3thang2@mindx.com.vn'),
+          ('3thang2', 'Đường 3/2', 'contact.3thang2@mindx.com.vn'),
+          ('phumyhung', 'Phú Mỹ Hưng', 'contact.phumyhung@mindx.com.vn'),
+          ('himlam', 'Him Lam', 'contact.himlam@mindx.com.vn'),
+          ('18hcm', '18+ HCM', 'contact.18hcm@mindx.com.vn'),
+          ('tenlua', 'Tên Lửa', 'contact.tenlua@mindx.com.vn'),
+          ('taythanh', 'Tây Thạnh', 'contact.taythanh@mindx.com.vn'),
+          ('luybanbich', 'Lũy Bán Bích', 'contact.luybanbich@mindx.com.vn'),
+          ('online', 'HCM Online', 'contact.online@mindx.com.vn'),
+          ('online', 'MindX - Online', 'contact.online@mindx.com.vn'),
+          ('multimedia', 'X Art', 'contact.multimedia@mindx.com.vn'),
+          ('multimedia', 'MindX Digital Art', 'contact.multimedia@mindx.com.vn'),
+          ('hoangdaothuy', 'Hoàng Đạo Thúy', 'contact.hoangdaothuy@mindx.com.vn'),
+          ('nguyenphongsac', 'Nguyễn Phong Sắc', 'contact.nguyenphongsac@mindx.com.vn'),
+          ('nguyenchithanh', 'Nguyễn Chí Thanh', 'contact.nguyenchithanh@mindx.com.vn'),
+          ('hamnghi', 'Hàm Nghi', 'contact.hamnghi@mindx.com.vn'),
+          ('minhkhai', 'Minh Khai', 'contact.minhkhai@mindx.com.vn'),
+          ('nguyenhuutho', 'Nguyễn Hữu Thọ', 'contact.nguyenhuutho@mindx.com.vn'),
+          ('longbien', 'Long Biên', 'contact.longbien@mindx.com.vn'),
+          ('nguyenvancu', 'Nguyễn Văn Cừ', 'contact.nguyenvancu@mindx.com.vn'),
+          ('vanphu', 'Văn Phú', 'contact.vanphu@mindx.com.vn'),
+          ('tranphu', 'Trần Phú', 'contact.tranphu@mindx.com.vn'),
+          ('thanhcong', 'Thành Công', 'contact.thanhcong@mindx.com.vn'),
+          ('18hn', '18+ HN', 'contact.18hn@mindx.com.vn'),
+          ('bienhoa', 'Biên Hòa', 'contact.bienhoa@mindx.com.vn'),
+          ('bienhoa', 'Đồng Nai', 'contact.bienhoa@mindx.com.vn'),
+          ('cantho', 'Cần Thơ', 'contact.cantho@mindx.com.vn'),
+          ('vungtau', 'Vũng Tàu', 'contact.vungtau@mindx.com.vn'),
+          ('dian', 'Dĩ An', 'contact.dian@mindx.com.vn'),
+          ('thudaumot', 'Thủ Dầu Một', 'contact.thudaumot@mindx.com.vn'),
+          ('halong', 'Hạ Long (Quảng Ninh)', 'contact.halong@mindx.com.vn'),
+          ('halong', 'Quảng Ninh', 'contact.halong@mindx.com.vn'),
+          ('haiphong', 'Hải Phòng', 'contact.haiphong@mindx.com.vn'),
+          ('bacninh', 'Bắc Ninh', 'contact.bacninh@mindx.com.vn'),
+          ('vinhphuc', 'Vĩnh Phúc', 'contact.vinhphuc@mindx.com.vn'),
+          ('thainguyen', 'Thái Nguyên', 'contact.thainguyen@mindx.com.vn'),
+          ('phutho', 'Phú Thọ', 'contact.phutho@mindx.com.vn'),
+          ('danang', 'Đà Nẵng', 'contact.danang@mindx.com.vn'),
+          ('nghean', 'Nghệ An', 'contact.nghean@mindx.com.vn'),
+          ('thanhhoa', 'Thanh Hóa', 'contact.thanhhoa@mindx.com.vn')
+      )
+      UPDATE centers c
+        SET email = m.email
+      FROM mappings m
+      WHERE LOWER(COALESCE(c.short_code, '')) = LOWER(m.short_code)
+         OR LOWER(TRIM(COALESCE(c.display_name, ''))) = LOWER(TRIM(m.display_name))
+         OR LOWER(TRIM(COALESCE(c.full_name, ''))) = LOWER(TRIM(m.display_name))
+         OR LOWER(COALESCE(c.display_name, '')) LIKE '%' || LOWER(TRIM(m.display_name)) || '%'
+         OR LOWER(COALESCE(c.full_name, '')) LIKE '%' || LOWER(TRIM(m.display_name)) || '%';
     `,
   },
 ]
