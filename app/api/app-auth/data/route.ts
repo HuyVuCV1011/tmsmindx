@@ -287,13 +287,14 @@ export async function PUT(request: NextRequest) {
         }
 
         if (table === 'centers_region') {
-            const { id, region } = data as { id?: number; region?: string };
+            const { id, region, email } = data as { id?: number; region?: string; email?: string };
             if (id == null || Number.isNaN(Number(id))) {
                 return NextResponse.json({ error: 'Missing id' }, { status: 400 });
             }
-            await pool.query('UPDATE centers SET region=$2 WHERE id=$1', [
+            await pool.query('UPDATE centers SET region=$2, email=$3 WHERE id=$1', [
                 id,
                 region ?? '',
+                email?.trim() ? email.trim() : null,
             ]);
             return NextResponse.json({ success: true });
         }
