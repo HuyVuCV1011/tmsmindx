@@ -90,42 +90,55 @@ export function QuestionCard({ question, index, onEdit, onDelete, isDraggable = 
           )}
 
           {/* Options Display */}
-          {question.question_type === 'multiple_choice' && question.options && (
+          {(question.question_type === 'multiple_choice' || question.question_type === 'multiple_select') && question.options && (
             <div className="space-y-1 mb-2">
-              {question.options.map((option, idx) => (
-                <div
-                  key={idx}
-                  className={`flex items-start gap-2 p-2 rounded text-sm ${
-                    option === question.correct_answer
-                      ? 'bg-green-50 border border-green-300 font-semibold'
-                      : 'bg-gray-50'
-                  }`}
-                >
-                  {(() => {
-                    const normalizedOption = decodeEscapedHtml(String(option));
-                    const renderAsHtml = hasHtmlMarkup(normalizedOption);
-
-                    return (
-                      <>
-                  <span className="w-6 h-6 flex items-center justify-center rounded-full bg-white border border-gray-300 text-xs">
-                    {String.fromCharCode(65 + idx)}
-                  </span>
-                        {renderAsHtml ? (
-                          <div
-                            className="prose prose-sm max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
-                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizedOption) }}
-                          />
-                        ) : (
-                          <span className="flex-1">{normalizedOption}</span>
-                        )}
-                      </>
-                    );
-                  })()}
-                  {option === question.correct_answer && (
-                    <span className="ml-auto text-green-600 text-xs">✓ Đúng</span>
-                  )}
-                </div>
-              ))}
+              {question.question_type === 'multiple_select' && (
+                <p className="text-xs text-blue-600 mb-1 font-medium">Chọn nhiều đáp án đúng</p>
+              )}
+              {question.options.map((option, idx) => {
+                let isCorrect = false;
+                if (question.question_type === 'multiple_select') {
+                  try {
+                    const arr = JSON.parse(question.correct_answer || '[]');
+                    isCorrect = Array.isArray(arr) && arr.includes(option);
+                  } catch { isCorrect = false; }
+                } else {
+                  isCorrect = option === question.correct_answer;
+                }
+                return (
+                  <div
+                    key={idx}
+                    className={`flex items-start gap-2 p-2 rounded text-sm ${
+                      isCorrect
+                        ? 'bg-green-50 border border-green-300 font-semibold'
+                        : 'bg-gray-50'
+                    }`}
+                  >
+                    {(() => {
+                      const normalizedOption = decodeEscapedHtml(String(option));
+                      const renderAsHtml = hasHtmlMarkup(normalizedOption);
+                      return (
+                        <>
+                          <span className="w-6 h-6 flex items-center justify-center rounded-full bg-white border border-gray-300 text-xs shrink-0">
+                            {String.fromCharCode(65 + idx)}
+                          </span>
+                          {renderAsHtml ? (
+                            <div
+                              className="prose prose-sm max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
+                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizedOption) }}
+                            />
+                          ) : (
+                            <span className="flex-1">{normalizedOption}</span>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {isCorrect && (
+                      <span className="ml-auto text-green-600 text-xs shrink-0">✓ Đúng</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 

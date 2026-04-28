@@ -75,7 +75,7 @@ export default function CommunicationsPage() {
   }, [selectedFilter, searchQuery, posts])
 
   // Derived Data
-  const featuredPosts = posts.slice(0, 5) // Top 5 for Slider
+  const featuredPosts = posts.slice(0, 10) // Top 10 for Slider
 
   const postTypes = [
     { value: 'all', label: 'Tất cả' },

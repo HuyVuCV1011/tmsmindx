@@ -254,14 +254,10 @@ function VideoSetupContent() {
 
     const fetchData = async () => {
       try {
-        // Fetch current video
+        // Fetch current video first (cần video_group_id trước)
         const videoResponse = await fetch(`/api/training-videos?id=${videoId}`);
         const videoData = await videoResponse.json();
-        
-        // Fetch all videos to calculate next lesson number
-        const allVideosResponse = await fetch('/api/training-videos');
-        const allVideosData = await allVideosResponse.json();
-        
+
         if (videoData.success && videoData.data.length > 0) {
           const currentVideo = videoData.data[0];
           setVideo(currentVideo);
@@ -271,10 +267,29 @@ function VideoSetupContent() {
 
           const baseTitle = normalizeGroupTitle(currentVideo.title || "");
 
+          // Chạy song song: max lesson number + group videos (nếu có)
+          const parallelFetches: Promise<any>[] = [
+            fetch('/api/training-videos?maxLessonNumber=true')
+              .then(r => r.json()).catch(() => null),
+          ];
+
           if (currentVideo.video_group_id) {
-            const groupResponse = await fetch(`/api/training-videos?video_group_id=${encodeURIComponent(currentVideo.video_group_id)}`);
-            const groupData = await groupResponse.json();
-            if (groupData.success && Array.isArray(groupData.data)) {
+            parallelFetches.push(
+              fetch(`/api/training-videos?video_group_id=${encodeURIComponent(currentVideo.video_group_id)}`)
+                .then(r => r.json()).catch(() => null)
+            );
+          }
+
+          const [maxLessonData, groupData] = await Promise.all(parallelFetches);
+
+          // Calculate next lesson number
+          let maxLesson = 0;
+          if (maxLessonData?.success) {
+            maxLesson = Number(maxLessonData.max) || 0;
+          }
+          const nextLesson = maxLesson + 1;
+
+          if (groupData?.success && Array.isArray(groupData.data)) {
               const sortedGroupVideos = [...groupData.data].sort((a: Video, b: Video) => {
                 const left = a.chunk_index ?? 0;
                 const right = b.chunk_index ?? 0;
@@ -282,17 +297,9 @@ function VideoSetupContent() {
                 return a.id - b.id;
               });
               setGroupVideos(sortedGroupVideos);
-            }
           } else {
             setGroupVideos([currentVideo]);
           }
-          
-          // Calculate next lesson number (max lesson number + 1)
-          let maxLesson = 0;
-          if (allVideosData.success && allVideosData.data.length > 0) {
-            maxLesson = Math.max(...allVideosData.data.map((v: Video) => v.lesson_number || 0));
-          }
-          const nextLesson = maxLesson + 1;
           
           // Set form with current video data or defaults
           setVideoForm({
@@ -309,8 +316,8 @@ function VideoSetupContent() {
             setThumbnailPreview(currentVideo.thumbnail_url);
           }
           
-          // Load questions from database
-          await loadQuestions(videoId);
+          // Load questions không block UI — chạy song song
+          loadQuestions(videoId);
         } else {
           setError("Không tìm thấy video");
         }
@@ -915,36 +922,28 @@ function VideoSetupContent() {
 
   const handleSaveVideo = async (status: 'draft' | 'active') => {
     if (!video) return;
-    
-    if (status === 'active' && !currentAssignment && questions.length === 0) {
-        // If neither assignment nor questions, warn user it's just a raw video
+
+    if (status === 'active') {
+      // Kiểm tra thumbnail
+      const hasThumbnail = !!(thumbnailPreview || videoForm.thumbnail_url || video.thumbnail_url);
+      if (!hasThumbnail) {
+        toast.error('Vui lòng thêm ảnh thumbnail trước khi giao bài');
+        return;
+      }
+
+      // Kiểm tra assignment
+      if (!currentAssignment) {
         setConfirmDialog({
-            isOpen: true,
-            title: "Xác nhận công khai",
-            message: "Video này chưa có Assignment (bài tập) và chưa có câu hỏi pop-up nào. Học viên sẽ được tính hoàn thành ngay sau khi xem xong video. Bạn có chắc muốn tiếp tục?",
-            type: "warning",
-            onConfirm: () => {
-                setConfirmDialog(p => ({...p, isOpen: false}));
-                executeSaveVideo(status);
-            }
+          isOpen: true,
+          title: 'Yêu cầu Assignment',
+          message: 'Video này chưa có Assignment (bài tập). Bạn không được phép Giao bài (Active) khi không có Assignment kèm theo. Vui lòng liên kết bài tập trước.',
+          type: 'warning',
+          onConfirm: () => { setConfirmDialog(p => ({ ...p, isOpen: false })); }
         });
         return;
+      }
     }
 
-
-    if (status === 'active' && !currentAssignment) {
-        setConfirmDialog({
-            isOpen: true,
-            title: "Yêu cầu Assignment",
-            message: "Video này chưa có Assignment (bài tập). Bạn không được phép Giao bài (Active) khi không có Assignment kèm theo. Vui lòng liên kết bài tập trước.",
-            type: "warning",
-            onConfirm: () => {
-                setConfirmDialog(p => ({...p, isOpen: false}));
-            }
-        });
-        return;
-    }
-    
     executeSaveVideo(status);
   };
 

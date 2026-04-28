@@ -4,6 +4,7 @@ import {
 } from '@/lib/datasource-api-auth';
 import { withApiProtection } from '@/lib/api-protection';
 import pool from '@/lib/db';
+import { normalizeStorageUrl } from '@/lib/storage-url';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const GET = withApiProtection(async (request: NextRequest) => {
@@ -152,7 +153,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       // Extract segments out to a dedicated array instead of Cloudinary concatenation.
       const segments = sorted.map((vid) => ({
          id: vid.id,
-         url: vid.video_link,
+         url: normalizeStorageUrl(vid.video_link),
          // We pass chunk duration for the specialized player later (fallback if duration is faulty)
          duration_minutes: Number(vid.duration_minutes) || 0,
          duration_seconds: vid.duration_seconds != null ? Number(vid.duration_seconds) : null
@@ -200,7 +201,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
         id: video.id,
         name: video.title || `Video ${video.id}`,
         score: scoreData ? scoreData.score : 0,
-        link: video.video_link,
+        link: normalizeStorageUrl(video.video_link),
         segments: video.segments, // Included chunks 
         thumbnail_url: video.thumbnail_url,
         description: video.description,

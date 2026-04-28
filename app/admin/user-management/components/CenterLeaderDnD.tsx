@@ -74,6 +74,7 @@ export interface CenterDragCenter {
   display_name: string
   region: string
   short_code: string
+  email?: string
   status: string
 }
 
@@ -297,6 +298,9 @@ export function CenterCardDragHeader({
             </span>
           )}
         </div>
+        {center.email && (
+          <p className="truncate text-xs text-gray-500">{center.email}</p>
+        )}
       </div>
       <button
         type="button"

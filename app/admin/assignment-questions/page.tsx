@@ -34,9 +34,12 @@ interface AssignmentPreviewData {
 const csvQuote = String.fromCharCode(34);
 const csvExample = [
   'question_text,question_type,correct_answer,options,points,difficulty,explanation,image_url',
-  `${csvQuote}Python là gì?${csvQuote},multiple_choice,${csvQuote}Ngôn ngữ thông dịch${csvQuote},${csvQuote}Ngôn ngữ thông dịch|Ngôn ngữ biên dịch|Ngôn ngữ máy${csvQuote},1,easy,${csvQuote}Python là ngôn ngữ thông dịch${csvQuote},`,
-  `${csvQuote}JS chỉ chạy trên browser${csvQuote},true_false,${csvQuote}Sai${csvQuote},${csvQuote}Đúng|Sai${csvQuote},1,medium,${csvQuote}JS có thể chạy trên Node.js${csvQuote},`,
-  `${csvQuote}HTML là viết tắt của gì?${csvQuote},short_answer,${csvQuote}HyperText Markup Language${csvQuote},,2,easy,${csvQuote}${csvQuote},`
+  `${csvQuote}Họ và tên${csvQuote},short_answer,,,0,medium,,`,
+  `${csvQuote}Python là ngôn ngữ lập trình thuộc loại nào?${csvQuote},multiple_choice,${csvQuote}Ngôn ngữ thông dịch${csvQuote},${csvQuote}Ngôn ngữ thông dịch|Ngôn ngữ biên dịch|Ngôn ngữ máy${csvQuote},1,easy,${csvQuote}Python là ngôn ngữ thông dịch${csvQuote},`,
+  `${csvQuote}JavaScript chỉ chạy trên trình duyệt web.${csvQuote},true_false,${csvQuote}Sai${csvQuote},${csvQuote}Đúng|Sai${csvQuote},1,medium,${csvQuote}JS có thể chạy trên Node.js${csvQuote},`,
+  `${csvQuote}Đặc điểm nào là của OOP? (Chọn tất cả đáp án đúng)${csvQuote},multiple_select,${csvQuote}Kế thừa|Đóng gói|Đa hình${csvQuote},${csvQuote}Kế thừa|Đóng gói|Đa hình|Biên dịch tĩnh${csvQuote},2,medium,${csvQuote}OOP có 3 đặc điểm chính${csvQuote},`,
+  `${csvQuote}CSS là viết tắt của gì?${csvQuote},short_answer,${csvQuote}Cascading Style Sheets${csvQuote},,1,easy,${csvQuote}CSS định dạng giao diện web${csvQuote},`,
+  `${csvQuote}Giải thích async/await trong JavaScript.${csvQuote},essay,,,5,hard,${csvQuote}Async/await giúp xử lý bất đồng bộ${csvQuote},`
 ].join('\n');
 
 const mapDifficultyToDb = (difficulty?: Question['difficulty'] | string): DbDifficulty => {
@@ -156,7 +159,7 @@ function AssignmentQuestionsContent() {
         question_text: questionText,
         question_type: questionType,
         correct_answer: correctAnswer,
-        options: questionType === 'multiple_choice' || questionType === 'true_false'
+        options: questionType === 'multiple_choice' || questionType === 'true_false' || questionType === 'multiple_select'
           ? normalizedOptions
           : null,
         image_url: questionData.image_url || null,
@@ -542,10 +545,10 @@ function AssignmentQuestionsContent() {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h3 className="font-semibold text-blue-900 mb-2">🚀 Bắt đầu nhanh</h3>
                 <ol className="list-decimal list-inside space-y-1 text-blue-800">
-                  <li>Click <strong>&quot;File mẫu&quot;</strong> để download file CSV mẫu</li>
+                  <li>Click <strong>&quot;Tải file mẫu&quot;</strong> để download file CSV mẫu đầy đủ</li>
                   <li>Mở file bằng Excel hoặc Google Sheets</li>
                   <li>Thêm câu hỏi của bạn (giữ nguyên dòng header)</li>
-                  <li>Lưu file dạng CSV (UTF-8)</li>
+                  <li>Lưu file dạng CSV (UTF-8 with BOM)</li>
                   <li>Click <strong>&quot;Import&quot;</strong> và chọn file vừa tạo</li>
                 </ol>
               </div>
@@ -555,69 +558,81 @@ function AssignmentQuestionsContent() {
                 <h3 className="font-semibold text-gray-900 mb-3">🎯 Các loại câu hỏi</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 mb-2">multiple_choice - Trắc nghiệm</h4>
-                    <p className="text-sm text-gray-600 mb-2">Câu hỏi có nhiều lựa chọn, chỉ 1 đáp án đúng</p>
-                    <div className="bg-gray-50 p-2 rounded text-xs font-mono overflow-x-auto">
-                      options: &quot;Đáp án A|Đáp án B|Đáp án C|Đáp án D&quot;
+                    <h4 className="font-semibold text-gray-900 mb-1">multiple_choice — Trắc nghiệm 1 đáp án</h4>
+                    <p className="text-xs text-gray-500 mb-2">Chỉ 1 đáp án đúng</p>
+                    <div className="bg-gray-50 p-2 rounded text-xs font-mono">
+                      options: <span className="text-blue-600">&quot;A|B|C|D&quot;</span><br />
+                      correct_answer: <span className="text-green-600">&quot;A&quot;</span>
+                    </div>
+                  </div>
+
+                  <div className="border-2 border-blue-200 bg-blue-50/30 rounded-lg p-4">
+                    <h4 className="font-semibold text-blue-900 mb-1">multiple_select — Chọn nhiều đáp án ✨</h4>
+                    <p className="text-xs text-blue-600 mb-2">Nhiều đáp án đúng — phải chọn đúng TẤT CẢ mới được điểm</p>
+                    <div className="bg-white p-2 rounded text-xs font-mono border border-blue-200">
+                      options: <span className="text-blue-600">&quot;A|B|C|D&quot;</span><br />
+                      correct_answer: <span className="text-green-600">&quot;A|C&quot;</span> <span className="text-gray-400">(dùng | phân cách)</span>
                     </div>
                   </div>
 
                   <div className="border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 mb-2">true_false - Đúng/Sai</h4>
-                    <p className="text-sm text-gray-600 mb-2">Câu hỏi đúng hoặc sai</p>
-                    <div className="bg-gray-50 p-2 rounded text-xs font-mono overflow-x-auto">
-                      options: &quot;Đúng|Sai&quot;<br />
-                      correct_answer: &quot;Đúng&quot; hoặc &quot;Sai&quot;
+                    <h4 className="font-semibold text-gray-900 mb-1">true_false — Đúng/Sai</h4>
+                    <p className="text-xs text-gray-500 mb-2">Câu hỏi đúng hoặc sai</p>
+                    <div className="bg-gray-50 p-2 rounded text-xs font-mono">
+                      options: <span className="text-blue-600">&quot;Đúng|Sai&quot;</span><br />
+                      correct_answer: <span className="text-green-600">&quot;Đúng&quot;</span> hoặc <span className="text-green-600">&quot;Sai&quot;</span>
                     </div>
                   </div>
 
                   <div className="border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 mb-2">short_answer - Trả lời ngắn</h4>
-                    <p className="text-sm text-gray-600 mb-2">Câu hỏi yêu cầu trả lời văn bản ngắn</p>
-                    <div className="bg-gray-50 p-2 rounded text-xs font-mono overflow-x-auto">
-                      options: (để trống)
+                    <h4 className="font-semibold text-gray-900 mb-1">short_answer / essay</h4>
+                    <p className="text-xs text-gray-500 mb-2">Trả lời ngắn hoặc tự luận</p>
+                    <div className="bg-gray-50 p-2 rounded text-xs font-mono">
+                      options: <span className="text-gray-400">(để trống)</span><br />
+                      correct_answer: <span className="text-green-600">&quot;Đáp án mẫu&quot;</span>
                     </div>
                   </div>
+                </div>
 
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 mb-2">essay - Tự luận</h4>
-                    <p className="text-sm text-gray-600 mb-2">Câu hỏi yêu cầu trả lời chi tiết</p>
-                    <div className="bg-gray-50 p-2 rounded text-xs font-mono overflow-x-auto">
-                      options: (để trống)<br />
-                      correct_answer: (có thể để trống)
-                    </div>
-                  </div>
+                {/* Câu thông tin */}
+                <div className="mt-3 border border-amber-200 bg-amber-50 rounded-lg p-3">
+                  <h4 className="font-semibold text-amber-900 mb-1 text-sm">💡 Câu thông tin (điểm = 0)</h4>
+                  <p className="text-xs text-amber-700">Dùng để thu thập thông tin (Họ tên, Cơ sở...). Đặt <code className="bg-amber-100 px-1 rounded">points = 0</code> và để trống <code className="bg-amber-100 px-1 rounded">correct_answer</code>.</p>
                 </div>
               </div>
 
               {/* Important Notes */}
               <div>
                 <h3 className="font-semibold text-gray-900 mb-3">⚠️ Lưu ý quan trọng</h3>
-                <ul className="space-y-2">
+                <ul className="space-y-2 text-sm">
                   <li className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
-                    <span className="text-gray-700"><strong>Dấu phân cách options:</strong> Sử dụng dấu <code className="bg-gray-100 px-1 rounded">|</code> (pipe) để phân tách các đáp án</span>
+                    <span className="text-green-600 font-bold shrink-0">✓</span>
+                    <span className="text-gray-700"><strong>Phân cách options:</strong> Dùng <code className="bg-gray-100 px-1 rounded">|</code> (pipe) giữa các đáp án</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
-                    <span className="text-gray-700"><strong>Encoding:</strong> Lưu file CSV với UTF-8 (có BOM) để hiển thị tiếng Việt đúng</span>
+                    <span className="text-green-600 font-bold shrink-0">✓</span>
+                    <span className="text-gray-700"><strong>multiple_select:</strong> correct_answer dùng <code className="bg-gray-100 px-1 rounded">|</code> phân cách các đáp án đúng — VD: <code className="bg-gray-100 px-1 rounded">&quot;Kế thừa|Đóng gói|Đa hình&quot;</code></span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
-                    <span className="text-gray-700"><strong>Độ khó:</strong> Chỉ dùng <code className="bg-gray-100 px-1 rounded">easy</code>, <code className="bg-gray-100 px-1 rounded">medium</code>, <code className="bg-gray-100 px-1 rounded">hard</code></span>
+                    <span className="text-green-600 font-bold shrink-0">✓</span>
+                    <span className="text-gray-700"><strong>Encoding:</strong> Lưu CSV với UTF-8 (có BOM) để hiển thị tiếng Việt đúng trong Excel</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
-                    <span className="text-gray-700"><strong>Đáp án đúng:</strong> Phải khớp chính xác với một trong các options (với trắc nghiệm)</span>
+                    <span className="text-green-600 font-bold shrink-0">✓</span>
+                    <span className="text-gray-700"><strong>Độ khó:</strong> Chỉ dùng <code className="bg-gray-100 px-1 rounded">easy</code> | <code className="bg-gray-100 px-1 rounded">medium</code> | <code className="bg-gray-100 px-1 rounded">hard</code></span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-blue-600 font-bold shrink-0">ℹ</span>
+                    <span className="text-gray-700"><strong>Auto-detect:</strong> Nếu correct_answer chứa <code className="bg-gray-100 px-1 rounded">|</code>, hệ thống tự chuyển thành <code className="bg-gray-100 px-1 rounded">multiple_select</code></span>
                   </li>
                 </ul>
               </div>
 
               {/* Example */}
               <div>
-                <h3 className="font-semibold text-gray-900 mb-3">📝 Ví dụ</h3>
+                <h3 className="font-semibold text-gray-900 mb-3">📝 Ví dụ nhanh</h3>
                 <div className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto">
-                  <pre className="text-xs">
+                  <pre className="text-xs whitespace-pre">
                     {csvExample}
                   </pre>
                 </div>
@@ -627,10 +642,10 @@ function AssignmentQuestionsContent() {
               <div className="flex gap-3 pt-4 border-t border-gray-200">
                 <button
                   onClick={handleDownloadTemplate}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                 >
                   <FileText className="w-5 h-5" />
-                  <span>Tải file mẫu</span>
+                  <span>Tải file mẫu đầy đủ</span>
                 </button>
                 <button
                   onClick={() => setShowImportGuide(false)}

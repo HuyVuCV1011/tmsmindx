@@ -24,6 +24,13 @@ export async function GET(request: Request) {
     const id = searchParams.get('id');
     const status = searchParams.get('status');
     const videoGroupId = searchParams.get('video_group_id');
+    const maxLessonNumber = searchParams.get('maxLessonNumber');
+
+    // Lightweight query chỉ lấy max lesson_number
+    if (maxLessonNumber === 'true') {
+      const r = await pool.query('SELECT COALESCE(MAX(lesson_number), 0) AS max FROM training_videos');
+      return NextResponse.json({ success: true, max: r.rows[0].max });
+    }
 
     let query = `
       SELECT

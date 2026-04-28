@@ -90,11 +90,13 @@ const migrations: Migration[] = [
         short_code VARCHAR(50) UNIQUE,
         full_name VARCHAR(255) NOT NULL,
         display_name VARCHAR(255),
+        email VARCHAR(255),
         status VARCHAR(20) DEFAULT 'Active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE centers ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Active';
+      ALTER TABLE centers ADD COLUMN IF NOT EXISTS email VARCHAR(255);
 
       CREATE TABLE IF NOT EXISTS teaching_leaders (
         code VARCHAR(50) PRIMARY KEY,
@@ -1360,8 +1362,94 @@ const migrations: Migration[] = [
     `,
   },
   {
-    name: 'V66_app_screens_catalog',
+    name: 'V66_hr_onboarding_training',
     version: 66,
+    sql: `
+      -- Bảng ứng viên đào tạo đầu vào
+      CREATE TABLE IF NOT EXISTS hr_candidates (
+        id                SERIAL PRIMARY KEY,
+        full_name         VARCHAR(255) NOT NULL,
+        email             VARCHAR(255) NOT NULL,
+        phone             VARCHAR(50),
+        region_code       VARCHAR(10),
+        desired_campus    VARCHAR(255),
+        work_block        VARCHAR(100),
+        subject_code      VARCHAR(100),
+        gen_id            INTEGER REFERENCES hr_gen_catalog(id) ON DELETE SET NULL,
+        status            VARCHAR(20) NOT NULL DEFAULT 'new'
+                          CHECK (status IN ('new', 'in_training', 'passed', 'failed', 'dropped')),
+        source            VARCHAR(20) NOT NULL DEFAULT 'manual'
+                          CHECK (source IN ('manual', 'csv')),
+        created_by_email  VARCHAR(255) NOT NULL,
+        updated_by_email  VARCHAR(255),
+        created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_hr_candidates_email_gen UNIQUE (email, gen_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_hr_candidates_gen_id ON hr_candidates(gen_id);
+      CREATE INDEX IF NOT EXISTS idx_hr_candidates_status ON hr_candidates(status);
+      CREATE INDEX IF NOT EXISTS idx_hr_candidates_email ON hr_candidates(email);
+
+      -- Bảng buổi training (tối đa 4 buổi/GEN)
+      CREATE TABLE IF NOT EXISTS hr_training_sessions (
+        id                SERIAL PRIMARY KEY,
+        gen_id            INTEGER NOT NULL REFERENCES hr_gen_catalog(id) ON DELETE CASCADE,
+        session_number    INTEGER NOT NULL CHECK (session_number BETWEEN 1 AND 4),
+        title             VARCHAR(500) NOT NULL,
+        session_date      DATE,
+        video_id          INTEGER REFERENCES training_videos(id) ON DELETE SET NULL,
+        created_by_email  VARCHAR(255) NOT NULL,
+        created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_hr_training_sessions_gen_session UNIQUE (gen_id, session_number)
+      );
+      CREATE INDEX IF NOT EXISTS idx_hr_training_sessions_gen_id ON hr_training_sessions(gen_id);
+
+      -- Bảng điểm danh + điểm kiểm tra từng buổi
+      CREATE TABLE IF NOT EXISTS hr_candidate_training_records (
+        id                SERIAL PRIMARY KEY,
+        candidate_id      INTEGER NOT NULL REFERENCES hr_candidates(id) ON DELETE CASCADE,
+        session_id        INTEGER NOT NULL REFERENCES hr_training_sessions(id) ON DELETE CASCADE,
+        attendance        BOOLEAN NOT NULL DEFAULT FALSE,
+        score             DECIMAL(4,2) CHECK (score >= 0 AND score <= 10),
+        recorded_by_email VARCHAR(255) NOT NULL,
+        created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_hr_training_record UNIQUE (candidate_id, session_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_hr_training_records_candidate ON hr_candidate_training_records(candidate_id);
+      CREATE INDEX IF NOT EXISTS idx_hr_training_records_session ON hr_candidate_training_records(session_id);
+
+      -- Thêm cột source vào teachers để ghi nhận nguồn gốc
+      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS source VARCHAR(50);
+
+      -- Triggers updated_at
+      DROP TRIGGER IF EXISTS trg_hr_candidates_updated_at ON hr_candidates;
+      CREATE TRIGGER trg_hr_candidates_updated_at
+        BEFORE UPDATE ON hr_candidates
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+      DROP TRIGGER IF EXISTS trg_hr_training_sessions_updated_at ON hr_training_sessions;
+      CREATE TRIGGER trg_hr_training_sessions_updated_at
+        BEFORE UPDATE ON hr_training_sessions
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+      DROP TRIGGER IF EXISTS trg_hr_candidate_training_records_updated_at ON hr_candidate_training_records;
+      CREATE TRIGGER trg_hr_candidate_training_records_updated_at
+        BEFORE UPDATE ON hr_candidate_training_records
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+      -- Permissions cho route /admin/hr-onboarding
+      INSERT INTO app_permissions (user_id, route_path, can_access)
+      SELECT u.id, '/admin/hr-onboarding', true
+      FROM app_users u
+      WHERE u.role = 'super_admin'
+      ON CONFLICT (user_id, route_path) DO NOTHING;
+    `,
+  },
+  {
+    name: 'V67_app_screens_catalog',
+    version: 67,
     sql: `
       CREATE TABLE IF NOT EXISTS app_screens (
         id SERIAL PRIMARY KEY,
@@ -1392,12 +1480,94 @@ const migrations: Migration[] = [
         BEFORE UPDATE ON app_screens
         FOR EACH ROW
         EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
+  {
+    name: 'V68_centers_contact_email',
+    version: 68,
+    sql: `
+      ALTER TABLE centers
+        ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+      ALTER TABLE centers
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
-      INSERT INTO app_screens (route_path, label, group_name, sort_order, description, is_active)
-      SELECT route_path, label, group_name, sort_order, description, is_active
-      FROM jsonb_to_recordset('${DEFAULT_SCREEN_CATALOG_JSON.replace(/'/g, "''")}'::jsonb)
-        AS x(route_path text, label text, group_name text, sort_order integer, description text, is_active boolean)
-      ON CONFLICT (route_path) DO NOTHING;
+      WITH mappings(short_code, display_name, email) AS (
+        VALUES
+          ('toky', 'Tô Ký', 'contact.toky@mindx.com.vn'),
+          ('phanvantri', 'Phan Văn Trị', 'contact.phanvantri@mindx.com.vn'),
+          ('quangtrung', 'Quang Trung', 'contact.quangtrung@mindx.com.vn'),
+          ('truongchinh', 'Trường Chinh', 'contact.truongchinh@mindx.com.vn'),
+          ('songhanh', 'Song Hành', 'contact.songhanh@mindx.com.vn'),
+          ('phanxichlong', 'Phan Xích Long', 'contact.phanxichlong@mindx.com.vn'),
+          ('nguyenxi', 'Nguyễn Xí', 'contact.nguyenxi@mindx.com.vn'),
+          ('phamvandong', 'Phạm Văn Đồng', 'contact.phamvandong@mindx.com.vn'),
+          ('levanviet', 'Lê Văn Việt', 'contact.levanviet@mindx.com.vn'),
+          ('phamngulao', 'Phạm Ngũ Lão', 'contact.phamngulao@mindx.com.vn'),
+          ('haithuonglanong', 'HTLO (Hải Thượng Lãn Ông)', 'contact.haithuonglanong@mindx.com.vn'),
+          ('haithuonglanong', 'Hải Thượng Lãn Ông', 'contact.haithuonglanong@mindx.com.vn'),
+          ('3thang2', '3T2 (3 Tháng 2)', 'contact.3thang2@mindx.com.vn'),
+          ('3thang2', '3 Tháng 2', 'contact.3thang2@mindx.com.vn'),
+          ('3thang2', 'Đường 3/2', 'contact.3thang2@mindx.com.vn'),
+          ('phumyhung', 'Phú Mỹ Hưng', 'contact.phumyhung@mindx.com.vn'),
+          ('himlam', 'Him Lam', 'contact.himlam@mindx.com.vn'),
+          ('18hcm', '18+ HCM', 'contact.18hcm@mindx.com.vn'),
+          ('tenlua', 'Tên Lửa', 'contact.tenlua@mindx.com.vn'),
+          ('taythanh', 'Tây Thạnh', 'contact.taythanh@mindx.com.vn'),
+          ('luybanbich', 'Lũy Bán Bích', 'contact.luybanbich@mindx.com.vn'),
+          ('online', 'HCM Online', 'contact.online@mindx.com.vn'),
+          ('online', 'MindX - Online', 'contact.online@mindx.com.vn'),
+          ('multimedia', 'X Art', 'contact.multimedia@mindx.com.vn'),
+          ('multimedia', 'MindX Digital Art', 'contact.multimedia@mindx.com.vn'),
+          ('hoangdaothuy', 'Hoàng Đạo Thúy', 'contact.hoangdaothuy@mindx.com.vn'),
+          ('nguyenphongsac', 'Nguyễn Phong Sắc', 'contact.nguyenphongsac@mindx.com.vn'),
+          ('nguyenchithanh', 'Nguyễn Chí Thanh', 'contact.nguyenchithanh@mindx.com.vn'),
+          ('hamnghi', 'Hàm Nghi', 'contact.hamnghi@mindx.com.vn'),
+          ('minhkhai', 'Minh Khai', 'contact.minhkhai@mindx.com.vn'),
+          ('nguyenhuutho', 'Nguyễn Hữu Thọ', 'contact.nguyenhuutho@mindx.com.vn'),
+          ('longbien', 'Long Biên', 'contact.longbien@mindx.com.vn'),
+          ('nguyenvancu', 'Nguyễn Văn Cừ', 'contact.nguyenvancu@mindx.com.vn'),
+          ('vanphu', 'Văn Phú', 'contact.vanphu@mindx.com.vn'),
+          ('tranphu', 'Trần Phú', 'contact.tranphu@mindx.com.vn'),
+          ('thanhcong', 'Thành Công', 'contact.thanhcong@mindx.com.vn'),
+          ('18hn', '18+ HN', 'contact.18hn@mindx.com.vn'),
+          ('bienhoa', 'Biên Hòa', 'contact.bienhoa@mindx.com.vn'),
+          ('bienhoa', 'Đồng Nai', 'contact.bienhoa@mindx.com.vn'),
+          ('cantho', 'Cần Thơ', 'contact.cantho@mindx.com.vn'),
+          ('vungtau', 'Vũng Tàu', 'contact.vungtau@mindx.com.vn'),
+          ('dian', 'Dĩ An', 'contact.dian@mindx.com.vn'),
+          ('thudaumot', 'Thủ Dầu Một', 'contact.thudaumot@mindx.com.vn'),
+          ('halong', 'Hạ Long (Quảng Ninh)', 'contact.halong@mindx.com.vn'),
+          ('halong', 'Quảng Ninh', 'contact.halong@mindx.com.vn'),
+          ('haiphong', 'Hải Phòng', 'contact.haiphong@mindx.com.vn'),
+          ('bacninh', 'Bắc Ninh', 'contact.bacninh@mindx.com.vn'),
+          ('vinhphuc', 'Vĩnh Phúc', 'contact.vinhphuc@mindx.com.vn'),
+          ('thainguyen', 'Thái Nguyên', 'contact.thainguyen@mindx.com.vn'),
+          ('phutho', 'Phú Thọ', 'contact.phutho@mindx.com.vn'),
+          ('danang', 'Đà Nẵng', 'contact.danang@mindx.com.vn'),
+          ('nghean', 'Nghệ An', 'contact.nghean@mindx.com.vn'),
+          ('thanhhoa', 'Thanh Hóa', 'contact.thanhhoa@mindx.com.vn')
+      )
+      UPDATE centers c
+        SET email = m.email
+      FROM mappings m
+      WHERE LOWER(COALESCE(c.short_code, '')) = LOWER(m.short_code)
+         OR LOWER(TRIM(COALESCE(c.display_name, ''))) = LOWER(TRIM(m.display_name))
+         OR LOWER(TRIM(COALESCE(c.full_name, ''))) = LOWER(TRIM(m.display_name))
+         OR LOWER(COALESCE(c.display_name, '')) LIKE '%' || LOWER(TRIM(m.display_name)) || '%'
+         OR LOWER(COALESCE(c.full_name, '')) LIKE '%' || LOWER(TRIM(m.display_name)) || '%';
+    `,
+  },
+  {
+    name: 'V69_multiple_select_question_type',
+    version: 69,
+    sql: `
+      -- Thêm loại câu hỏi multiple_select vào constraint
+      ALTER TABLE training_assignment_questions
+        DROP CONSTRAINT IF EXISTS training_assignment_questions_question_type_check;
+
+      ALTER TABLE training_assignment_questions
+        ADD CONSTRAINT training_assignment_questions_question_type_check
+        CHECK (question_type IN ('multiple_choice', 'multiple_select', 'true_false', 'short_answer', 'essay'));
     `,
   },
 ]
