@@ -3,7 +3,7 @@
 import { DIFFICULTY_LEVELS } from '@/lib/assignment-constants';
 import { sanitizeHtml } from '@/lib/sanitize-html';
 import { Question } from '@/types/assignment';
-import { Award, CheckCheck, CheckSquare, Clock, FileText, PenLine, X } from 'lucide-react';
+import { Award, CheckCheck, CheckSquare, Clock, FileText, ListChecks, PenLine, X } from 'lucide-react';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { toast } from '@/lib/app-toast';
@@ -23,6 +23,7 @@ interface AssignmentPreviewProps {
 const iconMap: Record<string, React.ComponentType<any>> = {
   CheckSquare,
   CheckCheck,
+  ListChecks,
   PenLine,
   FileText
 };
@@ -55,6 +56,7 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
   const getQuestionIcon = (type: string) => {
     const iconName = {
       'multiple_choice': 'CheckSquare',
+      'multiple_select': 'ListChecks',
       'true_false': 'CheckCheck',
       'short_answer': 'PenLine',
       'essay': 'FileText'
@@ -216,6 +218,52 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
                             })()}
                           </label>
                         ))}
+                      </div>
+                    )}
+
+                    {/* Multiple Select */}
+                    {question.question_type === 'multiple_select' && question.options && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-blue-600 font-medium mb-1">Chọn tất cả đáp án đúng</p>
+                        {(() => {
+                          let selectedArr: string[] = [];
+                          try { selectedArr = JSON.parse(answers[question.id] || '[]'); } catch { selectedArr = []; }
+                          return question.options.map((option, idx) => {
+                            const isChecked = selectedArr.includes(option);
+                            return (
+                              <label
+                                key={idx}
+                                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                                  isChecked ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    const next = isChecked
+                                      ? selectedArr.filter(a => a !== option)
+                                      : [...selectedArr, option];
+                                    setAnswers({ ...answers, [question.id]: JSON.stringify(next) });
+                                  }}
+                                  className="w-5 h-5 rounded mt-0.5"
+                                />
+                                {(() => {
+                                  const normalizedOption = decodeEscapedHtml(String(option));
+                                  if (hasHtmlMarkup(normalizedOption)) {
+                                    return (
+                                      <div
+                                        className="prose prose-sm max-w-none flex-1 font-medium text-gray-900"
+                                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizedOption) }}
+                                      />
+                                    );
+                                  }
+                                  return <span className="flex-1 font-medium text-gray-900">{normalizedOption}</span>;
+                                })()}
+                              </label>
+                            );
+                          });
+                        })()}
                       </div>
                     )}
 

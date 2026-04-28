@@ -1557,6 +1557,19 @@ const migrations: Migration[] = [
          OR LOWER(COALESCE(c.full_name, '')) LIKE '%' || LOWER(TRIM(m.display_name)) || '%';
     `,
   },
+  {
+    name: 'V69_multiple_select_question_type',
+    version: 69,
+    sql: `
+      -- Thêm loại câu hỏi multiple_select vào constraint
+      ALTER TABLE training_assignment_questions
+        DROP CONSTRAINT IF EXISTS training_assignment_questions_question_type_check;
+
+      ALTER TABLE training_assignment_questions
+        ADD CONSTRAINT training_assignment_questions_question_type_check
+        CHECK (question_type IN ('multiple_choice', 'multiple_select', 'true_false', 'short_answer', 'essay'));
+    `,
+  },
 ]
 
 // ========== HÀM CHẠY MIGRATIONS ==========

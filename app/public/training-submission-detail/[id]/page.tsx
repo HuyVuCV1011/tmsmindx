@@ -109,9 +109,15 @@ export default function SubmissionDetailPage() {
   };
 
   const getOptionLabel = (options: any, value: string) => {
-     if (!options || !Array.isArray(options)) return value;
-     const opt = options.find((o: any) => o.value === value);
-     return opt ? opt.label : value;
+    if (!value) return value;
+    // multiple_select: value là JSON array → hiển thị danh sách
+    try {
+      const arr = JSON.parse(value);
+      if (Array.isArray(arr)) return arr.join(', ');
+    } catch { /* không phải JSON */ }
+    if (!options || !Array.isArray(options)) return value;
+    const opt = options.find((o: any) => o.value === value);
+    return opt ? opt.label : value;
   };
 
   const FormattedText = ({ html }: { html: string }) => {
