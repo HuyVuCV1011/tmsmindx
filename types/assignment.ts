@@ -23,7 +23,7 @@ export interface Question {
   id: number;
   assignment_id: number;
   question_text: string;
-  question_type: 'multiple_choice' | 'true_false' | 'short_answer' | 'essay';
+  question_type: 'multiple_choice' | 'multiple_select' | 'true_false' | 'short_answer' | 'essay';
   correct_answer: string;
   options: string[] | null;
   image_url: string | null;

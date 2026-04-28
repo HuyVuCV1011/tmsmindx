@@ -288,6 +288,7 @@ export function QuestionList({
             >
               <option value="all">Tất cả loại</option>
               <option value="multiple_choice">Trắc nghiệm</option>
+              <option value="multiple_select">Chọn nhiều</option>
               <option value="true_false">Đúng/Sai</option>
               <option value="short_answer">Trả lời ngắn</option>
               <option value="essay">Tự luận</option>

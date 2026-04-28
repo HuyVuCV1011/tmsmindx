@@ -52,14 +52,23 @@ export async function GET(request: NextRequest) {
 
     // Convert options array to pipe-separated string
     const rows = questions.rows.map((q: any) => {
-      const optionsStr = q.options 
+      const optionsStr = q.options
         ? (Array.isArray(q.options) ? q.options.join('|') : q.options)
         : '';
-      
+
+      // multiple_select: correct_answer là JSON array → xuất dạng pipe-separated
+      let correctAnswerStr = q.correct_answer || ''
+      if (q.question_type === 'multiple_select') {
+        try {
+          const arr = JSON.parse(correctAnswerStr)
+          if (Array.isArray(arr)) correctAnswerStr = arr.join('|')
+        } catch { /* giữ nguyên */ }
+      }
+
       return [
         escapeCsvValue(q.question_text || ''),
         q.question_type || '',
-        escapeCsvValue(q.correct_answer || ''),
+        escapeCsvValue(correctAnswerStr),
         escapeCsvValue(optionsStr),
         q.points || 1,
         q.difficulty || 'medium',

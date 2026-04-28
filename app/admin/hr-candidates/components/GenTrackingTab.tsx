@@ -11,16 +11,6 @@ import {
   Search,
   Users,
 } from 'lucide-react'
-import { useAuth } from '@/lib/auth-context'
-import { HrCandidateRow } from '../types'
-
-// ─── Constants ──────────────────────────────────────────────────────────────
-const SESSIONS = [
-  { number: 1, label: 'Buổi 1' },
-  { number: 2, label: 'Buổi 2' },
-  { number: 3, label: 'Buổi 3' },
-  { number: 4, label: 'Buổi 4' },
-] as const
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type GenEntry = {
@@ -33,11 +23,32 @@ type GenEntry = {
   note: string
 }
 
-// attendance record per candidate: { [sessionNumber]: { attendance, score } }
-type SessionRecord = { attendance: boolean; score: string }
-type CandidateRecord = Record<number, SessionRecord>
-// draft map: candidateKey → CandidateRecord
-type DraftMap = Record<string, CandidateRecord>
+interface TrainingSession {
+  id: number
+  session_number: number
+  title: string
+  session_date: string | null
+}
+
+interface DbCandidate {
+  candidate_id: number
+  full_name: string
+  email: string
+  status: string
+  sessions: Array<{
+    session_id: number
+    session_number: number
+    attendance: boolean | null
+    score: number | null
+  }>
+  attendance_score: number
+  avg_test_score: number | null
+}
+
+// Draft: candidate_id → session_id → { attendance, score }
+type SessionDraft = { attendance: boolean; score: string }
+type CandidateDraft = Record<number, SessionDraft>
+type DraftMap = Record<number, CandidateDraft>
 
 interface GenTrackingTabProps {
   genEntries: GenEntry[]
@@ -45,13 +56,6 @@ interface GenTrackingTabProps {
   activeGenKey: string
   activeGenInfo: { genCode: string; regionCode: string } | null
   onSelectGen: (entry: GenEntry) => void
-}
-
-// ─── Sort (identical to planner) ─────────────────────────────────────────────
-function sortGenEntries(a: GenEntry, b: GenEntry, order: 'asc' | 'desc') {
-  const cmp = a.genCode.localeCompare(b.genCode, 'vi', { numeric: true })
-  if (cmp !== 0) return order === 'desc' ? -cmp : cmp
-  return a.regionCode.localeCompare(b.regionCode, 'vi')
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -63,14 +67,13 @@ function scoreClass(score: string): string {
   return 'border-red-300 bg-red-50 text-red-700'
 }
 
-function attendBadgeClass(count: number) {
-  if (count === 0) return 'bg-red-100 text-red-600 border-red-200'
-  if (count < SESSIONS.length)
-    return 'bg-amber-100 text-amber-700 border-amber-200'
+function attendanceBadgeClass(count: number, total: number) {
+  if (count === 0) return 'bg-gray-100 text-gray-400 border-gray-200'
+  if (count < total) return 'bg-amber-100 text-amber-700 border-amber-200'
   return 'bg-emerald-100 text-emerald-700 border-emerald-200'
 }
 
-function initRecord(): SessionRecord {
+function initDraft(): SessionDraft {
   return { attendance: false, score: '' }
 }
 
@@ -82,213 +85,165 @@ export default function GenTrackingTab({
   activeGenInfo,
   onSelectGen,
 }: GenTrackingTabProps) {
-  const { user } = useAuth()
+  const [sessions, setSessions] = useState<TrainingSession[]>([])
+  const [candidates, setCandidates] = useState<DbCandidate[]>([])
+  const [loading, setLoading] = useState(false)
+  const [currentGenId, setCurrentGenId] = useState<number | null>(null)
 
-  // Candidate list
-  const [candidates, setCandidates] = useState<HrCandidateRow[]>([])
-  const [loadingCandidates, setLoadingCandidates] = useState(false)
-
-  // Draft: unsaved edits (candidateKey → sessionNumber → { attendance, score })
+  // Draft state: candidate_id → session_id → { attendance, score }
   const [drafts, setDrafts] = useState<DraftMap>({})
-  // Original data: for dirty checking (candidateKey → sessionNumber → { attendance, score })
   const [originalData, setOriginalData] = useState<DraftMap>({})
-  // Dirty set: candidateKeys with unsaved changes
-  const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(new Set())
+  const [dirtyIds, setDirtyIds] = useState<Set<number>>(new Set())
   const [saving, setSaving] = useState(false)
 
-  // Candidate search
   const [candidateSearch, setCandidateSearch] = useState('')
 
-  // ── Reset when region changes ───────────────────────────────────────────
+  // Reset khi đổi region
   useEffect(() => {
     setCandidates([])
+    setSessions([])
     setDrafts({})
     setOriginalData({})
-    setDirtyKeys(new Set())
+    setDirtyIds(new Set())
+    setCurrentGenId(null)
   }, [regionFilter])
 
-  // ── Fetch candidates for selected GEN ─────────────────────────────────
-  const fetchCandidates = useCallback(
-    async (genCode: string, regionCode: string) => {
-      if (!user?.email || !genCode) return
-      setLoadingCandidates(true)
-      setDrafts({})
-      setDirtyKeys(new Set())
+  // Fetch dữ liệu từ DB khi chọn GEN
+  const fetchData = useCallback(async (genCode: string) => {
+    setLoading(true)
+    setDrafts({})
+    setDirtyIds(new Set())
 
-      try {
-        const params = new URLSearchParams({
-          requestEmail: user.email,
-          gen: genCode,
-          region: regionCode, // Use the specific region from the entry
-          status: 'assigned',
-          pageSize: '200',
-        })
+    try {
+      // 1. Lookup gen_id từ catalog
+      const catalogRes = await fetch('/api/hr/gens')
+      const catalogData = await catalogRes.json()
+      const catalog: Array<{ id: number; gen_name: string }> = catalogData.catalog || []
+      const genEntry = catalog.find(g => g.gen_name === genCode)
 
-        // Fetch candidates and attendance records in parallel
-        const [candidatesRes, attendanceRes] = await Promise.all([
-          fetch(`/api/hr/candidates?${params.toString()}`, {
-            cache: 'no-store',
-          }),
-          fetch(
-            `/api/hr/gen-attendance?requestEmail=${encodeURIComponent(user.email)}&gen=${encodeURIComponent(genCode)}`,
-            { cache: 'no-store' },
-          ),
-        ])
-
-        const candidatesData = await candidatesRes.json()
-        if (!candidatesRes.ok)
-          throw new Error(candidatesData.error || 'Không thể tải ứng viên.')
-
-        const fetchedCandidates: HrCandidateRow[] = candidatesData.rows || []
-        setCandidates(fetchedCandidates)
-
-        // Load saved attendance records into draft state
-        if (attendanceRes.ok) {
-          const attendanceData = await attendanceRes.json()
-          const savedRecords: Record<
-            string,
-            Record<number, { attendance: boolean; score: number | null }>
-          > = attendanceData.records || {}
-
-          const initialDrafts: DraftMap = {}
-          for (const candidate of fetchedCandidates) {
-            const saved = savedRecords[candidate.candidateKey] || {}
-            const record: CandidateRecord = {}
-            for (const session of SESSIONS) {
-              record[session.number] = {
-                attendance: saved[session.number]?.attendance ?? false,
-                score:
-                  saved[session.number]?.score !== null &&
-                  saved[session.number]?.score !== undefined
-                    ? String(saved[session.number].score)
-                    : '',
-              }
-            }
-            initialDrafts[candidate.candidateKey] = record
-          }
-          setDrafts(initialDrafts)
-          setOriginalData(JSON.parse(JSON.stringify(initialDrafts))) // Deep copy for original ref
-        }
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Lỗi không xác định')
-      } finally {
-        setLoadingCandidates(false)
+      if (!genEntry) {
+        setSessions([])
+        setCandidates([])
+        setLoading(false)
+        return
       }
-    },
-    [user?.email, regionFilter],
-  )
+
+      setCurrentGenId(genEntry.id)
+
+      // 2. Fetch records + candidateSummaries từ API onboarding
+      const res = await fetch(`/api/hr/onboarding/records?gen_id=${genEntry.id}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Không thể tải dữ liệu.')
+
+      const fetchedSessions: TrainingSession[] = data.sessions || []
+      const fetchedCandidates: DbCandidate[] = data.candidateSummaries || []
+
+      setSessions(fetchedSessions)
+      setCandidates(fetchedCandidates)
+
+      // 3. Khởi tạo draft từ dữ liệu DB
+      const initialDrafts: DraftMap = {}
+      for (const c of fetchedCandidates) {
+        initialDrafts[c.candidate_id] = {}
+        for (const s of fetchedSessions) {
+          const record = c.sessions.find(r => r.session_id === s.id)
+          initialDrafts[c.candidate_id][s.id] = {
+            attendance: record?.attendance ?? false,
+            score: record?.score != null ? String(record.score) : '',
+          }
+        }
+      }
+      setDrafts(initialDrafts)
+      setOriginalData(JSON.parse(JSON.stringify(initialDrafts)))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Lỗi không xác định')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (activeGenInfo) {
-      fetchCandidates(activeGenInfo.genCode, activeGenInfo.regionCode)
+      fetchData(activeGenInfo.genCode)
     }
-  }, [activeGenInfo, fetchCandidates])
+  }, [activeGenInfo, fetchData])
 
-  // ── Get or init draft for a candidate / session ────────────────────────
-  const getRecord = (
-    candidateKey: string,
-    sessionNumber: number,
-  ): SessionRecord => {
-    return drafts[candidateKey]?.[sessionNumber] ?? initRecord()
-  }
-
-  // ── Handle cell change ─────────────────────────────────────────────────
+  // Xử lý thay đổi ô
   const handleChange = (
-    candidateKey: string,
-    sessionNumber: number,
+    candidateId: number,
+    sessionId: number,
     field: 'attendance' | 'score',
     value: boolean | string,
   ) => {
-    // 1. Calculate the new candidate record
-    const currentCandidateDraft = { ...(drafts[candidateKey] ?? {}) }
-    const currentSessionDraft = {
-      ...(currentCandidateDraft[sessionNumber] ?? initRecord()),
-    }
+    const currentDraft = { ...(drafts[candidateId] ?? {}) }
+    const currentSession = { ...(currentDraft[sessionId] ?? initDraft()) }
+    if (field === 'attendance') currentSession.attendance = value as boolean
+    else currentSession.score = value as string
+    currentDraft[sessionId] = currentSession
 
-    // @ts-expect-error dynamic field
-    currentSessionDraft[field] = value
-    currentCandidateDraft[sessionNumber] = currentSessionDraft
-
-    // 2. Compare with original data to see if it's actually dirty
-    const originalCandidate = originalData[candidateKey] ?? {}
+    // Dirty check
+    const original = originalData[candidateId] ?? {}
     let isDifferent = false
-
-    // Check all sessions for this candidate
-    for (const session of SESSIONS) {
-      const d = currentCandidateDraft[session.number] || initRecord()
-      const o = originalCandidate[session.number] || initRecord()
+    for (const s of sessions) {
+      const d = currentDraft[s.id] || initDraft()
+      const o = original[s.id] || initDraft()
       if (d.attendance !== o.attendance || d.score !== o.score) {
         isDifferent = true
         break
       }
     }
 
-    // 3. Update states
-    setDrafts((prev) => ({ ...prev, [candidateKey]: currentCandidateDraft }))
-
-    setDirtyKeys((prev) => {
+    setDrafts(prev => ({ ...prev, [candidateId]: currentDraft }))
+    setDirtyIds(prev => {
       const next = new Set(prev)
-      if (isDifferent) {
-        next.add(candidateKey)
-      } else {
-        next.delete(candidateKey)
-      }
+      if (isDifferent) next.add(candidateId)
+      else next.delete(candidateId)
       return next
     })
   }
 
-  // ── Save ───────────────────────────────────────────────────────────────
+  // Lưu batch
   const handleSave = async () => {
-    if (!user?.email || dirtyKeys.size === 0 || !activeGenInfo) return
+    if (dirtyIds.size === 0) return
     setSaving(true)
-
     try {
-      const records: Array<{
-        candidateKey: string
-        sessionNumber: number
-        attendance: boolean
-        score: number | null
-      }> = []
-      for (const candidateKey of dirtyKeys) {
-        const rec = drafts[candidateKey]
-        if (!rec) continue
-        for (const session of SESSIONS) {
-          const s = rec[session.number] ?? initRecord()
+      const records: Array<{ candidate_id: number; session_id: number; attendance: boolean; score: number | null }> = []
+      for (const candidateId of dirtyIds) {
+        const draft = drafts[candidateId]
+        if (!draft) continue
+        for (const s of sessions) {
+          const d = draft[s.id] ?? initDraft()
           records.push({
-            candidateKey,
-            sessionNumber: session.number,
-            attendance: s.attendance,
-            score: s.score === '' ? null : Number(s.score),
+            candidate_id: candidateId,
+            session_id: s.id,
+            attendance: d.attendance,
+            score: d.score === '' ? null : Number(d.score),
           })
         }
       }
 
-      const res = await fetch('/api/hr/gen-attendance', {
+      const res = await fetch('/api/hr/onboarding/records', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requestEmail: user.email,
-          genCode: activeGenInfo.genCode,
-          records,
-        }),
+        body: JSON.stringify({ records }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Lưu thất bại.')
 
-      toast.success(`Đã lưu ${dirtyKeys.size} ứng viên thành công.`)
+      toast.success(`Đã lưu ${dirtyIds.size} ứng viên thành công.`)
 
-      // Update originalData to reflect saved state
-      setOriginalData((prev) => {
+      // Cập nhật original
+      setOriginalData(prev => {
         const next = { ...prev }
-        for (const key of dirtyKeys) {
-          if (drafts[key]) {
-            next[key] = JSON.parse(JSON.stringify(drafts[key]))
-          }
+        for (const id of dirtyIds) {
+          if (drafts[id]) next[id] = JSON.parse(JSON.stringify(drafts[id]))
         }
         return next
       })
+      setDirtyIds(new Set())
 
-      setDirtyKeys(new Set())
+      // Reload để cập nhật attendance_score, avg_test_score
+      if (activeGenInfo) await fetchData(activeGenInfo.genCode)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Lỗi không xác định')
     } finally {
@@ -296,81 +251,62 @@ export default function GenTrackingTab({
     }
   }
 
-  // ── Filtered candidates ────────────────────────────────────────────────
+  // Filter tìm kiếm
   const filteredCandidates = useMemo(() => {
     const q = candidateSearch.trim().toLowerCase()
     if (!q) return candidates
-    return candidates.filter((c) =>
-      [c.name, c.email, c.candidateCode, c.desiredCampus]
-        .join(' ')
-        .toLowerCase()
-        .includes(q),
+    return candidates.filter(c =>
+      [c.full_name, c.email].join(' ').toLowerCase().includes(q)
     )
   }, [candidates, candidateSearch])
 
-  // ── Stats for header pills ─────────────────────────────────────────────
+  // Stats header
   const stats = useMemo(() => {
-    let totalAttendance = 0
-    let scoredCount = 0
+    if (candidates.length === 0 || sessions.length === 0) return { avgAttendance: 0, avgScore: null }
+    let totalAttended = 0
     let scoreSum = 0
-    for (const candidate of candidates) {
-      const rec = drafts[candidate.candidateKey]
-      if (!rec) continue
-      for (const s of SESSIONS) {
-        if (rec[s.number]?.attendance) totalAttendance++
-        const sc = rec[s.number]?.score
-        if (sc && sc !== '') {
-          scoredCount++
-          scoreSum += Number(sc)
-        }
+    let scoredCount = 0
+    for (const c of candidates) {
+      const draft = drafts[c.candidate_id]
+      if (!draft) continue
+      for (const s of sessions) {
+        if (draft[s.id]?.attendance) totalAttended++
+        const sc = draft[s.id]?.score
+        if (sc && sc !== '') { scoreSum += Number(sc); scoredCount++ }
       }
     }
     return {
-      avgAttendance:
-        candidates.length > 0
-          ? totalAttendance / (candidates.length * SESSIONS.length)
-          : 0,
+      avgAttendance: totalAttended / (candidates.length * sessions.length),
       avgScore: scoredCount > 0 ? scoreSum / scoredCount : null,
     }
-  }, [candidates, drafts])
+  }, [candidates, sessions, drafts])
 
-  // ─────────────────────────────────────────────────────────────────────
   return (
     <div className="w-full">
-      {/* ══ RIGHT: Candidate Table ════════════════════════════════════════ */}
       <section className="w-full rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col">
-        {/* Empty state */}
         {!activeGenKey ? (
           <div className="flex flex-1 min-h-[480px] flex-col items-center justify-center gap-3 p-8">
             <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gray-100">
               <Users className="h-10 w-10 text-gray-300" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-bold text-gray-600">
-                Chọn một GEN để bắt đầu
-              </p>
-              <p className="mt-1 text-xs text-gray-400">
-                Nhấn vào một mã GEN bên trái để xem danh sách ứng viên
-              </p>
+              <p className="text-sm font-bold text-gray-600">Chọn một GEN để bắt đầu</p>
+              <p className="mt-1 text-xs text-gray-400">Nhấn vào một mã GEN bên trái để xem danh sách ứng viên</p>
             </div>
           </div>
         ) : (
           <>
-            {/* ── Header ──────────────────────────────────────────────── */}
+            {/* Header */}
             <div className="border-b border-gray-200 bg-white px-5 py-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                {/* Left: title + stats */}
                 <div className="flex flex-wrap items-center gap-3 min-w-0">
                   <div className="min-w-0">
-                    <h3 className="text-base font-extrabold text-gray-900">
-                      {activeGenInfo?.genCode}
-                    </h3>
+                    <h3 className="text-base font-extrabold text-gray-900">{activeGenInfo?.genCode}</h3>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      {filteredCandidates.length} ứng viên • 4 buổi học
+                      {filteredCandidates.length} ứng viên • {sessions.length} buổi học
                     </p>
                   </div>
-                  {/* Stats pills – only show when we have data */}
-                  {candidates.length > 0 && (
+                  {candidates.length > 0 && sessions.length > 0 && (
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
                         <CheckSquare2 className="h-3 w-3" />
@@ -386,265 +322,158 @@ export default function GenTrackingTab({
                   )}
                 </div>
 
-                {/* Right: actions */}
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
                     <input
                       value={candidateSearch}
-                      onChange={(e) => setCandidateSearch(e.target.value)}
+                      onChange={e => setCandidateSearch(e.target.value)}
                       placeholder="Tìm ứng viên..."
                       className="rounded-xl border border-gray-300 bg-white py-2 pl-8 pr-3 text-sm outline-none focus:border-[#a1001f] focus:ring-4 focus:ring-[#a1001f]/10 w-44"
                     />
                   </div>
-
                   <button
                     type="button"
-                    onClick={() =>
-                      activeGenInfo &&
-                      fetchCandidates(
-                        activeGenInfo.genCode,
-                        activeGenInfo.regionCode,
-                      )
-                    }
-                    disabled={loadingCandidates || !activeGenInfo}
+                    onClick={() => activeGenInfo && fetchData(activeGenInfo.genCode)}
+                    disabled={loading || !activeGenInfo}
                     className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#f3b4bd] bg-white text-[#a1001f] hover:bg-[#a1001f]/5 disabled:opacity-50 transition-colors"
                     title="Làm mới"
                   >
-                    <RefreshCw
-                      className={`h-4 w-4 ${loadingCandidates ? 'animate-spin' : ''}`}
-                    />
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                   </button>
-
                   <button
                     type="button"
                     onClick={handleSave}
-                    disabled={saving || dirtyKeys.size === 0}
+                    disabled={saving || dirtyIds.size === 0}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-[#a1001f] px-4 py-2 text-sm font-bold text-white hover:bg-[#880019] disabled:opacity-40 transition-all"
                   >
-                    {saving ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4" />
-                    )}
-                    {dirtyKeys.size > 0 ? `Lưu (${dirtyKeys.size})` : 'Lưu'}
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {dirtyIds.size > 0 ? `Lưu (${dirtyIds.size})` : 'Lưu'}
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* ── Table ───────────────────────────────────────────────── */}
+            {/* Table */}
             <div className="overflow-x-auto flex-1">
-              <table className="min-w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    {/* Sticky candidate col */}
-                    <th className="sticky left-0 z-20 bg-gray-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 min-w-[210px] border-r border-gray-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)]">
-                      Ứng viên
-                    </th>
-                    <th className="px-3 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 min-w-[90px]">
-                      Mã UV
-                    </th>
-                    <th className="px-3 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 min-w-[75px] text-center">
-                      Đ.danh
-                    </th>
-
-                    {/* 4 fixed session columns */}
-                    {SESSIONS.map((s) => (
-                      <th
-                        key={s.number}
-                        className="px-3 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 min-w-[140px]"
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[#a1001f]">{s.label}</span>
-                          <span className="text-[10px] normal-case font-normal text-gray-400">
-                            Điểm danh + Điểm
-                          </span>
-                        </div>
+              {sessions.length === 0 && !loading ? (
+                <div className="py-16 text-center text-gray-500">
+                  <p className="font-medium">Chưa có buổi training nào được thiết lập cho GEN này.</p>
+                  <p className="text-sm mt-1 text-gray-400">Vào tab "Đào tạo đầu vào" để tạo buổi training.</p>
+                </div>
+              ) : (
+                <table className="min-w-full text-left text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="sticky left-0 z-20 bg-gray-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 min-w-[210px] border-r border-gray-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)]">
+                        Ứng viên
                       </th>
-                    ))}
-
-                    <th className="px-3 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 min-w-[80px] text-center">
-                      Điểm TB
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-gray-100">
-                  {loadingCandidates ? (
-                    <tr>
-                      <td
-                        colSpan={SESSIONS.length + 4}
-                        className="py-20 text-center"
-                      >
-                        <div className="inline-flex items-center gap-2 text-sm text-gray-500">
-                          <Loader2 className="h-5 w-5 animate-spin text-[#a1001f]" />
-                          Đang tải danh sách ứng viên...
-                        </div>
-                      </td>
+                      <th className="px-3 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 min-w-[75px] text-center">
+                        Đ.danh
+                      </th>
+                      {sessions.map(s => (
+                        <th key={s.id} className="px-3 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 min-w-[140px]">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[#a1001f]">Buổi {s.session_number}</span>
+                            <span className="text-[10px] normal-case font-normal text-gray-400 truncate max-w-[120px]">{s.title}</span>
+                          </div>
+                        </th>
+                      ))}
+                      <th className="px-3 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 min-w-[80px] text-center">Điểm TB</th>
+                      <th className="px-3 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 min-w-[90px] text-center">Chuyên cần</th>
+                      <th className="px-3 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 min-w-[90px] text-center">Trạng thái</th>
                     </tr>
-                  ) : filteredCandidates.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={SESSIONS.length + 4}
-                        className="py-20 text-center"
-                      >
-                        <div className="flex flex-col items-center gap-2 text-gray-400">
-                          <Users className="h-8 w-8 opacity-40" />
-                          <p className="text-sm font-medium">
-                            Không có ứng viên nào trong GEN này.
-                          </p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredCandidates.map((candidate) => {
-                      const isDirty = dirtyKeys.has(candidate.candidateKey)
-                      const rec = drafts[candidate.candidateKey] ?? {}
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={sessions.length + 5} className="py-20 text-center">
+                          <div className="inline-flex items-center gap-2 text-sm text-gray-500">
+                            <Loader2 className="h-5 w-5 animate-spin text-[#a1001f]" />
+                            Đang tải dữ liệu từ database...
+                          </div>
+                        </td>
+                      </tr>
+                    ) : filteredCandidates.length === 0 ? (
+                      <tr>
+                        <td colSpan={sessions.length + 5} className="py-20 text-center">
+                          <div className="flex flex-col items-center gap-2 text-gray-400">
+                            <Users className="h-8 w-8 opacity-40" />
+                            <p className="text-sm font-medium">Không có ứng viên nào trong GEN này.</p>
+                            <p className="text-xs">Thêm ứng viên qua tab "Đào tạo đầu vào".</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : filteredCandidates.map(candidate => {
+                      const isDirty = dirtyIds.has(candidate.candidate_id)
+                      const draft = drafts[candidate.candidate_id] ?? {}
 
-                      // Compute per-row stats from draft
-                      const attendCount = SESSIONS.filter(
-                        (s) => rec[s.number]?.attendance,
-                      ).length
-                      const scores = SESSIONS.map(
-                        (s) => rec[s.number]?.score,
-                      ).filter((sc) => sc !== undefined && sc !== '')
-                      const avgScore =
-                        scores.length > 0
-                          ? scores.reduce((sum, sc) => sum + Number(sc), 0) /
-                            scores.length
-                          : null
+                      const attendCount = sessions.filter(s => draft[s.id]?.attendance).length
+                      const scores = sessions.map(s => draft[s.id]?.score).filter(sc => sc !== undefined && sc !== '')
+                      const avgScore = scores.length > 0
+                        ? scores.reduce((sum, sc) => sum + Number(sc), 0) / scores.length
+                        : null
 
                       return (
                         <tr
-                          key={candidate.candidateKey}
-                          className={`relative group transition-colors ${
-                            isDirty ? 'bg-amber-50/60' : 'hover:bg-gray-50/60'
-                          }`}
+                          key={candidate.candidate_id}
+                          className={`relative group transition-colors ${isDirty ? 'bg-amber-50/60' : 'hover:bg-gray-50/60'}`}
                         >
-                          {/* Candidate info - Changed bg-inherit to bg-white/amber-50 to fix transparency */}
-                          <td
-                            className={`sticky left-0 z-20 px-4 py-2.5 align-middle border-r border-gray-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] transition-colors ${
-                              isDirty
-                                ? 'bg-[#fffbeb] group-hover:bg-[#fef3c7]'
-                                : 'bg-white group-hover:bg-gray-50'
-                            }`}
-                          >
-                            {/* Dirty indicator moved inside the sticky cell */}
-                            {isDirty && (
-                              <div
-                                className="absolute left-0 top-0 h-full w-1 bg-amber-400"
-                                aria-hidden
-                              />
-                            )}
-                            <p className="text-sm font-semibold text-gray-900 leading-tight truncate max-w-[185px]">
-                              {candidate.name || 'Chưa có tên'}
-                            </p>
-                            <p className="text-xs text-gray-400 truncate max-w-[185px] mt-0.5">
-                              {candidate.email}
-                            </p>
-                            {candidate.desiredCampus && (
-                              <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                                📍 {candidate.desiredCampus}
-                              </p>
-                            )}
-                          </td>
-
-                          {/* Code */}
-                          <td className="px-3 py-2.5 align-middle">
-                            <span className="inline-flex rounded-lg border border-gray-200 bg-gray-100 px-2 py-1 text-xs font-bold text-gray-700">
-                              {candidate.candidateCode || '—'}
-                            </span>
+                          {/* Candidate info */}
+                          <td className={`sticky left-0 z-20 px-4 py-2.5 align-middle border-r border-gray-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] transition-colors ${
+                            isDirty ? 'bg-[#fffbeb] group-hover:bg-[#fef3c7]' : 'bg-white group-hover:bg-gray-50'
+                          }`}>
+                            {isDirty && <div className="absolute left-0 top-0 h-full w-1 bg-amber-400" aria-hidden />}
+                            <p className="text-sm font-semibold text-gray-900 leading-tight truncate max-w-[185px]">{candidate.full_name}</p>
+                            <p className="text-xs text-gray-400 truncate max-w-[185px] mt-0.5">{candidate.email}</p>
                           </td>
 
                           {/* Attendance summary */}
                           <td className="px-3 py-2.5 align-middle text-center">
-                            <span
-                              className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-bold ${attendanceBadgeClass(attendCount)}`}
-                            >
-                              {attendCount}/{SESSIONS.length}
+                            <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-bold ${attendanceBadgeClass(attendCount, sessions.length)}`}>
+                              {attendCount}/{sessions.length}
                             </span>
                           </td>
 
-                          {/* 4 session columns */}
-                          {SESSIONS.map((session) => {
-                            const r = rec[session.number] ?? initRecord()
+                          {/* Session columns */}
+                          {sessions.map(session => {
+                            const d = draft[session.id] ?? initDraft()
                             return (
-                              <td
-                                key={session.number}
-                                className={`px-3 py-2 align-middle border-r border-gray-100 transition-colors ${
-                                  r.attendance ? 'bg-amber-50' : ''
-                                }`}
-                              >
+                              <td key={session.id} className={`px-3 py-2 align-middle border-r border-gray-100 transition-colors ${d.attendance ? 'bg-amber-50' : ''}`}>
                                 <div className="flex flex-col gap-1.5">
-                                  {/* Attendance checkbox */}
                                   <label className="flex cursor-pointer select-none items-center gap-2 group">
                                     <div className="relative shrink-0">
                                       <input
                                         type="checkbox"
-                                        checked={r.attendance}
-                                        onChange={(e) =>
-                                          handleChange(
-                                            candidate.candidateKey,
-                                            session.number,
-                                            'attendance',
-                                            e.target.checked,
-                                          )
-                                        }
+                                        checked={d.attendance}
+                                        onChange={e => handleChange(candidate.candidate_id, session.id, 'attendance', e.target.checked)}
                                         className="sr-only"
                                       />
-                                      <div
-                                        className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-all ${
-                                          r.attendance
-                                            ? 'bg-emerald-500 border-emerald-500 shadow-sm shadow-emerald-200'
-                                            : 'bg-white border-gray-300 group-hover:border-emerald-400'
-                                        }`}
-                                      >
-                                        {r.attendance && (
-                                          <svg
-                                            className="h-3 w-3 text-white"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                            strokeWidth={3}
-                                          >
-                                            <path
-                                              strokeLinecap="round"
-                                              strokeLinejoin="round"
-                                              d="M5 13l4 4L19 7"
-                                            />
+                                      <div className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-all ${
+                                        d.attendance
+                                          ? 'bg-emerald-500 border-emerald-500 shadow-sm shadow-emerald-200'
+                                          : 'bg-white border-gray-300 group-hover:border-emerald-400'
+                                      }`}>
+                                        {d.attendance && (
+                                          <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                           </svg>
                                         )}
                                       </div>
                                     </div>
-                                    <span
-                                      className={`text-xs font-semibold transition-colors ${
-                                        r.attendance
-                                          ? 'text-emerald-700'
-                                          : 'text-gray-400 group-hover:text-gray-600'
-                                      }`}
-                                    >
-                                      {r.attendance ? 'Có mặt' : 'Vắng'}
+                                    <span className={`text-xs font-semibold transition-colors ${d.attendance ? 'text-emerald-700' : 'text-gray-400 group-hover:text-gray-600'}`}>
+                                      {d.attendance ? 'Có mặt' : 'Vắng'}
                                     </span>
                                   </label>
-
-                                  {/* Score input */}
                                   <input
                                     type="number"
                                     min={0}
                                     max={10}
                                     step={0.5}
-                                    value={r.score}
+                                    value={d.score}
                                     placeholder="Điểm (0–10)"
-                                    onChange={(e) =>
-                                      handleChange(
-                                        candidate.candidateKey,
-                                        session.number,
-                                        'score',
-                                        e.target.value,
-                                      )
-                                    }
-                                    className={`w-full rounded-lg border px-2 py-1 text-xs font-bold outline-none transition-all focus:ring-2 ${scoreClass(r.score)} focus:ring-blue-100`}
+                                    onChange={e => handleChange(candidate.candidate_id, session.id, 'score', e.target.value)}
+                                    className={`w-full rounded-lg border px-2 py-1 text-xs font-bold outline-none transition-all focus:ring-2 ${scoreClass(d.score)} focus:ring-blue-100`}
                                   />
                                 </div>
                               </td>
@@ -654,27 +483,35 @@ export default function GenTrackingTab({
                           {/* Avg score */}
                           <td className="px-3 py-2.5 align-middle text-center">
                             {avgScore !== null ? (
-                              <span
-                                className={`text-sm font-extrabold ${
-                                  avgScore >= 8
-                                    ? 'text-emerald-700'
-                                    : avgScore >= 6
-                                      ? 'text-amber-600'
-                                      : 'text-red-600'
-                                }`}
-                              >
+                              <span className={`text-sm font-extrabold ${avgScore >= 8 ? 'text-emerald-700' : avgScore >= 6 ? 'text-amber-600' : 'text-red-600'}`}>
                                 {avgScore.toFixed(1)}
                               </span>
-                            ) : (
-                              <span className="text-xs text-gray-400">—</span>
-                            )}
+                            ) : <span className="text-xs text-gray-400">—</span>}
+                          </td>
+
+                          {/* Attendance score */}
+                          <td className="px-3 py-2.5 align-middle text-center">
+                            <span className="text-sm font-bold text-gray-700">{candidate.attendance_score.toFixed(2)}</span>
+                          </td>
+
+                          {/* Status */}
+                          <td className="px-3 py-2.5 align-middle text-center">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              candidate.status === 'passed' ? 'bg-green-100 text-green-800' :
+                              candidate.status === 'failed' ? 'bg-red-100 text-red-800' :
+                              candidate.status === 'dropped' ? 'bg-gray-100 text-gray-600' :
+                              candidate.status === 'in_training' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-blue-100 text-blue-800'
+                            }`}>
+                              {candidate.status}
+                            </span>
                           </td>
                         </tr>
                       )
-                    })
-                  )}
-                </tbody>
-              </table>
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </>
         )}
@@ -683,10 +520,3 @@ export default function GenTrackingTab({
   )
 }
 
-// correct export for attendBadgeClass referenced inline in JSX
-function attendanceBadgeClass(count: number) {
-  if (count === 0) return 'bg-gray-100 text-gray-400 border-gray-200'
-  if (count < SESSIONS.length)
-    return 'bg-amber-100 text-amber-700 border-amber-200'
-  return 'bg-emerald-100 text-emerald-700 border-emerald-200'
-}

@@ -65,7 +65,16 @@ export async function POST(req: NextRequest): Promise<Response> {
     await ensureBucket();
     const client = createSupabaseS3Client();
 
-    const key = `videos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    // Sanitize tên file: chuyển về ASCII, chỉ giữ a-z0-9 và dấu gạch
+    const baseName = file.name
+      .replace(/\.[^/.]+$/, '')                                    // bỏ extension
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')            // bỏ dấu tiếng Việt → ASCII
+      .replace(/đ/g, 'd').replace(/Đ/g, 'd')                       // đ → d (không bị NFD)
+      .replace(/[^a-z0-9]+/g, '-')                                 // thay ký tự còn lại bằng -
+      .replace(/^-+|-+$/g, '')                                     // trim dấu -
+      .slice(0, 80) || 'video';
+    const key = `video_dtnc/${Date.now()}-${baseName}.${ext}`;
 
     await client.send(
       new PutObjectCommand({
@@ -87,6 +96,6 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
   } catch (error: any) {
     console.error('Upload video error:', error);
-    return NextResponse.json({ error: 'Lỗi upload video' }, { status: 500 });
+    return NextResponse.json({ error: 'Lỗi upload video', detail: error?.message || String(error) }, { status: 500 });
   }
 }

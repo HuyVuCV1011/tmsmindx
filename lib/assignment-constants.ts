@@ -1,12 +1,19 @@
-import { CheckCheck, CheckSquare, FileText, PenLine } from 'lucide-react';
+import { CheckCheck, CheckSquare, FileText, ListChecks, PenLine } from 'lucide-react';
 
 export const QUESTION_TEMPLATES = {
   multiple_choice: {
     name: 'Trắc nghiệm',
     icon: CheckSquare,
-    description: 'Câu hỏi với nhiều lựa chọn, chỉ 1 đáp án đúng',
+    description: 'Nhiều lựa chọn, chỉ 1 đáp án đúng',
     defaultOptions: ['', '', '', ''],
     placeholder: 'Nhập câu hỏi trắc nghiệm...'
+  },
+  multiple_select: {
+    name: 'Chọn nhiều',
+    icon: ListChecks,
+    description: 'Nhiều lựa chọn, có thể chọn nhiều đáp án đúng',
+    defaultOptions: ['', '', '', ''],
+    placeholder: 'Nhập câu hỏi chọn nhiều đáp án...'
   },
   true_false: {
     name: 'Đúng/Sai',

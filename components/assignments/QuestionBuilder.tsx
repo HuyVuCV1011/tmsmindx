@@ -67,6 +67,13 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
     initData?.options || QUESTION_TEMPLATES.multiple_choice.defaultOptions
   );
   const [correctAnswer, setCorrectAnswer] = useState(initData?.correct_answer || '');
+  // correctAnswers dùng cho multiple_select (mảng các đáp án đúng)
+  const [correctAnswers, setCorrectAnswers] = useState<string[]>(() => {
+    if (initData?.question_type === 'multiple_select' && initData?.correct_answer) {
+      try { return JSON.parse(initData.correct_answer); } catch { return [initData.correct_answer]; }
+    }
+    return [];
+  });
   const [explanation, setExplanation] = useState(initData?.explanation || '');
   const [points, setPoints] = useState(initData?.points || 1);
   const [difficulty, setDifficulty] = useState<QuestionFormData['difficulty']>(
@@ -146,7 +153,14 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
     if (template.defaultOptions) {
       setOptions(template.defaultOptions);
       setCorrectAnswer('');
+      setCorrectAnswers([]);
     }
+  };
+
+  const toggleCorrectAnswer = (option: string) => {
+    setCorrectAnswers(prev =>
+      prev.includes(option) ? prev.filter(a => a !== option) : [...prev, option]
+    );
   };
 
   const addOption = () => {
@@ -169,6 +183,10 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
     setOptions(newOptions);
     if (correctAnswer === oldVal) {
       setCorrectAnswer(value);
+    }
+    // Cập nhật correctAnswers nếu option thay đổi
+    if (correctAnswers.includes(oldVal)) {
+      setCorrectAnswers(prev => prev.map(a => a === oldVal ? value : a));
     }
   };
 
@@ -282,7 +300,19 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
       }
     }
 
-    if (!correctAnswer.trim()) {
+    if (questionType === 'multiple_select') {
+      const validOptions = options.filter((opt) => hasMeaningfulRichContent(opt));
+      if (validOptions.length < 2) {
+        toast.error('Cần ít nhất 2 đáp án');
+        return;
+      }
+      if (correctAnswers.length < 2) {
+        toast.error('Câu hỏi chọn nhiều cần ít nhất 2 đáp án đúng');
+        return;
+      }
+    }
+
+    if (questionType !== 'multiple_select' && !correctAnswer.trim()) {
       toast.error('Vui lòng nhập/chọn đáp án đúng');
       return;
     }
@@ -327,9 +357,12 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
         ...initialData,
         question_text: questionText,
         question_type: questionType,
-        correct_answer: correctAnswer,
-        options: questionType === 'multiple_choice' || questionType === 'true_false' 
-          ? options.filter((opt) => hasMeaningfulRichContent(opt)) 
+        // multiple_select: lưu JSON array; các loại khác: lưu string
+        correct_answer: questionType === 'multiple_select'
+          ? JSON.stringify(correctAnswers)
+          : correctAnswer,
+        options: questionType === 'multiple_choice' || questionType === 'multiple_select' || questionType === 'true_false'
+          ? options.filter((opt) => hasMeaningfulRichContent(opt))
           : null,
         image_url: finalImageUrl || null,
         explanation,
@@ -536,6 +569,60 @@ export function QuestionBuilder({ onSave, onCancel, initialData, assignmentId }:
                   <span>Thêm đáp án</span>
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Options for Multiple Select */}
+          {questionType === 'multiple_select' && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Các đáp án <span className="text-red-500">*</span>
+              </label>
+              <p className="text-xs text-blue-600 mb-2 bg-blue-50 px-3 py-1.5 rounded-lg">
+                ✓ Tick vào ô vuông để chọn đáp án đúng. Người dùng phải chọn đúng <strong>tất cả</strong> các đáp án đúng mới được tính điểm.
+              </p>
+              <div className="space-y-2">
+                {options.map((option, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={correctAnswers.includes(option)}
+                      onChange={() => toggleCorrectAnswer(option)}
+                      className="w-5 h-5 text-blue-600 rounded"
+                    />
+                    <div className={`flex-1 min-w-0 border rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent ${
+                      correctAnswers.includes(option) ? 'border-blue-400 bg-blue-50/30' : 'border-gray-300'
+                    }`}>
+                      <RichTextEditor
+                        content={option}
+                        onChange={(html) => updateOption(index, html)}
+                        minHeight="min-h-[100px]"
+                        showToolbar={true}
+                      />
+                    </div>
+                    {options.length > 2 && (
+                      <button
+                        onClick={() => removeOption(index)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  onClick={addOption}
+                  className="flex items-center gap-2 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>Thêm đáp án</span>
+                </button>
+              </div>
+              {correctAnswers.length > 0 && (
+                <p className="text-xs text-green-600 mt-2">
+                  Đã chọn {correctAnswers.length} đáp án đúng
+                </p>
+              )}
             </div>
           )}
 

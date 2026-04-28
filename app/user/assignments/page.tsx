@@ -292,20 +292,32 @@ export default function TeacherAssignmentPage() {
 
         questions.forEach((question, idx) => {
           const userAnswer = answers[question.id] || ''
-          const correctAnswer = (question.correct_answer || '')
-            .trim()
-            .toLowerCase()
-          const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer
+          const correctAnswer = (question.correct_answer || '').trim()
+
+          let isCorrect = false
+          if (question.question_type === 'multiple_select') {
+            // Phải chọn đúng 100% — so sánh 2 mảng
+            try {
+              const userArr: string[] = JSON.parse(userAnswer || '[]')
+              const correctArr: string[] = JSON.parse(correctAnswer || '[]')
+              isCorrect =
+                userArr.length === correctArr.length &&
+                correctArr.every(a => userArr.includes(a))
+            } catch { isCorrect = false }
+          } else {
+            isCorrect = userAnswer.trim().toLowerCase() === correctAnswer.toLowerCase()
+          }
+
           const points = parseFloat(question.points?.toString() || '0')
           const pointsEarned = isCorrect ? points : 0
 
           console.log(`[Assignment] Q${idx + 1}:`, {
             questionId: question.id,
-            points: points,
-            userAnswer: userAnswer,
-            correctAnswer: correctAnswer,
-            isCorrect: isCorrect,
-            pointsEarned: pointsEarned,
+            points,
+            userAnswer,
+            correctAnswer,
+            isCorrect,
+            pointsEarned,
           })
 
           totalScore += pointsEarned
@@ -338,8 +350,21 @@ export default function TeacherAssignmentPage() {
         // Prepare answers payload
         const answersPayload = questions.map((q) => {
           const userAnswer = answers[q.id] || ''
-          const correctAnswer = (q.correct_answer || '').trim().toLowerCase()
-          const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer
+          const correctAnswer = (q.correct_answer || '').trim()
+
+          let isCorrect = false
+          if (q.question_type === 'multiple_select') {
+            try {
+              const userArr: string[] = JSON.parse(userAnswer || '[]')
+              const correctArr: string[] = JSON.parse(correctAnswer || '[]')
+              isCorrect =
+                userArr.length === correctArr.length &&
+                correctArr.every(a => userArr.includes(a))
+            } catch { isCorrect = false }
+          } else {
+            isCorrect = userAnswer.trim().toLowerCase() === correctAnswer.toLowerCase()
+          }
+
           const points = parseFloat(q.points?.toString() || '0')
           const pointsEarned = isCorrect ? points : 0
 
@@ -846,7 +871,15 @@ export default function TeacherAssignmentPage() {
   const hasHtmlMarkup = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value)
 
   const getProgress = () => {
-    return Math.round((Object.keys(answers).length / questions.length) * 100)
+    const answered = questions.filter(q => {
+      const ans = answers[q.id]
+      if (!ans) return false
+      if (q.question_type === 'multiple_select') {
+        try { return JSON.parse(ans).length > 0 } catch { return false }
+      }
+      return ans.trim().length > 0
+    }).length
+    return Math.round((answered / questions.length) * 100)
   }
 
   // ─── Shared Helper Functions ───
@@ -1296,6 +1329,7 @@ export default function TeacherAssignmentPage() {
                   const isFullWidth =
                     question.question_type === 'essay' ||
                     question.question_type === 'multiple_choice' ||
+                    question.question_type === 'multiple_select' ||
                     question.image_url // Questions with images also take full width
 
                   return (
@@ -1303,9 +1337,15 @@ export default function TeacherAssignmentPage() {
                       key={question.id}
                       id={`question-${question.id}`}
                       className={`bg-white rounded-xl shadow-sm border-2 transition-all ${
-                        answers[question.id]
-                          ? 'border-green-200 bg-green-50/30'
-                          : 'border-gray-200 hover:border-blue-200'
+                        (() => {
+                          const ans = answers[question.id]
+                          const hasAnswer = question.question_type === 'multiple_select'
+                            ? (() => { try { return JSON.parse(ans || '[]').length > 0 } catch { return false } })()
+                            : Boolean(ans)
+                          return hasAnswer
+                            ? 'border-green-200 bg-green-50/30'
+                            : 'border-gray-200 hover:border-blue-200'
+                        })()
                       } ${isFullWidth ? 'lg:col-span-2' : 'lg:col-span-1'}`}
                     >
                       <div className="p-4 md:p-6">
@@ -1313,9 +1353,13 @@ export default function TeacherAssignmentPage() {
                         <div className="flex items-start gap-3 md:gap-4 mb-3 md:mb-4">
                           <div
                             className={`shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-sm md:text-base font-bold ${
-                              answers[question.id]
-                                ? 'bg-green-600 text-white'
-                                : 'bg-gray-200 text-gray-700'
+                              (() => {
+                                const ans = answers[question.id]
+                                const hasAnswer = question.question_type === 'multiple_select'
+                                  ? (() => { try { return JSON.parse(ans || '[]').length > 0 } catch { return false } })()
+                                  : Boolean(ans)
+                                return hasAnswer ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'
+                              })()
                             }`}
                           >
                             {idx + 1}
@@ -1405,6 +1449,62 @@ export default function TeacherAssignmentPage() {
                                   </label>
                                 ),
                               )}
+                            </div>
+                          ) : question.question_type === 'multiple_select' &&
+                          Array.isArray(question.options) ? (
+                            <div className="space-y-2">
+                              <p className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg mb-2">
+                                Chọn <strong>tất cả</strong> đáp án đúng (có thể chọn nhiều)
+                              </p>
+                              {(() => {
+                                // Parse selected answers từ JSON string
+                                let selectedArr: string[] = []
+                                try {
+                                  const raw = answers[question.id] || '[]'
+                                  selectedArr = JSON.parse(raw)
+                                  if (!Array.isArray(selectedArr)) selectedArr = []
+                                } catch { selectedArr = [] }
+
+                                const toggleOption = (opt: string) => {
+                                  const next = selectedArr.includes(opt)
+                                    ? selectedArr.filter(a => a !== opt)
+                                    : [...selectedArr, opt]
+                                  handleAnswerChange(question.id, JSON.stringify(next))
+                                }
+
+                                return question.options.map((option: string, optIdx: number) => {
+                                  const isChecked = selectedArr.includes(option)
+                                  return (
+                                    <label
+                                      key={optIdx}
+                                      className={`flex items-start gap-2 md:gap-3 p-3 md:p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                        isChecked
+                                          ? 'border-[#a1001f] bg-[#fff5f7] shadow-sm'
+                                          : 'border-gray-200 hover:border-[#d47a8b] hover:bg-[#fff5f7]'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => toggleOption(option)}
+                                        className="w-4 md:w-5 h-4 md:h-5 text-[#a1001f] rounded mt-0.5"
+                                      />
+                                      {(() => {
+                                        const normalizedOption = decodeEscapedHtml(String(option))
+                                        if (hasHtmlMarkup(normalizedOption)) {
+                                          return (
+                                            <div
+                                              className="prose prose-sm md:prose-base max-w-none flex-1 text-gray-900"
+                                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(normalizedOption) }}
+                                            />
+                                          )
+                                        }
+                                        return <span className="flex-1 text-sm md:text-base font-medium text-gray-900">{normalizedOption}</span>
+                                      })()}
+                                    </label>
+                                  )
+                                })
+                              })()}
                             </div>
                           ) : question.question_type === 'true_false' ? (
                             <div className="grid grid-cols-2 gap-2 md:gap-3">
