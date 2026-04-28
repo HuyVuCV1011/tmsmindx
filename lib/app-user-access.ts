@@ -124,24 +124,6 @@ export async function resolveAppUserAccessForEmail(
         hasAdminPerms ||
         hasTrainingInputRole)
 
-    // Fetch assigned centers for managers/admins
-    let assignedCenters: Array<{
-      id: number
-      full_name: string
-      short_code: string | null
-    }> = []
-    if (['admin', 'manager'].includes(appUser.role)) {
-      const centersRes = await pool.query(
-        `SELECT DISTINCT c.id, c.full_name, c.short_code
-         FROM manager_centers mc
-         JOIN centers c ON c.id = mc.center_id
-         WHERE mc.user_id = $1
-         ORDER BY c.full_name`,
-        [appUser.id],
-      )
-      assignedCenters = centersRes.rows
-    }
-
     return {
       found: true,
       email: normalized,

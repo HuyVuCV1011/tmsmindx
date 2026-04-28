@@ -206,8 +206,8 @@ export const UploadVideoProvider = ({ children }: { children: React.ReactNode })
 
     try {
       const fileMB = file.size / (1024 * 1024);
-      // Ngưỡng dùng multipart: > 50MB
-      const USE_MULTIPART_THRESHOLD = 50 * 1024 * 1024;
+      // Ngưỡng dùng multipart: > 30MB (an toàn hơn với limit server)
+      const USE_MULTIPART_THRESHOLD = 30 * 1024 * 1024;
 
       if (file.size > USE_MULTIPART_THRESHOLD) {
         // ── MULTIPART UPLOAD (file lớn > 50MB) ──────────────────────────────
