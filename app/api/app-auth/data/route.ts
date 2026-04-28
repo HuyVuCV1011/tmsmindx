@@ -22,6 +22,41 @@ async function getTeachingLeadersHasAreasColumn(): Promise<boolean> {
     return teachingLeadersHasAreasColumn;
 }
 
+async function syncTeachingLeaderAppUser(email: string | null, displayName: string | null, status: string | undefined) {
+    if (!email?.trim()) return;
+    const normalizedEmail = email.trim().toLowerCase();
+    const isActive = status !== 'Deactive';
+
+    // Get role_code from teaching_leaders
+    const leaderResult = await pool.query('SELECT role_code FROM teaching_leaders WHERE LOWER(TRIM(email)) = $1', [normalizedEmail]);
+    const roleCode = leaderResult.rows[0]?.role_code;
+
+    // Insert/update app_users
+    const userResult = await pool.query(
+        `INSERT INTO app_users (email, display_name, role, auth_type, is_active, created_by)
+         VALUES ($1, $2, 'manager', 'firebase', $3, 'teaching_leaders-sync')
+         ON CONFLICT (email) DO UPDATE SET
+           display_name = COALESCE(app_users.display_name, EXCLUDED.display_name),
+                     role = 'manager',
+           auth_type = COALESCE(app_users.auth_type, EXCLUDED.auth_type),
+                     is_active = EXCLUDED.is_active
+         RETURNING id`,
+        [normalizedEmail, displayName || null, isActive],
+    );
+
+    const userId = userResult.rows[0].id;
+
+    // Assign role if exists
+    if (roleCode) {
+        await pool.query(
+            `INSERT INTO user_roles (user_id, role_code)
+             VALUES ($1, $2)
+             ON CONFLICT (user_id, role_code) DO NOTHING`,
+            [userId, roleCode],
+        );
+    }
+}
+
 function normalizeLeaderRows(rows: Record<string, unknown>[]) {
     return rows.map((r) => ({
         ...r,
@@ -99,7 +134,9 @@ export async function GET(request: NextRequest) {
                 ) u WHERE trim(x) <> ''
                 ORDER BY area
             `);
-            const rolesF = await pool.query('SELECT DISTINCT role_code, role_name FROM teaching_leaders ORDER BY role_code');
+            const rolesF = await pool.query(
+                'SELECT role_code, role_name FROM roles ORDER BY department, role_name'
+            );
             const statusF = await pool.query('SELECT DISTINCT status FROM teaching_leaders ORDER BY status');
             const coursesF = await pool.query('SELECT DISTINCT courses FROM teaching_leaders WHERE courses IS NOT NULL ORDER BY courses');
             filters = {
@@ -149,7 +186,7 @@ export async function POST(request: NextRequest) {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10) ON CONFLICT (code) DO UPDATE SET
          full_name=EXCLUDED.full_name, email=EXCLUDED.email, role_code=EXCLUDED.role_code, role_name=EXCLUDED.role_name,
          center=EXCLUDED.center, courses=EXCLUDED.courses, area=EXCLUDED.area, areas=EXCLUDED.areas, status=EXCLUDED.status`,
-                    [code, full_name, email || null, role_code, role_name, center, courses || null, primaryArea, JSON.stringify(areasList), status || 'Active']
+                    [code, full_name, email || null, role_code, role_name, center, courses || null, primaryArea, JSON.stringify(areasList), status || 'Active'],
                 );
             } else {
                 await pool.query(
@@ -157,9 +194,10 @@ export async function POST(request: NextRequest) {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (code) DO UPDATE SET
          full_name=EXCLUDED.full_name, email=EXCLUDED.email, role_code=EXCLUDED.role_code, role_name=EXCLUDED.role_name,
          center=EXCLUDED.center, courses=EXCLUDED.courses, area=EXCLUDED.area, status=EXCLUDED.status`,
-                    [code, full_name, email || null, role_code, role_name, center, courses || null, areaLegacy, status || 'Active']
+                    [code, full_name, email || null, role_code, role_name, center, courses || null, areaLegacy, status || 'Active'],
                 );
             }
+            await syncTeachingLeaderAppUser(email || null, full_name || null, status);
             return NextResponse.json({ success: true });
         }
         return NextResponse.json({ error: 'Table not supported' }, { status: 400 });
@@ -192,14 +230,15 @@ export async function PUT(request: NextRequest) {
             if (hasAreas) {
                 await pool.query(
                     `UPDATE teaching_leaders SET full_name=$2, email=$3, role_code=$4, role_name=$5, center=$6, courses=$7, area=$8, areas=$9::jsonb, status=$10 WHERE code=$1`,
-                    [code, full_name, email || null, role_code, role_name, center, courses || null, primaryArea, JSON.stringify(areasList), status]
+                    [code, full_name, email || null, role_code, role_name, center, courses || null, primaryArea, JSON.stringify(areasList), status],
                 );
             } else {
                 await pool.query(
                     `UPDATE teaching_leaders SET full_name=$2, email=$3, role_code=$4, role_name=$5, center=$6, courses=$7, area=$8, status=$9 WHERE code=$1`,
-                    [code, full_name, email || null, role_code, role_name, center, courses || null, areaLegacy, status]
+                    [code, full_name, email || null, role_code, role_name, center, courses || null, areaLegacy, status],
                 );
             }
+            await syncTeachingLeaderAppUser(email || null, full_name || null, status);
             return NextResponse.json({ success: true });
         }
 

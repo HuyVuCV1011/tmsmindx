@@ -91,6 +91,7 @@ import type { Teacher } from '@/types/teacher'
 interface TrainingLesson {
   name: string
   score: number
+  link?: string
 }
 
 interface TrainingData {
@@ -109,6 +110,22 @@ interface TrainingData {
 }
 
 type TeacherDbRow = Record<string, unknown>
+
+type AvailabilityPeriod = 'week' | 'month' | 'year'
+
+interface ApiError extends Error {
+  info?: unknown
+  status?: number
+}
+
+const AVAILABILITY_PERIOD_OPTIONS: ReadonlyArray<{
+  label: string
+  value: AvailabilityPeriod
+}> = [
+  { value: 'week', label: 'Tuần' },
+  { value: 'month', label: 'Tháng' },
+  { value: 'year', label: 'Năm' },
+]
 
 // Memoized InfoItem component — supports `sensitive` to mask value behind eye toggle
 const InfoItem = memo(
@@ -187,14 +204,6 @@ const fetcher = async (url: string) => {
   })
 
   return data
-}
-
-function getVietnameseStatus(status: string): string {
-  const normalized = (status || '').trim().toLowerCase()
-  if (normalized === 'active') return 'Đang hoạt động'
-  if (normalized === 'deactive' || normalized === 'inactive')
-    return 'Ngưng hoạt động'
-  return status
 }
 
 /** Ngày vào (vd. 7/25/2023, 2023-07-25) → dd/MM/yyyy */
@@ -408,16 +417,15 @@ export default function Page1() {
       setFeedbackEnabled(true)
     }
   }
-  const [availabilityPeriod, setAvailabilityPeriod] = useState<
-    'week' | 'month' | 'year'
-  >('month')
+  const [availabilityPeriod, setAvailabilityPeriod] =
+    useState<AvailabilityPeriod>('month')
   const [notFoundModalOpen, setNotFoundModalOpen] = useState(false)
   const [registrationCheckModalOpen, setRegistrationCheckModalOpen] =
     useState(false)
 
   // Custom fetcher với Authorization header và token refresh
   const secureFetcher = useCallback(async (url: string) => {
-    let token = localStorage.getItem('token')
+    const token = localStorage.getItem('token')
 
     const doFetch = async (tok: string | null) => {
       const headers: HeadersInit = {}
@@ -427,58 +435,24 @@ export default function Page1() {
       return res
     }
 
-    let response = await doFetch(token)
+    const response = await doFetch(token)
 
     // Handle 401 -> attempt silent refresh with refreshToken
     if (response.status === 401) {
-      const refreshToken = localStorage.getItem('refreshToken')
-      if (refreshToken) {
-        try {
-          const FIREBASE_API_KEY =
-            process.env.NEXT_PUBLIC_FIREBASE_API_KEY || ''
-          const refreshRes = await fetch(
-            `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `grant_type=refresh_token&refresh_token=${refreshToken}`,
-            },
-          )
-
-          if (refreshRes.ok) {
-            const refreshData = await refreshRes.json()
-            const newIdToken = refreshData.id_token
-            const newRefreshToken = refreshData.refresh_token
-
-            if (newIdToken) {
-              localStorage.setItem('token', newIdToken)
-              if (newRefreshToken)
-                localStorage.setItem('refreshToken', newRefreshToken)
-              token = newIdToken
-              // retry original request
-              response = await doFetch(token)
-            }
-          }
-        } catch (e) {
-          console.warn('Silent token refresh failed', e)
-        }
-      }
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('refreshToken')
+      window.location.href = '/login'
+      throw new Error('Unauthorized')
     }
 
     if (!response.ok) {
-      if (response.status === 401) {
-        // If still unauthorized after refresh attempt, force logout
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        localStorage.removeItem('refreshToken')
-        window.location.href = '/login'
-        throw new Error('Unauthorized')
-      }
-
-      const error: any = new Error('An error occurred while fetching the data.')
+      const error = new Error(
+        'An error occurred while fetching the data.',
+      ) as ApiError
       try {
         error.info = await response.json()
-      } catch (e) {
+      } catch {
         error.info = null
       }
       error.status = response.status
@@ -553,17 +527,17 @@ export default function Page1() {
         }`
       : null
 
-  const { data: scoresBundle, isLoading: isLoadingScores } = useSWR(
-    scoresUrl,
-    secureFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 300000,
-      shouldRetryOnError: false,
-      revalidateIfStale: false,
-    },
-  )
+  const {
+    data: scoresBundle,
+    isLoading: isLoadingScores,
+    mutate: scoresMutate,
+  } = useSWR(scoresUrl, secureFetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    dedupingInterval: 300000,
+    shouldRetryOnError: false,
+    revalidateIfStale: false,
+  })
 
   const mergedProfileBundle = useMemo(() => {
     if (!profileBundle) return undefined
@@ -578,12 +552,17 @@ export default function Page1() {
     }
   }, [profileBundle, scoresBundle])
 
-  const teacherInfoData =
-    profileBundle && profileBundle.exists && profileBundle.teacher
-      ? { success: true as const, teacher: profileBundle.teacher }
-      : profileBundle
-        ? { success: false as const }
-        : undefined
+  const teacherInfoData = useMemo(() => {
+    if (profileBundle && profileBundle.exists && profileBundle.teacher) {
+      return { success: true as const, teacher: profileBundle.teacher }
+    }
+
+    if (profileBundle) {
+      return { success: false as const }
+    }
+
+    return undefined
+  }, [profileBundle])
 
   const dbRow: TeacherDbRow | null =
     profileBundle?.exists && profileBundle.teacher
@@ -594,7 +573,6 @@ export default function Page1() {
     : null
 
   const {
-    certificates,
     trainingData,
     expertiseData,
     experienceData,
@@ -602,7 +580,6 @@ export default function Page1() {
     isLoadingTraining,
   } = useMemo(() => {
     const bundle = mergedProfileBundle
-    const certificates = bundle?.certificates?.data ?? []
     const trainingStat = bundle?.training?.data?.[0] ?? null
     const trainingData = trainingStat as TrainingData | null
     const expertiseData = bundle?.expertise?.monthlyData ?? []
@@ -614,7 +591,6 @@ export default function Page1() {
       (!teacherLmsCode || !isLoadingScores)
     const isLoadingTraining = isLoadingProfile
     return {
-      certificates,
       trainingData,
       expertiseData,
       experienceData,
@@ -622,6 +598,11 @@ export default function Page1() {
       isLoadingTraining,
     }
   }, [mergedProfileBundle, isLoadingProfile, isLoadingScores, teacherLmsCode])
+
+  const trainingLessons = trainingData?.lessons ?? []
+  const completedTrainingLessonCount = trainingLessons.filter(
+    (lesson) => lesson.score > 0,
+  ).length
 
   // Show feedback modal 30 seconds after successful teacher search
   useEffect(() => {
@@ -740,44 +721,12 @@ export default function Page1() {
   useEffect(() => {
     ;(async () => {
       if (profileError) {
-        // If unauthorized, try silent refresh and revalidate once
-        const status = (profileError as any)?.status
+        // If unauthorized, invalidate the cached session and require login again
+        const status =
+          typeof profileError === 'object' && profileError !== null
+            ? (profileError as ApiError).status
+            : undefined
         if (status === 401) {
-          const refreshToken = localStorage.getItem('refreshToken')
-          if (refreshToken) {
-            try {
-              const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || ''
-              const refreshRes = await fetch(
-                `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
-                {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                  },
-                  body: `grant_type=refresh_token&refresh_token=${refreshToken}`,
-                },
-              )
-
-              if (refreshRes.ok) {
-                const refreshData = await refreshRes.json()
-                const newIdToken = refreshData.id_token
-                const newRefreshToken = refreshData.refresh_token
-                if (newIdToken) {
-                  localStorage.setItem('token', newIdToken)
-                  if (newRefreshToken)
-                    localStorage.setItem('refreshToken', newRefreshToken)
-                  // Revalidate teacher data
-                  if (profileUrl) await mutateProfile()
-                  if (scoresUrl) await globalMutate(scoresUrl)
-                  return
-                }
-              }
-            } catch (e) {
-              console.warn('Silent refresh failed', e)
-            }
-          }
-
-          // If refresh not possible or failed, force logout
           localStorage.removeItem('token')
           localStorage.removeItem('user')
           localStorage.removeItem('refreshToken')
@@ -809,7 +758,7 @@ export default function Page1() {
     profileUrl,
     scoresUrl,
     mutateProfile,
-    globalMutate,
+    scoresMutate,
   ])
 
   // Handle not found modal confirm
@@ -996,7 +945,7 @@ export default function Page1() {
       } else {
         toast.error('Gửi feedback thất bại. Vui lòng thử lại.')
       }
-    } catch (error) {
+    } catch {
       toast.error('Lỗi kết nối. Vui lòng thử lại.')
     } finally {
       setFeedbackSubmitting(false)
@@ -1845,8 +1794,7 @@ export default function Page1() {
                       <div className="text-right text-xs text-gray-600">
                         <div>
                           Hoàn thành:{' '}
-                          {trainingData.lessons?.filter((l: any) => l.score > 0)
-                            .length || 0}
+                          {completedTrainingLessonCount}
                           /10
                         </div>
                         <div className="mt-1">
@@ -1854,7 +1802,7 @@ export default function Page1() {
                             <div
                               className="h-full bg-[#a1001f] rounded-full transition-all"
                               style={{
-                                width: `${((trainingData.lessons?.filter((l: any) => l.score > 0).length || 0) / 10) * 100}%`,
+                                width: `${(completedTrainingLessonCount / 10) * 100}%`,
                               }}
                             />
                           </div>
@@ -1865,92 +1813,85 @@ export default function Page1() {
 
                   {/* Lessons Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {(trainingData.lessons || []).map(
-                      (lesson: any, idx: number) => {
-                        const score = lesson.score || 0
-                        const hasScore = score > 0
-                        const isPerfect = score >= 10
-                        const needsImprovement = hasScore && !isPerfect
-                        const notStarted = !hasScore
+                    {trainingLessons.map((lesson, idx) => {
+                      const score = lesson.score || 0
+                      const hasScore = score > 0
+                      const isPerfect = score >= 10
+                      const notStarted = !hasScore
 
-                        const scoreColor = hasScore
-                          ? 'text-[#a1001f]'
-                          : 'text-gray-400'
-                        const bgColor = hasScore
-                          ? 'bg-[#f3f3f3] border-gray-300'
-                          : 'bg-gray-50 border-gray-200'
+                      const scoreColor = hasScore
+                        ? 'text-[#a1001f]'
+                        : 'text-gray-400'
+                      const bgColor = hasScore
+                        ? 'bg-[#f3f3f3] border-gray-300'
+                        : 'bg-gray-50 border-gray-200'
 
-                        return (
-                          <div
-                            key={idx}
-                            className={`border rounded-lg p-3 transition-all hover:shadow-md ${bgColor}`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="text-xs font-bold text-[#a1001f] mb-1">
-                                  Lesson {idx + 1}
-                                </div>
-                                <div className="text-xs text-gray-700 line-clamp-2 mb-2">
-                                  {lesson.name.replace(/^Lesson \d+:\s*/, '')}
-                                </div>
-
-                                {/* Buttons - Show only for lessons not perfect (< 10 points) */}
-                                {!isPerfect &&
-                                  (lesson.link ? (
-                                    <a
-                                      href={lesson.link}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded transition-colors ${
-                                        notStarted
-                                          ? 'bg-[#a1001f] hover:bg-[#870019] text-white cursor-pointer'
-                                          : 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
-                                      }`}
-                                    >
-                                      <svg
-                                        className="w-3 h-3"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                                        />
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                        />
-                                      </svg>
-                                      {notStarted
-                                        ? 'Xem đào tạo'
-                                        : 'Cải thiện điểm'}
-                                    </a>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded bg-gray-300 text-gray-500 cursor-not-allowed">
-                                      Chưa có link
-                                    </span>
-                                  ))}
+                      return (
+                        <div
+                          key={idx}
+                          className={`border rounded-lg p-3 transition-all hover:shadow-md ${bgColor}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-bold text-[#a1001f] mb-1">
+                                Lesson {idx + 1}
                               </div>
-                              <div className="text-right shrink-0">
-                                <div
-                                  className={`text-xl font-bold ${scoreColor}`}
-                                >
-                                  {hasScore ? score?.toFixed(1) || '—' : '—'}
-                                </div>
-                                <div className="text-[10px] text-gray-500">
-                                  {hasScore ? '/10' : 'Chưa học'}
-                                </div>
+                              <div className="text-xs text-gray-700 line-clamp-2 mb-2">
+                                {lesson.name.replace(/^Lesson \d+:\s*/, '')}
+                              </div>
+
+                              {/* Buttons - Show only for lessons not perfect (< 10 points) */}
+                              {!isPerfect &&
+                                (lesson.link ? (
+                                  <a
+                                    href={lesson.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded transition-colors ${
+                                      notStarted
+                                        ? 'bg-[#a1001f] hover:bg-[#870019] text-white cursor-pointer'
+                                        : 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
+                                    }`}
+                                  >
+                                    <svg
+                                      className="w-3 h-3"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                                      />
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                      />
+                                    </svg>
+                                    {notStarted ? 'Xem đào tạo' : 'Cải thiện điểm'}
+                                  </a>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded bg-gray-300 text-gray-500 cursor-not-allowed">
+                                    Chưa có link
+                                  </span>
+                                ))}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className={`text-xl font-bold ${scoreColor}`}>
+                                {hasScore ? score?.toFixed(1) || '—' : '—'}
+                              </div>
+                              <div className="text-[10px] text-gray-500">
+                                {hasScore ? '/10' : 'Chưa học'}
                               </div>
                             </div>
                           </div>
-                        )
-                      },
-                    )}
+                        </div>
+                      )
+                    })}
                   </div>
 
                   {/* Legend */}
@@ -1995,14 +1936,10 @@ export default function Page1() {
 
                 {/* Period Filter */}
                 <div className="flex rounded-lg border border-white/15 bg-white/10 p-1 gap-1 sm:gap-2">
-                  {[
-                    { value: 'week', label: 'Tuần' },
-                    { value: 'month', label: 'Tháng' },
-                    { value: 'year', label: 'Năm' },
-                  ].map(({ value, label }) => (
+                  {AVAILABILITY_PERIOD_OPTIONS.map(({ value, label }) => (
                     <button
                       key={value}
-                      onClick={() => setAvailabilityPeriod(value as any)}
+                      onClick={() => setAvailabilityPeriod(value)}
                       className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all ${
                         availabilityPeriod === value
                           ? 'bg-white text-[#a1001f] shadow-sm'

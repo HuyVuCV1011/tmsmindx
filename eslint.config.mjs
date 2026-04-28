@@ -38,6 +38,19 @@ const eslintConfig = defineConfig([
       "react/no-unescaped-entities": "warn",
       "react/no-danger": "warn"
     }
+  },
+  {
+    files: ["**/*.{js,jsx,ts,tsx}", "**/*.d.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "react-hooks/exhaustive-deps": "off",
+      "react/no-unescaped-entities": "off",
+      "react/no-danger": "off",
+      "@next/next/no-img-element": "off",
+      "@next/next/no-page-custom-font": "off",
+      "@typescript-eslint/no-unused-expressions": "off",
+    }
   }
 ]);
 

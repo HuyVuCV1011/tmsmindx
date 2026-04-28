@@ -167,7 +167,7 @@ export function AssignmentPreview({ assignment, questions, onClose }: Assignment
                   {/* Question Image */}
                   {question.image_url && (
                     <div className="mb-4 pl-13">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      { }
                       <img
                         src={question.image_url}
                         alt="Question"

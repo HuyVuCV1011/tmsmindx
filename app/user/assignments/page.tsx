@@ -1,39 +1,39 @@
 'use client'
 
+
+
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import Modal from '@/components/Modal'
 import { PageContainer } from '@/components/PageContainer'
 import { Tabs } from '@/components/Tabs'
 import { Button } from '@/components/ui/button'
-import { ExplanationSection } from '@/components/user/ExplanationSection'
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
-import { sanitizeHtml } from '@/lib/sanitize-html'
 import { isExamInCurrentVietnamMonth } from '@/lib/giaitrinh-eligibility'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 import { useTeacher } from '@/lib/teacher-context'
 import {
-  AlertCircle,
-  ArrowLeft,
-  Award,
-  BookOpen,
-  CheckCircle,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  FileText,
-  FilterX,
-  RefreshCw,
-  Send,
-  Trophy,
-  XCircle,
+    AlertCircle,
+    ArrowLeft,
+    Award,
+    BookOpen,
+    CheckCircle,
+    ChevronDown,
+    ChevronUp,
+    Clock,
+    FileText,
+    FilterX,
+    RefreshCw,
+    Send,
+    Trophy,
+    XCircle,
 } from 'lucide-react'
 
-import NextImage from 'next/image'
+import { toast } from '@/lib/app-toast'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from '@/lib/app-toast'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 interface Assignment {
   id: number
@@ -61,7 +61,7 @@ interface Question {
   question_text: string
   question_type: string
   correct_answer: string
-  options: any
+  options: string[]
   image_url: string
   points: number
   order_number: number
@@ -122,6 +122,44 @@ interface EffectiveExamScore {
   isMissedCurrentMonth: boolean
 }
 
+type ScoreTypeFilter = 'all' | 'expertise' | 'experience'
+type ScoreResultFilter =
+  | 'all'
+  | 'done'
+  | 'waiting'
+  | 'pending'
+  | 'accepted'
+  | 'rejected'
+
+interface TrainingSubmissionSummary {
+  assignment_id: number
+  score: number
+  percentage: number
+  is_passed: boolean
+  submitted_at: string
+  attempt_number: number
+}
+
+const DEFAULT_PASS_MIN_EXCLUSIVE = 5
+
+function getPassingScore(item: ExamAssignment): number | null {
+  const parsed = Number(item.passing_score)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return parsed
+}
+
+function isExamPassed(item: ExamAssignment, score: number | null): boolean {
+  if (score === null) return false
+  const passingScore = getPassingScore(item)
+  if (passingScore !== null) return score >= passingScore
+  return score > DEFAULT_PASS_MIN_EXCLUSIVE
+}
+
+const extractCodeFromEmail = (email: string): string | null => {
+  const match = email.match(/^([^@]+)@/)
+  return match ? match[1] : null
+}
+
 export default function TeacherAssignmentPage() {
   const { user, logout, token } = useAuth()
   const { teacherProfile, isLoading: isTeacherLoading } = useTeacher()
@@ -143,12 +181,10 @@ export default function TeacherAssignmentPage() {
   >('available')
 
   const [selectedExamMonth, setSelectedExamMonth] = useState('6months')
-  const [scoreTypeFilter, setScoreTypeFilter] = useState<
-    'all' | 'expertise' | 'experience'
-  >('all')
-  const [scoreResultFilter, setScoreResultFilter] = useState<
-    'all' | 'done' | 'waiting' | 'pending' | 'accepted' | 'rejected'
-  >('all')
+  const [scoreTypeFilter, setScoreTypeFilter] = useState<ScoreTypeFilter>('all')
+  const [scoreResultFilter, setScoreResultFilter] = useState<ScoreResultFilter>(
+    'all',
+  )
   const [scoreSubjectKeyword, setScoreSubjectKeyword] = useState('')
 
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
@@ -202,9 +238,428 @@ export default function TeacherAssignmentPage() {
   const [selectedExamInfo, setSelectedExamInfo] =
     useState<ExamAssignment | null>(null)
 
+  const submitAssignment = useCallback(
+    async (skipConfirm?: boolean | React.MouseEvent) => {
+      if (!submission) return
+      if (isSubmittingRef.current) return
+
+      const isConfirmed = typeof skipConfirm === 'boolean' ? skipConfirm : false
+
+      const unansweredCount = questions.length - Object.keys(answers).length
+      if (!isConfirmed && unansweredCount > 0) {
+        if (
+          !confirm(
+            `Bạn còn ${unansweredCount} câu chưa trả lời. Bạn có chắc muốn nộp bài?`,
+          )
+        ) {
+          // Scroll to the first unanswered question
+          const firstUnansweredQuestion = questions.find((q) => !answers[q.id])
+          if (firstUnansweredQuestion) {
+            const element = document.getElementById(
+              `question-${firstUnansweredQuestion.id}`,
+            )
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              element.classList.add('ring-2', 'ring-red-500', 'ring-offset-2')
+              setTimeout(
+                () =>
+                  element.classList.remove(
+                    'ring-2',
+                    'ring-red-500',
+                    'ring-offset-2',
+                  ),
+                2000,
+              )
+              toast('Đã chuyển đến câu hỏi chưa hoàn thành', { icon: '👇' })
+            }
+          }
+          return
+        }
+      }
+
+      try {
+        isSubmittingRef.current = true
+        setIsSubmitting(true)
+        setTimerActive(false)
+
+        // Calculate score synchronously
+        let totalScore = 0
+        console.log(
+          '[Assignment] Starting score calculation for',
+          questions.length,
+          'questions',
+        )
+
+        questions.forEach((question, idx) => {
+          const userAnswer = answers[question.id] || ''
+          const correctAnswer = (question.correct_answer || '')
+            .trim()
+            .toLowerCase()
+          const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer
+          const points = parseFloat(question.points?.toString() || '0')
+          const pointsEarned = isCorrect ? points : 0
+
+          console.log(`[Assignment] Q${idx + 1}:`, {
+            questionId: question.id,
+            points: points,
+            userAnswer: userAnswer,
+            correctAnswer: correctAnswer,
+            isCorrect: isCorrect,
+            pointsEarned: pointsEarned,
+          })
+
+          totalScore += pointsEarned
+        })
+
+        console.log(
+          '[Assignment] Final calculated total score:',
+          totalScore,
+          'type:',
+          typeof totalScore,
+        )
+
+        // Ensure score is a valid number
+        if (
+          isNaN(totalScore) ||
+          totalScore === null ||
+          totalScore === undefined
+        ) {
+          console.error(
+            '[Assignment] Invalid total score calculated:',
+            totalScore,
+          )
+          toast.error('Lỗi: Không thể tính điểm. Vui lòng thử lại.')
+          return
+        }
+
+        // Update submission
+        const isPassed = totalScore >= currentAssignment!.passing_score
+
+        // Prepare answers payload
+        const answersPayload = questions.map((q) => {
+          const userAnswer = answers[q.id] || ''
+          const correctAnswer = (q.correct_answer || '').trim().toLowerCase()
+          const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer
+          const points = parseFloat(q.points?.toString() || '0')
+          const pointsEarned = isCorrect ? points : 0
+
+          return {
+            question_id: q.id,
+            answer_text: userAnswer,
+            is_correct: isCorrect,
+            points_earned: pointsEarned,
+          }
+        })
+
+        const response = await fetch('/api/training-submissions', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: submission.id,
+            action: 'grade',
+            score: totalScore,
+            is_passed: isPassed,
+            answers: answersPayload,
+          }),
+        })
+
+        const data = await response.json()
+        if (data.success) {
+          setSubmission(data.data)
+          setView('result')
+        } else {
+          toast.error('Lỗi khi nộp bài: ' + data.error)
+        }
+      } catch (err) {
+        console.error('Error submitting assignment:', err)
+        toast.error('Lỗi khi nộp bài')
+      } finally {
+        isSubmittingRef.current = false
+        setIsSubmitting(false)
+      }
+    },
+    [answers, currentAssignment, questions, submission],
+  )
+
+  const startAssignment = useCallback(
+    async (assignment: Assignment) => {
+      try {
+        // 1. Check teacher profile from context to insure data integrity
+        if (isTeacherLoading) {
+          toast(
+            'Đang đồng bộ dữ liệu giáo viên, vui lòng thử lại sau giây lát...',
+          )
+          return
+        }
+
+        if (!teacherProfile) {
+          toast.error(
+            'Thiếu thông tin giáo viên. Vui lòng đăng xuất và đăng nhập lại.',
+          )
+          setTimeout(() => {
+            logout()
+          }, 1500)
+          return
+        }
+
+        // Check required fields directly from profile
+        const teacherBranch =
+          teacherProfile.branchCurrent || teacherProfile.branchIn
+        // Note: teacherProfile.status might be mapped differently, but checking basic existence is safer
+        // We assume if profile loaded, it's good enough or we can check branch
+        if (!teacherBranch) {
+          toast.error(
+            'Thiếu thông tin Cơ sở (Branch). Vui lòng cập nhật thông tin.',
+          )
+          return
+        }
+
+        // Fetch questions
+        const questionsRes = await fetch(
+          `/api/training-assignment-questions?assignment_id=${assignment.id}`,
+        )
+        const questionsData = await questionsRes.json()
+
+        if (!questionsData.success) {
+          toast.error('Không thể tải câu hỏi')
+          return
+        }
+
+        // Create submission
+        const submissionRes = await fetch('/api/training-submissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            teacher_code: teacherCode,
+            assignment_id: assignment.id,
+            attempt_number: 1,
+            teacher_info: {
+              full_name: teacherProfile?.name || teacherCode,
+              center: teacherProfile?.branchCurrent || '',
+              teaching_block: teacherProfile?.programCurrent || '',
+              work_email: user?.email || '',
+            },
+          }),
+        })
+
+        const submissionData = await submissionRes.json()
+        if (!submissionData.success) {
+          toast.error('Không thể bắt đầu bài tập: ' + submissionData.error)
+          return
+        }
+
+        setCurrentAssignment(assignment)
+        setQuestions(questionsData.data)
+        setSubmission(submissionData.data)
+
+        // Load saved answers if this is a continuing submission
+        if (
+          submissionData.existing_answers &&
+          Object.keys(submissionData.existing_answers).length > 0
+        ) {
+          setAnswers(submissionData.existing_answers)
+          toast.success('Đã tải lại bài làm cũ của bạn')
+        } else {
+          setAnswers({})
+        }
+
+        setView('taking')
+
+        // Start timer - logic updated to use server started_at and server_time
+        if (assignment.time_limit_minutes > 0) {
+          let remainingSeconds = assignment.time_limit_minutes * 60
+
+          if (submissionData.data.started_at) {
+            const startTime = new Date(submissionData.data.started_at).getTime()
+
+            // Use server time if available to avoid clock drift, fallback to local
+            const serverNow = submissionData.server_time
+              ? new Date(submissionData.server_time).getTime()
+              : Date.now()
+            const elapsedSeconds = Math.floor((serverNow - startTime) / 1000)
+
+            // Calculate offset for local countdown
+            const clientNow = Date.now()
+            // How much ahead/behind is the client vs server?
+            const clockOffset = clientNow - serverNow // e.g. +5000ms if client is 5s ahead
+
+            remainingSeconds = Math.max(
+              0,
+              assignment.time_limit_minutes * 60 - elapsedSeconds,
+            )
+
+            console.log('[Assignment] Timer init:', {
+              serverStarted: submissionData.data.started_at,
+              serverNow: submissionData.server_time,
+              elapsed: elapsedSeconds,
+              limit: assignment.time_limit_minutes * 60,
+              remaining: remainingSeconds,
+              offset: clockOffset,
+            })
+          }
+
+          setTimeRemaining(remainingSeconds)
+          setTimerActive(remainingSeconds > 0)
+
+          if (remainingSeconds === 0) {
+            // If already expired according to server, submit immediately
+            setTimeout(() => submitAssignment(true), 100)
+          }
+        }
+      } catch (err) {
+        console.error('Error starting assignment:', err)
+        toast.error('Lỗi khi bắt đầu bài tập')
+      }
+    },
+    [
+      isTeacherLoading,
+      logout,
+      submitAssignment,
+      teacherCode,
+      teacherProfile,
+      user,
+    ],
+  )
+
+  const fetchAvailableAssignments = useCallback(
+    async (isBackgroundUpdate = false) => {
+      try {
+        setTrainingLoading(true)
+
+        // 1. Fetch assignments list
+        const response = await fetch('/api/training-assignments?status=published')
+        const data = await response.json()
+
+        if (data.success) {
+          const submissionsMap = new Map<number, TrainingSubmissionSummary>()
+
+          // 2. Fetch all submissions for teacher (instead of N+1 requests)
+          if (teacherCode) {
+            try {
+              // Fetch ALL submissions for this teacher, ordered by created_at DESC
+              const subRes = await fetch(
+                `/api/training-submissions?teacher_code=${teacherCode}`,
+              )
+              const subData: { success?: boolean; data?: TrainingSubmissionSummary[] } =
+                await subRes.json()
+
+              if (subData.success && Array.isArray(subData.data)) {
+                // Map assignment_id to its LATEST submission
+                subData.data.forEach((sub: TrainingSubmissionSummary) => {
+                  if (!submissionsMap.has(sub.assignment_id)) {
+                    submissionsMap.set(sub.assignment_id, sub)
+                  }
+                })
+              }
+            } catch (err) {
+              console.warn('Failed to batch fetch submissions', err)
+            }
+          }
+
+          // 3. Merge data
+          const assignmentsWithScores = data.data.map(
+            (assignment: Assignment) => {
+              const latestSubmission = submissionsMap.get(assignment.id)
+              if (latestSubmission) {
+                return {
+                  ...assignment,
+                  recent_submission: {
+                    score: latestSubmission.score,
+                    percentage: latestSubmission.percentage,
+                    is_passed: latestSubmission.is_passed,
+                    submitted_at: latestSubmission.submitted_at,
+                    attempt_number: latestSubmission.attempt_number,
+                  },
+                }
+              }
+              return assignment
+            },
+          )
+
+          setAssignments(assignmentsWithScores)
+        }
+      } catch (err) {
+        console.error('Error fetching assignments:', err)
+        setError('Failed to load assignments')
+      } finally {
+        if (!isBackgroundUpdate) setTrainingLoading(false)
+      }
+    },
+    [teacherCode],
+  )
+
+  const fetchExamAssignments = useCallback(
+    async (isBackgroundUpdate = false) => {
+      try {
+        if (!isBackgroundUpdate) setExamLoading(true)
+
+        let canonicalTeacherCode = ''
+        if (user?.email) {
+          try {
+            const res = await fetch(
+              `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
+              { headers: authHeaders(token) },
+            )
+            const data = await res.json()
+            canonicalTeacherCode = (data?.teacher?.code || '').toString().trim()
+            if (canonicalTeacherCode && canonicalTeacherCode !== teacherCode) {
+              setTeacherCode(canonicalTeacherCode)
+            }
+          } catch {
+            // Keep fallback behavior below when teacher lookup is unavailable.
+          }
+        }
+
+        const candidates = new Set<string>()
+        const normalizedTeacherCode = teacherCode?.trim()
+        if (normalizedTeacherCode) {
+          candidates.add(normalizedTeacherCode)
+          candidates.add(normalizedTeacherCode.toLowerCase())
+          candidates.add(normalizedTeacherCode.toUpperCase())
+        }
+
+        if (canonicalTeacherCode) {
+          candidates.add(canonicalTeacherCode)
+          candidates.add(canonicalTeacherCode.toLowerCase())
+          candidates.add(canonicalTeacherCode.toUpperCase())
+        }
+
+        if (user?.email) {
+          const emailCode = extractCodeFromEmail(user.email)?.trim()
+          if (emailCode) {
+            candidates.add(emailCode)
+            candidates.add(emailCode.toLowerCase())
+            candidates.add(emailCode.toUpperCase())
+          }
+        }
+
+        const teacherCodesParam = encodeURIComponent(
+          Array.from(candidates).join(','),
+        )
+        const effectiveTeacherCode = canonicalTeacherCode || teacherCode
+        const baseParams = `teacher_code=${encodeURIComponent(effectiveTeacherCode)}&teacher_codes=${teacherCodesParam}`
+        // Fetch full assignment history so score tab filters (6 months/all/custom month)
+        // operate on complete data instead of only current month.
+        const recentRes = await fetch(`/api/exam-assignments?${baseParams}`, {
+          cache: 'no-store',
+        })
+        const recentData = await recentRes.json()
+        if (recentData.success) {
+          setExamAssignments(recentData.data || [])
+        }
+
+        if (!isBackgroundUpdate) setExamLoading(false)
+      } catch (err) {
+        console.error('Error fetching exam assignments:', err)
+        setError('Failed to load exam assignments')
+        if (!isBackgroundUpdate) setExamLoading(false)
+      }
+    },
+    [teacherCode, token, user],
+  )
+
   const searchParams = useSearchParams()
   const startId = searchParams.get('start_assignment_id')
-  const tabParam = searchParams.get('tab')
 
   // Auto-start assignment logic
   useEffect(() => {
@@ -218,7 +673,7 @@ export default function TeacherAssignmentPage() {
         }
       }
     }
-  }, [startId, activeMainTab, assignments, view])
+  }, [startId, activeMainTab, assignments, startAssignment, view])
 
   // Helper function to safely parse percentage
   const formatPercentage = (
@@ -228,12 +683,6 @@ export default function TeacherAssignmentPage() {
     const num =
       typeof percentage === 'number' ? percentage : parseFloat(percentage)
     return isNaN(num) ? '0.0' : num.toFixed(1)
-  }
-
-  // Extract teacher code from email (fallback method)
-  const extractCodeFromEmail = (email: string): string | null => {
-    const match = email.match(/^([^@]+)@/)
-    return match ? match[1] : null
   }
 
   // Get teacher code from user email (tránh gọi /api/teachers/info trùng TeacherProvider khi profile đang load)
@@ -259,7 +708,7 @@ export default function TeacherAssignmentPage() {
           if (data?.teacher?.code) {
             setTeacherCode(data.teacher.code)
             return          }
-        } catch (err) {
+        } catch {
           console.warn(
             'Email-based lookup failed, falling back to code extraction',
           )
@@ -272,14 +721,14 @@ export default function TeacherAssignmentPage() {
         }
       })()
     }
-  }, [user, teacherCode, teacherProfile, token])
+  }, [isTeacherLoading, teacherCode, teacherProfile, token, user])
 
   useEffect(() => {
     if (teacherCode) {
       fetchAvailableAssignments()
       fetchExamAssignments()
     }
-  }, [teacherCode])
+  }, [teacherCode, fetchAvailableAssignments, fetchExamAssignments])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -289,7 +738,7 @@ export default function TeacherAssignmentPage() {
     return () => {
       window.clearInterval(timer)
     }
-  }, [])
+  }, [submitAssignment])
 
   // Auto-refetch exam assignments when any exam's open_at boundary is crossed
   useEffect(() => {
@@ -307,267 +756,7 @@ export default function TeacherAssignmentPage() {
     if (anyJustOpened) {
       fetchExamAssignments(true)
     }
-  }, [nowTs, examAssignments])
-
-  const fetchAvailableAssignments = async (isBackgroundUpdate = false) => {
-    try {
-      setTrainingLoading(true)
-
-      // 1. Fetch assignments list
-      const response = await fetch('/api/training-assignments?status=published')
-      const data = await response.json()
-
-      if (data.success) {
-        const submissionsMap = new Map<number, any>()
-
-        // 2. Fetch all submissions for teacher (instead of N+1 requests)
-        if (teacherCode) {
-          try {
-            // Fetch ALL submissions for this teacher, ordered by created_at DESC
-            const subRes = await fetch(
-              `/api/training-submissions?teacher_code=${teacherCode}`,
-            )
-            const subData = await subRes.json()
-
-            if (subData.success && Array.isArray(subData.data)) {
-              // Map assignment_id to its LATEST submission
-              subData.data.forEach((sub: any) => {
-                if (!submissionsMap.has(sub.assignment_id)) {
-                  submissionsMap.set(sub.assignment_id, sub)
-                }
-              })
-            }
-          } catch (err) {
-            console.warn('Failed to batch fetch submissions', err)
-          }
-        }
-
-        // 3. Merge data
-        const assignmentsWithScores = data.data.map(
-          (assignment: Assignment) => {
-            const latestSubmission = submissionsMap.get(assignment.id)
-            if (latestSubmission) {
-              return {
-                ...assignment,
-                recent_submission: {
-                  score: latestSubmission.score,
-                  percentage: latestSubmission.percentage,
-                  is_passed: latestSubmission.is_passed,
-                  submitted_at: latestSubmission.submitted_at,
-                  attempt_number: latestSubmission.attempt_number,
-                },
-              }
-            }
-            return assignment
-          },
-        )
-
-        setAssignments(assignmentsWithScores)
-      }
-    } catch (err) {
-      console.error('Error fetching assignments:', err)
-      setError('Failed to load assignments')
-    } finally {
-      if (!isBackgroundUpdate) setTrainingLoading(false)
-    }
-  }
-
-  const fetchExamAssignments = async (isBackgroundUpdate = false) => {
-    try {
-      if (!isBackgroundUpdate) setExamLoading(true)
-
-      let canonicalTeacherCode = ''
-      if (user?.email) {
-        try {
-          const res = await fetch(
-            `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
-            { headers: authHeaders(token) },
-          )
-          const data = await res.json()
-          canonicalTeacherCode = (data?.teacher?.code || '').toString().trim()
-          if (canonicalTeacherCode && canonicalTeacherCode !== teacherCode) {
-            setTeacherCode(canonicalTeacherCode)
-          }
-        } catch {
-          // Keep fallback behavior below when teacher lookup is unavailable.
-        }
-      }
-
-      const candidates = new Set<string>()
-      const normalizedTeacherCode = teacherCode?.trim()
-      if (normalizedTeacherCode) {
-        candidates.add(normalizedTeacherCode)
-        candidates.add(normalizedTeacherCode.toLowerCase())
-        candidates.add(normalizedTeacherCode.toUpperCase())
-      }
-
-      if (canonicalTeacherCode) {
-        candidates.add(canonicalTeacherCode)
-        candidates.add(canonicalTeacherCode.toLowerCase())
-        candidates.add(canonicalTeacherCode.toUpperCase())
-      }
-
-      if (user?.email) {
-        const emailCode = extractCodeFromEmail(user.email)?.trim()
-        if (emailCode) {
-          candidates.add(emailCode)
-          candidates.add(emailCode.toLowerCase())
-          candidates.add(emailCode.toUpperCase())
-        }
-      }
-
-      const teacherCodesParam = encodeURIComponent(
-        Array.from(candidates).join(','),
-      )
-      const effectiveTeacherCode = canonicalTeacherCode || teacherCode
-      const baseParams = `teacher_code=${encodeURIComponent(effectiveTeacherCode)}&teacher_codes=${teacherCodesParam}`
-      // Fetch full assignment history so score tab filters (6 months/all/custom month)
-      // operate on complete data instead of only current month.
-      const recentRes = await fetch(`/api/exam-assignments?${baseParams}`, {
-        cache: 'no-store',
-      })
-      const recentData = await recentRes.json()
-      if (recentData.success) {
-        setExamAssignments(recentData.data || [])
-      }
-
-      if (!isBackgroundUpdate) setExamLoading(false)
-    } catch (err) {
-      console.error('Error fetching exam assignments:', err)
-      setError('Failed to load exam assignments')
-      if (!isBackgroundUpdate) setExamLoading(false)
-    }
-  }
-
-  const startAssignment = async (assignment: Assignment) => {
-    try {
-      // 1. Check teacher profile from context to insure data integrity
-      if (isTeacherLoading) {
-        toast(
-          'Đang đồng bộ dữ liệu giáo viên, vui lòng thử lại sau giây lát...',
-        )
-        return
-      }
-
-      if (!teacherProfile) {
-        toast.error(
-          'Thiếu thông tin giáo viên. Vui lòng đăng xuất và đăng nhập lại.',
-        )
-        setTimeout(() => {
-          logout()
-        }, 1500)
-        return
-      }
-
-      // Check required fields directly from profile
-      const teacherBranch =
-        teacherProfile.branchCurrent || teacherProfile.branchIn
-      // Note: teacherProfile.status might be mapped differently, but checking basic existence is safer
-      // We assume if profile loaded, it's good enough or we can check branch
-      if (!teacherBranch) {
-        toast.error(
-          'Thiếu thông tin Cơ sở (Branch). Vui lòng cập nhật thông tin.',
-        )
-        return
-      }
-
-      // Fetch questions
-      const questionsRes = await fetch(
-        `/api/training-assignment-questions?assignment_id=${assignment.id}`,
-      )
-      const questionsData = await questionsRes.json()
-
-      if (!questionsData.success) {
-        toast.error('Không thể tải câu hỏi')
-        return
-      }
-
-      // Create submission
-      const submissionRes = await fetch('/api/training-submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          teacher_code: teacherCode,
-          assignment_id: assignment.id,
-          attempt_number: 1,
-          teacher_info: {
-            full_name: teacherProfile?.name || teacherCode,
-            center: teacherProfile?.branchCurrent || '',
-            teaching_block: teacherProfile?.programCurrent || '',
-            work_email: user?.email || '',
-          },
-        }),
-      })
-
-      const submissionData = await submissionRes.json()
-      if (!submissionData.success) {
-        toast.error('Không thể bắt đầu bài tập: ' + submissionData.error)
-        return
-      }
-
-      setCurrentAssignment(assignment)
-      setQuestions(questionsData.data)
-      setSubmission(submissionData.data)
-
-      // Load saved answers if this is a continuing submission
-      if (
-        submissionData.existing_answers &&
-        Object.keys(submissionData.existing_answers).length > 0
-      ) {
-        setAnswers(submissionData.existing_answers)
-        toast.success('Đã tải lại bài làm cũ của bạn')
-      } else {
-        setAnswers({})
-      }
-
-      setView('taking')
-
-      // Start timer - logic updated to use server started_at and server_time
-      if (assignment.time_limit_minutes > 0) {
-        let remainingSeconds = assignment.time_limit_minutes * 60
-
-        if (submissionData.data.started_at) {
-          const startTime = new Date(submissionData.data.started_at).getTime()
-
-          // Use server time if available to avoid clock drift, fallback to local
-          const serverNow = submissionData.server_time
-            ? new Date(submissionData.server_time).getTime()
-            : Date.now()
-          const elapsedSeconds = Math.floor((serverNow - startTime) / 1000)
-
-          // Calculate offset for local countdown
-          const clientNow = Date.now()
-          // How much ahead/behind is the client vs server?
-          const clockOffset = clientNow - serverNow // e.g. +5000ms if client is 5s ahead
-
-          remainingSeconds = Math.max(
-            0,
-            assignment.time_limit_minutes * 60 - elapsedSeconds,
-          )
-
-          console.log('[Assignment] Timer init:', {
-            serverStarted: submissionData.data.started_at,
-            serverNow: submissionData.server_time,
-            elapsed: elapsedSeconds,
-            limit: assignment.time_limit_minutes * 60,
-            remaining: remainingSeconds,
-            offset: clockOffset,
-          })
-        }
-
-        setTimeRemaining(remainingSeconds)
-        setTimerActive(remainingSeconds > 0)
-
-        if (remainingSeconds === 0) {
-          // If already expired according to server, submit immediately
-          setTimeout(() => submitAssignment(true), 100)
-        }
-      }
-    } catch (err) {
-      console.error('Error starting assignment:', err)
-      toast.error('Lỗi khi bắt đầu bài tập')
-    }
-  }
+  }, [examAssignments, fetchExamAssignments, nowTs])
 
   // Create debounced save function
   const saveAnswerToDb = async (
@@ -629,7 +818,7 @@ export default function TeacherAssignmentPage() {
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [timerActive, timeRemaining])
+  }, [submitAssignment, timerActive, timeRemaining])
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -655,146 +844,6 @@ export default function TeacherAssignmentPage() {
   }
 
   const hasHtmlMarkup = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value)
-
-  const submitAssignment = async (skipConfirm?: boolean | React.MouseEvent) => {
-    if (!submission) return
-    if (isSubmittingRef.current) return
-
-    const isConfirmed = typeof skipConfirm === 'boolean' ? skipConfirm : false
-
-    const unansweredCount = questions.length - Object.keys(answers).length
-    if (!isConfirmed && unansweredCount > 0) {
-      if (
-        !confirm(
-          `Bạn còn ${unansweredCount} câu chưa trả lời. Bạn có chắc muốn nộp bài?`,
-        )
-      ) {
-        // Scroll to the first unanswered question
-        const firstUnansweredQuestion = questions.find((q) => !answers[q.id])
-        if (firstUnansweredQuestion) {
-          const element = document.getElementById(
-            `question-${firstUnansweredQuestion.id}`,
-          )
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            element.classList.add('ring-2', 'ring-red-500', 'ring-offset-2')
-            setTimeout(
-              () =>
-                element.classList.remove(
-                  'ring-2',
-                  'ring-red-500',
-                  'ring-offset-2',
-                ),
-              2000,
-            )
-            toast('Đã chuyển đến câu hỏi chưa hoàn thành', { icon: '👇' })
-          }
-        }
-        return
-      }
-    }
-
-    try {
-      isSubmittingRef.current = true
-      setIsSubmitting(true)
-      setTimerActive(false)
-
-      // Calculate score synchronously
-      let totalScore = 0
-      console.log(
-        '[Assignment] Starting score calculation for',
-        questions.length,
-        'questions',
-      )
-
-      questions.forEach((question, idx) => {
-        const userAnswer = answers[question.id] || ''
-        const correctAnswer = (question.correct_answer || '')
-          .trim()
-          .toLowerCase()
-        const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer
-        const points = parseFloat(question.points?.toString() || '0')
-        const pointsEarned = isCorrect ? points : 0
-
-        console.log(`[Assignment] Q${idx + 1}:`, {
-          questionId: question.id,
-          points: points,
-          userAnswer: userAnswer,
-          correctAnswer: correctAnswer,
-          isCorrect: isCorrect,
-          pointsEarned: pointsEarned,
-        })
-
-        totalScore += pointsEarned
-      })
-
-      console.log(
-        '[Assignment] Final calculated total score:',
-        totalScore,
-        'type:',
-        typeof totalScore,
-      )
-
-      // Ensure score is a valid number
-      if (
-        isNaN(totalScore) ||
-        totalScore === null ||
-        totalScore === undefined
-      ) {
-        console.error(
-          '[Assignment] Invalid total score calculated:',
-          totalScore,
-        )
-        toast.error('Lỗi: Không thể tính điểm. Vui lòng thử lại.')
-        return
-      }
-
-      // Update submission
-      const isPassed = totalScore >= currentAssignment!.passing_score
-
-      // Prepare answers payload
-      const answersPayload = questions.map((q) => {
-        const userAnswer = answers[q.id] || ''
-        const correctAnswer = (q.correct_answer || '').trim().toLowerCase()
-        const isCorrect = userAnswer.trim().toLowerCase() === correctAnswer
-        const points = parseFloat(q.points?.toString() || '0')
-        const pointsEarned = isCorrect ? points : 0
-
-        return {
-          question_id: q.id,
-          answer_text: userAnswer,
-          is_correct: isCorrect,
-          points_earned: pointsEarned,
-        }
-      })
-
-      const response = await fetch('/api/training-submissions', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: submission.id,
-          action: 'grade',
-          score: totalScore,
-          is_passed: isPassed,
-          answers: answersPayload,
-        }),
-      })
-
-      const data = await response.json()
-      if (data.success) {
-        setSubmission(data.data)
-        setView('result')
-      } else {
-        toast.error('Lỗi khi nộp bài: ' + data.error)
-      }
-    } catch (err) {
-      console.error('Error submitting assignment:', err)
-      toast.error('Lỗi khi nộp bài')
-    } finally {
-      isSubmittingRef.current = false
-      setIsSubmitting(false)
-    }
-  }
 
   const getProgress = () => {
     return Math.round((Object.keys(answers).length / questions.length) * 100)
@@ -881,23 +930,6 @@ export default function TeacherAssignmentPage() {
     return `/user/giaitrinh?assignment_id=${item.id}&subject=${encodeURIComponent(item.subject_code)}&test_date=${encodeURIComponent(item.open_at)}&campus=${encodeURIComponent(item.block_code)}`
   }
 
-  /** Điểm đạt cấu hình trên bộ đề; null = không giới hạn trên UI */
-  function getPassingScore(item: ExamAssignment): number | null {
-    const parsed = Number(item.passing_score)
-    if (!Number.isFinite(parsed) || parsed <= 0) return null
-    return parsed
-  }
-
-  /** Không cấu hình điểm đạt: coi điểm lớn hơn 5 (thang 10) là đạt */
-  const DEFAULT_PASS_MIN_EXCLUSIVE = 5
-
-  function isExamPassed(item: ExamAssignment, score: number | null): boolean {
-    if (score === null) return false
-    const passingScore = getPassingScore(item)
-    if (passingScore !== null) return score >= passingScore
-    return score > DEFAULT_PASS_MIN_EXCLUSIVE
-  }
-
   function formatScoreSummary(
     item: ExamAssignment,
     score: number | null,
@@ -925,6 +957,7 @@ export default function TeacherAssignmentPage() {
     let totalAssigned = 0
     let totalPassed = 0
     let bestExperience = 0
+    let bestExpertiseMonth = ''
     let missingOrPending = 0
     let explanationsApproved = 0
     let explanationsRejected = 0
@@ -986,7 +1019,6 @@ export default function TeacherAssignmentPage() {
     })
 
     let bestMonthAverage = 0
-    let bestExpertiseMonth = ''
     monthlyExpertiseScores.forEach((scores, month) => {
       if (scores.length > 0) {
         const avg = scores.reduce((a, b) => a + b, 0) / scores.length
@@ -1180,20 +1212,6 @@ export default function TeacherAssignmentPage() {
     scoreResultFilter,
   ])
 
-  const currentMonthExams = (() => {
-    const now = new Date()
-    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    return examAssignments
-      .filter((item) => {
-        const date = new Date(item.open_at)
-        const itemMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-        return itemMonth === monthKey
-      })
-      .sort(
-        (a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime(),
-      )
-  })()
-
   // Loading state when auto-starting assignment
   if (startId && view === 'list') {
     const target = assignments.find((a) => a.id.toString() === startId)
@@ -1320,7 +1338,7 @@ export default function TeacherAssignmentPage() {
                         {/* Question Image */}
                         {question.image_url && (
                           <div className="mb-3 md:mb-4 ml-11 md:ml-14">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            { }
                             <img
                               src={question.image_url}
                               alt="Question"
@@ -1367,12 +1385,14 @@ export default function TeacherAssignmentPage() {
 
                                       if (renderAsHtml) {
                                         return (
-                                          <div
-                                            className="prose prose-sm md:prose-base max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
-                                            dangerouslySetInnerHTML={{
-                                              __html: sanitizeHtml(normalizedOption),
-                                            }}
-                                          />
+                                          <>
+                                            <div
+                                              className="prose prose-sm md:prose-base max-w-none flex-1 text-gray-900 [&_.tiptap-image]:inline-block [&_.tiptap-image]:max-w-full [&_img]:h-auto"
+                                              dangerouslySetInnerHTML={{
+                                                __html: sanitizeHtml(normalizedOption),
+                                              }}
+                                            />
+                                          </>
                                         )
                                       }
 
@@ -1799,15 +1819,6 @@ export default function TeacherAssignmentPage() {
     ),
   ).sort((a, b) => b.localeCompare(a))
 
-  const filteredExamAssignments =
-    selectedExamMonth === 'all'
-      ? examAssignments
-      : examAssignments.filter((item) => {
-          const date = new Date(item.open_at)
-          const month = `${date.getMonth() + 1}`.padStart(2, '0')
-          return `${date.getFullYear()}-${month}` === selectedExamMonth
-        })
-
   const formatRegistrationType = (type: 'official' | 'additional') =>
     type === 'official' ? 'Chính thức' : 'Bổ sung'
 
@@ -1846,7 +1857,6 @@ export default function TeacherAssignmentPage() {
   const getExamCountdownInfo = (item: ExamAssignment) => {
     const openMs = new Date(item.open_at).getTime()
     const closeMs = new Date(item.close_at).getTime()
-    const durationMins = item.duration_minutes || 90
 
     if (nowTs < openMs) {
       return {
@@ -1885,8 +1895,8 @@ export default function TeacherAssignmentPage() {
     <PageContainer>
       <div className="max-w-7xl mx-auto assignments-page">
         <style>{`
-          .assignments-page button, 
-          .assignments-page a, 
+          .assignments-page button,
+          .assignments-page a,
           .assignments-page [role="button"],
           .assignments-page select,
           .assignments-page label,
@@ -2419,7 +2429,9 @@ export default function TeacherAssignmentPage() {
                   </label>
                   <select
                     value={scoreTypeFilter}
-                    onChange={(e) => setScoreTypeFilter(e.target.value as any)}
+                    onChange={(e) =>
+                      setScoreTypeFilter(e.target.value as ScoreTypeFilter)
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="all">Tất cả</option>
@@ -2435,7 +2447,9 @@ export default function TeacherAssignmentPage() {
                   <select
                     value={scoreResultFilter}
                     onChange={(e) =>
-                      setScoreResultFilter(e.target.value as any)
+                      setScoreResultFilter(
+                        e.target.value as ScoreResultFilter,
+                      )
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
@@ -2519,8 +2533,6 @@ export default function TeacherAssignmentPage() {
                         <div className="p-4 sm:p-6 pt-2 border-t border-gray-100 animate-tab-enter">
                           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             {group.items.map((item) => {
-                              const now = new Date()
-                              const closeAt = new Date(item.close_at)
                               const {
                                 score: effectiveScore,
                                 isMissedCurrentMonth,

@@ -7,7 +7,7 @@
  */
 
 export async function ensureChuyenSauExamTables(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
   _client?: unknown
 ): Promise<void> {
   // No-op: schema is managed by migrations

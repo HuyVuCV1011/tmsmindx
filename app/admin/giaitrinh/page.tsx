@@ -6,15 +6,14 @@ import Modal from '@/components/Modal';
 import { PageContainer } from '@/components/PageContainer';
 import { SkeletonPage } from '@/components/skeletons';
 import { Tabs } from '@/components/Tabs';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Stepper } from '@/components/ui/stepper';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Stepper, StepItem } from '@/components/ui/stepper';
-import { useAuth } from '@/lib/auth-context';
-import { CheckCircle, Eye, FileText, Search, Filter, XCircle } from 'lucide-react';
-import { useEffect, useState, useMemo } from 'react';
-import Select from 'react-select';
 import { toast } from '@/lib/app-toast';
+import { useAuth } from '@/lib/auth-context';
+import { CheckCircle, FileText, Filter, Search, XCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import Select, { type StylesConfig } from 'react-select';
 
 interface Explanation {
   id: number;
@@ -32,6 +31,25 @@ interface Explanation {
   created_at: string;
   updated_at: string;
 }
+
+type SelectOption = {
+  value: string;
+  label: string;
+};
+
+const selectStyles: StylesConfig<SelectOption, true> = {
+  menuPortal: base => ({ ...base, zIndex: 9999 }),
+  control: (base, state) => ({
+    ...base,
+    borderColor: state.isFocused ? '#a1001f' : '#e2e8f0',
+    boxShadow: state.isFocused ? '0 0 0 3px rgba(161, 0, 31, 0.1)' : 'none',
+    minHeight: '42px',
+    borderRadius: '0.5rem',
+    '&:hover': {
+      borderColor: state.isFocused ? '#a1001f' : '#cbd5e1'
+    }
+  })
+};
 
 export default function AdminGiaiThichPage() {
   const { user } = useAuth();
@@ -261,52 +279,28 @@ export default function AdminGiaiThichPage() {
           </div>
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">Cơ sở</label>
-            <Select 
+            <Select<SelectOption, true>
               isMulti
               options={campusOptions}
               value={selectedCampuses}
-              onChange={(newValue: any) => setFilterCampuses(newValue ? newValue.map((v: any) => v.value) : [])}
+              onChange={newValue => setFilterCampuses(newValue.map(v => v.value))}
               placeholder="Chọn cơ sở..." 
               className="text-sm"
               menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-              styles={{
-                menuPortal: (base: any) => ({ ...base, zIndex: 9999 }),
-                control: (base: any, state: any) => ({
-                  ...base,
-                  borderColor: state.isFocused ? '#a1001f' : '#e2e8f0',
-                  boxShadow: state.isFocused ? '0 0 0 3px rgba(161, 0, 31, 0.1)' : 'none',
-                  minHeight: '42px',
-                  borderRadius: '0.5rem',
-                  '&:hover': {
-                    borderColor: state.isFocused ? '#a1001f' : '#cbd5e1'
-                  }
-                })
-              }}
+              styles={selectStyles}
             />
           </div>
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">Bộ môn</label>
-            <Select 
+            <Select<SelectOption, true>
               isMulti
               options={subjectOptions}
               value={selectedSubjects}
-              onChange={(newValue: any) => setFilterSubjects(newValue ? newValue.map((v: any) => v.value) : [])}
+              onChange={newValue => setFilterSubjects(newValue.map(v => v.value))}
               placeholder="Chọn bộ môn..." 
               className="text-sm"
               menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-              styles={{
-                menuPortal: (base: any) => ({ ...base, zIndex: 9999 }),
-                control: (base: any, state: any) => ({
-                  ...base,
-                  borderColor: state.isFocused ? '#a1001f' : '#e2e8f0',
-                  boxShadow: state.isFocused ? '0 0 0 3px rgba(161, 0, 31, 0.1)' : 'none',
-                  minHeight: '42px',
-                  borderRadius: '0.5rem',
-                  '&:hover': {
-                    borderColor: state.isFocused ? '#a1001f' : '#cbd5e1'
-                  }
-                })
-              }}
+              styles={selectStyles}
             />
           </div>
         </div>

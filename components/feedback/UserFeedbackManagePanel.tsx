@@ -5,24 +5,24 @@ import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { StepItem, Stepper } from '@/components/ui/stepper'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table'
+import { toast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 import {
-  AlertCircle,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  RefreshCcw,
-  X,
+    AlertCircle,
+    CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
+    RefreshCcw,
+    X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { toast } from '@/lib/app-toast'
 
 type FeedbackItem = {
   id: number
@@ -105,8 +105,8 @@ function formatScreenTitle(screenPath?: string | null): string {
     '/user/truyenthong': 'Truyền thông nội bộ',
     '/user/thong-tin-giao-vien': 'Thông tin của tôi',
     '/user/hoat-dong-hang-thang': 'Hoạt động hàng tháng',
-    '/user/xin-nghi-mot-buoi': 'Tạo yêu cầu xin nghỉ',
-    '/user/nhan-lop-1-buoi': 'Danh sách nhận lớp dạy thay',
+    '/user/xin-nghi-mot-buoi': 'Tạo yêu cầu xin nghỉ 1 buổi',
+    '/user/nhan-lop-1-buoi': 'Tiếp nhận xin nghỉ 1 buổi',
     '/user/dao-tao-nang-cao': 'Đào tạo nâng cao',
     '/user/assignments': 'Quản lý kiểm tra',
     '/user/giaitrinh': 'Giải trình điểm kiểm tra',
@@ -194,13 +194,13 @@ function UserFeedbackManagePanelWithOptions({
 
   useEffect(() => {
     loadMyFeedback()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [user?.email])
 
   useEffect(() => {
     if (externalRefreshSignal === undefined) return
     loadMyFeedback()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [externalRefreshSignal])
 
   useEffect(() => {
@@ -450,7 +450,7 @@ function UserFeedbackManagePanelWithOptions({
                         }}
                         className="w-24 h-24 shrink-0 border border-gray-200 rounded-lg overflow-hidden"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        { }
                         <img
                           src={url}
                           alt="feedback-image"
@@ -497,7 +497,7 @@ function UserFeedbackManagePanelWithOptions({
                         }}
                         className="w-24 h-24 shrink-0 border border-emerald-200 rounded-lg overflow-hidden"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        { }
                         <img
                           src={url}
                           alt="admin-image"
@@ -530,7 +530,7 @@ function UserFeedbackManagePanelWithOptions({
               <X className="h-6 w-6" />
             </button>
             <div className="bg-black rounded-xl overflow-hidden border border-white/20">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img
                 src={previewImages[previewIndex]}
                 alt={`feedback-${previewIndex + 1}`}

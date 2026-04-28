@@ -1,28 +1,89 @@
 import { withApiProtection } from '@/lib/api-protection';
+import { requireDatasourceBearer } from '@/lib/datasource-api-auth';
 import pool from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
+type AccessibleCenter = {
+  id: number;
+  full_name: string;
+  short_code: string | null;
+};
+
+function normalizeCenterToken(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function collectCenterTokens(centers: AccessibleCenter[]): string[] {
+  return Array.from(
+    new Set(
+      centers
+        .flatMap((center) => [center.full_name, center.short_code ?? ''])
+        .map(normalizeCenterToken)
+        .filter(Boolean),
+    ),
+  );
+}
+
+function parseRequestedCenters(raw: string | null): string[] {
+  if (!raw?.trim()) return [];
+  return Array.from(
+    new Set(
+      raw
+        .split(',')
+        .map((value) => normalizeCenterToken(value))
+        .filter(Boolean),
+    ),
+  );
+}
+
 export const GET = withApiProtection(async (request: NextRequest) => {
   try {
+    const auth = await requireDatasourceBearer(request);
+    if (!auth.ok) return auth.response;
+
     const searchParams = request.nextUrl.searchParams;
-    // Multi-center: comma-separated list e.g. "CS1,CS2"
     const centersParam = searchParams.get('centers');
     const teacherCode = searchParams.get('teacher_code');
     const block = searchParams.get('block');
 
-    console.log('[Teacher Stats API] Fetching teacher statistics with filters:', { centersParam, teacherCode, block });
+    const requestedCenters = parseRequestedCenters(centersParam);
+    const accessibleCenters = auth.privileged
+      ? []
+      : collectCenterTokens(auth.accessibleCenters);
+    const effectiveCenters = auth.privileged
+      ? requestedCenters
+      : requestedCenters.length > 0
+        ? requestedCenters.filter((center) => accessibleCenters.includes(center))
+        : accessibleCenters;
 
-    const params: any[] = [];
+    if (!auth.privileged && effectiveCenters.length === 0) {
+      return NextResponse.json({
+        success: true,
+        data: [],
+        count: 0,
+        active_videos: [],
+      });
+    }
+
+    const params: unknown[] = [];
     const conditions: string[] = [];
     let paramIdx = 1;
 
-    if (centersParam) {
-      const centerList = centersParam.split(',').map(c => c.trim()).filter(Boolean);
-      if (centerList.length > 0) {
-        conditions.push(`t.main_centre = ANY($${paramIdx}::text[])`);
-        params.push(centerList);
-        paramIdx++;
-      }
+    if (!auth.privileged) {
+      conditions.push(
+        `EXISTS (
+          SELECT 1
+          FROM unnest(
+            string_to_array(
+              regexp_replace(COALESCE(t.main_centre, t."Main centre", t.centers, ts.center, ''), '[\\n;|]+', ',', 'g'),
+              ','
+            )
+          ) AS teacher_center
+          WHERE LOWER(TRIM(teacher_center)) = ANY($${paramIdx}::text[])
+        )`,
+      );
+      params.push(effectiveCenters);
+      paramIdx++;
     }
 
     if (teacherCode) {
@@ -98,15 +159,13 @@ export const GET = withApiProtection(async (request: NextRequest) => {
 
     const result = await pool.query(query, params);
 
-    // Fetch active videos and collapse by video_group_id (representative per group)
     const videosResult = await pool.query(
       `SELECT id, title, created_at, video_group_id, chunk_index
        FROM training_videos
        WHERE status = 'active'
-       ORDER BY COALESCE(video_group_id, CAST(id AS TEXT)) ASC, COALESCE(chunk_index, 0) ASC, created_at ASC`
+       ORDER BY COALESCE(video_group_id, CAST(id AS TEXT)) ASC, COALESCE(chunk_index, 0) ASC, created_at ASC`,
     );
 
-    // Deduplicate by video_group_id: pick the first row (lowest chunk_index or earliest created) as representative
     const groupMap = new Map<string, { id: number; title: string; created_at: string }>();
     for (const v of videosResult.rows as Array<{ id: number; title: string; created_at: string; video_group_id: string | null }>) {
       const key = v.video_group_id ?? `single-${v.id}`;
@@ -144,13 +203,13 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     });
   } catch (error) {
     console.error('[Teacher Stats API] Error:', error);
-    
+
     return NextResponse.json(
-      { 
+      {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 });
