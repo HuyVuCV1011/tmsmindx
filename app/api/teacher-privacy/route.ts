@@ -40,7 +40,7 @@ async function handleGet(req: NextRequest) {
             result = await pool.query(
                 `INSERT INTO teacher_privacy_settings 
                  (teacher_email, show_birthday, show_on_public_list, show_phone, show_personal_email)
-                 VALUES ($1, true, true, false, false)
+                 VALUES ($1, false, true, false, false)
                  RETURNING *`,
                 [teacherEmail]
             )
@@ -104,7 +104,7 @@ async function handlePut(req: NextRequest) {
              RETURNING *`,
             [
                 teacher_email,
-                show_birthday ?? true,
+                show_birthday ?? false,
                 show_on_public_list ?? true,
                 show_phone ?? false,
                 show_personal_email ?? false,

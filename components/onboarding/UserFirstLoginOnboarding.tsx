@@ -157,7 +157,7 @@ const ALL_TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'quanlyphanho',
-    title: 'Quản lý phản hồi',
+    title: 'Trung tâm phản hồi',
     description:
       'Nhận thông tin phản hồi, góp ý hoặc báo cáo sự cố đến đội vận hành. Mọi ý kiến của bạn đều được ghi nhận và xử lý.',
     target: 'tour-nav-quanlyphanho',

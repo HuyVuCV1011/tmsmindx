@@ -11,7 +11,7 @@ export default function QuanLyPhanHoiPage() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <PageHeader
-        title="Quản Lý Phản Hồi"
+        title="Trung Tâm Phản Hồi"
         description="Theo dõi toàn bộ ý kiến phản hồi bạn đã gửi và tiến trình xử lý"
         actions={
           <button
