@@ -261,13 +261,15 @@ export function Sidebar() {
       ],
     },
     {
-      href: '/user/quy-trinh-quy-dinh',
-      label: 'Quy trình & Quy định',
+      label: 'Tài liệu nội bộ',
       icon: BookOpen,
+      submenu: [
+        { href: '/user/quy-trinh-quy-dinh', label: 'Quy trình & Quy định' },
+      ],
     },
     {
       href: '/user/quan-ly-phan-hoi',
-      label: 'Quản lý phản hồi',
+      label: 'Trung tâm phản hồi',
       icon: FileText,
     },
   ]

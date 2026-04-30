@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS teacher_privacy_settings (
     id SERIAL PRIMARY KEY,
     teacher_email VARCHAR(255) NOT NULL UNIQUE,
-    show_birthday BOOLEAN DEFAULT true,
+    show_birthday BOOLEAN DEFAULT false,
     show_on_public_list BOOLEAN DEFAULT true,
     show_phone BOOLEAN DEFAULT false,
     show_personal_email BOOLEAN DEFAULT false,
