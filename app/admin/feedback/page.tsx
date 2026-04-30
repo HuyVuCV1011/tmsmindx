@@ -109,7 +109,7 @@ function formatScreenTitle(screenPath?: string | null): string {
     '/user/assignments': 'Quản lý kiểm tra',
     '/user/giaitrinh': 'Giải trình điểm kiểm tra',
     '/user/quy-trinh-quy-dinh': 'Quy trình & Quy định',
-    '/user/quan-ly-phan-hoi': 'Quản lý phản hồi',
+    '/user/quan-ly-phan-hoi': 'Trung tâm phản hồi',
   }
 
   if (knownMap[screenPath]) return knownMap[screenPath]
@@ -311,7 +311,7 @@ export default function AdminFeedbackPage() {
 
   return (
     <PageContainer
-      title="Quản Lý Phản Hồi"
+      title="Trung Tâm Phản Hồi"
       description="Theo dõi, phân loại và phản hồi các ý kiến từ người dùng"
       maxWidth="2xl"
       headerActions={

@@ -111,7 +111,7 @@ function formatScreenTitle(screenPath?: string | null): string {
     '/user/assignments': 'Quản lý kiểm tra',
     '/user/giaitrinh': 'Giải trình điểm kiểm tra',
     '/user/quy-trinh-quy-dinh': 'Quy trình & Quy định',
-    '/user/quan-ly-phan-hoi': 'Quản lý phản hồi',
+    '/user/quan-ly-phan-hoi': 'Trung tâm phản hồi',
   }
 
   if (knownMap[screenPath]) return knownMap[screenPath]

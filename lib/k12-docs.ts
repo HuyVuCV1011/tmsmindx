@@ -1,4 +1,3 @@
-import { promises as fs } from "fs";
 import pool from "@/lib/db";
 import { type PoolClient } from 'pg';
 import path from "path";
@@ -75,14 +74,15 @@ async function ensureK12Schema(client: PoolClient) {
 	k12SchemaEnsured = true;
 }
 
-const DOCS_ROOT = path.join(
-	process.cwd(),
-	"app",
-	"api",
-	"gitbook_markdown",
-	"markdown_files",
-	"quy-trinh-quy-dinh-danh-cho-giao-vien"
-);
+// DOCS_ROOT không còn được sử dụng vì đã chuyển sang database
+// const DOCS_ROOT = path.join(
+// 	process.cwd(),
+// 	"app",
+// 	"api",
+// 	"gitbook_markdown",
+// 	"markdown_files",
+// 	"quy-trinh-quy-dinh-danh-cho-giao-vien"
+// );
 
 function slugify(input: string) {
 	return input
@@ -194,60 +194,61 @@ function extractHeadings(content: string) {
 	return result;
 }
 
-async function walkDirectory(
-	absoluteDir: string,
-	relativeDir: string,
-	docs: K12DocItem[]
-): Promise<K12DocNode[]> {
-	const entries = await fs.readdir(absoluteDir, { withFileTypes: true });
-	const sorted = entries.sort((a, b) => a.name.localeCompare(b.name, "vi"));
-	const nodes: K12DocNode[] = [];
-
-	for (const entry of sorted) {
-		const absolutePath = path.join(absoluteDir, entry.name);
-		const relativePath = path.join(relativeDir, entry.name);
-
-		if (entry.isDirectory()) {
-			const children = await walkDirectory(absolutePath, relativePath, docs);
-			if (children.length > 0) {
-				nodes.push({
-					id: relativePath.replace(/\\/g, "/"),
-					title: prettifyName(entry.name),
-					children,
-				});
-			}
-			continue;
-		}
-
-		if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".md")) {
-			continue;
-		}
-
-		const content = await fs.readFile(absolutePath, "utf8");
-		const normalizedRelative = relativePath.replace(/\\/g, "/");
-		const slug = normalizedRelative.replace(/\.md$/i, "");
-		const fallbackTitle = prettifyName(entry.name) || entry.name;
-		const title = extractTitle(content, fallbackTitle);
-
-		docs.push({
-			id: docs.length + 1,
-			slug,
-			title,
-			relativePath: normalizedRelative,
-			content,
-			sortOrder: docs.length,
-			headings: extractHeadings(content),
-		});
-
-		nodes.push({
-			id: normalizedRelative,
-			title,
-			slug,
-		});
-	}
-
-	return nodes;
-}
+// walkDirectory không còn được sử dụng vì đã chuyển sang database
+// async function walkDirectory(
+// 	absoluteDir: string,
+// 	relativeDir: string,
+// 	docs: K12DocItem[]
+// ): Promise<K12DocNode[]> {
+// 	const entries = await fs.readdir(absoluteDir, { withFileTypes: true });
+// 	const sorted = entries.sort((a, b) => a.name.localeCompare(b.name, "vi"));
+// 	const nodes: K12DocNode[] = [];
+//
+// 	for (const entry of sorted) {
+// 		const absolutePath = path.join(absoluteDir, entry.name);
+// 		const relativePath = path.join(relativeDir, entry.name);
+//
+// 		if (entry.isDirectory()) {
+// 			const children = await walkDirectory(absolutePath, relativePath, docs);
+// 			if (children.length > 0) {
+// 				nodes.push({
+// 					id: relativePath.replace(/\\/g, "/"),
+// 					title: prettifyName(entry.name),
+// 					children,
+// 				});
+// 			}
+// 			continue;
+// 		}
+//
+// 		if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".md")) {
+// 			continue;
+// 		}
+//
+// 		const content = await fs.readFile(absolutePath, "utf8");
+// 		const normalizedRelative = relativePath.replace(/\\/g, "/");
+// 		const slug = normalizedRelative.replace(/\.md$/i, "");
+// 		const fallbackTitle = prettifyName(entry.name) || entry.name;
+// 		const title = extractTitle(content, fallbackTitle);
+//
+// 		docs.push({
+// 			id: docs.length + 1,
+// 			slug,
+// 			title,
+// 			relativePath: normalizedRelative,
+// 			content,
+// 			sortOrder: docs.length,
+// 			headings: extractHeadings(content),
+// 		});
+//
+// 		nodes.push({
+// 			id: normalizedRelative,
+// 			title,
+// 			slug,
+// 		});
+// 	}
+//
+// 	return nodes;
+// }
 
 function buildTreeFromRelativePaths(documents: K12DocItem[]): K12DocNode[] {
 	const root: K12DocNode[] = [];
@@ -514,40 +515,40 @@ function buildTreeFromRelativePaths(documents: K12DocItem[]): K12DocNode[] {
 	return uniqueRoot;
 }
 
-async function seedK12DocsFromFilesystem() {
-	const docs: K12DocItem[] = [];
-	await walkDirectory(DOCS_ROOT, "", docs);
-
-	if (docs.length === 0) {
-		return;
-	}
-
-	const client = await pool.connect();
-	try {
-		await client.query("BEGIN");
-
-		for (let i = 0; i < docs.length; i++) {
-			const doc = docs[i];
-			await client.query(
-				`INSERT INTO k12_documents (slug, title, relative_path, content, status, sort_order, created_by_email, updated_by_email)
-				 VALUES ($1, $2, $3, $4, 'published', $5, 'system', 'system')
-				 ON CONFLICT (slug) DO NOTHING`,
-				[doc.slug, doc.title, doc.relativePath, doc.content, i]
-			);
-		}
-
-		await client.query("COMMIT");
-	} catch (error) {
-		await client.query("ROLLBACK");
-		throw error;
-	} finally {
-		client.release();
-	}
-}
+// seedK12DocsFromFilesystem không còn được sử dụng vì đã chuyển sang database
+// async function seedK12DocsFromFilesystem() {
+// 	const docs: K12DocItem[] = [];
+// 	await walkDirectory(DOCS_ROOT, "", docs);
+//
+// 	if (docs.length === 0) {
+// 		return;
+// 	}
+//
+// 	const client = await pool.connect();
+// 	try {
+// 		await client.query("BEGIN");
+//
+// 		for (let i = 0; i < docs.length; i++) {
+// 			const doc = docs[i];
+// 			await client.query(
+// 				`INSERT INTO k12_documents (slug, title, relative_path, content, status, sort_order, created_by_email, updated_by_email)
+// 				 VALUES ($1, $2, $3, $4, 'published', $5, 'system', 'system')
+// 				 ON CONFLICT (slug) DO NOTHING`,
+// 				[doc.slug, doc.title, doc.relativePath, doc.content, i]
+// 			);
+// 		}
+//
+// 		await client.query("COMMIT");
+// 	} catch (error) {
+// 		await client.query("ROLLBACK");
+// 		throw error;
+// 	} finally {
+// 		client.release();
+// 	}
+// }
 
 async function loadK12DocsFromDatabase(includeDraft = false): Promise<K12DocsPayload | null> {
 	const client = await pool.connect();
-	let releasedEarly = false;
 	try {
 		// Dùng client đang giữ — tránh lấy connection thứ 2 từ pool (gây timeout khi pool nhỏ)
 		await ensureK12Schema(client);
@@ -565,10 +566,8 @@ async function loadK12DocsFromDatabase(includeDraft = false): Promise<K12DocsPay
 		);
 
 		if (countResult.rows[0]?.count === 0) {
-			client.release();
-			releasedEarly = true;
-			await seedK12DocsFromFilesystem();
-			return await loadK12DocsFromDatabase();
+			// Không có dữ liệu trong database
+			return null;
 		}
 
 		const result = await client.query<K12DocumentRow>(
@@ -578,44 +577,29 @@ async function loadK12DocsFromDatabase(includeDraft = false): Promise<K12DocsPay
 			 ORDER BY sort_order ASC, title ASC`
 		);
 
-		const dbByRelativePath = new Map<string, K12DocumentRow>();
-		for (const row of result.rows) {
-			dbByRelativePath.set(normalizeRelativePath(row.relative_path), row);
-		}
-
-		const filesystemDocuments: K12DocItem[] = [];
-		await walkDirectory(DOCS_ROOT, "", filesystemDocuments);
-
-		const fsByRelativePath = new Map<string, K12DocItem>();
-		for (const fsDoc of filesystemDocuments) {
-			fsByRelativePath.set(normalizeRelativePath(fsDoc.relativePath), fsDoc);
-		}
-
+		// Chỉ sử dụng dữ liệu từ database, không đọc filesystem
 		const documents: K12DocItem[] = result.rows.map((row) => {
 			const normalizedPath = normalizeRelativePath(row.relative_path);
-			const fsDoc = fsByRelativePath.get(normalizedPath);
-			const mergedContent = row.content || fsDoc?.content || "";
+			const mergedContent = row.content || "";
 
 			return {
 				id: row.id,
 				slug: row.slug,
-				title: row.title || fsDoc?.title || prettifyName(path.basename(normalizedPath)),
+				title: row.title || prettifyName(path.basename(normalizedPath)),
 				relativePath: normalizedPath,
 				content: mergedContent,
 				sortOrder: row.sort_order,
-				type: row.type || fsDoc?.type,
-				sectionId: row.section_id ?? fsDoc?.sectionId ?? null,
-				parentId: row.parent_id ?? fsDoc?.parentId ?? null,
-				topic: (row.topic || fsDoc?.topic) ?? undefined,
-				excerpt: (row.excerpt || fsDoc?.excerpt) ?? undefined,
-				coverImageUrl: (row.cover_image_url || fsDoc?.coverImageUrl) ?? undefined,
+				type: row.type,
+				sectionId: row.section_id ?? null,
+				parentId: row.parent_id ?? null,
+				topic: row.topic ?? undefined,
+				excerpt: row.excerpt ?? undefined,
+				coverImageUrl: row.cover_image_url ?? undefined,
 				headings: extractHeadings(mergedContent),
 			};
 		});
 
-		// When DB is available, treat it as the single source of truth for menu structure.
-		// This prevents stale filesystem files from creating duplicated sidebar nodes.
-
+		// Database là nguồn dữ liệu duy nhất cho cấu trúc menu
 		if (documents.length === 0) {
 			return null;
 		}
@@ -633,9 +617,7 @@ async function loadK12DocsFromDatabase(includeDraft = false): Promise<K12DocsPay
 			defaultSlug: defaultDoc?.slug || "",
 		};
 	} finally {
-		if (!releasedEarly) {
-			client.release();
-		}
+		client.release();
 	}
 }
 
@@ -649,25 +631,15 @@ const MEM_CACHE_TTL_MS = 5 * 60 * 1000; // 5 phút
 /** Phiên bản được cache bởi Next.js (persist qua requests, revalidate 5 phút) */
 const loadK12DocsCached = unstable_cache(
 	async (includeDraft: boolean): Promise<K12DocsPayload> => {
-		try {
-			const dbDocs = await loadK12DocsFromDatabase(includeDraft);
-			if (dbDocs) return dbDocs;
-		} catch (error) {
-			console.error('Failed loading K12 docs from database, fallback to filesystem:', error);
-		}
+		const dbDocs = await loadK12DocsFromDatabase(includeDraft);
+		if (dbDocs) return dbDocs;
 
-		const documents: K12DocItem[] = [];
-		const tree = await walkDirectory(DOCS_ROOT, '', documents);
-		const defaultDoc =
-			documents.find((doc) => doc.slug.endsWith('/index')) ||
-			documents.find((doc) => doc.slug === 'index') ||
-			documents[0];
-
+		// Nếu không có dữ liệu trong database, trả về payload rỗng
 		return {
 			rootTitle: 'Quy Trình, Quy Định K12 Teaching',
-			tree,
-			documents,
-			defaultSlug: defaultDoc?.slug || '',
+			tree: [],
+			documents: [],
+			defaultSlug: '',
 		};
 	},
 	['k12-docs-published'],
@@ -677,23 +649,15 @@ const loadK12DocsCached = unstable_cache(
 /** Cache riêng cho draft (admin) — revalidate 60s */
 const loadK12DocsDraftCached = unstable_cache(
 	async (): Promise<K12DocsPayload> => {
-		try {
-			const dbDocs = await loadK12DocsFromDatabase(true);
-			if (dbDocs) return dbDocs;
-		} catch (error) {
-			console.error('Failed loading K12 docs (draft) from database, fallback to filesystem:', error);
-		}
-		const documents: K12DocItem[] = [];
-		const tree = await walkDirectory(DOCS_ROOT, '', documents);
-		const defaultDoc =
-			documents.find((doc) => doc.slug.endsWith('/index')) ||
-			documents.find((doc) => doc.slug === 'index') ||
-			documents[0];
+		const dbDocs = await loadK12DocsFromDatabase(true);
+		if (dbDocs) return dbDocs;
+
+		// Nếu không có dữ liệu trong database, trả về payload rỗng
 		return {
 			rootTitle: 'Quy Trình, Quy Định K12 Teaching',
-			tree,
-			documents,
-			defaultSlug: defaultDoc?.slug || '',
+			tree: [],
+			documents: [],
+			defaultSlug: '',
 		};
 	},
 	['k12-docs-draft'],

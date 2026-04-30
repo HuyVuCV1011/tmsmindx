@@ -41,7 +41,7 @@ const FEEDBACK_PAGE_OPTIONS = [
   { path: '/user/assignments', title: 'Quản lý kiểm tra' },
   { path: '/user/giaitrinh', title: 'Giải trình điểm kiểm tra' },
   { path: '/user/quy-trinh-quy-dinh', title: 'Quy trình & Quy định' },
-  { path: '/user/quan-ly-phan-hoi', title: 'Quản lý phản hồi' },
+  { path: '/user/quan-ly-phan-hoi', title: 'Trung tâm phản hồi' },
 ].filter((o) => !isTempHiddenUserRoute(o.path))
 
 const getFallbackPageTitle = (path: string) => {
