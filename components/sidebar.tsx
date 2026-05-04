@@ -5,21 +5,21 @@ import { useSidebar } from '@/lib/sidebar-context'
 import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import { cn } from '@/lib/utils'
 import {
-    BarChart3,
-    BookOpen,
-    CalendarDays,
-    ChevronDown,
-    DollarSign,
-    FileText,
-    GraduationCap,
-    Home,
-    LogOut,
-    Megaphone,
-    Menu,
-    Settings,
-    Sparkles,
-    Users,
-    X,
+  BarChart3,
+  BookOpen,
+  CalendarDays,
+  ChevronDown,
+  DollarSign,
+  FileText,
+  GraduationCap,
+  Home,
+  LogOut,
+  Megaphone,
+  Menu,
+  Settings,
+  Sparkles,
+  Users,
+  X,
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -243,9 +243,7 @@ export function Sidebar() {
       icon: CalendarDays,
       submenu: [
         { href: '/user/hoat-dong-hang-thang', label: 'Hoạt động hàng tháng' },
-        { href: '/user/dang-ky-lich-lam-viec', label: 'Đăng ký lịch làm việc' },
-        { href: '/user/xin-nghi-mot-buoi', label: 'Tạo yêu cầu xin nghỉ 1 buổi' },
-        { href: '/user/nhan-lop-1-buoi', label: 'Tiếp nhận xin nghỉ 1 buổi' },
+        { href: '/user/lich-cua-toi', label: 'Lịch cá nhân' },
       ].filter((item) => !isTempHiddenUserRoute(item.href)),
     },
     {
@@ -334,8 +332,8 @@ export function Sidebar() {
 
     const effectivePermissions = hasAnyK12Access
       ? Array.from(
-          new Set([...permissions, '/admin/page2', '/admin/page2/manage']),
-        )
+        new Set([...permissions, '/admin/page2', '/admin/page2/manage']),
+      )
       : permissions
 
     const roleCodes = (user.userRoles || []).map((code) =>
@@ -726,23 +724,23 @@ export function Sidebar() {
                                 'Quy Trình, Quy Định K12 Teaching'
                               const nestedItems = isK12PolicyGroup
                                 ? (() => {
-                                    const current = Array.isArray(
-                                      subItem.submenu,
-                                    )
-                                      ? [...subItem.submenu]
-                                      : []
-                                    const hasManageItem = current.some(
-                                      (entry: any) =>
-                                        entry?.href === '/admin/page2/manage',
-                                    )
-                                    if (!hasManageItem) {
-                                      current.push({
-                                        href: '/admin/page2/manage',
-                                        label: 'Quản Lý Tài Liệu',
-                                      })
-                                    }
-                                    return current
-                                  })()
+                                  const current = Array.isArray(
+                                    subItem.submenu,
+                                  )
+                                    ? [...subItem.submenu]
+                                    : []
+                                  const hasManageItem = current.some(
+                                    (entry: any) =>
+                                      entry?.href === '/admin/page2/manage',
+                                  )
+                                  if (!hasManageItem) {
+                                    current.push({
+                                      href: '/admin/page2/manage',
+                                      label: 'Quản Lý Tài Liệu',
+                                    })
+                                  }
+                                  return current
+                                })()
                                 : subItem.submenu
 
                               return (
@@ -754,8 +752,8 @@ export function Sidebar() {
                                     className={cn(
                                       'px-2 py-1 text-[11px] font-semibold tracking-wide text-gray-500',
                                       subItem.label !==
-                                        'Kiểm Tra Chuyên Môn/Trải Nghiệm' &&
-                                        'uppercase',
+                                      'Kiểm Tra Chuyên Môn/Trải Nghiệm' &&
+                                      'uppercase',
                                     )}
                                   >
                                     {toTitleCase(subItem.label)}
