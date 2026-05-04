@@ -1,7 +1,7 @@
 "use client";
 
 import { Card } from "@/components/Card";
-import Modal from "@/components/Modal";
+import { Modal } from "@/components/ui/modal";
 import { PageContainer } from "@/components/PageContainer";
 import { SkeletonCard } from "@/components/skeletons";
 import { cn } from "@/lib/utils";

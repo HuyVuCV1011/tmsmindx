@@ -1,7 +1,7 @@
 "use client";
 
 import { Card } from "@/components/Card";
-import Modal from "@/components/Modal";
+import { Modal } from "@/components/ui/modal";
 import { PageContainer } from "@/components/PageContainer";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, ListChecks, PlusCircle, Shuffle, SquarePen, Star, Trash2 } from "lucide-react";

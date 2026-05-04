@@ -6,6 +6,7 @@ import PostCard from '@/components/post-card'
 import PostContentRenderer from '@/components/PostContentRenderer'
 import { PostDetailSkeleton } from '@/components/skeletons'
 import { Button } from '@/components/ui/button'
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout'
 import { Angry, ArrowLeft, Calendar, Check, Eye, FileText, Frown, Heart, Laugh, Share2, ThumbsUp } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, usePathname } from 'next/navigation'
@@ -286,21 +287,25 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
 
     if (loading) return <PostDetailSkeleton />
     if (!post) return (
-        <div className="min-h-screen flex items-center justify-center animate-in fade-in zoom-in duration-500">
-            <div className="text-center">
-                <div className="bg-muted p-6 rounded-full mb-6 inline-block">
-                    <FileText className="w-12 h-12 text-muted-foreground" />
+        <PageLayout>
+            <PageLayoutContent>
+                <div className="flex items-center justify-center animate-in fade-in zoom-in duration-500 py-20">
+                    <div className="text-center">
+                        <div className="bg-muted p-6 rounded-full mb-6 inline-block">
+                            <FileText className="w-12 h-12 text-muted-foreground" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-foreground mb-2">Không tìm thấy bài viết</h3>
+                        <p className="text-muted-foreground mb-6">Bài viết này không tồn tại hoặc đã bị xóa.</p>
+                        <Link href={backHref}>
+                            <Button variant="default">
+                                <ArrowLeft className="w-4 h-4 mr-2" />
+                                Quay lại
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
-                <h3 className="text-2xl font-bold text-foreground mb-2">Không tìm thấy bài viết</h3>
-                <p className="text-muted-foreground mb-6">Bài viết này không tồn tại hoặc đã bị xóa.</p>
-                <Link href={backHref}>
-                    <Button variant="default">
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Quay lại
-                    </Button>
-                </Link>
-            </div>
-        </div>
+            </PageLayoutContent>
+        </PageLayout>
     )
 
     const publishDate = new Date(post.published_at).toLocaleDateString('vi-VN', {
@@ -321,18 +326,18 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
     }
 
     return (
-        <div>
-            {/* Nút quay lại — hiển thị cho cả user và admin */}
-            <div className="max-w-7xl mx-auto px-4 lg:px-6 pt-4 pb-2">
-                <Link href={backHref}>
-                    <Button variant="ghost" size="sm" className="gap-2 hover:bg-gray-100 transition-all hover:-translate-x-0.5 text-gray-600">
-                        <ArrowLeft className="w-4 h-4" />
-                        Quay lại
-                    </Button>
-                </Link>
-            </div>
+        <PageLayout maxWidth="7xl" padding="md">
+            <PageLayoutContent spacing="md">
+                {/* Nút quay lại — hiển thị cho cả user và admin */}
+                <div className="pb-2">
+                    <Link href={backHref}>
+                        <Button variant="ghost" size="sm" className="gap-2 hover:bg-gray-100 transition-all hover:-translate-x-0.5 text-gray-600">
+                            <ArrowLeft className="w-4 h-4" />
+                            Quay lại
+                        </Button>
+                    </Link>
+                </div>
 
-            <main className="mt-1 max-w-7xl mx-auto px-4 lg:px-6">
                 <div className="relative w-full rounded-xl overflow-hidden mb-5 shadow-lg" style={{ height: 'clamp(200px, 40vw, calc(var(--spacing) * 130))' }}>
                     <CroppedImage
                         src={post.featured_image || '/placeholder.svg'}
@@ -645,7 +650,7 @@ export function TruyenThongPostDetailView({ mode }: TruyenThongPostDetailViewPro
                         </div>
                     </div>
                 </section>
-            </main>
-        </div>
+            </PageLayoutContent>
+        </PageLayout>
     )
 }

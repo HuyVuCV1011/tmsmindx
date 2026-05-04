@@ -1,8 +1,8 @@
 'use client'
 
-import Modal from '@/components/Modal'
+import { Modal } from '@/components/ui/modal'
 import { Tabs } from '@/components/Tabs'
-import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { StepItem, Stepper } from '@/components/ui/stepper'
@@ -50,7 +50,7 @@ interface LeaveRequest {
   updated_at?: string
 }
 
-type StatusVariant = 'warning' | 'info' | 'success' | 'destructive'
+type StatusVariant = 'warning' | 'info' | 'success' | 'danger'
 
 function getWorkflowSteps(status: LeaveRequest['status']): StepItem[] {
   const step1: StepItem = {
@@ -100,7 +100,7 @@ function getStatusMeta(status: LeaveRequest['status']): {
     case 'substitute_confirmed':
       return { label: 'GV thay đã xác nhận', variant: 'success' }
     case 'rejected':
-      return { label: 'Đã từ chối', variant: 'destructive' }
+      return { label: 'Đã từ chối', variant: 'danger' }
     default:
       return { label: status, variant: 'info' }
   }
@@ -361,22 +361,7 @@ export default function AdminXinNghiMotBuoiPage() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto max-w-7xl space-y-4">
-          <div className="h-10 w-72 animate-pulse rounded bg-gray-200" />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
-            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
-            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
-            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
-          </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <TableSkeleton rows={6} columns={6} />
-          </div>
-        </div>
-      </div>
-    )
+    return <PageSkeleton variant="table" itemCount={8} showHeader={true} />
   }
 
   return (

@@ -1,6 +1,7 @@
 'use client'
 
 import { PageContainer } from '@/components/PageContainer'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth-context'
 import {
@@ -335,6 +336,13 @@ export default function TeacherProfilePage() {
   }
 
   if (!user) return null
+
+  // Show skeleton while loading data
+  const isLoading = !certificatesData || !privacyData || !rawTeacherData
+
+  if (isLoading) {
+    return <PageSkeleton variant="form" itemCount={8} showHeader={true} />
+  }
 
   return (
     <PageContainer padding="lg">

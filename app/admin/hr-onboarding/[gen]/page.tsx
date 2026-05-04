@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { PageContainer } from '@/components/PageContainer'
+import { Button } from '@/components/ui/button'
 import { toast } from '@/lib/app-toast'
 import { ArrowLeft, Check, X, Save, UserCheck, UserX, UserMinus, Plus, Calendar } from 'lucide-react'
 import Link from 'next/link'
@@ -211,25 +212,27 @@ export default function GenDetailPage() {
           </Link>
           <div className="flex items-center gap-3">
             {availableSessionNumbers.length > 0 && (
-              <button
+              <Button
                 onClick={() => {
                   setSessionForm(f => ({ ...f, session_number: availableSessionNumbers[0] }))
                   setShowSessionForm(true)
                 }}
-                className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+                variant="outline"
               >
-                <Plus className="w-4 h-4" /> Thêm buổi training
-              </button>
+                <Plus className="w-4 h-4 mr-2" />
+                Thêm buổi training
+              </Button>
             )}
             {edits.size > 0 && (
-              <button
+              <Button
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+                loading={saving}
+                variant="default"
               >
-                <Save className="w-4 h-4" />
-                {saving ? 'Đang lưu...' : `Lưu ${edits.size} thay đổi`}
-              </button>
+                <Save className="w-4 h-4 mr-2" />
+                Lưu {edits.size} thay đổi
+              </Button>
             )}
           </div>
         </div>
@@ -284,19 +287,20 @@ export default function GenDetailPage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <button
+              <Button
                 onClick={handleCreateSession}
                 disabled={savingSession}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                loading={savingSession}
+                variant="default"
               >
-                {savingSession ? 'Đang tạo...' : 'Tạo buổi training'}
-              </button>
-              <button
+                Tạo buổi training
+              </Button>
+              <Button
                 onClick={() => setShowSessionForm(false)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+                variant="outline"
               >
                 Huỷ
-              </button>
+              </Button>
             </div>
           </div>
         )}

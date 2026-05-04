@@ -2,7 +2,7 @@
 
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
-import Modal from '@/components/Modal';
+import { Modal } from '@/components/ui/modal';
 import { PageContainer } from '@/components/PageContainer';
 import { SkeletonPage } from '@/components/skeletons';
 import { Tabs } from '@/components/Tabs';

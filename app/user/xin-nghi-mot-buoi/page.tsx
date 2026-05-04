@@ -1,11 +1,12 @@
 'use client'
 
-import Modal from '@/components/Modal'
+import { Modal } from '@/components/ui/modal'
 import { PageHeader } from '@/components/PageHeader'
-import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { StepItem, Stepper } from '@/components/ui/stepper'
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout'
 import {
     Table,
     TableBody,
@@ -60,7 +61,7 @@ interface LeaveRequest {
   updated_at: string
 }
 
-type StatusVariant = 'warning' | 'info' | 'success' | 'destructive'
+type StatusVariant = 'warning' | 'info' | 'success' | 'danger'
 
 const STORAGE_KEY = 'teacher_leave_request_auto_fill_data'
 const NORTH_CAMPUS_KEYWORDS = [
@@ -145,7 +146,7 @@ function getStatusMeta(status: LeaveRequest['status']): {
     case 'substitute_confirmed':
       return { label: 'GV thay đã xác nhận', variant: 'success' }
     case 'rejected':
-      return { label: 'Từ chối', variant: 'destructive' }
+      return { label: 'Từ chối', variant: 'danger' }
     default:
       return { label: status, variant: 'info' }
   }
@@ -686,27 +687,13 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-white p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto max-w-7xl space-y-4">
-          <div className="h-10 w-72 animate-pulse rounded bg-gray-200" />
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
-            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
-            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
-            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
-          </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <TableSkeleton rows={6} columns={5} />
-          </div>
-        </div>
-      </div>
-    )
+    return <PageSkeleton variant="table" itemCount={8} showHeader={true} />
   }
 
   return (
-    <div className="min-h-screen bg-white p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-7xl space-y-5">
+    <>
+    <PageLayout>
+      <PageLayoutContent spacing="lg">
         <PageHeader
           title="Xin Nghỉ Một Buổi Dạy"
           actions={
@@ -1048,19 +1035,15 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
             </>
           )}
         </div>
-      </div>
+      </PageLayoutContent>
+    </PageLayout>
 
-      <Modal
-        isOpen={showModal}
-        onClose={() => {
-          setShowCampusPicker(false)
-          setCampusPickerSearchText('')
-          setShowModal(false)
-        }}
-        title="Tạo mail xin nghỉ 1 buổi"
-        maxWidth="4xl"
-      >
-        <form onSubmit={handleSubmit} className="space-y-5 pb-2 sm:pb-3">
+    <Modal open={showModal} onClose={() => {
+      setShowCampusPicker(false)
+      setCampusPickerSearchText('')
+      setShowModal(false)
+    }} title="Tạo mail xin nghỉ 1 buổi" maxWidth="4xl">
+      <form onSubmit={handleSubmit} className="space-y-5 pb-2 sm:pb-3">
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <p className="font-semibold">Quy định nhanh</p>
             <div className="mt-2 space-y-1 text-[13px]">
@@ -1401,18 +1384,9 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
         </form>
       </Modal>
 
-      <Modal
-        isOpen={!!selectedRequest}
-        onClose={() => setSelectedRequest(null)}
-        title={
-          selectedRequest
-            ? `Chi tiết yêu cầu #${selectedRequest.id}`
-            : 'Chi tiết yêu cầu'
-        }
-        maxWidth="3xl"
-      >
-        {selectedRequest && (
-          <div className="space-y-4">
+    <Modal open={!!selectedRequest} onClose={() => setSelectedRequest(null)} title={selectedRequest ? `Chi tiết yêu cầu #${selectedRequest.id}` : 'Chi tiết yêu cầu'} size="3xl">
+      {selectedRequest && (
+        <div className="space-y-4">
             <div className="border-b border-gray-200 pb-4">
               <h3 className="mb-3 text-sm font-semibold text-gray-900 sm:text-base">
                 Chi tiết yêu cầu xin nghỉ
@@ -1506,6 +1480,6 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
           </div>
         )}
       </Modal>
-    </div>
+    </>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 
 interface VideoScore {
   video_id: string;
@@ -55,24 +56,12 @@ function formatTime(seconds: number): string {
 
 function StatusBadge({ status }: { status: string | null }) {
   if (status === 'completed') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
-        ✓ Hoàn thành
-      </span>
-    );
+    return <Badge variant="success" size="sm" shape="pill">✓ Hoàn thành</Badge>;
   }
   if (status === 'in_progress') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-        🔄 Đang xem
-      </span>
-    );
+    return <Badge variant="info" size="sm" shape="pill">🔄 Đang xem</Badge>;
   }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
-      — Chưa xem
-    </span>
-  );
+  return <Badge variant="default" size="sm" shape="pill">— Chưa xem</Badge>;
 }
 
 export default function TrainingDetailPage() {

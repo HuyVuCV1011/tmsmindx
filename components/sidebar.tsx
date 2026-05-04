@@ -25,6 +25,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/ui/primitives/icon'
 
 export function Sidebar() {
   const { isOpen, setIsOpen, requestExpandLabels } = useSidebar()
@@ -883,16 +885,18 @@ export function Sidebar() {
                 </div>
               </Link>
 
-              <button
-                className="group flex w-full items-center justify-center gap-2 rounded-lg border-2 border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all duration-300 hover:border-[#a1001f] hover:bg-[#a1001f] hover:text-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a1001f] focus-visible:ring-offset-2"
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
                 onClick={() => {
                   closeSidebarOnMobile()
                   logout()
                 }}
               >
-                <LogOut className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
-                <span>Đăng Xuất</span>
-              </button>
+                <Icon icon={LogOut} size="sm" />
+                Đăng xuất
+              </Button>
             </div>
           )}
         </div>

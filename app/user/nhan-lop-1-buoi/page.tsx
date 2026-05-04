@@ -1,11 +1,12 @@
 'use client'
 
-import Modal from '@/components/Modal'
+import { Modal } from '@/components/ui/modal'
 import { Tabs } from '@/components/Tabs'
-import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Stepper } from '@/components/ui/stepper'
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout'
 import {
   Table,
   TableBody,
@@ -47,7 +48,7 @@ interface LeaveRequest {
   updated_at?: string
 }
 
-type StatusVariant = 'warning' | 'info' | 'success' | 'destructive'
+type StatusVariant = 'warning' | 'info' | 'success' | 'danger'
 
 function getStatusMeta(status: LeaveRequest['status']): {
   label: string
@@ -63,7 +64,7 @@ function getStatusMeta(status: LeaveRequest['status']): {
     case 'substitute_confirmed':
       return { label: 'GV thay đã xác nhận', variant: 'success' }
     case 'rejected':
-      return { label: 'Đã từ chối', variant: 'destructive' }
+      return { label: 'Đã từ chối', variant: 'danger' }
     default:
       return { label: status, variant: 'info' }
   }
@@ -237,26 +238,13 @@ export default function NhanLop1BuoiPage() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto max-w-7xl space-y-4">
-          <div className="h-10 w-80 animate-pulse rounded bg-gray-200" />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
-            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
-            <div className="h-20 animate-pulse rounded-xl bg-gray-100" />
-          </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <TableSkeleton rows={6} columns={6} />
-          </div>
-        </div>
-      </div>
-    )
+    return <PageSkeleton variant="table" itemCount={8} showHeader={true} />
   }
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-7xl space-y-5">
+    <>
+    <PageLayout>
+      <PageLayoutContent spacing="lg">
         <div className="flex flex-col gap-3 border-b border-gray-200 pb-4 sm:flex-row sm:items-center sm:justify-between sm:pb-5">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
@@ -575,14 +563,15 @@ export default function NhanLop1BuoiPage() {
             </div>
           )}
         </div>
-      </div>
+      </PageLayoutContent>
+    </PageLayout>
 
-      <Modal
-        isOpen={!!selected}
-        onClose={() => setSelected(null)}
-        title={selected ? `Lớp nhận thay #${selected.id}` : 'Chi tiết'}
-        maxWidth="2xl"
-      >
+    <Modal
+      open={!!selected}
+      onClose={() => setSelected(null)}
+      title={selected ? `Lớp nhận thay #${selected.id}` : 'Chi tiết'}
+      maxWidth="2xl"
+    >
         {selected && (
           <div className="space-y-4">
             <Stepper
@@ -707,6 +696,6 @@ export default function NhanLop1BuoiPage() {
           </div>
         )}
       </Modal>
-    </div>
+    </>
   )
 }

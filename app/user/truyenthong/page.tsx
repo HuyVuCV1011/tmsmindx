@@ -7,9 +7,11 @@ import useSWR from 'swr'
 
 import { PageContainer } from '@/components/PageContainer'
 import { PageHeader } from '@/components/PageHeader'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import PostCard from '@/components/post-card'
-import Slider from '@/components/slider'
+import HeroSection from '@/components/hero-section'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { UpcomingEventsSidebar } from '@/components/upcoming-events-sidebar'
 import { useSidebar } from '@/lib/sidebar-context'
@@ -87,14 +89,17 @@ export default function CommunicationsPage() {
     { value: 'thông-báo', label: 'Thông báo' },
   ]
 
+  // Show full page skeleton while loading
+  if (isLoading) {
+    return <PageSkeleton variant="grid" itemCount={6} showHeader={true} />
+  }
+
   return (
     <PageContainer>
       <div className="bg-white pb-20">
-        {/* Hero Slider - Now at the top */}
-        {!isLoading && posts.length > 0 && (
-          <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <Slider posts={featuredPosts} />
-          </section>
+        {/* Hero Section - Slider + Sidebar */}
+        {posts.length > 0 && (
+          <HeroSection posts={featuredPosts} />
         )}
 
         {/* Header Section - Now after slider */}
@@ -133,31 +138,25 @@ export default function CommunicationsPage() {
                   <div className="flex items-center justify-between gap-4 overflow-x-auto p-2 no-scrollbar">
                     <div className="flex p-1 gap-1">
                       {postTypes.map((type) => (
-                        <button
+                        <Button
                           key={type.value}
+                          variant={selectedFilter === type.value ? 'default' : 'ghost'}
+                          size="sm"
                           onClick={() => setSelectedFilter(type.value)}
                           className={cn(
-                            'px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 whitespace-nowrap',
-                            selectedFilter === type.value
-                              ? 'bg-gray-900 text-white shadow-md'
-                              : 'bg-transparent text-gray-600 hover:bg-gray-100',
+                            'whitespace-nowrap',
+                            selectedFilter === type.value && 'bg-gray-900 hover:bg-gray-800'
                           )}
                         >
                           {type.label}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   </div>
                 </div>
 
                 {/* Posts Grid */}
-                {isLoading ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {[...Array(6)].map((_, i) => (
-                      <PostCardSkeleton key={i} />
-                    ))}
-                  </div>
-                ) : filteredPosts.length > 0 ? (
+                {filteredPosts.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-500">
                     {filteredPosts.map((post, index) => (
                       <div key={`${post.id || post.slug || 'post'}-${index}`}>

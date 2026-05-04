@@ -1,6 +1,7 @@
 'use client';
 
 import { PageContainer } from '@/components/PageContainer';
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
 import { authHeaders } from '@/lib/auth-headers';
@@ -440,11 +441,7 @@ export default function ExamAssignmentTakingPage() {
   };
 
   if (loading) {
-    return (
-      <PageContainer>
-        <div className="p-8 text-center text-gray-600">Đang tải bài thi...</div>
-      </PageContainer>
-    );
+    return <PageSkeleton variant="form" itemCount={6} showHeader={true} />
   }
 
   if (Number.isNaN(assignmentId)) {

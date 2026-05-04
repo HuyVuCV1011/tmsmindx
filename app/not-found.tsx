@@ -4,6 +4,8 @@ import { useAuth } from '@/lib/auth-context'
 import { ArrowLeft, HomeIcon } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/ui/primitives/icon'
 
 export default function NotFound() {
   const router = useRouter()
@@ -106,30 +108,32 @@ export default function NotFound() {
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <button
+            <Button
               onClick={handleGoHome}
               disabled={isLoading}
-              className="group flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-[#a1001f] to-[#c1122f] text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+              variant="mindx"
+              size="lg"
+              className="w-full sm:w-auto shadow-lg hover:shadow-xl"
             >
-              <HomeIcon className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-              <span>
-                {isLoading
-                  ? 'Đang tải...'
-                  : user
-                    ? user.isAdmin
-                      ? 'Về trang Admin'
-                      : 'Về trang của tôi'
-                    : 'Về trang đăng nhập'}
-              </span>
-            </button>
+              <Icon icon={HomeIcon} size="sm" />
+              {isLoading
+                ? 'Đang tải...'
+                : user
+                  ? user.isAdmin
+                    ? 'Về trang Admin'
+                    : 'Về trang của tôi'
+                  : 'Về trang đăng nhập'}
+            </Button>
 
-            <button
+            <Button
               onClick={handleGoBack}
-              className="group flex items-center gap-2 px-8 py-4 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transform hover:scale-105 transition-all duration-200 w-full sm:w-auto"
+              variant="secondary"
+              size="lg"
+              className="w-full sm:w-auto"
             >
-              <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-              <span>Quay lại</span>
-            </button>
+              <Icon icon={ArrowLeft} size="sm" />
+              Quay lại
+            </Button>
           </div>
 
           {/* Additional Info */}

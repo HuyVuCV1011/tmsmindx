@@ -2,9 +2,11 @@
 import { toast } from "@/lib/app-toast";
 import { useAuth } from "@/lib/auth-context";
 import { authHeaders } from "@/lib/auth-headers";
-import { Loader2, Save, Settings } from "lucide-react";
+import { Loader2, Save, Settings, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import PermSelector from "./PermSelector";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/primitives/icon";
 
 interface RoleData {
     role_code: string; role_name: string; description: string; department: string;
@@ -106,11 +108,10 @@ export default function RoleSettingsTab() {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <p className="text-sm text-gray-500">Click vào role để set các màn hình mà role đó được xem. Sau đó gán role cho user ở tab "Quản lý tài khoản".</p>
-                <button onClick={() => setShowNewRoleDialog(true)}
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg shadow-md hover:bg-black transition-colors text-sm font-medium flex-shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+                <Button onClick={() => setShowNewRoleDialog(true)} className="flex-shrink-0">
+                    <Icon icon={Plus} size="sm" />
                     Thêm Role Mới
-                </button>
+                </Button>
             </div>
 
             {/* Role list by department */}
@@ -121,17 +122,25 @@ export default function RoleSettingsTab() {
                         {roles.filter(r => r.department === dept).map(r => {
                             const isSelected = selectedRole?.role_code === r.role_code;
                             return (
-                                <button key={r.role_code} onClick={() => openRole(r)}
-                                    className={`text-left p-4 rounded-xl border-2 transition-all duration-200 hover:shadow-md ${isSelected ? 'border-[#a1001f] bg-red-50 shadow-md' : 'border-gray-200 hover:border-gray-300 bg-white'
-                                        }`}>
-                                    <div className="flex items-center justify-between mb-1">
-                                        <span className="text-sm font-bold text-gray-900">{r.role_code}</span>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${r.permission_count > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                                            }`}>{r.permission_count} màn hình</span>
+                                <Button 
+                                    key={r.role_code} 
+                                    onClick={() => openRole(r)}
+                                    variant="outline"
+                                    className={`text-left p-4 h-auto justify-start transition-all duration-200 hover:shadow-md ${
+                                        isSelected ? 'border-[#a1001f] bg-red-50 shadow-md' : 'hover:border-gray-300'
+                                    }`}
+                                    asChild
+                                >
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-sm font-bold text-gray-900">{r.role_code}</span>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${r.permission_count > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                                                }`}>{r.permission_count} màn hình</span>
+                                        </div>
+                                        <p className="text-xs font-medium text-gray-700">{r.role_name}</p>
+                                        <p className="text-xs text-gray-400 mt-0.5">{r.description}</p>
                                     </div>
-                                    <p className="text-xs font-medium text-gray-700">{r.role_name}</p>
-                                    <p className="text-xs text-gray-400 mt-0.5">{r.description}</p>
-                                </button>
+                                </Button>
                             );
                         })}
                     </div>
@@ -147,20 +156,25 @@ export default function RoleSettingsTab() {
                                 <Settings className="h-5 w-5 text-[#a1001f]" />
                                 Cài đặt màn hình: <span className="text-[#a1001f]">{selectedRole.role_code} — {selectedRole.role_name}</span>
                             </h3>
-                            <button onClick={() => setSelectedRole(null)} className="text-gray-400 hover:text-gray-600 rounded-full p-1 hover:bg-gray-100 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                            </button>
+                            <Button variant="ghost" size="icon-sm" onClick={() => setSelectedRole(null)}>
+                                <Icon icon={X} size="sm" />
+                            </Button>
                         </div>
                         <div className="max-h-[60vh] overflow-y-auto pr-2 border border-gray-200 rounded-xl p-3 bg-gray-50/50 mb-4">
                             <PermSelector perms={perms} setPerms={setPerms} />
                         </div>
                         <div className="flex justify-end gap-3 pt-4 mt-2 border-t border-gray-200 font-medium">
-                            <button onClick={() => setSelectedRole(null)} className="px-5 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Hủy</button>
-                            <button onClick={handleSave} disabled={saving}
-                                className="px-5 py-2 text-sm text-white bg-[#a1001f] hover:bg-[#c41230] transition-colors rounded-lg shadow disabled:opacity-50 flex items-center gap-2">
-                                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                            <Button variant="outline" onClick={() => setSelectedRole(null)}>
+                                Hủy
+                            </Button>
+                            <Button 
+                                onClick={handleSave} 
+                                disabled={saving}
+                                loading={saving}
+                            >
+                                <Icon icon={Save} size="sm" />
                                 Lưu cài đặt
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </div>
@@ -174,9 +188,9 @@ export default function RoleSettingsTab() {
                             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                                 Thêm Role Mới
                             </h3>
-                            <button onClick={() => setShowNewRoleDialog(false)} className="text-gray-400 hover:text-gray-600 rounded-full p-1 hover:bg-gray-100 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                            </button>
+                            <Button variant="ghost" size="icon-sm" onClick={() => setShowNewRoleDialog(false)}>
+                                <Icon icon={X} size="sm" />
+                            </Button>
                         </div>
                         <form onSubmit={handleCreateRole} className="space-y-4">
                             <div>
@@ -196,11 +210,17 @@ export default function RoleSettingsTab() {
                                 <textarea rows={2} value={newRoleDesc} onChange={e => setNewRoleDesc(e.target.value)} placeholder="Phạm vi công việc của role này..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-gray-900 focus:border-gray-900 outline-none resize-none"></textarea>
                             </div>
                             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 mt-2">
-                                <button type="button" onClick={() => setShowNewRoleDialog(false)} className="px-5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Hủy</button>
-                                <button type="submit" disabled={creatingRole} className="px-5 py-2 text-sm font-medium text-white bg-gray-900 hover:bg-black rounded-lg shadow disabled:opacity-50 flex items-center gap-2 transition-colors">
-                                    {creatingRole ? <Loader2 className="h-4 w-4 animate-spin" /> : <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>}
+                                <Button type="button" variant="outline" onClick={() => setShowNewRoleDialog(false)}>
+                                    Hủy
+                                </Button>
+                                <Button 
+                                    type="submit" 
+                                    disabled={creatingRole}
+                                    loading={creatingRole}
+                                >
+                                    <Icon icon={Plus} size="sm" />
                                     Khởi tạo Role
-                                </button>
+                                </Button>
                             </div>
                         </form>
                     </div>

@@ -1,6 +1,10 @@
 'use client'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { useEffect, useState } from 'react'
 import { RefreshCcw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/ui/primitives/icon'
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout'
 
 export default function AnalyticsPage() {
   const [stats, setStats] = useState<any>(null)
@@ -32,76 +36,49 @@ export default function AnalyticsPage() {
   }, [])
 
   if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto p-8">
-        <div className="space-y-6">
-          {/* Header Skeleton */}
-          <div className="h-10 bg-gray-200 rounded w-64 animate-pulse"></div>
-          {/* Stats Cards Skeleton */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => (
-              <div
-                key={i}
-                className="bg-white border rounded-lg p-6 animate-pulse"
-              >
-                <div className="h-5 bg-gray-200 rounded w-32 mb-3"></div>
-                <div className="h-8 bg-gray-200 rounded w-20 mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-24"></div>
-              </div>
-            ))}
-          </div>
-          {/* Chart Skeleton */}
-          <div className="bg-white rounded-lg p-6 h-96 animate-pulse">
-            <div className="h-full bg-gray-200 rounded"></div>
-          </div>
-        </div>
-      </div>
-    )
+    return <PageSkeleton variant="default" itemCount={8} showHeader={true} />
   }
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto p-8">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-          <p className="text-red-800">{error}</p>
-          <button
-            onClick={fetchStats}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-          >
-            Thử lại
-          </button>
-        </div>
-      </div>
+      <PageLayout maxWidth="7xl" padding="md">
+        <PageLayoutContent>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <p className="text-red-800">{error}</p>
+            <Button variant="destructive" onClick={fetchStats} className="mt-4">
+              Thử lại
+            </Button>
+          </div>
+        </PageLayoutContent>
+      </PageLayout>
     )
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-8">
-      <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-            Analytics Dashboard
-          </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Thống kê sử dụng hệ thống
-          </p>
+    <PageLayout maxWidth="7xl" padding="md">
+      <PageLayoutContent spacing="lg">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              Analytics Dashboard
+            </h1>
+            <p className="text-sm text-gray-600 mt-1">
+              Thống kê sử dụng hệ thống
+            </p>
+          </div>
+          <Button variant="outline" onClick={fetchStats}>
+            <Icon icon={RefreshCcw} size="sm" />
+            Làm mới
+          </Button>
         </div>
-        <button
-          onClick={fetchStats}
-          className="inline-flex h-10 self-start items-center justify-center gap-2 rounded-lg border border-[#f3b4bd] bg-white px-4 text-sm font-medium text-[#a1001f] shadow-sm hover:bg-[#a1001f]/5"
-        >
-          <RefreshCcw className="mr-1.5 h-4 w-4" />
-          Làm mới
-        </button>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-lg shadow-lg text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-medium opacity-90 mb-2">
-                Tổng lượt truy cập
-              </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-lg shadow-lg text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-medium opacity-90 mb-2">
+                  Tổng lượt truy cập
+                </h2>
               <p className="text-4xl font-bold">{stats?.totalVisits || 0}</p>
             </div>
             <div className="bg-white/20 p-3 rounded-full">
@@ -349,9 +326,10 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      <div className="mt-8 text-center text-sm text-gray-500">
+      <div className="text-center text-sm text-gray-500">
         <p>Dữ liệu được cập nhật theo thời gian thực từ Google Sheets</p>
       </div>
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
   )
 }

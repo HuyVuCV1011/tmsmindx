@@ -1,5 +1,35 @@
 'use client'
 
+/**
+ * @deprecated This component is deprecated. Please use `components/ui/modal.tsx` instead.
+ * 
+ * Migration guide:
+ * ```tsx
+ * // Old (this component)
+ * import Modal from '@/components/Modal'
+ * <Modal isOpen={show} onClose={close} title="Title" subtitle="Subtitle" footer={<Button>Save</Button>}>
+ *   Content
+ * </Modal>
+ * 
+ * // New (recommended)
+ * import { Modal } from '@/components/ui/modal'
+ * <Modal open={show} onClose={close} title="Title" subtitle="Subtitle" footer={<Button>Save</Button>}>
+ *   Content
+ * </Modal>
+ * 
+ * // Or use composition pattern (best practice)
+ * import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter } from '@/components/ui/modal'
+ * <Modal open={show} onClose={close}>
+ *   <ModalHeader>
+ *     <ModalTitle>Title</ModalTitle>
+ *     <ModalClose />
+ *   </ModalHeader>
+ *   <ModalBody>Content</ModalBody>
+ *   <ModalFooter><Button>Save</Button></ModalFooter>
+ * </Modal>
+ * ```
+ */
+
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/body-scroll-lock'
 import { ReactNode, useEffect } from 'react'
 
@@ -36,6 +66,14 @@ export default function Modal({
   headerColor = 'bg-[#a1001f]',
   overflowContent = 'auto',
 }: ModalProps) {
+  // Log deprecation warning in development
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(
+        '[DEPRECATED] components/Modal.tsx is deprecated. Please migrate to components/ui/modal.tsx. See JSDoc for migration guide.'
+      )
+    }
+  }, [])
   // Handle ESC key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {

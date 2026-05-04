@@ -1,9 +1,11 @@
 'use client'
 
-import Modal from '@/components/Modal'
+import { Modal } from '@/components/ui/modal'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Stepper } from '@/components/ui/stepper'
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import {
   Table,
   TableBody,
@@ -348,48 +350,14 @@ export default function GiaiTrinhPage() {
     )
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-white p-4 sm:p-6 lg:p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-6 space-y-3 animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-96"></div>
-            <div className="h-4 bg-gray-200 rounded w-64"></div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="bg-white rounded-xl border-sm  border border-gray-200 p-4"
-                style={{
-                  animationDelay: `${i * 100}ms`,
-                }}
-              >
-                <div className="animate-pulse">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-8 h-8 bg-gray-200 rounded-lg"></div>
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-gray-200 rounded w-full"></div>
-                      <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="h-3 bg-gray-200 rounded w-full"></div>
-                    <div className="h-3 bg-gray-200 rounded w-4/5"></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
+  if (loading || loadingExams) {
+    return <PageSkeleton variant="grid" itemCount={6} showHeader={true} />
   }
 
   return (
-    <div className="min-h-screen bg-white p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
+    <>
+    <PageLayout>
+      <PageLayoutContent spacing="xl">
         {/* Header */}
         <PageHeader
           title="Giải Trình Không Tham Gia Kiểm Tra"
@@ -408,10 +376,10 @@ export default function GiaiTrinhPage() {
 
         {/* Modal Form - Responsive for mobile */}
         <Modal
-          isOpen={showModal}
+          open={showModal}
           onClose={() => setShowModal(false)}
           title="Tạo Giải Trình Mới"
-          maxWidth="3xl"
+          size="3xl"
           headerColor="bg-[#a1001f]"
         >
           <form onSubmit={handleSubmit}>
@@ -687,16 +655,17 @@ export default function GiaiTrinhPage() {
             )}
           </div>
         </div>
-      </div>
+      </PageLayoutContent>
+    </PageLayout>
 
-      {/* Detail Modal - Mobile Optimized */}
-      <Modal
-        isOpen={!!selectedExplanation}
-        onClose={() => setSelectedExplanation(null)}
-        title="Chi Tiết Giải Trình"
-        maxWidth="2xl"
-        footer={
-          <Button
+    {/* Detail Modal - Mobile Optimized */}
+    <Modal
+      open={!!selectedExplanation}
+      onClose={() => setSelectedExplanation(null)}
+      title="Chi Tiết Giải Trình"
+      size="2xl"
+      footer={
+        <Button
             variant="secondary"
             onClick={() => setSelectedExplanation(null)}
             className="w-full sm:w-auto bg-gray-600 text-white hover:bg-gray-700 font-medium hover:text-white"
@@ -841,6 +810,6 @@ export default function GiaiTrinhPage() {
           </div>
         )}
       </Modal>
-    </div>
+    </>
   )
 }
