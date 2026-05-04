@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { PageContainer } from '@/components/PageContainer'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { toast } from '@/lib/app-toast'
 import { Users, UserCheck, UserX, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
@@ -95,7 +96,9 @@ export default function HrOnboardingDashboard() {
             <span className="text-sm text-gray-500">{gens.length} GEN</span>
           </div>
           {loading ? (
-            <div className="p-12 text-center text-gray-500">Đang tải...</div>
+            <div className="p-4">
+              <PageSkeleton variant="table" itemCount={8} showHeader={false} />
+            </div>
           ) : gens.length === 0 ? (
             <div className="p-12 text-center text-gray-500">Chưa có GEN nào.</div>
           ) : (

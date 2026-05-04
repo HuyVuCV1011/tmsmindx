@@ -1,7 +1,9 @@
 'use client'
 
-import Modal from '@/components/Modal'
+import { Modal } from '@/components/ui/modal'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { Button } from '@/components/ui/button'
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout'
 import { Stepper } from '@/components/ui/stepper'
 import {
   Table,
@@ -274,72 +276,47 @@ export function ExplanationSection({
   }
 
   if (loading) {
-    return (
-      <div
-        className={compact ? 'p-0' : 'min-h-screen bg-white p-4 sm:p-6 lg:p-8'}
-      >
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-6 space-y-3 animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-96"></div>
-            <div className="h-4 bg-gray-200 rounded w-64"></div>
-          </div>
-          <div className="bg-white rounded-lg shadow-md p-6 space-y-4">
-            {[...Array(8)].map((_, i) => (
-              <div
-                key={i}
-                className="flex gap-4 p-4 border border-gray-200 rounded-lg animate-pulse"
-              >
-                <div className="flex-1 space-y-3">
-                  <div className="h-5 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                  <div className="h-4 bg-gray-200 rounded w-2/3"></div>
-                </div>
-                <div className="w-24 h-8 bg-gray-200 rounded"></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
+    return <PageSkeleton variant="default" itemCount={8} showHeader={true} maxWidth="7xl" padding={compact ? 'none' : 'md'} />
   }
 
   return (
-    <div className={compact ? '' : 'min-h-screen bg-white'}>
-      <div className="w-full mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Giải Trình Không Tham Gia Kiểm Tra
-            </h1>
-            <p className="mt-1 text-sm text-gray-600">
-              Quản lý và theo dõi các giải trình của bạn
-            </p>
-          </div>
-          <Button
-            onClick={() => setShowModal(true)}
-            size="lg"
-            className="whitespace-nowrap border-2 border-[#a1001f] bg-[#a1001f] text-white shadow-md hover:bg-[#8a001a]"
-          >
-            <svg
-              className="w-5 h-5 mr-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+    <PageLayout maxWidth="7xl" padding={compact ? 'none' : 'md'}>
+      <PageLayoutContent spacing="lg">
+        <div className="w-full">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                Giải Trình Không Tham Gia Kiểm Tra
+              </h1>
+              <p className="mt-1 text-sm text-gray-600">
+                Quản lý và theo dõi các giải trình của bạn
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowModal(true)}
+              size="lg"
+              className="whitespace-nowrap border-2 border-[#a1001f] bg-[#a1001f] text-white shadow-md hover:bg-[#8a001a]"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Tạo Giải Trình Mới
-          </Button>
+              <svg
+                className="w-5 h-5 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Tạo Giải Trình Mới
+            </Button>
+          </div>
         </div>
-      </div>
 
       <Modal
-        isOpen={showModal}
+        open={showModal}
         onClose={() => setShowModal(false)}
         title="Tạo Giải Trình Mới"
         maxWidth="3xl"
@@ -560,9 +537,8 @@ export function ExplanationSection({
         </form>
       </Modal>
 
-      <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-linear-to-r from-gray-50 to-white">
+      <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-linear-to-r from-gray-50 to-white">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
                 Danh Sách Giải Trình
@@ -733,7 +709,6 @@ export function ExplanationSection({
             </div>
           )}
         </div>
-      </div>
 
       <Modal
         isOpen={!!selectedExplanation}
@@ -882,6 +857,7 @@ export function ExplanationSection({
           </div>
         )}
       </Modal>
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
   )
 }

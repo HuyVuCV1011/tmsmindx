@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout';
 interface Teacher {
   [key: string]: any;
 }
@@ -39,21 +41,22 @@ export default function TestTeachersPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white p-8">
-      <div className="max-w-7xl mx-auto">
+    <PageLayout>
+      <PageLayoutContent spacing="xl">
         <div className="bg-white rounded-lg shadow-lg p-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-6">
             🧪 Test PostgreSQL Connection - Bảng Teachers
           </h1>
 
           <div className="mb-6">
-            <button
+            <Button
               onClick={handleTest}
               disabled={loading}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg shadow transition duration-200"
+              loading={loading}
+              variant="default"
             >
-              {loading ? 'Đang kết nối...' : 'Test Kết Nối'}
-            </button>
+              Test Kết Nối
+            </Button>
           </div>
 
           {response && (
@@ -141,7 +144,7 @@ export default function TestTeachersPage() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
   );
 }

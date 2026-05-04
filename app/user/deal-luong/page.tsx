@@ -1,7 +1,9 @@
 'use client';
 
-import Modal from '@/components/Modal';
+import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout';
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton';
 import { StepItem, Stepper } from '@/components/ui/stepper';
 import { useAuth } from '@/lib/auth-context';
 import { Award, ChevronDown, DollarSign, FileText, Info, Plus, Send, TrendingDown } from 'lucide-react';
@@ -221,28 +223,26 @@ export default function DealLuongPage() {
 
   // ─── Render ──────────────────────────────────────
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" />
-      </div>
-    );
+    return <PageSkeleton variant="default" itemCount={6} showHeader={true} />
   }
 
   return (
-    <div className="min-h-screen">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <DollarSign className="w-5 h-5 text-white" />
-          </div>
-          Quản lý lương
-        </h1>
-        <p className="text-slate-500 mt-2 text-sm">Gửi yêu cầu nâng lương, hạ lương, hoặc thỏa thuận lương cho giáo viên</p>
-      </div>
+    <>
+    <PageLayout>
+      <PageLayoutContent spacing="2xl">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <DollarSign className="w-5 h-5 text-white" />
+            </div>
+            Quản lý lương
+          </h1>
+          <p className="text-slate-500 mt-2 text-sm">Gửi yêu cầu nâng lương, hạ lương, hoặc thỏa thuận lương cho giáo viên</p>
+        </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+        {/* Tabs */}
+        <div className="flex gap-2">
         {(Object.keys(DEAL_TYPE_LABELS) as DealTab[]).map(tab => {
           const t = DEAL_TYPE_LABELS[tab];
           const isActive = activeTab === tab;
@@ -331,10 +331,10 @@ export default function DealLuongPage() {
 
       {/* ═══ Form Modal ═══ */}
       <Modal
-        isOpen={showForm}
+        open={showForm}
         onClose={() => setShowForm(false)}
         title={`Tạo yêu cầu ${DEAL_TYPE_LABELS[activeTab].label}`}
-        maxWidth="4xl"
+        size="4xl"
       >
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Common fields */}
@@ -577,10 +577,10 @@ export default function DealLuongPage() {
 
       {/* ═══ Detail Modal ═══ */}
       <Modal
-        isOpen={!!selectedDeal}
+        open={!!selectedDeal}
         onClose={() => setSelectedDeal(null)}
         title={`Chi tiết yêu cầu #${selectedDeal?.id}`}
-        maxWidth="4xl"
+        size="4xl"
       >
         {selectedDeal && (
           <div className="space-y-6">
@@ -674,6 +674,8 @@ export default function DealLuongPage() {
           </div>
         )}
       </Modal>
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
+    </>
   );
 }

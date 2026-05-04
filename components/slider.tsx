@@ -60,7 +60,7 @@ export default function Slider({ posts }: SliderProps) {
 
     return (
         <div
-            className="relative w-full h-72 sm:h-96 md:h-[480px] lg:h-[560px] rounded-2xl overflow-hidden bg-gray-900 group shadow-xl ring-1 ring-black/5"
+            className="relative w-full aspect-video rounded-2xl overflow-hidden bg-gray-900 group shadow-xl ring-1 ring-black/5"
             onMouseEnter={() => setAutoPlay(false)}
             onMouseLeave={() => setAutoPlay(true)}
         >

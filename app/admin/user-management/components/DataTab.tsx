@@ -3,6 +3,7 @@ import { toast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
 import { getLeaderAreas } from '@/lib/teaching-leaders'
+import { Button } from '@/components/ui/button'
 import {
   Building2,
   Database,
@@ -1225,25 +1226,22 @@ function CentersLeadersPanel() {
                 />
               </div>
               <div className="flex justify-end gap-3 pt-4 mt-2 border-t font-medium">
-                <button
+                <Button
                   type="button"
                   onClick={() => setEditCenter(null)}
-                  className="px-5 py-2 text-sm border rounded-lg hover:bg-gray-50 transition-colors"
+                  variant="outline"
                 >
                   Hủy
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 text-sm text-white bg-[#a1001f] hover:bg-[#c41230] transition-colors rounded-lg shadow disabled:opacity-50 flex items-center gap-2"
+                  loading={saving}
+                  variant="mindx"
                 >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4" />
-                  )}
+                  <Save className="w-4 h-4 mr-2" />
                   Lưu thay đổi
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -1573,25 +1571,22 @@ function RolesPanel() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 mt-2">
-                <button
+                <Button
                   type="button"
                   onClick={() => setEditRole(null)}
-                  className="px-5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  variant="outline"
                 >
                   Hủy
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   disabled={savingRoleMeta}
-                  className="px-5 py-2 text-sm font-medium text-white bg-[#a1001f] hover:bg-[#c41230] rounded-lg shadow disabled:opacity-50 flex items-center gap-2 transition-colors"
+                  loading={savingRoleMeta}
+                  variant="mindx"
                 >
-                  {savingRoleMeta ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4" />
-                  )}
+                  <Save className="w-4 h-4 mr-2" />
                   Lưu role tham chiếu
-                </button>
+                </Button>
               </div>
             </form>
           </div>

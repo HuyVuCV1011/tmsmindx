@@ -2,7 +2,10 @@
 
 import { Card } from '@/components/Card'
 import { PageContainer } from '@/components/PageContainer'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { useAuth } from '@/lib/auth-context'
+import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/ui/primitives/icon'
 import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -223,6 +226,11 @@ export default function DangKyLichLamViecPage() {
     } catch {}
   }
 
+  // Show skeleton while loading initial data
+  if (!maGv || centers.length === 0) {
+    return <PageSkeleton variant="default" itemCount={4} showHeader={true} />
+  }
+
   return (
     <PageContainer title="Đăng ký lịch làm việc" description="">
       <Card className="overflow-hidden" padding="sm">
@@ -233,9 +241,15 @@ export default function DangKyLichLamViecPage() {
             <span className="text-sm font-semibold text-gray-700 capitalize">{periodLabel}</span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => stepMonth(-1)} className="rounded-md border border-gray-300 bg-white p-2 hover:bg-gray-50"><ChevronLeft className="h-4 w-4" /></button>
-            <button onClick={() => setFocusDate(new Date())} className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Hôm nay</button>
-            <button onClick={() => stepMonth(1)} className="rounded-md border border-gray-300 bg-white p-2 hover:bg-gray-50"><ChevronRight className="h-4 w-4" /></button>
+            <Button variant="outline" size="icon" onClick={() => stepMonth(-1)}>
+              <Icon icon={ChevronLeft} size="sm" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setFocusDate(new Date())}>
+              Hôm nay
+            </Button>
+            <Button variant="outline" size="icon" onClick={() => stepMonth(1)}>
+              <Icon icon={ChevronRight} size="sm" />
+            </Button>
           </div>
         </div>
 
@@ -303,18 +317,20 @@ export default function DangKyLichLamViecPage() {
                           {slot.batDau} – {slot.ketThuc}
                         </span>
                         <div className="ml-auto relative z-10 flex gap-1">
-                          <button
+                          <Button
+                            variant="default"
+                            size="icon-sm"
                             onClick={e => { e.stopPropagation(); openEditForm(slot) }}
-                            className="flex-shrink-0 rounded p-1 bg-[#a1001f] text-white hover:opacity-80 transition-opacity"
                           >
-                            <Pencil className="h-3 w-3" />
-                          </button>
-                          <button
+                            <Icon icon={Pencil} size="xs" />
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="icon-sm"
                             onClick={e => { e.stopPropagation(); handleDeleteSlot(slot.id, slot.date) }}
-                            className="flex-shrink-0 rounded p-1 bg-[#a1001f] text-white hover:opacity-80 transition-opacity"
                           >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
+                            <Icon icon={Trash2} size="xs" />
+                          </Button>
                         </div>
                       </div>
                     ))}
@@ -335,16 +351,18 @@ export default function DangKyLichLamViecPage() {
                 <h3 className="text-base font-bold text-white">Lịch rảnh đã đăng ký</h3>
                 <p className="text-xs text-white/80 mt-0.5">{viewDate.toLocaleDateString('vi-VN', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })}</p>
               </div>
-              <button onClick={() => setViewDate(null)} className="rounded-md p-1 text-white/80 hover:text-white hover:bg-white/10"><X className="h-5 w-5" /></button>
+              <Button variant="ghost" size="icon-sm" onClick={() => setViewDate(null)}>
+                <Icon icon={X} size="sm" />
+              </Button>
             </div>
             <div className="px-5 py-4 space-y-3">
               {(lichRanhByDate[formatDateKey(viewDate)] || []).map(slot => (
                 <div key={slot.id} className="rounded-xl border border-gray-200 p-3">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-bold text-gray-900">{slot.batDau} – {slot.ketThuc}</p>
-                    <button onClick={() => handleDeleteSlot(slot.id, slot.date)} className="rounded p-1 text-gray-400 hover:text-red-500 hover:bg-red-50">
-                      <X className="h-4 w-4" />
-                    </button>
+                    <Button variant="ghost" size="icon-sm" onClick={() => handleDeleteSlot(slot.id, slot.date)}>
+                      <Icon icon={X} size="sm" />
+                    </Button>
                   </div>
                   {slot.coSo.length > 0 && (() => {
                     // Group theo region, userRegion hiển thị trên
@@ -383,8 +401,12 @@ export default function DangKyLichLamViecPage() {
               ))}
             </div>
             <div className="border-t border-gray-200 px-5 py-3 flex justify-between">
-              <button onClick={() => { setViewDate(null); openForm(viewDate) }} className="rounded-lg bg-[#a1001f]/10 text-[#a1001f] px-4 py-2 text-sm font-semibold hover:bg-[#a1001f]/20">+ Thêm slot</button>
-              <button onClick={() => setViewDate(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Đóng</button>
+              <Button variant="ghost" onClick={() => { setViewDate(null); openForm(viewDate) }}>
+                + Thêm slot
+              </Button>
+              <Button variant="outline" onClick={() => setViewDate(null)}>
+                Đóng
+              </Button>
             </div>
           </div>
         </div>
@@ -401,9 +423,9 @@ export default function DangKyLichLamViecPage() {
                   {selectedDate.toLocaleDateString('vi-VN', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })}
                 </p>
               </div>
-              <button onClick={() => setSelectedDate(null)} className="rounded-md p-1 text-white/80 hover:text-white hover:bg-white/10">
-                <X className="h-5 w-5" />
-              </button>
+              <Button variant="ghost" size="icon-sm" onClick={() => setSelectedDate(null)}>
+                <Icon icon={X} size="sm" />
+              </Button>
             </div>
 
             <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
@@ -520,10 +542,12 @@ export default function DangKyLichLamViecPage() {
             </div>
 
             <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-5 py-3">
-              <button onClick={() => setSelectedDate(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Hủy</button>
-              <button onClick={handleSave} disabled={saving} className="rounded-lg bg-[#a1001f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#870019] disabled:opacity-60">
-                {saving ? 'Đang lưu...' : 'Lưu'}
-              </button>
+              <Button variant="outline" onClick={() => setSelectedDate(null)}>
+                Hủy
+              </Button>
+              <Button variant="default" onClick={handleSave} disabled={saving} loading={saving}>
+                Lưu
+              </Button>
             </div>
           </div>
         </div>

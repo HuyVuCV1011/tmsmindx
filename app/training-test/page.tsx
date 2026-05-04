@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout';
+
 export default function TrainingTestPage() {
   const [teacherCode, setTeacherCode] = useState('trucnt2');
   const [loading, setLoading] = useState(false);
@@ -30,9 +33,9 @@ export default function TrainingTestPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white p-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Training API Raw Data Test</h1>
+    <PageLayout maxWidth="4xl">
+      <PageLayoutContent spacing="xl">
+        <h1 className="text-3xl font-bold">Training API Raw Data Test</h1>
         
         {/* Input Form */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -44,13 +47,13 @@ export default function TrainingTestPage() {
               placeholder="Enter teacher code (e.g., trucnt2)"
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#a1001f] focus:ring-1 focus:ring-[#a1001f]/25"
             />
-            <button
+            <Button
               onClick={fetchData}
               disabled={loading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+              loading={loading}
             >
-              {loading ? 'Loading...' : 'Fetch Data'}
-            </button>
+              Fetch Data
+            </Button>
           </div>
         </div>
 
@@ -150,7 +153,7 @@ export default function TrainingTestPage() {
             </ul>
           </div>
         )}
-      </div>
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
   );
 }

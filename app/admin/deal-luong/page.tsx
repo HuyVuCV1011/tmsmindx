@@ -1,12 +1,13 @@
 'use client';
 
-import Modal from '@/components/Modal';
+import { Modal } from '@/components/ui/modal';
 import { useAuth } from '@/lib/auth-context';
 import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from '@/lib/app-toast';
 import { Button } from '@/components/ui/button';
 import { Stepper, StepItem } from '@/components/ui/stepper';
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout';
 import {
   Search, CheckCircle, XCircle, DollarSign,
   Award, TrendingDown, MessageSquare, Plus
@@ -225,14 +226,15 @@ export default function AdminDealLuongPage() {
   }
 
   return (
-    <div className="min-h-screen p-4">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3">
-          
-          {`Quản lý ${DEAL_TYPE_LABELS[dealTypeTab]?.label || 'Thỏa thuận lương'}`}
-        </h1>
-      </div>
+    <PageLayout>
+      <PageLayoutContent spacing="2xl">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3">
+            
+            {`Quản lý ${DEAL_TYPE_LABELS[dealTypeTab]?.label || 'Thỏa thuận lương'}`}
+          </h1>
+        </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
@@ -369,10 +371,10 @@ export default function AdminDealLuongPage() {
 
       {/* ═══ Detail + Review Modal ═══ */}
       <Modal
-        isOpen={!!selectedDeal}
+        open={!!selectedDeal}
         onClose={() => { setSelectedDeal(null); setReviewNote(''); setRejectMode(false); setRejectReason(''); }}
         title={`Chi tiết yêu cầu #${selectedDeal?.id}`}
-        maxWidth="4xl"
+        size="4xl"
       >
         {selectedDeal && (
           <div className="space-y-6">
@@ -593,6 +595,7 @@ export default function AdminDealLuongPage() {
           </div>
         )}
       </Modal>
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
   );
 }

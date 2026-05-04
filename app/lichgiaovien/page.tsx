@@ -1,9 +1,15 @@
 "use client";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton';
+import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/primitives/icon';
+import { FilterBar, FilterSection } from '@/components/ui/filter-bar';
+import { Modal, ModalHeader, ModalTitle, ModalClose, ModalBody } from '@/components/ui/modal';
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout';
 import { useAuth } from '@/lib/auth-context';
 import { authHeaders } from '@/lib/auth-headers';
-import { Calendar, Filter, User, X } from "lucide-react";
+import { Calendar, MapPin, User, X } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 
@@ -125,14 +131,18 @@ const CalendarCell = memo(({
             {count} giáo viên
           </div>
           {teachers.map((teacher, idx) => (
-            <button
+            <Button
               key={`${teacher.email}-${idx}`}
               onClick={() => onTeacherClick(teacher, day, timeSlot)}
-              className="w-full text-left px-2 py-1 text-xs bg-white hover:bg-blue-100 border border-gray-200 rounded transition-colors duration-150 hover:shadow-sm"
+              variant="outline"
+              size="xs"
+              className="w-full justify-start text-left h-auto py-1"
             >
-              <div className="font-medium text-gray-900 truncate">{teacher.name}</div>
-              <div className="text-gray-600 text-[10px] truncate">{teacher.mainBranch}</div>
-            </button>
+              <div className="w-full">
+                <div className="font-medium text-gray-900 truncate">{teacher.name}</div>
+                <div className="text-gray-600 text-[10px] truncate">{teacher.mainBranch}</div>
+              </div>
+            </Button>
           ))}
         </div>
       )}
@@ -340,15 +350,16 @@ export default function Page2() {
   }
 
   return (
-    <div className="min-h-screen bg-white p-2">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Calendar className="w-8 h-8 text-blue-600" />
-          <h1 className="text-3xl font-bold text-gray-900">Lịch Rảnh Giáo Viên</h1>
+    <PageLayout padding="sm">
+      <PageLayoutContent spacing="lg">
+        {/* Header */}
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <Calendar className="w-8 h-8 text-blue-600" />
+            <h1 className="text-3xl font-bold text-gray-900">Lịch Rảnh Giáo Viên</h1>
+          </div>
+          <p className="text-gray-600">Xem số lượng giáo viên rảnh theo khung giờ và chương trình</p>
         </div>
-        <p className="text-gray-600">Xem số lượng giáo viên rảnh theo khung giờ và chương trình</p>
-      </div>
 
       {/* Date Range Filter */}
       <div className="bg-white rounded-lg shadow-md p-4 mb-4">
@@ -375,84 +386,47 @@ export default function Page2() {
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          <button
+          <Button
             onClick={() => {
               const newToDate = new Date().toISOString().split('T')[0];
               const newFromDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
               setFromDate(newFromDate);
               setToDate(newToDate);
             }}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+            variant="outline"
+            size="sm"
           >
             10 ngày gần nhất
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Region and Program Filters */}
-      <div className="bg-white rounded-lg shadow-md p-4 mb-6">
-        {/* Region Filter */}
-        <div className="flex items-center gap-4 pb-4 border-b border-gray-200">
-          <Filter className="w-5 h-5 text-gray-600" />
-          <span className="text-gray-700 font-medium min-w-24">Khu vực:</span>
-          <div className="flex gap-2">
-            {regionOptions.map(region => (
-              <button
-                key={region}
-                onClick={() => setSelectedRegion(region)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                  selectedRegion === region
-                    ? 'bg-purple-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {region}
-              </button>
-            ))}
-          </div>
+      <FilterSection>
+        <FilterBar
+          label="Khu vực"
+          icon={MapPin}
+          options={regionOptions}
+          selected={selectedRegion}
+          onSelect={(value) => setSelectedRegion(value as string)}
+        />
+
+        <FilterBar
+          label="Chương trình"
+          icon={Calendar}
+          options={PROGRAMS}
+          selected={selectedPrograms}
+          onSelect={(value) => setSelectedPrograms(value as string[])}
+          multiple
+          onClear={() => setSelectedPrograms([])}
+        />
+
+        <div className="flex items-center justify-between pt-2 border-t border-gray-200">
           {selectedRegion !== 'Tất cả' && selectedRegionGroup && (
-            <div className="ml-4 text-xs text-gray-600 bg-purple-50 px-3 py-1 rounded-full">
+            <div className="text-xs text-gray-600 bg-purple-50 px-3 py-1 rounded-full">
               {centersLoading ? 'Đang tải cơ sở...' : selectedRegionSummary}
             </div>
           )}
-        </div>
-        
-        {/* Program Filter */}
-        <div className="flex items-center gap-4 pt-4">
-          <Filter className="w-5 h-5 text-gray-600" />
-          <span className="text-gray-700 font-medium min-w-24">Chương trình:</span>
-          <div className="flex gap-2">
-            {PROGRAMS.map(program => {
-              const isSelected = selectedPrograms.includes(program);
-              return (
-                <button
-                  key={program}
-                  onClick={() => {
-                    if (isSelected) {
-                      setSelectedPrograms(selectedPrograms.filter(p => p !== program));
-                    } else {
-                      setSelectedPrograms([...selectedPrograms, program]);
-                    }
-                  }}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                    isSelected
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {program}
-                </button>
-              );
-            })}
-            {selectedPrograms.length > 0 && (
-              <button
-                onClick={() => setSelectedPrograms([])}
-                className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
-              >
-                Xóa bộ lọc
-              </button>
-            )}
-          </div>
           <span className="ml-auto text-sm text-gray-600">
             Tổng: <span className="font-bold text-gray-900">{filteredTeachers.length}</span> giáo viên
             {selectedPrograms.length > 0 && (
@@ -460,32 +434,11 @@ export default function Page2() {
             )}
           </span>
         </div>
-      </div>
+      </FilterSection>
 
       {/* Calendar */}
       {isLoading ? (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="overflow-x-auto">
-            <div className="space-y-3">
-              {/* Table Header Skeleton */}
-              <div className="flex gap-2">
-                <div className="w-32 h-12 bg-gray-200 rounded animate-pulse"></div>
-                {[...Array(7)].map((_, i) => (
-                  <div key={i} className="flex-1 h-12 bg-gray-200 rounded animate-pulse"></div>
-                ))}
-              </div>
-              {/* Table Rows Skeleton */}
-              {[...Array(3)].map((_, rowIdx) => (
-                <div key={rowIdx} className="flex gap-2">
-                  <div className="w-32 h-24 bg-gray-200 rounded animate-pulse"></div>
-                  {[...Array(7)].map((_, colIdx) => (
-                    <div key={colIdx} className="flex-1 h-24 bg-gray-200 rounded animate-pulse"></div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <PageSkeleton variant="table" itemCount={6} showHeader={false} />
       ) : (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="overflow-x-auto">
@@ -574,12 +527,14 @@ export default function Page2() {
                   </p>
                 </div>
               </div>
-              <button
+              <Button
                 onClick={() => setModalOpen(false)}
-                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                variant="ghost"
+                size="icon-sm"
+                className="text-white hover:bg-white hover:bg-opacity-20"
               >
-                <X className="w-6 h-6" />
-              </button>
+                <Icon icon={X} size="sm" />
+              </Button>
             </div>
 
             {/* Modal Body */}
@@ -657,16 +612,18 @@ export default function Page2() {
 
             {/* Modal Footer */}
             <div className="px-6 py-4 bg-gradient-to-b from-gray-50 to-gray-100 border-t border-gray-200">
-              <button
+              <Button
                 onClick={() => setModalOpen(false)}
-                className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                variant="default"
+                className="w-full"
               >
                 Đóng
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       )}
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
   );
 }

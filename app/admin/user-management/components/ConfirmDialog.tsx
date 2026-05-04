@@ -1,5 +1,7 @@
 "use client";
 import { AlertTriangle, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/primitives/icon";
 
 interface Props {
     open: boolean;
@@ -27,15 +29,21 @@ export default function ConfirmDialog({ open, title, message, confirmText = "Xá
                             <h3 className="text-lg font-bold text-gray-900">{title}</h3>
                             <p className="mt-2 text-sm text-gray-600">{message}</p>
                         </div>
-                        <button onClick={onCancel} className="p-1 rounded-lg hover:bg-gray-100"><X className="h-5 w-5 text-gray-400" /></button>
+                        <Button variant="ghost" size="icon-sm" onClick={onCancel}>
+                            <Icon icon={X} size="sm" />
+                        </Button>
                     </div>
                 </div>
                 <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-xl">
-                    <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">{cancelText}</button>
-                    <button onClick={onConfirm}
-                        className={`px-4 py-2 text-sm font-medium text-white rounded-lg shadow ${isDanger ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
+                    <Button variant="outline" onClick={onCancel}>
+                        {cancelText}
+                    </Button>
+                    <Button 
+                        variant={isDanger ? "destructive" : "default"}
+                        onClick={onConfirm}
+                    >
                         {confirmText}
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

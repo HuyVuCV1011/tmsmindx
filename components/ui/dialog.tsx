@@ -1,8 +1,49 @@
 'use client'
 
+/**
+ * Dialog Component
+ * 
+ * Modal dialog component following international standards:
+ * - Material Design 3 Dialog
+ * - Apple HIG Sheets/Alerts
+ * - WCAG 2.1 AA Accessibility
+ * 
+ * Built with base components (Box, Stack, Heading, Text) for consistency.
+ * 
+ * Z-Index Scale:
+ * - Backdrop: 1300 (z-modal-backdrop)
+ * - Content: 1400 (z-modal)
+ * 
+ * @example
+ * ```tsx
+ * <Dialog open={isOpen} onOpenChange={setIsOpen}>
+ *   <DialogContent>
+ *     <DialogHeader>
+ *       <DialogTitle>Xác nhận xóa</DialogTitle>
+ *       <DialogDescription>
+ *         Bạn có chắc chắn muốn xóa mục này không?
+ *       </DialogDescription>
+ *     </DialogHeader>
+ *     <DialogFooter>
+ *       <Button variant="outline" onClick={() => setIsOpen(false)}>
+ *         Hủy
+ *       </Button>
+ *       <Button variant="destructive" onClick={handleDelete}>
+ *         Xóa
+ *       </Button>
+ *     </DialogFooter>
+ *   </DialogContent>
+ * </Dialog>
+ * ```
+ */
+
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
+import { Box } from './primitives/box'
+import { Stack } from './primitives/stack'
+import { Heading } from './primitives/heading'
+import { Text, type TextProps } from './primitives/text'
 
 const Dialog = ({
     open,
@@ -19,20 +60,45 @@ const Dialog = ({
         setMounted(true)
     }, [])
 
+    // Lock body scroll when dialog is open
+    React.useEffect(() => {
+        if (open) {
+            document.body.style.overflow = 'hidden'
+        } else {
+            document.body.style.overflow = ''
+        }
+        return () => {
+            document.body.style.overflow = ''
+        }
+    }, [open])
+
+    // Close on Escape key
+    React.useEffect(() => {
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && open) {
+                onOpenChange?.(false)
+            }
+        }
+        document.addEventListener('keydown', handleEscape)
+        return () => document.removeEventListener('keydown', handleEscape)
+    }, [open, onOpenChange])
+
     if (!open || !mounted) return null
 
     return createPortal(
-        <div className="fixed inset-0 z-9999 flex items-center justify-center opacity-100">
-            {/* Backdrop with stronger blur and opacity */}
-            <div
-                className="fixed inset-0 backdrop-blur-xs backdrop-saturate-150 transition-all duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=open]:fade-in opacity-100"
+        <Box className="fixed inset-0 z-[1300] flex items-center justify-center">
+            {/* Backdrop - z-index: 1300 */}
+            <Box
+                className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in-0 duration-200"
                 onClick={() => onOpenChange?.(false)}
+                aria-hidden="true"
             />
-            {/* Content Container - z-index higher than backdrop */}
-            <div className="z-10000 w-full max-w-lg p-4 sm:p-0 flex items-center justify-center pointer-events-none opacity-100">
+            
+            {/* Content Container - z-index: 1400 */}
+            <Box className="relative z-[1400] w-full max-w-lg p-4 sm:p-0 flex items-center justify-center">
                 {children}
-            </div>
-        </div>,
+            </Box>
+        </Box>,
         document.body
     )
 }
@@ -41,17 +107,17 @@ const DialogContent = React.forwardRef<
     HTMLDivElement,
     React.HTMLAttributes<HTMLDivElement>
 >(({ className, children, ...props }, ref) => (
-    <div
+    <Box
         ref={ref}
         className={cn(
-            "pointer-events-auto relative grid w-full gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg md:w-full opacity-100",
-            "animate-in fade-in-0 zoom-in-95 slide-in-from-left-1/2 slide-in-from-top-[48%]",
+            "w-full bg-background border border-gray-200 shadow-xl rounded-lg",
+            "animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-4 duration-200",
             className
         )}
         {...props}
     >
         {children}
-    </div>
+    </Box>
 ))
 DialogContent.displayName = "DialogContent"
 
@@ -59,9 +125,10 @@ const DialogHeader = ({
     className,
     ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
-    <div
+    <Stack
+        gap="sm"
         className={cn(
-            "flex flex-col space-y-1.5 text-center sm:text-left",
+            "px-6 pt-6 pb-4 border-b border-gray-100",
             className
         )}
         {...props}
@@ -73,9 +140,9 @@ const DialogFooter = ({
     className,
     ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
-    <div
+    <Box
         className={cn(
-            "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
+            "flex flex-col-reverse sm:flex-row sm:justify-end gap-2 px-6 py-4 bg-gray-50 rounded-b-lg border-t border-gray-100",
             className
         )}
         {...props}
@@ -89,10 +156,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
     <h2
         ref={ref}
-        className={cn(
-            "text-lg font-semibold leading-none tracking-tight",
-            className
-        )}
+        className={cn("text-lg font-semibold text-gray-900", className)}
         {...props}
     />
 ))
@@ -101,14 +165,29 @@ DialogTitle.displayName = "DialogTitle"
 const DialogDescription = React.forwardRef<
     HTMLParagraphElement,
     React.HTMLAttributes<HTMLParagraphElement>
->(({ className, ...props }, ref) => (
-    <p
-        ref={ref}
-        className={cn("text-sm text-muted-foreground", className)}
+>(({ className, ...props }, ref) => {
+    return (
+        <Text
+            size="sm"
+            color={'muted' satisfies NonNullable<TextProps['color']> as any}
+            ref={ref}
+            className={className}
+            {...props}
+        />
+    )
+})
+DialogDescription.displayName = "DialogDescription"
+
+const DialogBody = ({
+    className,
+    ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+    <Box
+        className={cn("px-6 py-4", className)}
         {...props}
     />
-))
-DialogDescription.displayName = "DialogDescription"
+)
+DialogBody.displayName = "DialogBody"
 
 export {
     Dialog,
@@ -117,4 +196,5 @@ export {
     DialogFooter,
     DialogTitle,
     DialogDescription,
+    DialogBody,
 }

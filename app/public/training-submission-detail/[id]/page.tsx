@@ -4,6 +4,7 @@ import { sanitizeHtml } from '@/lib/sanitize-html';
 import { AlertCircle, CheckCircle, Clock, User, XCircle } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 
 interface SubmissionDetail {
   id: number;
@@ -179,13 +180,13 @@ export default function SubmissionDetailPage() {
                  <div className="text-sm text-slate-500 mb-1">Trạng thái</div>
                  <div className="flex justify-center items-center h-full pt-1">
                    {(submission.percentage ?? 0) >= 70 ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full font-medium text-sm">
-                        <CheckCircle className="w-4 h-4" /> Đạt
-                      </span>
+                      <Badge variant="success" size="lg" shape="pill" icon={CheckCircle}>
+                        Đạt
+                      </Badge>
                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-700 rounded-full font-medium text-sm">
-                        <XCircle className="w-4 h-4" /> Chưa đạt
-                      </span>
+                      <Badge variant="danger" size="lg" shape="pill" icon={XCircle}>
+                        Chưa đạt
+                      </Badge>
                    )}
                  </div>
                </div>

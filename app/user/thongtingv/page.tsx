@@ -8,6 +8,10 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/ui/primitives/icon'
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { toast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
@@ -30,6 +34,7 @@ import {
     User,
     UserCheck,
     Users,
+    X,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -152,18 +157,16 @@ const InfoItem = memo(
           </div>
         </div>
         {sensitive && (
-          <button
+          <Button
             type="button"
             onClick={() => setRevealed((v) => !v)}
-            className="text-gray-400 hover:text-gray-600 mt-1 shrink-0 transition-colors"
+            variant="ghost"
+            size="icon-sm"
+            className="mt-1 shrink-0 h-6 w-6"
             aria-label={revealed ? 'Ẩn' : 'Hiện'}
           >
-            {revealed ? (
-              <EyeOff className="h-4 w-4" />
-            ) : (
-              <Eye className="h-4 w-4" />
-            )}
-          </button>
+            <Icon icon={revealed ? EyeOff : Eye} size="sm" />
+          </Button>
         )}
       </div>
     )
@@ -1240,27 +1243,21 @@ export default function Page1() {
     availabilityToDate,
   ])
 
+  // Show skeleton while loading initial profile
+  if (isLoadingProfile && !teacher) {
+    return <PageSkeleton variant="default" itemCount={6} showHeader={true} />
+  }
+
   return (
-    <div className="max-w-7xl mx-auto px-4 lg:px-6 pt-4 sm:pt-6 lg:pt-0">
-      <div className="space-y-3 sm:space-y-4">
+    <PageLayout maxWidth="7xl" padding="md">
+      <PageLayoutContent spacing="lg">
         {/* Header */}
         <div className="border-b border-gray-200 pb-2 sm:pb-3">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             Thông Tin Của Tôi
           </h1>
           <div className="text-xs text-gray-600 mt-1">
-            {isLoadingProfile ? (
-              <span className="inline-flex items-center gap-2">
-                <div className="w-3 h-1 bg-gray-300 rounded overflow-hidden">
-                  <div className="w-full h-full bg-blue-500 animate-pulse"></div>
-                </div>
-                Đang tải thông tin của bạn...
-              </span>
-            ) : user?.displayName ? (
-              `Xin chào ${user.displayName}`
-            ) : (
-              'Đang tải thông tin của bạn...'
-            )}
+            {user?.displayName ? `Xin chào ${user.displayName}` : 'Thông tin giáo viên'}
           </div>
         </div>
 
@@ -1283,7 +1280,7 @@ export default function Page1() {
         )}
 
         {/* Empty State — chưa có GV (kể cả sau khi tải theo email) */}
-        {!submitCode && !teacher && !error && !isLoadingProfile && (
+        {!submitCode && !teacher && !error && (
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 sm:p-12 text-center">
             <div className="flex flex-col items-center gap-3">
               <div className="w-16 h-16 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center">
@@ -1300,42 +1297,8 @@ export default function Page1() {
           </div>
         )}
 
-        {/* Teacher Info Skeleton */}
-        {isLoadingProfile && !teacher && (
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
-            {/* Header Skeleton */}
-            <div className="bg-[#a1001f] text-white p-3 sm:p-4">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gray-700 animate-pulse"></div>
-                <div className="min-w-0 flex-1 space-y-2">
-                  <div className="h-5 bg-gray-700 rounded w-40 animate-pulse"></div>
-                  <div className="h-3 bg-gray-700 rounded w-24 animate-pulse"></div>
-                </div>
-              </div>
-            </div>
-
-            {/* Info Grid Skeleton */}
-            <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-2 p-2 bg-white border border-gray-100 rounded"
-                  >
-                    <div className="w-4 h-4 bg-gray-300 rounded animate-pulse mt-0.5"></div>
-                    <div className="flex-1 space-y-1">
-                      <div className="h-3 bg-gray-300 rounded w-20 animate-pulse"></div>
-                      <div className="h-4 bg-gray-200 rounded w-full animate-pulse"></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Teacher Profile — unified from DB */}
-        {teacher && dbRow && !isLoadingProfile && (
+        {teacher && dbRow && (
           <div
             className="border border-gray-200 rounded-xl overflow-hidden animate-fadeIn"
             style={{ animationDelay: '0.1s' }}
@@ -1386,21 +1349,7 @@ export default function Page1() {
           </div>
         )}
 
-        {/* Score Summary Skeleton */}
-        {teacher && !scoresLoaded && (
-          <div className="border border-gray-200 rounded-xl p-3 sm:p-4 bg-white">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 items-end">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i}>
-                  <div className="h-3 bg-gray-200 rounded w-16 mb-1 animate-pulse"></div>
-                  <div className="h-10 bg-gray-300 rounded animate-pulse"></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Score Summary */}
+        {/* Score Summary - No nested skeleton, just show when loaded */}
         {teacher &&
           scoresLoaded &&
           (expertiseData.length > 0 || experienceData.length > 0) && (
@@ -1492,35 +1441,7 @@ export default function Page1() {
               </div>
             </div>
             <div className="p-2 sm:p-4 overflow-x-auto -mx-2 sm:mx-0">
-              {!scoresLoaded ? (
-                /* Loading Skeleton */
-                <div className="space-y-3">
-                  <div className="animate-pulse">
-                    <div className="flex gap-2 mb-3">
-                      <div className="h-8 bg-gray-200 rounded w-24"></div>
-                      {Array.from({ length: 12 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className="h-8 bg-gray-200 rounded flex-1 min-w-12.5"
-                        ></div>
-                      ))}
-                    </div>
-                    <div className="space-y-2">
-                      {[1, 2].map((row) => (
-                        <div key={row} className="flex gap-2">
-                          <div className="h-10 bg-gray-300 rounded w-24"></div>
-                          {Array.from({ length: 12 }).map((_, i) => (
-                            <div
-                              key={i}
-                              className="h-10 bg-gray-100 rounded flex-1 min-w-12.5"
-                            ></div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : expertiseData.length === 0 && experienceData.length === 0 ? (
+              {expertiseData.length === 0 && experienceData.length === 0 ? (
                 /* No Data Message */
                 <div className="text-center py-8 text-gray-500">
                   <p className="text-sm">Chưa có dữ liệu điểm số</p>
@@ -1761,19 +1682,7 @@ export default function Page1() {
 
             {/* Content */}
             <div className="p-3 sm:p-4">
-              {isLoadingTraining ? (
-                /* Loading Skeleton */
-                <div className="space-y-3">
-                  <div className="animate-pulse space-y-2">
-                    <div className="h-6 bg-gray-200 rounded w-48"></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {Array.from({ length: 10 }).map((_, i) => (
-                        <div key={i} className="h-20 bg-gray-100 rounded"></div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : !trainingData ? (
+              {!trainingData ? (
                 /* No Data Message */
                 <div className="text-center py-8 text-gray-500">
                   <p className="text-sm">Chưa có dữ liệu đào tạo</p>
@@ -1954,41 +1863,7 @@ export default function Page1() {
             </div>
 
             <div className="p-3 sm:p-4 bg-white space-y-4">
-              {isLoadingAvailabilityData ? (
-                /* Loading Skeleton */
-                <>
-                  {/* Summary Stats Skeleton */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-                    {[1, 2, 3, 4].map((i) => (
-                      <div
-                        key={i}
-                        className="bg-gray-100 rounded-lg p-2 sm:p-3 animate-pulse"
-                      >
-                        <div className="h-6 sm:h-8 bg-gray-300 rounded mb-2"></div>
-                        <div className="h-3 sm:h-4 bg-gray-200 rounded"></div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Heatmap Skeleton */}
-                  <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50">
-                    <div className="h-4 bg-gray-300 rounded w-48 mb-3 animate-pulse"></div>
-                    <div className="h-48 bg-gray-200 rounded animate-pulse"></div>
-                  </div>
-
-                  {/* Charts Skeleton */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-                    <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50">
-                      <div className="h-4 bg-gray-300 rounded w-32 mb-3 animate-pulse"></div>
-                      <div className="h-48 bg-gray-200 rounded animate-pulse"></div>
-                    </div>
-                    <div className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50">
-                      <div className="h-4 bg-gray-300 rounded w-32 mb-3 animate-pulse"></div>
-                      <div className="h-48 bg-gray-200 rounded animate-pulse"></div>
-                    </div>
-                  </div>
-                </>
-              ) : !availabilityStats || availabilityStats.totalSlots === 0 ? (
+              {!availabilityStats || availabilityStats.totalSlots === 0 ? (
                 /* No Data Message */
                 <div className="text-center py-8 text-gray-500">
                   <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -2456,25 +2331,15 @@ export default function Page1() {
                     </p>
                   </div>
                 </div>
-                <button
+                <Button
                   onClick={() => setModalOpen(false)}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 sm:p-2 transition-all shrink-0"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-white hover:bg-white hover:bg-opacity-20 shrink-0"
                   title="Đóng"
                 >
-                  <svg
-                    className="w-5 h-5 sm:w-6 sm:h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
+                  <Icon icon={X} size="sm" />
+                </Button>
               </div>
 
               <div className="overflow-y-auto max-h-[calc(95vh-150px)] sm:max-h-[calc(90vh-220px)] bg-gray-50 overflow-x-auto">
@@ -2764,12 +2629,13 @@ export default function Page1() {
                   <strong className="text-gray-900">{searchCode}</strong>. Vui
                   lòng kiểm tra lại mã giáo viên.
                 </p>
-                <button
+                <Button
                   onClick={handleNotFoundConfirm}
-                  className="w-full px-4 py-3 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
+                  variant="default"
+                  className="w-full"
                 >
                   OK
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -3014,7 +2880,7 @@ export default function Page1() {
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
   )
 }
