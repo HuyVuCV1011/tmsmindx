@@ -1,8 +1,9 @@
 'use client'
 
 import { Card } from '@/components/Card'
-import Modal from '@/components/Modal'
+import { Modal } from '@/components/ui/modal'
 import { PageContainer } from '@/components/PageContainer'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
@@ -1724,6 +1725,13 @@ export default function MonthlyActivitiesPage() {
     )
   }
 
+  // Show skeleton while loading initial data
+  const isInitialLoading = events.length === 0 && !teacherCode
+
+  if (isInitialLoading) {
+    return <PageSkeleton variant="default" itemCount={6} showHeader={true} />
+  }
+
   return (
     <PageContainer title="Các Hoạt Động Hàng Tháng" description="">
       <Card className="overflow-hidden" padding="sm">
@@ -2658,7 +2666,7 @@ export default function MonthlyActivitiesPage() {
       )}
 
       <Modal
-        isOpen={showRegisterModal && !!selectedDate}
+        open={showRegisterModal && !!selectedDate}
         onClose={() => {
           setShowRegisterModal(false)
           setSelectedRegistrationEvent(null)

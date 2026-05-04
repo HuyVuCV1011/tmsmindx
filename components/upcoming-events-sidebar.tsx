@@ -10,6 +10,8 @@ import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
 import { BirthdayWishPopup } from '@/components/birthday-wish-popup'
 import { BirthdaySendWishPopup } from '@/components/birthday-send-wish-popup'
+import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/ui/primitives/icon'
 
 interface Post {
     id: string | number
@@ -406,13 +408,12 @@ export function UpcomingEventsSidebar() {
                                 )
                             })}
                             
-                            <Link
-                                href="/user/hoat-dong-hang-thang"
-                                className="flex items-center justify-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-semibold py-3 hover:bg-linear-to-r hover:from-blue-50 hover:to-indigo-50 rounded-xl transition-all duration-200 mt-4 border border-transparent hover:border-blue-200 hover:shadow-md group"
-                            >
-                                <span>Xem toàn bộ lịch</span>
-                                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                            </Link>
+                            <Button variant="outline" size="default" className="w-full mt-4" asChild>
+                                <Link href="/user/hoat-dong-hang-thang">
+                                    Xem toàn bộ lịch
+                                    <Icon icon={ArrowRight} size="sm" />
+                                </Link>
+                            </Button>
                         </>
                     ) : (
                         <div className="text-center py-10">
@@ -489,16 +490,15 @@ export function UpcomingEventsSidebar() {
                 </div>
 
                 <div className="px-4 pb-4">
-                    <button
-                        type="button"
-                        className="w-full py-3 bg-white/15 hover:bg-white text-white hover:text-red-700 text-sm font-bold rounded-xl transition-colors duration-200 border border-white/30 hover:border-white shadow-sm hover:shadow-md group"
+                    <Button
+                        variant="outline"
+                        size="default"
+                        className="w-full bg-white/15 hover:bg-white text-white hover:text-red-700 border-white/30 hover:border-white"
                         onClick={() => setIsSendWishPopupOpen(true)}
                     >
-                        <span className="flex items-center justify-center gap-2">
-                            <span>Gửi lời chúc ngay</span>
-                            <span className="group-hover:scale-125 transition-transform">💌</span>
-                        </span>
-                    </button>
+                        Gửi lời chúc ngay
+                        <span className="group-hover:scale-125 transition-transform">💌</span>
+                    </Button>
                   
                 </div>
             </div>

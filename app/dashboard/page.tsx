@@ -1,5 +1,6 @@
 'use client'
 
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { useAuth } from '@/lib/auth-context'
 import { logger } from '@/lib/logger'
 import { useRouter } from 'next/navigation'
@@ -39,18 +40,5 @@ export default function DashboardRedirect() {
     }
   }, [user, token, isLoading, router])
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="text-center max-w-md">
-        <div className="animate-pulse space-y-4">
-          <div className="h-16 w-16 bg-gray-200 rounded-full mx-auto"></div>
-          <div className="h-4 bg-gray-200 rounded w-2/3 mx-auto"></div>
-          <div className="h-3 bg-gray-200 rounded w-1/2 mx-auto"></div>
-        </div>
-        <p className="text-gray-600 text-sm font-medium mt-6">
-          {isLoading ? 'Đang kiểm tra đăng nhập...' : 'Đang chuyển hướng...'}
-        </p>
-      </div>
-    </div>
-  )
+  return <PageSkeleton variant="default" itemCount={3} showHeader={false} />
 }

@@ -421,22 +421,9 @@ export default function AppLayout({
     void verifyTeacherStillExists()
   }, [user, token, pathname, router])
 
-  // Show skeleton while checking authentication
+  // Show nothing while checking authentication - let page-level skeleton handle it
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-white p-4">
-        <div className="animate-pulse space-y-6">
-          <div className="flex items-center space-x-4">
-            <div className="h-10 w-10 bg-gray-300 rounded-full"></div>
-            <div className="h-6 bg-gray-300 rounded w-32"></div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="h-64 bg-gray-300 rounded"></div>
-            <div className="md:col-span-3 h-64 bg-gray-300 rounded"></div>
-          </div>
-        </div>
-      </div>
-    )
+    return null
   }
 
   const adminGateBlocking =
@@ -446,42 +433,12 @@ export default function AppLayout({
     (adminAccessState === 'checking' || adminAccessState === 'idle')
 
   if (adminGateBlocking) {
-    return (
-      <div className="min-h-screen bg-white p-4">
-        <div className="animate-pulse space-y-6">
-          <div className="flex items-center space-x-4">
-            <div className="h-10 w-10 bg-gray-300 rounded-full"></div>
-            <div className="h-6 bg-gray-300 rounded w-40"></div>
-          </div>
-          <p className="text-sm text-gray-500">Đang xác thực phiên quản trị…</p>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="h-64 bg-gray-300 rounded"></div>
-            <div className="md:col-span-3 h-64 bg-gray-300 rounded"></div>
-          </div>
-        </div>
-      </div>
-    )
+    return null
   }
 
   // GV: đang kiểm tra DB trước khi render /user (tránh nháy /checkdatasource)
   if (teacherGateBlocking) {
-    return (
-      <div className="min-h-screen bg-white p-4">
-        <div className="animate-pulse space-y-6">
-          <div className="flex items-center space-x-4">
-            <div className="h-10 w-10 bg-gray-300 rounded-full"></div>
-            <div className="h-6 bg-gray-300 rounded w-40"></div>
-          </div>
-          <p className="text-sm text-gray-500">
-            Đang xác thực hồ sơ giáo viên…
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="h-64 bg-gray-300 rounded"></div>
-            <div className="md:col-span-3 h-64 bg-gray-300 rounded"></div>
-          </div>
-        </div>
-      </div>
-    )
+    return null
   }
 
   // Fallback UI for unassigned admin roles

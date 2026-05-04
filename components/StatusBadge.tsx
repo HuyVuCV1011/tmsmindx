@@ -29,13 +29,13 @@ const statusMap: Record<string, BadgeVariant> = {
   "Processing": "warning",
   "Chờ xác nhận": "warning",
 
-  // Destructive states
-  "Từ chối": "destructive",
-  "Không đạt": "destructive",
-  "Hết hạn": "destructive",
-  "Rejected": "destructive",
-  "Failed": "destructive",
-  "Expired": "destructive",
+  // Danger states
+  "Từ chối": "danger",
+  "Không đạt": "danger",
+  "Hết hạn": "danger",
+  "Rejected": "danger",
+  "Failed": "danger",
+  "Expired": "danger",
 
   // Info states
   "Mới": "info",

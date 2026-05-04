@@ -1,9 +1,13 @@
 "use client";
 
 import { PageContainer } from "@/components/PageContainer";
+import { PageSkeleton } from "@/components/skeletons/PageSkeleton";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/primitives/icon";
+import { StatCard, StatGrid } from "@/components/ui/stat-card";
 import { useAuth } from "@/lib/auth-context";
 import { authHeaders } from "@/lib/auth-headers";
-import { File, Filter, Image as ImageIcon, Loader2, RefreshCw, Video } from "lucide-react";
+import { File, Filter, Image as ImageIcon, RefreshCw, Video, Database } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/app-toast";
 
@@ -100,32 +104,42 @@ export default function S3SupabaseManagerPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <p className="text-xs text-gray-500">Tổng tài nguyên</p>
-          <p className="text-xl font-bold text-gray-900">{stats.total}</p>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <p className="text-xs text-gray-500">Hình ảnh</p>
-          <p className="text-xl font-bold text-blue-600">{stats.images}</p>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <p className="text-xs text-gray-500">Video</p>
-          <p className="text-xl font-bold text-purple-600">{stats.videos}</p>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <p className="text-xs text-gray-500">File khác</p>
-          <p className="text-xl font-bold text-amber-600">{stats.files}</p>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-3 md:col-span-2">
-          <p className="text-xs text-gray-500">Bucket</p>
-          <p className="text-sm font-semibold text-gray-900 truncate">{bucket || "Tất cả buckets"}</p>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <p className="text-xs text-gray-500">Dung lượng</p>
-          <p className="text-xl font-bold text-emerald-600">{formatBytes(stats.totalBytes)}</p>
-        </div>
-      </div>
+      <StatGrid cols={6}>
+        <StatCard
+          label="Tổng tài nguyên"
+          value={stats.total}
+          icon={File}
+        />
+        <StatCard
+          label="Hình ảnh"
+          value={stats.images}
+          icon={ImageIcon}
+          variant="blue"
+        />
+        <StatCard
+          label="Video"
+          value={stats.videos}
+          icon={Video}
+          variant="purple"
+        />
+        <StatCard
+          label="File khác"
+          value={stats.files}
+          icon={File}
+          variant="amber"
+        />
+        <StatCard
+          label="Bucket"
+          value={bucket || "Tất cả buckets"}
+          icon={Database}
+          className="md:col-span-2"
+        />
+        <StatCard
+          label="Dung lượng"
+          value={formatBytes(stats.totalBytes)}
+          variant="emerald"
+        />
+      </StatGrid>
 
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -167,27 +181,28 @@ export default function S3SupabaseManagerPage() {
             </select>
           </div>
           <div className="flex items-end gap-2">
-            <button
+            <Button
               onClick={() => setAppliedPrefix(prefix)}
-              className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-[#a1001f] text-white rounded-lg text-sm hover:bg-[#7e0018]"
+              variant="default"
+              size="sm"
+              className="flex-1"
             >
-              <Filter className="w-4 h-4" />
+              <Icon icon={Filter} size="sm" />
               Áp dụng
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={fetchItems}
-              className="inline-flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+              variant="outline"
+              size="icon-sm"
             >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+              <Icon icon={RefreshCw} size="sm" />
+            </Button>
           </div>
         </div>
       </div>
 
       {loading ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-10 flex justify-center">
-          <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-        </div>
+        <PageSkeleton variant="grid" itemCount={6} showHeader={false} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {items.map((item) => (

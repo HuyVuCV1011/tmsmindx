@@ -1,6 +1,7 @@
 'use client'
 
 import { PageHeader } from '@/components/PageHeader'
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout'
 
 interface PageContainerProps {
   children: React.ReactNode
@@ -21,37 +22,43 @@ function PageContainer({
   className = '',
   padding = 'md',
 }: PageContainerProps) {
-  const maxWidthClasses = {
-    sm: 'max-w-2xl',
-    md: 'max-w-4xl',
-    lg: 'max-w-5xl',
-    xl: 'max-w-6xl',
-    '2xl': 'max-w-7xl',
-    full: 'w-full',
-  }
+  // Map PageContainer maxWidth to PageLayout maxWidth
+  const pageLayoutMaxWidth = {
+    sm: '3xl' as const,
+    md: '4xl' as const,
+    lg: '5xl' as const,
+    xl: '6xl' as const,
+    '2xl': '7xl' as const,
+    full: '7xl' as const,
+  }[maxWidth]
 
-  const paddingClasses = {
-    none: 'p-4',
-    sm: 'p-4',
-    md: 'p-4',
-    lg: 'p-4',
-  }
+  // Map PageContainer padding to PageLayout padding
+  const pageLayoutPadding = {
+    none: 'none' as const,
+    sm: 'sm' as const,
+    md: 'md' as const,
+    lg: 'lg' as const,
+  }[padding]
 
   return (
-    <div className={`${paddingClasses[padding]} ${className}`}>
-      {/* Page Header */}
-      {(title || description) && (
-        <PageHeader
-          title={title || ''}
-          description={description}
-          actions={headerActions}
-        />
-      )}
-      {/* Page Content */}
-      <div className={`w-full ${maxWidthClasses[maxWidth]} mx-auto`}>
+    <PageLayout 
+      maxWidth={pageLayoutMaxWidth} 
+      padding={pageLayoutPadding}
+      className={className}
+    >
+      <PageLayoutContent spacing="lg">
+        {/* Page Header */}
+        {(title || description) && (
+          <PageHeader
+            title={title || ''}
+            description={description}
+            actions={headerActions}
+          />
+        )}
+        {/* Page Content */}
         {children}
-      </div>
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
   )
 }
 

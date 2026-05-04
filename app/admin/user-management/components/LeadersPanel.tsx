@@ -2,10 +2,12 @@
 import { useAuth } from "@/lib/auth-context";
 import { authHeaders } from "@/lib/auth-headers";
 import { getLeaderAreas } from "@/lib/teaching-leaders";
-import { Edit2, Filter, Loader2, MapPin, Plus, Save, Search, Trash2 } from "lucide-react";
+import { Edit2, Filter, Loader2, MapPin, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "@/lib/app-toast";
 import ConfirmDialog from "./ConfirmDialog";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/primitives/icon";
 
 interface Leader {
     code: string;
@@ -161,13 +163,18 @@ export default function LeadersPanel() {
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Tìm tên, code, center..."
                         className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-[#a1001f]" />
                 </div>
-                <button onClick={() => setShowFilters(!showFilters)}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${showFilters ? 'bg-[#a1001f] text-white border-[#a1001f]' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
-                    <Filter className="h-4 w-4" />{(fStatus || fArea || fRole) ? `Lọc (${[fStatus, fArea, fRole].filter(Boolean).length})` : 'Bộ lọc'}
-                </button>
-                <button onClick={openNew} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gradient-to-r from-[#a1001f] to-[#c41230] text-white text-sm font-medium shadow hover:shadow-md">
-                    <Plus className="h-4 w-4" />Thêm
-                </button>
+                <Button 
+                    onClick={() => setShowFilters(!showFilters)}
+                    variant={showFilters ? "default" : "outline"}
+                    size="sm"
+                >
+                    <Icon icon={Filter} size="sm" />
+                    {(fStatus || fArea || fRole) ? `Lọc (${[fStatus, fArea, fRole].filter(Boolean).length})` : 'Bộ lọc'}
+                </Button>
+                <Button onClick={openNew} variant="mindx" size="sm">
+                    <Icon icon={Plus} size="sm" />
+                    Thêm
+                </Button>
             </div>
 
             {/* Filters */}
@@ -185,7 +192,16 @@ export default function LeadersPanel() {
                         <option value="">Tất cả role</option>
                         {filters.roleCodes.map(r => <option key={r.role_code} value={r.role_code}>{r.role_code} - {r.role_name}</option>)}
                     </select>
-                    {(fStatus || fArea || fRole) && <button onClick={() => { setFStatus(""); setFArea(""); setFRole(""); }} className="text-xs text-[#a1001f] hover:underline">Xóa lọc</button>}
+                    {(fStatus || fArea || fRole) && (
+                        <Button 
+                            onClick={() => { setFStatus(""); setFArea(""); setFRole(""); }} 
+                            variant="ghost" 
+                            size="xs"
+                            className="text-[#a1001f] hover:text-[#a1001f]"
+                        >
+                            Xóa lọc
+                        </Button>
+                    )}
                 </div>
             )}
 
@@ -240,9 +256,13 @@ export default function LeadersPanel() {
                                     <option value="Active">Active</option><option value="Deactive">Deactive</option></select></div>
                         </div>
                         <div className="flex justify-end gap-2 pt-2">
-                            <button type="button" onClick={() => setEditLeader(null)} className="px-4 py-1.5 text-sm border rounded-lg hover:bg-gray-50">Hủy</button>
-                            <button type="submit" disabled={saving} className="px-4 py-1.5 text-sm text-white bg-blue-600 rounded-lg shadow disabled:opacity-50 flex items-center gap-1.5">
-                                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{isNew ? "Thêm" : "Lưu"}</button>
+                            <Button type="button" onClick={() => setEditLeader(null)} variant="outline">
+                                Hủy
+                            </Button>
+                            <Button type="submit" disabled={saving} loading={saving} variant="default">
+                                <Icon icon={Save} size="sm" />
+                                {isNew ? "Thêm" : "Lưu"}
+                            </Button>
                         </div>
                     </form>
                 </div>
@@ -277,13 +297,31 @@ export default function LeadersPanel() {
                                                 <p className="text-xs text-gray-500 truncate">{l.center}</p>
                                             </div>
                                             <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                <button onClick={() => askToggleStatus(l)} title={l.status === 'Active' ? 'Tắt' : 'Bật'}
-                                                    className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${l.status === 'Active' ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700' : 'bg-red-100 text-red-700 hover:bg-green-100 hover:text-green-700'}`}>
-                                                    {l.status}</button>
-                                                <button onClick={() => openEdit(l)} className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors" title="Sửa">
-                                                    <Edit2 className="h-3.5 w-3.5 text-gray-400 hover:text-blue-600" /></button>
-                                                <button onClick={() => setConfirmDlg({ open: true, code: l.code, name: l.full_name })} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors" title="Xóa">
-                                                    <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-red-600" /></button>
+                                                <Button 
+                                                    onClick={() => askToggleStatus(l)} 
+                                                    title={l.status === 'Active' ? 'Tắt' : 'Bật'}
+                                                    variant={l.status === 'Active' ? 'success' : 'destructive'}
+                                                    size="xs"
+                                                    className="rounded-full"
+                                                >
+                                                    {l.status}
+                                                </Button>
+                                                <Button 
+                                                    onClick={() => openEdit(l)} 
+                                                    variant="ghost" 
+                                                    size="icon-sm"
+                                                    title="Sửa"
+                                                >
+                                                    <Icon icon={Edit2} size="sm" className="text-gray-400 hover:text-blue-600" />
+                                                </Button>
+                                                <Button 
+                                                    onClick={() => setConfirmDlg({ open: true, code: l.code, name: l.full_name })} 
+                                                    variant="ghost" 
+                                                    size="icon-sm"
+                                                    title="Xóa"
+                                                >
+                                                    <Icon icon={Trash2} size="sm" className="text-gray-400 hover:text-red-600" />
+                                                </Button>
                                             </div>
                                         </div>
                                     ))}

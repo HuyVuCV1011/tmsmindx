@@ -1,6 +1,6 @@
 'use client';
 
-import Modal from '@/components/Modal';
+import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { StepItem, Stepper } from '@/components/ui/stepper';
 import { useAuth } from '@/lib/auth-context';
@@ -585,7 +585,7 @@ export default function DealLuongPage() {
 
       {/* ═══ Form Modal ═══ */}
       <Modal
-        isOpen={showForm}
+        open={showForm}
         onClose={() => setShowForm(false)}
         title={`Tạo yêu cầu ${DEAL_TYPE_LABELS[activeTab].label}`}
         maxWidth="4xl"

@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout';
+
 export default function CourseLinksTestPage() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any[]>([]);
@@ -82,9 +85,9 @@ export default function CourseLinksTestPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white p-8">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Course Links Raw Data Test</h1>
+    <PageLayout>
+      <PageLayoutContent spacing="xl">
+        <h1 className="text-3xl font-bold">Course Links Raw Data Test</h1>
         
         {/* Sheet Info */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -97,13 +100,14 @@ export default function CourseLinksTestPage() {
               https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}
             </div>
           </div>
-          <button
+          <Button
             onClick={fetchData}
             disabled={loading}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
+            loading={loading}
+            className="mt-4"
           >
-            {loading ? 'Loading...' : 'Refresh Data'}
-          </button>
+            Refresh Data
+          </Button>
         </div>
 
         {/* Error Display */}
@@ -199,7 +203,7 @@ export default function CourseLinksTestPage() {
             <p className="text-blue-800">No data loaded. Click "Refresh Data" to fetch.</p>
           </div>
         )}
-      </div>
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
   );
 }

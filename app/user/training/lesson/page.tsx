@@ -1,6 +1,7 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout'
 import { toast as flatToast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 import { useAppSelector } from '@/lib/redux/hooks'
@@ -1810,17 +1811,17 @@ export default function LessonPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-white p-6">
-          <div className="max-w-4xl mx-auto animate-pulse space-y-6">
-            <div className="h-8 bg-gray-300 rounded w-1/3"></div>
-            <div className="aspect-video bg-gray-300 rounded"></div>
+        <PageLayout maxWidth="4xl">
+          <PageLayoutContent spacing="xl">
+            <div className="h-8 bg-gray-300 rounded w-1/3 animate-pulse"></div>
+            <div className="aspect-video bg-gray-300 rounded animate-pulse"></div>
             <div className="space-y-3">
-              <div className="h-4 bg-gray-300 rounded w-3/4"></div>
-              <div className="h-4 bg-gray-300 rounded w-1/2"></div>
-              <div className="h-4 bg-gray-300 rounded w-2/3"></div>
+              <div className="h-4 bg-gray-300 rounded w-3/4 animate-pulse"></div>
+              <div className="h-4 bg-gray-300 rounded w-1/2 animate-pulse"></div>
+              <div className="h-4 bg-gray-300 rounded w-2/3 animate-pulse"></div>
             </div>
-          </div>
-        </div>
+          </PageLayoutContent>
+        </PageLayout>
       }
     >
       <LessonContent />

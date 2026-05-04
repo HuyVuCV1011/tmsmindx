@@ -3,6 +3,12 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton';
+import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/primitives/icon';
+import { StatusBadge } from '@/components/ui/badge';
+import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout';
+import { X } from 'lucide-react';
 interface TestRecord {
   area: string;
   name: string;
@@ -88,8 +94,8 @@ function RawDataContent() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="space-y-4">
+    <PageLayout>
+      <PageLayoutContent>
         <div className="border-b border-gray-900 pb-3">
           <h1 className="text-2xl font-bold text-gray-900">Raw Data - Chuyên môn Chuyên sâu</h1>
           <p className="text-xs text-gray-600 mt-1">Xem chi tiết điểm test chuyên môn theo tháng</p>
@@ -106,13 +112,14 @@ function RawDataContent() {
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:border-[#a1001f] focus:ring-1 focus:ring-[#a1001f]/25"
             />
           </div>
-          <button
+          <Button
+            variant="default"
             onClick={() => handleSearch()}
             disabled={loading}
-            className="px-4 py-2 bg-gray-900 text-white rounded text-sm font-medium hover:bg-gray-700 disabled:bg-gray-400 transition-colors"
+            loading={loading}
           >
-            {loading ? "Đang tìm..." : "Tìm kiếm"}
-          </button>
+            Tìm kiếm
+          </Button>
         </div>
 
         {error && (
@@ -121,11 +128,7 @@ function RawDataContent() {
           </div>
         )}
 
-        {loading && (
-          <div className="flex items-center justify-center p-8">
-            <div className="text-gray-600">Đang tải dữ liệu...</div>
-          </div>
-        )}
+        {loading && <PageSkeleton variant="table" itemCount={8} showHeader={true} />}
 
         {!loading && teacherCode && (
           <>
@@ -218,15 +221,12 @@ function RawDataContent() {
                             )}
                           </TableCell>
                           <TableCell className="text-center py-3 px-3">
-                            {record.isCountedInAverage ? (
-                              <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                                ✓ Tính
-                              </span>
-                            ) : (
-                              <span className="inline-block px-3 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">
-                                ✗ Không tính
-                              </span>
-                            )}
+                            <StatusBadge
+                              active={record.isCountedInAverage}
+                              activeText="✓ Tính"
+                              inactiveText="✗ Không tính"
+                              size="sm"
+                            />
                           </TableCell>
                         </TableRow>
                       ))}
@@ -256,14 +256,13 @@ function RawDataContent() {
                     Điểm trung bình: {selectedMonth.average.toFixed(1)} | Tổng {selectedMonth.count} bài test
                   </p>
                 </div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
                   onClick={() => setModalOpen(false)}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-all"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                  <Icon icon={X} size="md" />
+                </Button>
               </div>
 
               <div className="overflow-y-auto max-h-[calc(90vh-180px)] bg-white">
@@ -314,15 +313,12 @@ function RawDataContent() {
                           )}
                         </TableCell>
                         <TableCell className="text-center py-3 px-3">
-                          {record.isCountedInAverage ? (
-                            <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                              ✓ Tính
-                            </span>
-                          ) : (
-                            <span className="inline-block px-3 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">
-                              ✗ Không tính
-                            </span>
-                          )}
+                          <StatusBadge
+                            active={record.isCountedInAverage}
+                            activeText="✓ Tính"
+                            inactiveText="✗ Không tính"
+                            size="sm"
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -337,16 +333,16 @@ function RawDataContent() {
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </PageLayoutContent>
+    </PageLayout>
   );
 }
 
 export default function RawDataPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-white p-4">
-        <div className="max-w-7xl mx-auto space-y-4">
+      <PageLayout>
+        <PageLayoutContent>
           {/* Header Skeleton */}
           <div className="space-y-3 animate-pulse">
             <div className="h-8 bg-gray-200 rounded w-96"></div>
@@ -363,8 +359,8 @@ export default function RawDataPage() {
               <div key={i} className="h-16 bg-gray-200 rounded animate-pulse"></div>
             ))}
           </div>
-        </div>
-      </div>
+        </PageLayoutContent>
+      </PageLayout>
     }>
       <RawDataContent />
     </Suspense>

@@ -1,6 +1,7 @@
 'use client'
 
 import { PageContainer } from '@/components/PageContainer'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import {
     Table,
@@ -119,6 +120,7 @@ export default function TrainingPage() {
   const [submitCode, setSubmitCode] = useState('')
   const [hasAutoSearched, setHasAutoSearched] = useState(false)
   const [isResolvingCode, setIsResolvingCode] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
   const prewarmedLessonIdsRef = useRef<Set<number>>(new Set())
   const prewarmedGroupIdsRef = useRef<Set<string>>(new Set())
   const prewarmInFlightRef = useRef<Map<string, Promise<void>>>(new Map())
@@ -315,6 +317,27 @@ export default function TrainingPage() {
     ).length
   }, [trainingData])
 
+  // Set isMounted to true after all initial data is loaded
+  useEffect(() => {
+    if (
+      !isLoadingTraining &&
+      !isLoadingAssignments &&
+      !isTeacherLoading &&
+      !isResolvingCode &&
+      submitCode &&
+      (teacher || isLoadingTeacher === false)
+    ) {
+      setIsMounted(true)
+    }
+  }, [
+    isLoadingTraining,
+    isLoadingAssignments,
+    isTeacherLoading,
+    isResolvingCode,
+    submitCode,
+    teacher,
+  ])
+
   const prewarmLessonManifest = useCallback(async (lessonId: number) => {
     if (!lessonId || prewarmedLessonIdsRef.current.has(lessonId)) return
 
@@ -426,6 +449,19 @@ export default function TrainingPage() {
     return <AssignmentsPage />
   }
 
+  // Show skeleton while loading - check ALL conditions
+  if (
+    isLoadingTraining || 
+    isLoadingAssignments || 
+    isTeacherLoading || 
+    isResolvingCode ||
+    !submitCode ||  // Still resolving code
+    (submitCode && !teacher && !isLoadingTeacher) ||  // Waiting for teacher data
+    !isMounted  // Prevent content flash on initial render
+  ) {
+    return <PageSkeleton variant="grid" itemCount={12} showHeader={true} />
+  }
+
   // localStorage guard modal
   if (missingProfile) {
     return (
@@ -455,7 +491,6 @@ export default function TrainingPage() {
       title="Đào Tạo Nâng Cao"
       description={`Điểm học trực tuyến - ${trainingData?.lessons?.length || 0} bài học`}
     >
-      {/* Always show content structure with skeleton when loading */}
       <div className="mb-6 flex gap-6 border-b border-[#e7c6cb]">
         <button
           className={`pb-3 px-2 border-b-2 font-bold transition-colors ${
@@ -489,27 +524,7 @@ export default function TrainingPage() {
         </button>
       </div>
 
-      {/* Loading Skeleton or Content */}
-      {isResolvingCode || isLoadingTeacher || isLoadingTraining ? (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="animate-pulse">
-            <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="bg-white rounded-lg shadow-sm border border-gray-200 p-4"
-                  style={{ animationDelay: `${i * 100}ms` }}
-                >
-                  <div className="aspect-video bg-gray-200 rounded mb-3"></div>
-                  <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
-                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                </div>
-              ))}            </div>
-          </div>
-        </div>
-      ) : trainingData ? (
+      {trainingData ? (
         <>
           {/* Tab: Bài học nâng cao */}
           {tab === 'lessons' && (
@@ -956,20 +971,15 @@ export default function TrainingPage() {
               <h2 className="text-xl font-bold mb-4 text-[#a1001f]">
                 Bài kiểm tra & Bài tập
               </h2>
-              {isLoadingAssignments ? (
-                <div className="text-center py-4">
-                  Đang tải danh sách bài tập...
-                </div>
-              ) : (
-                (() => {
-                  const filteredAssignments = (
-                    assignmentsData?.data || []
-                  ).filter((a) => {
-                    if (!a.video_id) return false
-                    return !!trainingData?.lessons?.find(
-                      (l) => l.id === a.video_id,
-                    )
-                  })
+              {(() => {
+                const filteredAssignments = (
+                  assignmentsData?.data || []
+                ).filter((a) => {
+                  if (!a.video_id) return false
+                  return !!trainingData?.lessons?.find(
+                    (l) => l.id === a.video_id,
+                  )
+                })
 
                   if (filteredAssignments.length === 0) {
                     return (
@@ -1172,7 +1182,7 @@ export default function TrainingPage() {
                     </div>
                   )
                 })()
-              )}
+              }
             </div>
           )}
         </>

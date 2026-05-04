@@ -7,6 +7,7 @@ import { TableSkeleton } from '@/components/skeletons'
 import { Tabs } from '@/components/Tabs'
 import TruyenThongStats from '@/components/truyenthong-stats'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Eye, EyeOff, FileText, ImageIcon, MessageCircle, Pencil, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
@@ -31,10 +32,10 @@ async function fetchPostsArray<T>(url: string): Promise<T[]> {
     return Array.isArray(data) ? (data as T[]) : []
 }
 
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-    published: { label: '✓ Đã công bố', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-    draft:     { label: '✎ Bản nháp',   className: 'bg-amber-50 text-amber-700 border border-amber-200' },
-    hidden:    { label: '✕ Đã ẩn',      className: 'bg-red-50 text-red-600 border border-red-200' },
+const STATUS_CONFIG: Record<string, { label: string; variant: 'success' | 'warning' | 'danger' }> = {
+    published: { label: '✓ Đã công bố', variant: 'success' },
+    draft:     { label: '✎ Bản nháp',   variant: 'warning' },
+    hidden:    { label: '✕ Đã ẩn',      variant: 'danger' },
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -55,9 +56,9 @@ function StatusBadge({ status }: { status: string }) {
     const cfg = STATUS_CONFIG[status]
     if (!cfg) return null
     return (
-        <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold ${cfg.className}`}>
+        <Badge variant={cfg.variant} size="sm" shape="pill">
             {cfg.label}
-        </span>
+        </Badge>
     )
 }
 
@@ -187,15 +188,15 @@ export default function TruyenthongDashboardPage() {
                                                 <StatusBadge status={post.status} />
 
                                                 {typeLabel && (
-                                                    <span className="text-[11px] px-2.5 py-0.5 bg-gray-100 text-gray-600 rounded-full font-semibold">
+                                                    <Badge variant="default" size="sm" shape="pill">
                                                         {typeLabel}
-                                                    </span>
+                                                    </Badge>
                                                 )}
 
                                                 {audienceLabel && (
-                                                    <span className="text-[11px] px-2.5 py-0.5 bg-blue-50 text-blue-600 rounded-full font-semibold max-w-[180px] truncate">
+                                                    <Badge variant="info" size="sm" shape="pill" className="max-w-[180px] truncate">
                                                         {audienceLabel}
-                                                    </span>
+                                                    </Badge>
                                                 )}
                                             </div>
                                         </div>

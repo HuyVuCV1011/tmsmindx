@@ -1,6 +1,6 @@
 'use client'
 
-import Modal from '@/components/Modal'
+import { Modal } from '@/components/ui/modal'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { StepItem, Stepper } from '@/components/ui/stepper'
@@ -128,6 +128,7 @@ function formatScreenTitle(screenPath?: string | null): string {
 type UserFeedbackManagePanelProps = {
   showInlineRefresh?: boolean
   externalRefreshSignal?: number
+  onInitialLoadComplete?: () => void
 }
 
 export default function UserFeedbackManagePanel(
@@ -139,6 +140,7 @@ export default function UserFeedbackManagePanel(
 function UserFeedbackManagePanelWithOptions({
   showInlineRefresh = true,
   externalRefreshSignal,
+  onInitialLoadComplete,
 }: UserFeedbackManagePanelProps = {}) {
   const { user } = useAuth()
   const [loadingList, setLoadingList] = useState(false)
@@ -162,8 +164,13 @@ function UserFeedbackManagePanelWithOptions({
   )
 
   const loadMyFeedback = async () => {
-    if (!user?.email) return
+    if (!user?.email) {
+      console.log('[UserFeedbackManagePanel] No user email, calling callback')
+      onInitialLoadComplete?.()
+      return
+    }
 
+    console.log('[UserFeedbackManagePanel] Loading feedback for:', user.email)
     try {
       setLoadingList(true)
       setLoadingError(null)
@@ -183,12 +190,16 @@ function UserFeedbackManagePanelWithOptions({
       }
 
       setItems(data.items || [])
+      console.log('[UserFeedbackManagePanel] Loaded items:', data.items?.length || 0)
     } catch (error: any) {
       const message = error.message || 'Lỗi tải phản hồi'
       setLoadingError(message)
       toast.error(message)
+      console.error('[UserFeedbackManagePanel] Load error:', error)
     } finally {
       setLoadingList(false)
+      console.log('[UserFeedbackManagePanel] Calling onInitialLoadComplete callback')
+      onInitialLoadComplete?.()
     }
   }
 
@@ -376,15 +387,16 @@ function UserFeedbackManagePanelWithOptions({
         </div>
       </div>
 
+      {/* Modal - outside conditional rendering */}
       <Modal
-        isOpen={!!selectedItem}
+        open={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         title={
           selectedItem
             ? `Chi tiết phản hồi #${selectedItem.id}`
             : 'Chi tiết phản hồi'
         }
-        maxWidth="3xl"
+        size="3xl"
       >
         {selectedItem && (
           <div className="space-y-4">

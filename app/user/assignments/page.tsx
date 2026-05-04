@@ -4,8 +4,9 @@
 
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
-import Modal from '@/components/Modal'
+import { Modal } from '@/components/ui/modal'
 import { PageContainer } from '@/components/PageContainer'
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { Tabs } from '@/components/Tabs'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth-context'
@@ -1263,42 +1264,8 @@ export default function TeacherAssignmentPage() {
     }
   }
 
-  if (trainingLoading && examLoading) {
-    return (
-      <PageContainer>
-        {/* Assignment Loading Skeleton */}
-        <div className="space-y-6">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-1/3 mb-2"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/2 mb-6"></div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 p-4"
-                style={{ animationDelay: `${i * 100}ms` }}
-              >
-                <div className="animate-pulse">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-8 h-8 bg-gray-200 rounded-lg"></div>
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-gray-200 rounded w-full"></div>
-                      <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="h-3 bg-gray-200 rounded w-full"></div>
-                    <div className="h-3 bg-gray-200 rounded w-4/5"></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </PageContainer>
-    )
+  if (trainingLoading || examLoading) {
+    return <PageSkeleton variant="grid" itemCount={6} showHeader={true} />
   }
 
   if (view === 'taking' && currentAssignment) {
@@ -2037,20 +2004,15 @@ export default function TeacherAssignmentPage() {
           </div>
         ) : activeMainTab === 'available' ? (
           <div key="available" className="mt-6 animate-tab-enter">
-            {examLoading ? (
-              <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500 shadow-sm">
-                Đang tải bài kiểm tra...
-              </div>
-            ) : (
-              (() => {
-                const availableNow = examAssignments.filter(
-                  (item) => item.can_take === true,
-                )
-                return availableNow.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
-                    <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
-                    <p className="text-sm font-semibold text-gray-700 mb-1">
-                      Hiện tại không có bài kiểm tra nào đang mở.
+            {(() => {
+              const availableNow = examAssignments.filter(
+                (item) => item.can_take === true,
+              )
+              return availableNow.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
+                  <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
+                  <p className="text-sm font-semibold text-gray-700 mb-1">
+                    Hiện tại không có bài kiểm tra nào đang mở.
                     </p>
                     <p className="text-xs text-gray-500">
                       Những môn bạn đã đăng ký sẽ xuất hiện ở đây khi đến giờ
@@ -2135,7 +2097,7 @@ export default function TeacherAssignmentPage() {
                   </div>
                 )
               })()
-            )}
+            }
           </div>
         ) : activeMainTab === 'list' ? (
           <div key="list" className="mt-6 space-y-6 animate-tab-enter">
@@ -2581,11 +2543,7 @@ export default function TeacherAssignmentPage() {
             </div>
 
             {/* 3. Detailed Month View */}
-            {examLoading ? (
-              <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500 shadow-sm">
-                Đang tải danh sách bài thi...
-              </div>
-            ) : filteredGroupedExams.length === 0 ? (
+            {filteredGroupedExams.length === 0 ? (
               <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
                 <FileText className="mx-auto mb-4 h-16 w-16 text-gray-300" />
                 <p className="text-sm text-gray-500">
@@ -2971,7 +2929,7 @@ export default function TeacherAssignmentPage() {
 
           return (
             <Modal
-              isOpen={showPassRateModal}
+              open={showPassRateModal}
               onClose={() => setShowPassRateModal(false)}
               title="Chi tiết Tỉ lệ đạt"
               subtitle={`${passed} / ${passRateItems.length} bài đạt yêu cầu (theo danh sách đã tải)`}
