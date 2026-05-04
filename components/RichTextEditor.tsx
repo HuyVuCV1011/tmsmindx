@@ -754,34 +754,14 @@ export default function RichTextEditor({
 
   const uploadImageFile = useCallback(async (file: File): Promise<string> => {
     if (!file.type.startsWith('image/')) throw new Error('Chỉ hỗ trợ định dạng ảnh')
-    if (file.size > 5 * 1024 * 1024) throw new Error('Kích thước ảnh tối đa 5MB')
+    if (file.size > 10 * 1024 * 1024) throw new Error('Kích thước ảnh tối đa 10MB')
 
-    // Resize + compress trước khi chèn vào editor để tránh lag
+    // Upload ảnh gốc không xử lý để giữ nguyên chất lượng
     return new Promise<string>((resolve, reject) => {
-      const img = new window.Image()
-      const objectUrl = URL.createObjectURL(file)
-      img.onload = () => {
-        URL.revokeObjectURL(objectUrl)
-        const MAX_W = 800
-        const MAX_H = 800
-        let { width, height } = img
-        if (width > MAX_W || height > MAX_H) {
-          const ratio = Math.min(MAX_W / width, MAX_H / height)
-          width = Math.round(width * ratio)
-          height = Math.round(height * ratio)
-        }
-        const canvas = document.createElement('canvas')
-        canvas.width = width
-        canvas.height = height
-        const ctx = canvas.getContext('2d')
-        if (!ctx) { reject(new Error('Canvas không khả dụng')); return }
-        ctx.drawImage(img, 0, 0, width, height)
-        // Dùng webp nếu hỗ trợ, fallback jpeg — nhỏ hơn png nhiều
-        const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
-        resolve(canvas.toDataURL(mime, 0.75))
-      }
-      img.onerror = reject
-      img.src = objectUrl
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
     })
   }, [])
 
