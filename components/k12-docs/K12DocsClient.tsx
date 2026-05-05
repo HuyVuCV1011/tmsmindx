@@ -184,28 +184,77 @@ function buildSearchPreview(content: string, maxLength = 120) {
   return `${noHtml.slice(0, maxLength).trim()}...`
 }
 
-function mapGitbookHref(href: string, basePath: string) {
-  const prefix = 'quy-trinh-quy-dinh-danh-cho-giao-vien/'
-
-  const fromRoot = '/quy-trinh-quy-dinh-danh-cho-giao-vien/'
-  if (href.startsWith(fromRoot)) {
-    const slug = href.slice(fromRoot.length).replace(/\.md$/i, '')
-    return `${basePath}?doc=${encodeURIComponent(slug)}`
+function mapGitbookHref(href: string, basePath: string, documents: K12ClientDocItem[]) {
+  // Preserve hash and query params
+  const hashIndex = href.indexOf('#')
+  const hash = hashIndex >= 0 ? href.slice(hashIndex) : ''
+  const cleanHref = href.split('#')[0].split('?')[0].trim()
+  
+  // If it's an external URL
+  if (cleanHref.startsWith('http://') || cleanHref.startsWith('https://')) {
+    // Check if it's a GitBook URL that should be converted
+    const gitbookMarker = 'cxohok12.gitbook.io/quy-trinh-quy-dinh-danh-cho-giao-vien/'
+    const markerIndex = cleanHref.indexOf(gitbookMarker)
+    if (markerIndex >= 0) {
+      let extractedPath = cleanHref.slice(markerIndex + gitbookMarker.length).replace(/\.md$/i, '')
+      
+      // If the path is empty (root GitBook URL), return to default doc
+      if (!extractedPath) {
+        return basePath
+      }
+      
+      // Try to find exact match
+      const exactMatch = documents.find(doc => doc.slug === extractedPath)
+      if (exactMatch) {
+        return `${basePath}?doc=${encodeURIComponent(extractedPath)}${hash}`
+      }
+      
+      // Try to find by matching the last segment
+      const segments = extractedPath.split('/').filter(Boolean)
+      const lastSegment = segments[segments.length - 1]
+      
+      if (lastSegment) {
+        const partialMatch = documents.find(doc => 
+          doc.slug.endsWith('/' + lastSegment) || doc.slug === lastSegment
+        )
+        if (partialMatch) {
+          return `${basePath}?doc=${encodeURIComponent(partialMatch.slug)}${hash}`
+        }
+      }
+      
+      // Return with extracted path even if not found (might be valid)
+      return `${basePath}?doc=${encodeURIComponent(extractedPath)}${hash}`
+    }
+    // Not a GitBook URL, return as-is
+    return href
   }
 
-  const marker = 'cxohok12.gitbook.io/quy-trinh-quy-dinh-danh-cho-giao-vien/'
-  const markerIndex = href.indexOf(marker)
-  if (markerIndex >= 0) {
-    const slug = href.slice(markerIndex + marker.length).replace(/\.md$/i, '')
-    return `${basePath}?doc=${encodeURIComponent(slug)}`
+  // Remove common prefixes for relative paths
+  let extractedPath = cleanHref
+    .replace(/^\/quy-trinh-quy-dinh-danh-cho-giao-vien\//, '')
+    .replace(/^quy-trinh-quy-dinh-danh-cho-giao-vien\//, '')
+    .replace(/^\//, '')
+    .replace(/\.md$/i, '')
+
+  // If empty after cleanup, return to base path
+  if (!extractedPath) return basePath
+
+  // Check if this exact slug exists in documents
+  const exactMatch = documents.find(doc => doc.slug === extractedPath)
+  if (exactMatch) {
+    return `${basePath}?doc=${encodeURIComponent(extractedPath)}${hash}`
   }
 
-  if (href.startsWith(prefix)) {
-    const slug = href.slice(prefix.length).replace(/\.md$/i, '')
-    return `${basePath}?doc=${encodeURIComponent(slug)}`
+  // If no exact match, try case-insensitive match
+  const caseInsensitiveMatch = documents.find(
+    doc => doc.slug.toLowerCase() === extractedPath.toLowerCase()
+  )
+  if (caseInsensitiveMatch) {
+    return `${basePath}?doc=${encodeURIComponent(caseInsensitiveMatch.slug)}${hash}`
   }
 
-  return href
+  // If still no match, use the extracted path as-is
+  return `${basePath}?doc=${encodeURIComponent(extractedPath)}${hash}`
 }
 
 function getPlainText(node: unknown): string {
@@ -327,6 +376,28 @@ export default function K12DocsClient({
     const effective = selectedSlug || defaultSlug
     return documents.find((doc) => doc.slug === effective) || documents[0]
   }, [documents, selectedSlug, defaultSlug])
+
+  // Tìm các trang con của trang hiện tại
+  const childPages = useMemo(() => {
+    if (!selectedDoc?.slug) return []
+    
+    const findNodeBySlug = (nodes: K12ClientDocNode[]): K12ClientDocNode | null => {
+      for (const node of nodes) {
+        if (node.slug === selectedDoc.slug) return node
+        if (node.children) {
+          const found = findNodeBySlug(node.children)
+          if (found) return found
+        }
+      }
+      return null
+    }
+    
+    const currentNode = findNodeBySlug(tree)
+    if (!currentNode?.children) return []
+    
+    // Chỉ lấy các node có slug (là trang thực sự, không phải folder rỗng)
+    return currentNode.children.filter(child => child.slug)
+  }, [selectedDoc?.slug, tree])
 
   useEffect(() => {
     if (!pendingDocSlug) return
@@ -684,7 +755,7 @@ export default function K12DocsClient({
                         return <a {...props}>{children}</a>
                       }
 
-                      const mappedHref = mapGitbookHref(href, basePath)
+                      const mappedHref = mapGitbookHref(href, basePath, documents)
                       const isExternal = /^https?:\/\//.test(mappedHref)
                       const classNameFromProps = (
                         props as { className?: string }
@@ -834,6 +905,7 @@ export default function K12DocsClient({
                         const mappedHref = mapGitbookHref(
                           firstAnchor.href,
                           basePath,
+                          documents
                         )
                         const isExternal = /^https?:\/\//.test(mappedHref)
                         const inlineLinkClassName = 'k12-inline-link'
@@ -896,6 +968,7 @@ export default function K12DocsClient({
                               const mappedHref = mapGitbookHref(
                                 safeItem.href,
                                 basePath,
+                                documents
                               )
                               const isExternal = /^https?:\/\//.test(mappedHref)
 
@@ -936,6 +1009,43 @@ export default function K12DocsClient({
                 >
                   {normalizedContent}
                 </Markdown>
+                
+                {/* Hiển thị danh sách trang con nếu có */}
+                {childPages.length > 0 && (
+                  <div className="mt-8 pt-6 border-t border-gray-200">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Nội dung trong mục này
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {childPages.map((child) => {
+                        const childDoc = documents.find(doc => doc.slug === child.slug)
+                        return (
+                          <Link
+                            key={child.slug}
+                            href={`${basePath}?doc=${encodeURIComponent(child.slug!)}`}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              navigateToDoc(child.slug!)
+                            }}
+                            className="group flex items-start gap-3 p-4 rounded-lg border border-gray-200 hover:border-[#a1001f] hover:bg-red-50/50 transition-all duration-200"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-gray-900 group-hover:text-[#a1001f] transition-colors line-clamp-2 mb-1 flex items-center gap-2">
+                                <span className="text-base">{child.title}</span>
+                              </h3>
+                              {childDoc?.excerpt && (
+                                <p className="text-xs text-gray-600 line-clamp-2 mt-1">
+                                  {childDoc.excerpt}
+                                </p>
+                              )}
+                            </div>
+                            <ChevronRight className="flex-shrink-0 w-5 h-5 text-gray-400 group-hover:text-[#a1001f] group-hover:translate-x-1 transition-all" />
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           ) : (
