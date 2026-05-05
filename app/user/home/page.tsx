@@ -1,5 +1,4 @@
 "use client";
-import CalendarMonth from "@/components/CalendarMonth";
 import { Card } from "@/components/Card";
 import { PageContainer } from "@/components/PageContainer";
 
@@ -18,11 +17,6 @@ const TeacherHomePage = () => {
               <p className="text-sm text-gray-500 mt-2">Đang phát triển...</p>
             </div>
           </div>
-        </Card>
-
-        {/* Lịch bảng hoạt động tháng hiện tại */}
-        <Card title="📅 Lịch hoạt động tháng">
-          <CalendarMonth />
         </Card>
       </div>
     </PageContainer>
