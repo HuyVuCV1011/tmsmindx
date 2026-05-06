@@ -203,7 +203,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
         score: scoreData ? scoreData.score : 0,
         link: normalizeStorageUrl(video.video_link),
         segments: video.segments, // Included chunks 
-        thumbnail_url: video.thumbnail_url,
+        thumbnail_url: normalizeStorageUrl(video.thumbnail_url) || null,
         description: video.description,
         duration_minutes: video.duration_minutes,
         lesson_number: video.lesson_number || (index + 1),
