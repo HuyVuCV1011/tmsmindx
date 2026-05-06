@@ -96,6 +96,11 @@ function LichCuaToiContent() {
     [pendingLeave, pendingSub],
   )
 
+  const visibleTabs = useMemo(
+    () => tabs.filter((tab) => tab.id !== 'xin-nghi'),
+    [tabs],
+  )
+
   const openLeaveModal = useCallback((dateStr?: string) => {
     setLeaveModalDate(dateStr ?? null)
     setLeaveModalOpen(true)
@@ -111,7 +116,7 @@ function LichCuaToiContent() {
       {/* Tab bar */}
       <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
-          <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+          <Tabs tabs={visibleTabs} activeTab={activeTab} onChange={setActiveTab} />
         </div>
       </div>
 
