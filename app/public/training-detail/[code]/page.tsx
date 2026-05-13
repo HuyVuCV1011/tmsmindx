@@ -104,9 +104,9 @@ export default function TrainingDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-12 h-12 border-4 border-slate-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-slate-500 text-sm">Đang tải dữ liệu...</p>
         </div>
       </div>
@@ -115,8 +115,8 @@ export default function TrainingDetailPage() {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-md p-8 text-center max-w-sm">
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="bg-slate-50 rounded-2xl shadow-sm border border-slate-200 p-8 text-center max-w-sm">
           <div className="text-4xl mb-3">🔍</div>
           <h2 className="font-semibold text-slate-800 mb-2">Không tìm thấy</h2>
           <p className="text-slate-500 text-sm">{error || 'Dữ liệu không tồn tại.'}</p>
@@ -129,7 +129,7 @@ export default function TrainingDetailPage() {
   const completedCount = video_scores.filter(v => v.completion_status === 'completed').length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
       <div className="bg-white border-b border-slate-100 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-5">
@@ -150,20 +150,20 @@ export default function TrainingDetailPage() {
               <p className="text-slate-500 text-sm mt-0.5">Mã GV: <span className="font-mono font-medium text-slate-700">{teacher.teacher_code}</span></p>
               <div className="flex flex-wrap gap-2 mt-3">
                 {teacher.center && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-medium">
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm font-medium">
                     🏫 {teacher.center}
                   </span>
                 )}
                 {teacher.teaching_block && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-violet-50 text-violet-700 rounded-full text-sm font-medium">
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm font-medium">
                     📚 Khối {teacher.teaching_block}
                   </span>
                 )}
               </div>
             </div>
-            <div className="text-center bg-gradient-to-br from-blue-500 to-violet-600 text-white rounded-2xl px-6 py-4 shadow-md">
+            <div className="text-center bg-red-600 text-white rounded-2xl px-6 py-4 shadow-sm">
               <div className="text-3xl font-bold">{teacher.total_score.toFixed(1)}</div>
-              <div className="text-xs opacity-80 mt-0.5">Điểm tổng kết</div>
+              <div className="text-xs opacity-90 mt-0.5">Điểm tổng kết</div>
             </div>
           </div>
 

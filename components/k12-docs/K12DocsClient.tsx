@@ -509,6 +509,33 @@ export default function K12DocsClient({
 
   const isSearchRendering = pendingDocSlug !== null
 
+  // Tìm tài liệu trước và sau
+  const getPreviousNextDocs = useMemo(() => {
+    if (!selectedDoc?.slug) return { prev: null, next: null }
+
+    // Tạo danh sách phẳng tất cả các tài liệu có slug (duyệt theo thứ tự cây)
+    const flatList: Array<{ slug: string; title: string }> = []
+    const traverse = (nodes: K12ClientDocNode[]) => {
+      for (const node of nodes) {
+        if (node.slug) {
+          flatList.push({ slug: node.slug, title: node.title })
+        }
+        if (node.children) {
+          traverse(node.children)
+        }
+      }
+    }
+    traverse(tree)
+
+    const currentIndex = flatList.findIndex(doc => doc.slug === selectedDoc.slug)
+    if (currentIndex === -1) return { prev: null, next: null }
+
+    return {
+      prev: currentIndex > 0 ? flatList[currentIndex - 1] : null,
+      next: currentIndex < flatList.length - 1 ? flatList[currentIndex + 1] : null,
+    }
+  }, [selectedDoc?.slug, tree])
+
   const renderTree = (nodes: K12ClientDocNode[], depth = 0) => {
     return nodes
       .map((node) => {
@@ -1050,6 +1077,41 @@ export default function K12DocsClient({
             </>
           ) : (
             <p className="text-sm text-gray-500">Không tìm thấy tài liệu.</p>
+          )}
+
+          {/* Navigation buttons */}
+          {selectedDoc && (getPreviousNextDocs.prev || getPreviousNextDocs.next) && (
+            <div className="mt-8 pt-6 border-t border-gray-200 flex gap-3 justify-between">
+              {getPreviousNextDocs.prev ? (
+                <button
+                  type="button"
+                  onClick={() => navigateToDoc(getPreviousNextDocs.prev!.slug)}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 hover:bg-gray-50 transition-colors font-medium text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Trang trước
+                </button>
+              ) : (
+                <div />
+              )}
+              
+              {getPreviousNextDocs.next ? (
+                <button
+                  type="button"
+                  onClick={() => navigateToDoc(getPreviousNextDocs.next!.slug)}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 hover:bg-gray-50 transition-colors font-medium text-sm"
+                >
+                  Trang sau
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              ) : (
+                <div />
+              )}
+            </div>
           )}
         </article>
 

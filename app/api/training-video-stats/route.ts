@@ -106,7 +106,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
       JOIN group_ids gi ON gi.group_key = gr.group_key
       -- All teachers in the system
       JOIN training_teacher_stats tts ON gr.status = 'active'
-      JOIN teachers t ON tts.teacher_code = t.code
+      JOIN teachers t ON LOWER(TRIM(tts.teacher_code)) = LOWER(TRIM(t.code))
       -- Viewed: teacher has a score row for ANY video in the group
       LEFT JOIN training_teacher_video_scores tvs
         ON tvs.video_id = ANY(gi.video_ids) AND tts.teacher_code = tvs.teacher_code
@@ -136,7 +136,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
         tts.teacher_code,
         COALESCE(t.full_name, tts.full_name) AS full_name,
         COALESCE(t.main_centre, tts.center) AS center,
-        COALESCE(t.course_line, tts.teaching_block) AS teaching_block,
+        COALESCE(NULLIF(t.khoi_final, ''), NULLIF(t.course_line, ''), tts.teaching_block) AS teaching_block,
         tv.id AS video_id,
         tv.video_group_id,
         tv.chunk_index,

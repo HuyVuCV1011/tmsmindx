@@ -6,7 +6,15 @@ import { PageContainer } from '@/components/PageContainer'
 import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
-import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  MapPin,
+  Plus,
+  X,
+} from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from '@/lib/app-toast'
@@ -18,6 +26,7 @@ type EventCategory =
   | 'thi'
   | 'workshop_teaching'
   | 'meeting'
+  | 'teaching_review'
   | 'advanced_training_release'
   | 'holiday'
 
@@ -32,6 +41,13 @@ interface EvaluationEvent {
   note?: string
   eventType?: EventCategory
   registrationTemplate?: RegistrationTemplate
+  lectureReviewer?: string | null
+  centerId?: number | null
+  centerName?: string | null
+  centerAddress?: string | null
+  centerFullAddress?: string | null
+  centerMapUrl?: string | null
+  allowRegistration?: boolean
 }
 
 interface RegisteredExamParticipant {
@@ -42,6 +58,14 @@ interface RegisteredExamParticipant {
   subject_code: string
   scheduled_at: string
   assignment_status: string | null
+}
+
+interface TeacherLookupItem {
+  teacher_code: string
+  lms_code: string
+  teacher_name: string
+  email?: string | null
+  center?: string | null
 }
 
 interface CalendarExamAssignment {
@@ -65,6 +89,7 @@ const EVENT_TYPE_LABELS: Record<EventCategory, string> = {
   thi: 'B: Lịch kiểm tra chuyên môn',
   workshop_teaching: 'C: Lịch Workshop Teaching',
   meeting: 'D: Lịch họp',
+  teaching_review: 'E: Duyệt giảng chuyên môn',
   advanced_training_release: 'E: Lịch phát hành đào tạo nâng cao',
   holiday: 'F: Lịch nghỉ',
 }
@@ -114,6 +139,8 @@ function getEventClass(eventType: EventCategory | undefined) {
       return 'bg-purple-200 text-purple-900'
     case 'meeting':
       return 'bg-blue-200 text-blue-900'
+    case 'teaching_review':
+      return 'bg-cyan-200 text-cyan-900'
     case 'advanced_training_release':
       return 'bg-indigo-200 text-indigo-900'
     case 'holiday':
@@ -141,6 +168,11 @@ function getCalendarEventStyle(eventType: EventCategory | undefined) {
       return {
         timeClassName: 'text-blue-700',
         titleClassName: 'bg-blue-200 text-blue-900',
+      }
+    case 'teaching_review':
+      return {
+        timeClassName: 'text-cyan-700',
+        titleClassName: 'bg-cyan-200 text-cyan-900',
       }
     case 'advanced_training_release':
       return {
@@ -170,6 +202,8 @@ function getEventDotClass(eventType: EventCategory | undefined) {
       return 'bg-purple-500'
     case 'meeting':
       return 'bg-blue-500'
+    case 'teaching_review':
+      return 'bg-cyan-500'
     case 'advanced_training_release':
       return 'bg-indigo-500'
     case 'holiday':
@@ -193,6 +227,8 @@ function getTimelineEventContainerClass(eventType: EventCategory | undefined) {
       return 'border-purple-300 bg-purple-50/80 text-purple-900'
     case 'meeting':
       return 'border-blue-300 bg-blue-50/80 text-blue-900'
+    case 'teaching_review':
+      return 'border-cyan-300 bg-cyan-50/80 text-cyan-900'
     case 'advanced_training_release':
       return 'border-indigo-300 bg-indigo-50/80 text-indigo-900'
     case 'holiday':
@@ -446,6 +482,13 @@ export default function MonthlyActivitiesPage() {
   >([])
   const [participantsEvent, setParticipantsEvent] =
     useState<EvaluationEvent | null>(null)
+  const [showLectureRegisterModal, setShowLectureRegisterModal] = useState(false)
+  const [selectedLectureEvent, setSelectedLectureEvent] = useState<EvaluationEvent | null>(null)
+  const [teacherQuery, setTeacherQuery] = useState('')
+  const [teachersLoading, setTeachersLoading] = useState(false)
+  const [teacherResults, setTeacherResults] = useState<TeacherLookupItem[]>([])
+  const [selectedTeacherCode, setSelectedTeacherCode] = useState('')
+  const [registeringLectureReview, setRegisteringLectureReview] = useState(false)
   const [userRegisteredSubjects, setUserRegisteredSubjects] = useState<
     Set<string>
   >(new Set())
@@ -547,6 +590,15 @@ export default function MonthlyActivitiesPage() {
     return available
   }, [examSubjects])
 
+  const canRegisterLectureReview = useMemo(() => {
+    const role = String(user?.role || '').toLowerCase()
+    if (['super_admin', 'admin', 'manager'].includes(role)) return true
+
+    return (user?.userRoles || []).some((item) =>
+      ['LEADER', 'TE', 'ACADEMIC_LEADER', 'CODING_LEADER'].includes(String(item || '').toUpperCase()),
+    )
+  }, [user?.role, user?.userRoles])
+
   const resolveExamEventIdByOptionAndSchedule = useCallback(
     (option: string, scheduledAt: string) => {
       const scheduledStamp = toMinuteStamp(scheduledAt)
@@ -635,6 +687,13 @@ export default function MonthlyActivitiesPage() {
           note?: string | null
           event_type: EventCategory
           registration_template?: RegistrationTemplate | null
+          lecture_reviewer?: string | null
+          center_id?: number | null
+          center_name?: string | null
+          center_address?: string | null
+          center_full_address?: string | null
+          center_map_url?: string | null
+          allow_registration?: boolean
         }>
 
         setEvents(
@@ -647,6 +706,13 @@ export default function MonthlyActivitiesPage() {
             note: item.note || undefined,
             eventType: item.event_type,
             registrationTemplate: item.registration_template || undefined,
+            lectureReviewer: item.lecture_reviewer || undefined,
+            centerId: item.center_id ?? null,
+            centerName: item.center_name || null,
+            centerAddress: item.center_address || null,
+            centerFullAddress: item.center_full_address || null,
+            centerMapUrl: item.center_map_url || null,
+            allowRegistration: item.allow_registration ?? undefined,
           })),
         )
       } catch (error) {
@@ -1436,6 +1502,11 @@ export default function MonthlyActivitiesPage() {
     setShowDayEventsModal(true)
   }
 
+  const openMapUrl = (url?: string | null) => {
+    if (!url) return
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   const openRegisterModalFromDay = () => {
     if (!selectedDate) {
       return
@@ -1513,6 +1584,80 @@ export default function MonthlyActivitiesPage() {
       setParticipantsForEvent(list)
     } finally {
       setParticipantsLoading(false)
+    }
+  }
+
+  const loadTeachersForLectureReview = useCallback(
+    async (queryText: string) => {
+      try {
+        setTeachersLoading(true)
+        const response = await fetch(
+          `/api/event-schedules/teachers?q=${encodeURIComponent(queryText.trim())}`,
+          { headers: authHeaders(token) },
+        )
+        const data = await response.json()
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || 'Không thể tải danh sách giáo viên')
+        }
+
+        setTeacherResults((data.teachers || []) as TeacherLookupItem[])
+      } catch (error: any) {
+        setTeacherResults([])
+        toast.error(error?.message || 'Không thể tải danh sách giáo viên')
+      } finally {
+        setTeachersLoading(false)
+      }
+    },
+    [token],
+  )
+
+  const openLectureRegisterModal = async (event: EvaluationEvent) => {
+    setSelectedLectureEvent(event)
+    setTeacherQuery('')
+    setSelectedTeacherCode('')
+    setTeacherResults([])
+    setShowLectureRegisterModal(true)
+    await loadTeachersForLectureReview('')
+  }
+
+  const handleSubmitLectureRegistration = async () => {
+    if (!selectedLectureEvent) return
+
+    if (!selectedTeacherCode) {
+      toast.error('Vui lòng chọn giáo viên')
+      return
+    }
+
+    try {
+      setRegisteringLectureReview(true)
+      const response = await fetch('/api/lecture-review-registrations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(token),
+        },
+        body: JSON.stringify({
+          event_id: selectedLectureEvent.id,
+          teacher_code: selectedTeacherCode,
+          lecture_reviewer: selectedLectureEvent.lectureReviewer || null,
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Không thể đăng ký lịch duyệt giảng')
+      }
+
+      toast.success('Đăng ký lịch duyệt giảng thành công')
+      setShowLectureRegisterModal(false)
+      setSelectedLectureEvent(null)
+      setTeacherQuery('')
+      setSelectedTeacherCode('')
+      setTeacherResults([])
+    } catch (error: any) {
+      toast.error(error?.message || 'Không thể đăng ký lịch duyệt giảng')
+    } finally {
+      setRegisteringLectureReview(false)
     }
   }
 
@@ -2464,6 +2609,42 @@ export default function MonthlyActivitiesPage() {
                             {event.note}
                           </p>
                         )}
+                        {event.eventType === 'teaching_review' && event.lectureReviewer && (
+                          <p>
+                            <span className="font-semibold">Reviewer:</span>{' '}
+                            {event.lectureReviewer}
+                          </p>
+                        )}
+                        {event.eventType === 'teaching_review' && (
+                          <div className="space-y-2 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-950">
+                            <p className="flex items-start gap-2">
+                              <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                              <span>
+                                <span className="font-semibold">Cơ sở duyệt giảng:</span>{' '}
+                                {event.centerName || 'Chưa có thông tin cơ sở'}
+                                {event.centerFullAddress ? (
+                                  <span className="mt-1 block text-xs text-cyan-900/80">
+                                    {event.centerFullAddress}
+                                  </span>
+                                ) : event.centerAddress ? (
+                                  <span className="mt-1 block text-xs text-cyan-900/80">
+                                    {event.centerAddress}
+                                  </span>
+                                ) : null}
+                              </span>
+                            </p>
+                            {event.centerMapUrl && (
+                              <button
+                                type="button"
+                                onClick={() => openMapUrl(event.centerMapUrl)}
+                                className="inline-flex items-center gap-1 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-800"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                Xem map
+                              </button>
+                            )}
+                          </div>
+                        )}
                         {eventIsPast && (
                           <p className="text-xs font-semibold text-gray-500">
                             Sự kiện đã qua
@@ -2494,6 +2675,20 @@ export default function MonthlyActivitiesPage() {
                           </button>
                         </div>
                       )}
+
+                      {event.eventType === 'teaching_review' &&
+                        !eventIsPast &&
+                        canRegisterLectureReview && (
+                          <div className="mt-3 border-t border-gray-200 pt-3">
+                            <button
+                              type="button"
+                              onClick={() => openLectureRegisterModal(event)}
+                              className="rounded-md bg-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-700"
+                            >
+                              Đăng ký duyệt giảng
+                            </button>
+                          </div>
+                        )}
 
                       {supportsParticipantList && (
                         <div className="mt-3 border-t border-gray-200 pt-3">
@@ -2660,6 +2855,91 @@ export default function MonthlyActivitiesPage() {
               >
                 Đóng
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLectureRegisterModal && selectedLectureEvent && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Đăng ký lịch duyệt giảng</h3>
+                <p className="mt-1 text-xs text-gray-600">
+                  {selectedLectureEvent.title}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowLectureRegisterModal(false)
+                  setSelectedLectureEvent(null)
+                  setTeacherQuery('')
+                  setSelectedTeacherCode('')
+                  setTeacherResults([])
+                }}
+                className="rounded-md p-1 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="max-h-[65vh] space-y-4 overflow-y-auto p-4">
+              <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900">
+                <p>
+                  Reviewer:{' '}
+                  <span className="font-semibold">
+                    {selectedLectureEvent.lectureReviewer || 'Chưa gán reviewer'}
+                  </span>
+                </p>
+              </div>
+
+              <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto]">
+                  <input
+                    type="text"
+                    value={teacherQuery}
+                    onChange={(event) => setTeacherQuery(event.target.value)}
+                    placeholder="Tìm theo tên giáo viên hoặc LMS code"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => loadTeachersForLectureReview(teacherQuery)}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold hover:bg-gray-50"
+                  >
+                    Tìm giáo viên
+                  </button>
+                </div>
+
+                <select
+                  value={selectedTeacherCode}
+                  onChange={(event) => setSelectedTeacherCode(event.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                >
+                  <option value="">-- Chọn giáo viên --</option>
+                  {teacherResults.map((teacher) => (
+                    <option key={teacher.teacher_code} value={teacher.teacher_code}>
+                      {teacher.teacher_name} ({teacher.lms_code}){teacher.center ? ` - ${teacher.center}` : ''}
+                    </option>
+                  ))}
+                </select>
+
+                {teachersLoading && (
+                  <p className="text-xs text-blue-700">Đang tải danh sách giáo viên...</p>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSubmitLectureRegistration}
+                    disabled={registeringLectureReview}
+                    className="inline-flex items-center gap-1 rounded-md bg-cyan-700 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-60"
+                  >
+                    <Plus className="h-4 w-4" /> {registeringLectureReview ? 'Đang đăng ký...' : 'Xác nhận đăng ký'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

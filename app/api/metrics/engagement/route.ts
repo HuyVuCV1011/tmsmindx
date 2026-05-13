@@ -205,49 +205,59 @@ async function getEngagement(request: NextRequest) {
         WHERE user_id IS NOT NULL AND event_name = 'page_view'
         GROUP BY user_id
       ),
+      active_days AS (
+        SELECT 
+          user_id,
+          ARRAY_AGG(DISTINCT DATE(created_at)) AS active_dates
+        FROM system_events
+        WHERE user_id IS NOT NULL AND event_name = 'page_view'
+        GROUP BY user_id
+      ),
       retention AS (
         SELECT 
           fs.user_id,
           fs.first_date,
-          ARRAY_AGG(DISTINCT DATE(se.created_at)) AS active_dates
+          ad.active_dates,
+          CURRENT_DATE - fs.first_date AS age_days
         FROM first_seen fs
-        JOIN system_events se ON se.user_id = fs.user_id AND se.event_name = 'page_view'
-        WHERE se.created_at >= NOW() - INTERVAL '35 days'
-        GROUP BY fs.user_id, fs.first_date
+        JOIN active_days ad ON ad.user_id = fs.user_id
       )
       SELECT
-        COUNT(*) AS total_users,
-        COUNT(*) FILTER (WHERE (first_date + 1) = ANY(active_dates)) AS d1,
-        COUNT(*) FILTER (WHERE (first_date + 7) = ANY(active_dates)) AS d7,
-        COUNT(*) FILTER (WHERE (first_date + 30) = ANY(active_dates)) AS d30
+        COUNT(*) FILTER (WHERE age_days >= 1) AS d1_total,
+        COUNT(*) FILTER (WHERE age_days >= 7) AS d7_total,
+        COUNT(*) FILTER (WHERE age_days >= 30) AS d30_total,
+        COUNT(*) FILTER (WHERE age_days >= 1 AND (first_date + 1) = ANY(active_dates)) AS d1,
+        COUNT(*) FILTER (WHERE age_days >= 7 AND (first_date + 7) = ANY(active_dates)) AS d7,
+        COUNT(*) FILTER (WHERE age_days >= 30 AND (first_date + 30) = ANY(active_dates)) AS d30
       FROM retention
-      WHERE first_date >= NOW() - INTERVAL '35 days'
     `)
-    const totalUsers = parseInt(retentionRes.rows[0]?.total_users || '0', 10)
+    const d1Total = parseInt(retentionRes.rows[0]?.d1_total || '0', 10)
+    const d7Total = parseInt(retentionRes.rows[0]?.d7_total || '0', 10)
+    const d30Total = parseInt(retentionRes.rows[0]?.d30_total || '0', 10)
     const retention = {
       d1:
-        totalUsers > 0
+        d1Total > 0
           ? parseFloat(
               (
-                (parseInt(retentionRes.rows[0]?.d1 || '0', 10) / totalUsers) *
+                (parseInt(retentionRes.rows[0]?.d1 || '0', 10) / d1Total) *
                 100
               ).toFixed(1),
             )
           : 0,
       d7:
-        totalUsers > 0
+        d7Total > 0
           ? parseFloat(
               (
-                (parseInt(retentionRes.rows[0]?.d7 || '0', 10) / totalUsers) *
+                (parseInt(retentionRes.rows[0]?.d7 || '0', 10) / d7Total) *
                 100
               ).toFixed(1),
             )
           : 0,
       d30:
-        totalUsers > 0
+        d30Total > 0
           ? parseFloat(
               (
-                (parseInt(retentionRes.rows[0]?.d30 || '0', 10) / totalUsers) *
+                (parseInt(retentionRes.rows[0]?.d30 || '0', 10) / d30Total) *
                 100
               ).toFixed(1),
             )

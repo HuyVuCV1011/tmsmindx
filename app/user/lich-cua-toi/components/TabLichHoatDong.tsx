@@ -18,7 +18,23 @@ type LichRanhByDate = Record<string, LichRanhSlot[]>
 type LeaveInfo = { id:number; leave_date:string; status:string; class_code?:string; campus?:string; reason?:string }
 type LeaveByDate = Record<string, LeaveInfo[]>
 
-type EventSchedule = { id: string; title: string; event_type: string; start_at: string; end_at: string }
+type EventSchedule = {
+  id: string
+  title: string
+  event_type: string
+  start_at: string
+  end_at: string
+  center_name?: string | null
+  center_address?: string | null
+  center_full_address?: string | null
+  center_map_url?: string | null
+  room?: string | null
+  lecture_reviewer?: string | null
+  teacher_name?: string | null
+  teacher_email?: string | null
+  teacher_center?: string | null
+  review_lesson?: string | null
+}
 type ParticipantRow = { event_id: string; response_status: string }
 
 function startOfDay(d:Date){const x=new Date(d);x.setHours(0,0,0,0);return x}
@@ -79,8 +95,8 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
   const [saving,setSaving]=useState(false)
   const [editingSlotId,setEditingSlotId]=useState<number|null>(null)
   const [eventSchedules,setEventSchedules]=useState<EventSchedule[]>([])
-  const [registeredEventIds,setRegisteredEventIds]=useState<Set<string>>(new Set())
-  const [registeredByDate,setRegisteredByDate]=useState<Record<string,EventSchedule[]>>({})
+  const [registeredExamScheduleIds,setRegisteredExamScheduleIds]=useState<Set<string>>(new Set())
+  const [lectureReviewByDate,setLectureReviewByDate]=useState<Record<string,EventSchedule[]>>({})
   const [batDau,setBatDau]=useState('08:00')
   const [ketThuc,setKetThuc]=useState('12:00')
   const [coSoChon,setCoSoChon]=useState<string[]>([])
@@ -127,25 +143,21 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
         if(r.ok && d.success){
           const rows: EventSchedule[] = d.data || []
           setEventSchedules(rows)
-          // Fetch exam registrations for this teacher in the same month — these represent "đã đăng ký" for exam events
+          // Fetch exam / registration records for this teacher in the same month.
           const regRes = await fetch(`/api/exam-registrations?teacher_code=${encodeURIComponent(maGv)}&month=${month}`, { headers: authHeaders(undefined) })
           const regData = await regRes.json()
-          const registeredScheduleIds = new Set<string>()
           if(regRes.ok && regData.success){
-            (regData.data||[]).forEach((r:any)=>{
-              if(r.schedule_id) registeredScheduleIds.add(String(r.schedule_id))
+            const allowedTypes = new Set(['official', 'additional'])
+            const registeredIds = new Set<string>()
+            ;(regData.data || []).forEach((row: any) => {
+              if (!allowedTypes.has(String(row.registration_type || '').trim().toLowerCase())) return
+              if (!row.schedule_id) return
+              registeredIds.add(String(row.schedule_id))
             })
+            setRegisteredExamScheduleIds(registeredIds)
+          } else {
+            setRegisteredExamScheduleIds(new Set())
           }
-          setRegisteredEventIds(registeredScheduleIds)
-          const byDate: Record<string, EventSchedule[]> = {}
-          rows.forEach((ev)=>{
-            if(!registeredScheduleIds.has(String(ev.id))) return
-            const start = new Date(ev.start_at)
-            const key = formatDateKey(start)
-            if(!byDate[key]) byDate[key] = []
-            byDate[key].push(ev)
-          })
-          setRegisteredByDate(byDate)
         }
       }catch(e){
         // ignore
@@ -153,6 +165,88 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
     })()
     return ()=>{aborted=true}
   },[maGv, focusDate])
+
+  useEffect(()=>{
+    if(!user?.email || user.role !== 'teacher') {
+      setLectureReviewByDate({})
+      return
+    }
+    const monthPrefix = `${focusDate.getFullYear()}-${String(focusDate.getMonth()+1).padStart(2,'0')}`
+    let aborted = false
+    ;(async()=>{
+      try{
+        const r = await fetch(`/api/lecture-review-registrations?teacher_email=${encodeURIComponent(user.email)}`, { headers: authHeaders(undefined) })
+        const d = await r.json()
+        if(aborted) return
+        if(r.ok && d?.success){
+          const byDate: Record<string, EventSchedule[]> = {}
+          ;(d.data || []).forEach((row:any)=>{
+            const startAt = row?.bat_dau_luc || row?.start_at
+            if(!startAt || String(startAt).slice(0,7) !== monthPrefix) return
+            const endAt = row?.ket_thuc_luc || row?.end_at || startAt
+            const title = `Duyệt giảng: ${row?.event_title || row?.ten || 'Duyệt giảng'}${row?.review_lesson ? ` · Slide: ${row.review_lesson}` : ''}`
+            const key = formatDateKey(new Date(startAt))
+            if(!byDate[key]) byDate[key] = []
+            byDate[key].push({
+              id: `lrr-${row.id}`,
+              title,
+              event_type: 'teaching_review',
+              start_at: startAt,
+              end_at: endAt,
+              center_name: row?.center_name || null,
+              center_address: row?.center_address || null,
+              center_full_address: row?.center_full_address || null,
+              center_map_url: row?.center_map_url || null,
+              room: row?.room || null,
+              lecture_reviewer: row?.lecture_reviewer || null,
+              teacher_name: row?.teacher_name || null,
+              teacher_email: row?.teacher_email || null,
+              teacher_center: row?.teacher_center || null,
+              review_lesson: row?.review_lesson || null,
+            })
+          })
+          setLectureReviewByDate(byDate)
+        } else {
+          setLectureReviewByDate({})
+        }
+      }catch{
+        if(!aborted) setLectureReviewByDate({})
+      }
+    })()
+    return ()=>{aborted=true}
+  },[user?.email, focusDate])
+
+  const allEventsByDate = useMemo(() => {
+    const merged: Record<string, EventSchedule[]> = {}
+
+    eventSchedules.forEach((ev) => {
+      const eventType = String(ev.event_type || '').trim().toLowerCase()
+      if ((eventType === 'exam' || eventType === 'registration') && !registeredExamScheduleIds.has(String(ev.id))) {
+        return
+      }
+      const key = formatDateKey(new Date(ev.start_at))
+      if (!merged[key]) merged[key] = []
+      merged[key].push(ev)
+    })
+
+    Object.entries(lectureReviewByDate).forEach(([dateKey, events]) => {
+      if (!merged[dateKey]) merged[dateKey] = []
+      const existingIds = new Set(merged[dateKey].map((ev) => String(ev.id)))
+      events.forEach((ev) => {
+        if (!existingIds.has(String(ev.id))) {
+          merged[dateKey].push(ev)
+        }
+      })
+    })
+
+    Object.keys(merged).forEach((dateKey) => {
+      merged[dateKey] = merged[dateKey].sort(
+        (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime(),
+      )
+    })
+
+    return merged
+  }, [eventSchedules, lectureReviewByDate, registeredExamScheduleIds])
 
   const monthCells=useMemo(()=>buildMonthCells(focusDate),[focusDate])
   const weekDates=useMemo(()=>{
@@ -303,6 +397,9 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
   const activeDateKey=formatDateKey(activeDate)
   const activeSlots=lichRanhByDate[activeDateKey]||[]
   const activeLeaves=leaveByDate[activeDateKey]||[]
+  const activeAllEvents = useMemo(() => {
+    return allEventsByDate[activeDateKey] || []
+  }, [activeDateKey, allEventsByDate])
   const lapTuDate=lapTu?parseFlexibleDateInput(lapTu):null
   const lapDenDate=lapDen?parseFlexibleDateInput(lapDen):null
 
@@ -377,7 +474,7 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
                       </div>
                     )
                   })}
-                  {(eventSchedules.filter(ev=>registeredEventIds.has(String(ev.id)) && formatDateKey(new Date(ev.start_at))===activeDateKey)).map((ev)=>{
+                  {activeAllEvents.map((ev)=>{
                     const start = new Date(ev.start_at)
                     const end = new Date(ev.end_at)
                     const startStr = `${String(start.getHours()).padStart(2,'0')}:${String(start.getMinutes()).padStart(2,'0')}`
@@ -473,7 +570,7 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
                             </div>
                           )
                         })}
-                        {(registeredByDate[dateKey]||[]).map(ev=>{
+                        {(allEventsByDate[dateKey]||[]).map(ev=>{
                           const start=new Date(ev.start_at)
                           const end=new Date(ev.end_at)
                           const startStr = `${String(start.getHours()).padStart(2,'0')}:${String(start.getMinutes()).padStart(2,'0')}`
@@ -539,7 +636,7 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
                           </div>
                         )
                       })}
-                      {(registeredByDate[key]||[]).map(ev=>{
+                      {(allEventsByDate[key]||[]).map(ev=>{
                         const start=new Date(ev.start_at)
                         const end=new Date(ev.end_at)
                         const startStr = `${String(start.getHours()).padStart(2,'0')}:${String(start.getMinutes()).padStart(2,'0')}`
@@ -590,7 +687,7 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
                 {inCurrentMonth && (()=>{
                   const evs: Array<{type:'slot'|'event'|'leave'; id:string; label:string}> = []
                   slots.forEach(s=>evs.push({type:'slot', id:`slot-${s.id}`, label:`${s.batDau}–${s.ketThuc}`}))
-                  ;(registeredByDate[key]||[]).forEach(e=>{
+                  ;(allEventsByDate[key]||[]).forEach(e=>{
                     const start=new Date(e.start_at)
                     const end=new Date(e.end_at)
                     const now=new Date()
@@ -631,6 +728,7 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
         const key=formatDateKey(dayDetailDate)
         const daySlots=lichRanhByDate[key]||[]
         const dayLeaves=leaveByDate[key]||[]
+        const dayEvents=allEventsByDate[key]||[]
         const isPast=startOfDay(dayDetailDate)<startOfDay(new Date())
         const statusLabel=(s:string)=>{switch(s){case 'pending_admin':return{text:'Chờ duyệt',cls:'bg-amber-100 text-amber-700'};case 'approved_unassigned':case 'approved_assigned':return{text:'Đã duyệt',cls:'bg-blue-100 text-blue-700'};case 'substitute_confirmed':return{text:'Hoàn tất',cls:'bg-emerald-100 text-emerald-700'};case 'rejected':return{text:'Từ chối',cls:'bg-red-100 text-red-700'};default:return{text:s,cls:'bg-gray-100 text-gray-700'}}}
         return(
@@ -671,11 +769,9 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
                 )}
               </div>
               {/* Đơn xin nghỉ */}
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Đơn xin nghỉ</p>
-                {dayLeaves.length===0?(
-                  <p className="text-sm text-gray-400 italic">Không có đơn xin nghỉ ngày này.</p>
-                ):(
+              {dayLeaves.length>0&&(
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Đơn xin nghỉ</p>
                   <div className="space-y-2">
                     {dayLeaves.map(lv=>{
                       const st=statusLabel(lv.status)
@@ -687,6 +783,66 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
                           </div>
                           {lv.campus&&<p className="text-xs text-gray-500 mt-1">Cơ sở: {lv.campus}</p>}
                           {lv.reason&&<p className="text-xs text-gray-500 mt-0.5 line-clamp-2">Lý do: {lv.reason}</p>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* Sự kiện trong ngày */}
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Sự kiện trong ngày</p>
+                {dayEvents.length===0?(
+                  <p className="text-sm text-gray-400 italic">Không có sự kiện nào trong ngày này.</p>
+                ):(
+                  <div className="space-y-2">
+                    {dayEvents.map(ev=>{
+                      const start = new Date(ev.start_at)
+                      const end = new Date(ev.end_at)
+                      const timeLabel = `${String(start.getHours()).padStart(2,'0')}:${String(start.getMinutes()).padStart(2,'0')} - ${String(end.getHours()).padStart(2,'0')}:${String(end.getMinutes()).padStart(2,'0')}`
+                      return(
+                        <div key={ev.id} className="rounded-xl border border-blue-200 bg-blue-50/50 p-3">
+                          <div className="flex items-start gap-3">
+                            <div className="rounded-lg bg-blue-100 p-2"><CalendarDays className="h-4 w-4 text-blue-700" /></div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-gray-900 line-clamp-2">{ev.title}</p>
+                              <p className="text-xs text-gray-600 mt-0.5">{timeLabel}</p>
+                              {String(ev.event_type || '').toLowerCase() === 'teaching_review' && (
+                                <div className="mt-2 space-y-1.5 text-xs text-gray-700">
+                                  <p>
+                                    <span className="font-semibold text-gray-500">Cơ sở: </span>
+                                    {ev.center_name || ev.teacher_center || '—'}
+                                    {ev.center_map_url && (
+                                      <a
+                                        href={ev.center_map_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="ml-2 inline-flex items-center gap-1 rounded-full border border-[#a1001f]/20 bg-[#a1001f]/5 px-2 py-0.5 font-semibold text-[#a1001f] hover:border-[#a1001f]/30 hover:bg-[#a1001f]/10 hover:text-[#870019]"
+                                        title="Xem map"
+                                      >
+                                        <MapPin className="h-3 w-3" />
+                                        <span>Xem map</span>
+                                      </a>
+                                    )}
+                                  </p>
+                                  <p>
+                                    <span className="font-semibold text-gray-500">Phòng duyệt giảng: </span>
+                                    {ev.room || '—'}
+                                  </p>
+                                  <p>
+                                    <span className="font-semibold text-gray-500">Người duyệt giảng: </span>
+                                    {ev.lecture_reviewer || '—'}
+                                  </p>
+                                  {(ev.center_full_address || ev.center_address) && (
+                                    <p className="text-gray-500">
+                                      <span className="font-semibold text-gray-500">Địa chỉ: </span>
+                                      {ev.center_full_address || ev.center_address}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       )
                     })}

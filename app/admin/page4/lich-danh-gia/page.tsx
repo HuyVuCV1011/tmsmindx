@@ -7,7 +7,10 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
+  ExternalLink,
+  MapPin,
   Plus,
   Users,
   X,
@@ -19,10 +22,13 @@ type CalendarView = "day" | "week" | "month" | "year";
 type EventCategory =
   | "registration"
   | "exam"
+  | "workshop"
   | "workshop_teaching"
   | "meeting"
+  | "teaching_review"
   | "advanced_training_release"
   | "holiday";
+type EventMode = "online" | "offline";
 type RegistrationTemplate = "official" | "supplement";
 
 interface EvaluationEvent {
@@ -34,6 +40,19 @@ interface EvaluationEvent {
   note?: string;
   eventType?: EventCategory;
   registrationTemplate?: RegistrationTemplate;
+  mode?: EventMode;
+  centerId?: number | null;
+  centerName?: string | null;
+  centerAddress?: string | null;
+  centerFullAddress?: string | null;
+  centerMapUrl?: string | null;
+  room?: string | null;
+  meetingUrl?: string | null;
+  meetingId?: string | null;
+  lectureReviewer?: string | null;
+  status?: string | null;
+  allowRegistration?: boolean;
+  slotLimit?: number | null;
 }
 
 interface EventRow {
@@ -45,6 +64,29 @@ interface EventRow {
   start_at: string;
   end_at: string;
   note?: string | null;
+  mode?: EventMode;
+  center_id?: number | null;
+  center_name?: string | null;
+  center_address?: string | null;
+  center_full_address?: string | null;
+  center_map_url?: string | null;
+  room?: string | null;
+  meeting_url?: string | null;
+  meeting_id?: string | null;
+  lecture_reviewer?: string | null;
+  status?: string | null;
+  allow_registration?: boolean;
+  slot_limit?: number | null;
+}
+
+interface CenterOption {
+  id: number;
+  center_name: string;
+  display_name?: string | null;
+  address?: string | null;
+  full_address?: string | null;
+  map_url?: string | null;
+  hotline?: string | null;
 }
 
 interface ExamScheduleItem {
@@ -80,6 +122,38 @@ interface EventParticipant {
   responded_at: string;
 }
 
+interface TeachingReviewParticipant {
+  id: number;
+  event_id: string;
+  teacher_code: string;
+  teacher_name?: string | null;
+  teacher_email?: string | null;
+  teacher_center?: string | null;
+  lecture_reviewer?: string | null;
+  status: string;
+  created_at: string;
+}
+
+interface TeacherLookupItem {
+  teacher_code: string;
+  lms_code: string;
+  teacher_name: string;
+  email?: string | null;
+  center?: string | null;
+}
+
+interface LectureReviewRegistrationRow {
+  id: number;
+  event_id: string;
+  teacher_code: string;
+  teacher_name?: string | null;
+  teacher_email?: string | null;
+  teacher_center?: string | null;
+  lecture_reviewer?: string | null;
+  status: string;
+  created_at: string;
+}
+
 const REGISTRATION_TEMPLATE_LABELS: Record<RegistrationTemplate, string> = {
   official: "Đăng ký kiểm tra chuyên sâu chính thức",
   supplement: "Đăng ký kiểm tra chuyên sâu bổ sung",
@@ -88,11 +162,21 @@ const REGISTRATION_TEMPLATE_LABELS: Record<RegistrationTemplate, string> = {
 const EVENT_TYPE_LABELS: Record<EventCategory, string> = {
   registration: "A: Lịch đăng ký kiểm tra",
   exam: "B: Lịch kiểm tra chuyên môn",
-  workshop_teaching: "C: Lịch Workshop Teaching",
-  meeting: "D: Lịch họp",
-  advanced_training_release: "E: Lịch phát hành đào tạo nâng cao",
-  holiday: "F: Lịch nghỉ",
+  workshop: "C: Workshop",
+  workshop_teaching: "D: Lịch Workshop Teaching",
+  meeting: "E: Lịch họp",
+  teaching_review: "F: Duyệt giảng chuyên môn",
+  advanced_training_release: "G: Lịch phát hành đào tạo nâng cao",
+  holiday: "H: Lịch nghỉ",
 };
+
+const LECTURE_REVIEWERS = [
+  "Cao Quang Sơn",
+  "Trần Văn Nghĩa",
+  "Nguyễn Cảnh An",
+  "Phạm Tiến Thịnh",
+  "Hoàng Việt Hùng",
+];
 
 interface CalendarCell {
   date: Date;
@@ -140,10 +224,13 @@ function getEventClass(eventType: EventCategory | undefined) {
   switch (eventType) {
     case "registration":
       return "bg-red-100 text-red-900";
+    case "workshop":
     case "workshop_teaching":
-      return "bg-purple-200 text-purple-900";
+      return "bg-primary/10 text-primary";
     case "meeting":
-      return "bg-blue-200 text-blue-900";
+      return "bg-primary/10 text-primary";
+    case "teaching_review":
+      return "bg-primary/15 text-primary";
     case "advanced_training_release":
       return "bg-indigo-200 text-indigo-900";
     case "holiday":
@@ -168,6 +255,19 @@ function mapEventRowToEvent(row: EventRow): EvaluationEvent {
     note: row.note || "",
     eventType: row.event_type,
     registrationTemplate: row.registration_template || undefined,
+    mode: row.mode,
+    centerId: row.center_id,
+    centerName: row.center_name || null,
+    centerAddress: row.center_address || null,
+    centerFullAddress: row.center_full_address || null,
+    centerMapUrl: row.center_map_url || null,
+    room: row.room || null,
+    meetingUrl: row.meeting_url || null,
+    meetingId: row.meeting_id || null,
+    lectureReviewer: row.lecture_reviewer || null,
+    status: row.status || null,
+    allowRegistration: Boolean(row.allow_registration),
+    slotLimit: row.slot_limit ?? null,
   };
 }
 
@@ -265,7 +365,18 @@ export default function ProfessionalEvaluationSchedulePage() {
   const [showParticipantsModal, setShowParticipantsModal] = useState(false);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [selectedParticipantEvent, setSelectedParticipantEvent] = useState<EvaluationEvent | null>(null);
-  const [acceptedParticipants, setAcceptedParticipants] = useState<EventParticipant[]>([]);
+  const [acceptedParticipants, setAcceptedParticipants] = useState<Array<EventParticipant | TeachingReviewParticipant>>([]);
+  const [showLectureRegisterModal, setShowLectureRegisterModal] = useState(false);
+  const [selectedLectureEvent, setSelectedLectureEvent] = useState<EvaluationEvent | null>(null);
+  const [teacherQuery, setTeacherQuery] = useState("");
+  const [teachersLoading, setTeachersLoading] = useState(false);
+  const [teacherResults, setTeacherResults] = useState<TeacherLookupItem[]>([]);
+  const [selectedTeacherCode, setSelectedTeacherCode] = useState("");
+  const [registeringLectureReview, setRegisteringLectureReview] = useState(false);
+  const [lectureRegistrationsLoading, setLectureRegistrationsLoading] = useState(false);
+  const [lectureRegistrations, setLectureRegistrations] = useState<LectureReviewRegistrationRow[]>([]);
+  const [centers, setCenters] = useState<CenterOption[]>([]);
+  const [centersLoading, setCentersLoading] = useState(false);
   const calendarPermissionPath = "/admin/page4/lich-danh-gia";
 
   // Subjects & sets (giống thu-vien-de)
@@ -296,6 +407,12 @@ export default function ProfessionalEvaluationSchedulePage() {
         },
       ] as ExamScheduleItem[],
       title: "",
+        mode: "online" as EventMode,
+        centerId: null as number | null,
+        room: "",
+        lectureReviewer: "",
+        allowRegistration: false,
+        slotLimit: "",
       note: "",
     };
   });
@@ -331,6 +448,28 @@ export default function ProfessionalEvaluationSchedulePage() {
 
   useEffect(() => {
     fetchEvents();
+  }, []);
+
+  useEffect(() => {
+    const fetchCenters = async () => {
+      try {
+        setCentersLoading(true);
+        const response = await fetch('/api/event-schedules/centers');
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || 'Không thể tải danh sách cơ sở');
+        }
+        setCenters((data.centers || []) as CenterOption[]);
+      } catch (error: any) {
+        console.error('Error fetching event centers:', error);
+        toast.error(error?.message || 'Không thể tải danh sách cơ sở');
+        setCenters([]);
+      } finally {
+        setCentersLoading(false);
+      }
+    };
+
+    fetchCenters();
   }, []);
 
   // Tải danh sách môn + bộ đề (giống thu-vien-de)
@@ -373,6 +512,16 @@ export default function ProfessionalEvaluationSchedulePage() {
   }, []);
 
   const canManageCalendar = user?.role === "super_admin";
+  const canRegisterLectureReview = useMemo(() => {
+    if (!user) return false;
+    const elevatedRoles = new Set([
+      "LEADER",
+      "TE",
+      "ACADEMIC_LEADER",
+      "CODING_LEADER",
+    ]);
+    return (user.userRoles || []).some((role) => elevatedRoles.has(String(role || "").toUpperCase()));
+  }, [user]);
 
   const yearOptions = useMemo(() => {
     const currentYear = currentTime.getFullYear();
@@ -509,6 +658,12 @@ export default function ProfessionalEvaluationSchedulePage() {
       ],
       title: "",
       note: "",
+      mode: "online",
+      centerId: null,
+      room: "",
+      lectureReviewer: "",
+      allowRegistration: false,
+      slotLimit: "",
     });
   };
 
@@ -587,6 +742,12 @@ export default function ProfessionalEvaluationSchedulePage() {
         commonStartTime: formatTimeOnly(event.startAt),
         commonEndTime: formatTimeOnly(event.endAt),
         note: event.note || "",
+        mode: event.mode || "online",
+        centerId: event.centerId || null,
+        room: event.room || "",
+        lectureReviewer: event.lectureReviewer || "",
+        allowRegistration: Boolean(event.allowRegistration),
+        slotLimit: event.slotLimit ?? "",
       }));
     }
 
@@ -624,7 +785,9 @@ export default function ProfessionalEvaluationSchedulePage() {
       setShowParticipantsModal(true);
 
       const response = await fetch(
-        `/api/event-schedule-participants?event_id=${encodeURIComponent(event.id)}&status=accepted`
+        event.eventType === 'teaching_review'
+          ? `/api/lecture-review-registrations?event_id=${encodeURIComponent(event.id)}`
+          : `/api/event-schedule-participants?event_id=${encodeURIComponent(event.id)}&status=accepted`
       );
       const data = await response.json();
 
@@ -632,12 +795,94 @@ export default function ProfessionalEvaluationSchedulePage() {
         throw new Error(data?.error || 'Không thể tải danh sách tham gia');
       }
 
-      setAcceptedParticipants((data.data || []) as EventParticipant[]);
+      setAcceptedParticipants((data.data || []) as Array<EventParticipant | TeachingReviewParticipant>);
     } catch (error: any) {
       setAcceptedParticipants([]);
       toast.error(error?.message || 'Không thể tải danh sách tham gia');
     } finally {
       setParticipantsLoading(false);
+    }
+  };
+
+  const loadLectureRegistrations = async (eventId: string) => {
+    try {
+      setLectureRegistrationsLoading(true);
+      const response = await fetch(
+        `/api/lecture-review-registrations?event_id=${encodeURIComponent(eventId)}`,
+      );
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || "Không thể tải danh sách đăng ký duyệt giảng");
+      }
+      setLectureRegistrations((data.data || []) as LectureReviewRegistrationRow[]);
+    } catch (error: any) {
+      toast.error(error?.message || "Không thể tải danh sách đăng ký duyệt giảng");
+      setLectureRegistrations([]);
+    } finally {
+      setLectureRegistrationsLoading(false);
+    }
+  };
+
+  const loadTeachersForLectureReview = async (query: string) => {
+    try {
+      setTeachersLoading(true);
+      const response = await fetch(
+        `/api/event-schedules/teachers?q=${encodeURIComponent(query)}&limit=30`,
+      );
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || "Không thể tải danh sách giáo viên");
+      }
+      setTeacherResults((data.teachers || []) as TeacherLookupItem[]);
+    } catch (error: any) {
+      toast.error(error?.message || "Không thể tải danh sách giáo viên");
+      setTeacherResults([]);
+    } finally {
+      setTeachersLoading(false);
+    }
+  };
+
+  const openLectureRegisterModal = async (event: EvaluationEvent) => {
+    setSelectedLectureEvent(event);
+    setShowLectureRegisterModal(true);
+    setTeacherQuery("");
+    setSelectedTeacherCode("");
+    await Promise.all([
+      loadTeachersForLectureReview(""),
+      loadLectureRegistrations(event.id),
+    ]);
+  };
+
+  const handleSubmitLectureRegistration = async () => {
+    if (!selectedLectureEvent) return;
+    if (!selectedTeacherCode) {
+      toast.error("Vui lòng chọn giáo viên để đăng ký");
+      return;
+    }
+
+    try {
+      setRegisteringLectureReview(true);
+      const response = await fetch('/api/lecture-review-registrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_id: selectedLectureEvent.id,
+          teacher_code: selectedTeacherCode,
+          lecture_reviewer: selectedLectureEvent.lectureReviewer || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Không thể đăng ký lịch duyệt giảng');
+      }
+
+      toast.success('Đăng ký lịch duyệt giảng thành công');
+      await loadLectureRegistrations(selectedLectureEvent.id);
+      setSelectedTeacherCode("");
+    } catch (error: any) {
+      toast.error(error?.message || 'Không thể đăng ký lịch duyệt giảng');
+    } finally {
+      setRegisteringLectureReview(false);
     }
   };
 
@@ -811,11 +1056,28 @@ export default function ProfessionalEvaluationSchedulePage() {
       const titleByType: Record<EventCategory, string> = {
         registration: EVENT_TYPE_LABELS.registration,
         exam: EVENT_TYPE_LABELS.exam,
+        workshop: "Workshop",
         workshop_teaching: "Workshop Teaching",
         meeting: "Lịch họp",
+        teaching_review: "Duyệt giảng chuyên môn",
         advanced_training_release: "Phát hành đào tạo nâng cao",
         holiday: "Lịch nghỉ",
       };
+
+      if (formData.mode === "offline" && !formData.centerId) {
+        toast.error("Sự kiện offline bắt buộc chọn cơ sở tổ chức");
+        return;
+      }
+
+      if (formData.eventType === "teaching_review" && !formData.lectureReviewer) {
+        toast.error("Vui lòng chọn người duyệt giảng");
+        return;
+      }
+
+      const selectedCenter =
+        formData.centerId != null
+          ? centers.find((center) => center.id === formData.centerId) || null
+          : null;
 
       const finalTitle = formData.title.trim() || titleByType[formData.eventType];
       nextEvents = [
@@ -827,6 +1089,21 @@ export default function ProfessionalEvaluationSchedulePage() {
           startAt,
           endAt,
           note: formData.note.trim(),
+          mode: formData.mode,
+          centerId: formData.centerId,
+          centerName: selectedCenter?.center_name || null,
+          centerAddress: selectedCenter?.address || null,
+          centerFullAddress: selectedCenter?.full_address || null,
+          centerMapUrl: selectedCenter?.map_url || null,
+          room: formData.room.trim() || null,
+          lectureReviewer: formData.lectureReviewer.trim() || null,
+          allowRegistration: Boolean(formData.allowRegistration),
+          slotLimit:
+            formData.slotLimit === ""
+              ? null
+              : Number(formData.slotLimit) > 0
+                ? Number(formData.slotLimit)
+                : null,
         },
       ];
     }
@@ -847,6 +1124,12 @@ export default function ProfessionalEvaluationSchedulePage() {
             start_at: updated.startAt,
             end_at: updated.endAt,
             note: updated.note || null,
+            mode: updated.mode || "online",
+            center_id: updated.centerId || null,
+            room: updated.room || null,
+            lecture_reviewer: updated.lectureReviewer || null,
+            allow_registration: Boolean(updated.allowRegistration),
+            slot_limit: updated.slotLimit || null,
           }),
         });
         const data = await response.json();
@@ -875,6 +1158,12 @@ export default function ProfessionalEvaluationSchedulePage() {
                 start_at: event.startAt,
                 end_at: event.endAt,
                 note: event.note || null,
+                mode: event.mode || "online",
+                center_id: event.centerId || null,
+                room: event.room || null,
+                lecture_reviewer: event.lectureReviewer || null,
+                allow_registration: Boolean(event.allowRegistration),
+                slot_limit: event.slotLimit || null,
               }),
             });
             const data = await response.json();
@@ -924,6 +1213,10 @@ export default function ProfessionalEvaluationSchedulePage() {
   const dayIsToday = isSameDate(startOfDay(focusDate), startOfDay(currentTime));
   const currentMinuteOfDay = currentTime.getHours() * 60 + currentTime.getMinutes();
   const currentTimeTop = (currentMinuteOfDay / 60) * HOUR_BLOCK_HEIGHT;
+  const selectedCenter =
+    formData.centerId != null
+      ? centers.find((center) => center.id === formData.centerId) || null
+      : null;
 
   return (
     <PageContainer title="Lịch sự kiện">
@@ -1222,9 +1515,9 @@ export default function ProfessionalEvaluationSchedulePage() {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-xl rounded-xl bg-white shadow-2xl h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-              <h3 className="text-lg font-bold text-gray-900">Thêm mới sự kiện</h3>
-              <button onClick={closeCreateModal} className="rounded-md p-1 hover:bg-gray-100">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h3 className="text-lg font-bold text-foreground">{editingEventId ? 'Cập nhật sự kiện' : 'Thêm mới sự kiện'}</h3>
+              <button onClick={closeCreateModal} className="rounded-md p-1 hover:bg-muted">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -1251,15 +1544,9 @@ export default function ProfessionalEvaluationSchedulePage() {
                       ...previous,
                       eventType,
                       title:
-                        eventType === "workshop_teaching"
-                          ? "Workshop Teaching"
-                          : eventType === "meeting"
-                            ? "Lịch họp"
-                            : eventType === "advanced_training_release"
-                              ? "Phát hành đào tạo nâng cao"
-                              : eventType === "holiday"
-                                ? "Lịch nghỉ"
-                                : previous.title,
+                        eventType === "teaching_review"
+                          ? "Duyệt giảng chuyên môn"
+                          : previous.title,
                     }));
                   }}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
@@ -1304,6 +1591,9 @@ export default function ProfessionalEvaluationSchedulePage() {
                           }))
                         }
                         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                                              className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
+                                                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
+                                                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
                       >
                         <option value="official">{REGISTRATION_TEMPLATE_LABELS.official}</option>
                         <option value="supplement">{REGISTRATION_TEMPLATE_LABELS.supplement}</option>
@@ -1533,6 +1823,167 @@ export default function ProfessionalEvaluationSchedulePage() {
                       />
                     </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-sm font-medium">Hình thức tổ chức *</label>
+                        <select
+                          value={formData.mode}
+                          onChange={(event) =>
+                            setFormData((previous) => ({
+                              ...previous,
+                              mode: event.target.value as EventMode,
+                              centerId:
+                                event.target.value === "online"
+                                  ? null
+                                  : previous.centerId,
+                            }))
+                          }
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                        >
+                          <option value="online">ONLINE</option>
+                          <option value="offline">OFFLINE</option>
+                        </select>
+                      </div>
+
+                      {formData.eventType === "teaching_review" && (
+                        <div>
+                          <label className="mb-1 block text-sm font-medium">Người duyệt giảng *</label>
+                          <select
+                            value={formData.lectureReviewer}
+                            onChange={(event) =>
+                              setFormData((previous) => ({
+                                ...previous,
+                                lectureReviewer: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                          >
+                            <option value="">-- Chọn reviewer --</option>
+                            {LECTURE_REVIEWERS.map((reviewer) => (
+                              <option key={reviewer} value={reviewer}>
+                                {reviewer}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {formData.mode === "offline" && (
+                      <>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium">Cơ sở tổ chức *</label>
+                          <select
+                            value={formData.centerId ?? ""}
+                            onChange={(event) =>
+                              setFormData((previous) => ({
+                                ...previous,
+                                centerId: event.target.value ? Number(event.target.value) : null,
+                              }))
+                            }
+                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                          >
+                            <option value="">-- Chọn cơ sở --</option>
+                            {centers.map((center) => (
+                              <option key={center.id} value={center.id}>
+                                {center.center_name}
+                              </option>
+                            ))}
+                          </select>
+                          {centersLoading && (
+                            <p className="mt-1 text-xs text-primary">Đang tải danh sách cơ sở...</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-sm font-medium">Phòng học / địa điểm</label>
+                          <input
+                            type="text"
+                            value={formData.room}
+                            onChange={(event) =>
+                              setFormData((previous) => ({ ...previous, room: event.target.value }))
+                            }
+                            placeholder="Ví dụ: Phòng 301"
+                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                          />
+                        </div>
+
+                        {selectedCenter && (
+                          <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
+                            <p className="font-semibold">{selectedCenter.center_name}</p>
+                            <p className="mt-1 leading-5">
+                              {selectedCenter.full_address || selectedCenter.address || "Chưa có địa chỉ"}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const address =
+                                    selectedCenter.full_address || selectedCenter.address || "";
+                                  if (!address) return;
+                                  navigator.clipboard.writeText(address);
+                                  toast.success("Đã copy địa chỉ");
+                                }}
+                                className="inline-flex items-center gap-1 rounded border border-primary/20 bg-card px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/5"
+                              >
+                                <Copy className="h-3.5 w-3.5" /> Copy địa chỉ
+                              </button>
+                              {selectedCenter.map_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => window.open(selectedCenter.map_url || "", "_blank", "noopener,noreferrer")}
+                                  className="inline-flex items-center gap-1 rounded border border-primary/20 bg-card px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/5"
+                                >
+                                  <MapPin className="h-3.5 w-3.5" /> Xem bản đồ
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {formData.mode === "online" && (
+                      <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
+                        Link meeting sẽ được gán từ cấu hình reviewer hoặc nhập thủ công vào sự kiện.
+                      </div>
+                    )}
+
+                    {formData.eventType === "teaching_review" && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-md border border-gray-200 bg-white p-3">
+                        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={formData.allowRegistration}
+                            onChange={(event) =>
+                              setFormData((previous) => ({
+                                ...previous,
+                                allowRegistration: event.target.checked,
+                              }))
+                            }
+                            className="h-4 w-4"
+                          />
+                          Mở đăng ký lịch duyệt giảng
+                        </label>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium">Slot tối đa</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={formData.slotLimit}
+                            onChange={(event) =>
+                              setFormData((previous) => ({
+                                ...previous,
+                                slotLimit: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                            placeholder="Để trống nếu không giới hạn"
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     {formData.eventType === "holiday" ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
@@ -1632,14 +2083,14 @@ export default function ProfessionalEvaluationSchedulePage() {
             <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 shrink-0 bg-white">
               <button
                 onClick={closeCreateModal}
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold hover:bg-gray-50"
+                className="rounded-md border border-border px-3 py-2 text-sm font-semibold hover:bg-muted"
               >
                 Hủy
               </button>
               <button
                 onClick={handleCreateEvent}
                 disabled={isSavingEvent}
-                className="inline-flex items-center gap-1 rounded-md bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+                className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
               >
                 <Plus className="h-4 w-4" /> {isSavingEvent ? "Đang lưu..." : editingEventId ? "Cập nhật sự kiện" : "Lưu sự kiện"}
               </button>
@@ -1652,21 +2103,21 @@ export default function ProfessionalEvaluationSchedulePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-              <h3 className="text-lg font-bold text-gray-900">
+              <h3 className="text-lg font-bold text-foreground">
                 Sự kiện ngày {selectedDate.toLocaleDateString("vi-VN")}
               </h3>
               <div className="flex items-center gap-2">
                 {canManageCalendar && (
                   <button
                     onClick={() => openCreateModalForDay(selectedDate)}
-                    className="inline-flex items-center gap-1 rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800"
+                    className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
                   >
                     <Plus className="h-4 w-4" /> Thêm sự kiện mới
                   </button>
                 )}
                 <button
                   onClick={() => setShowDayEventsModal(false)}
-                  className="rounded-md p-1 hover:bg-gray-100"
+                  className="rounded-md p-1 hover:bg-muted"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -1675,35 +2126,94 @@ export default function ProfessionalEvaluationSchedulePage() {
 
             <div className="max-h-[65vh] overflow-y-auto p-4 space-y-3">
               {selectedDayEvents.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+                <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
                   Không có sự kiện trong ngày này.
                 </div>
               ) : (
                 selectedDayEvents.map((event) => (
-                  <div key={event.id} className="rounded-lg border border-gray-200 p-3">
+                  <div key={event.id} className="rounded-lg border border-border bg-card p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-xs font-semibold text-gray-500 mb-1">
+                        <div className="mb-1 text-xs font-semibold text-muted-foreground">
                           {EVENT_TYPE_LABELS[event.eventType || "exam"]}
                         </div>
-                        <div className="text-sm font-bold text-gray-900 whitespace-pre-line">{event.title}</div>
-                        <div className="text-xs text-blue-700 mt-1">
+                        <div className="whitespace-pre-line text-sm font-bold text-foreground">{event.title}</div>
+                        <div className="mt-1 text-xs text-primary">
                           {formatEventTimeRange(event.startAt, event.endAt)}
                         </div>
-                        <div className="text-xs text-gray-600 mt-1">{event.specialty}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{event.specialty}</div>
+                        {event.lectureReviewer && (
+                          <div className="mt-1 text-xs text-primary">
+                            Reviewer: <span className="font-semibold">{event.lectureReviewer}</span>
+                          </div>
+                        )}
+                        {event.mode && (
+                          <div className="mt-1 text-xs text-muted-foreground">Hình thức: {event.mode.toUpperCase()}</div>
+                        )}
+                        {event.centerName && (
+                          <div className="mt-2 rounded-md border border-primary/20 bg-primary/5 p-2 text-xs text-foreground">
+                            <p className="font-semibold">{event.centerName}</p>
+                            <p className="mt-1 leading-5 text-muted-foreground">{event.centerFullAddress || event.centerAddress || "Chưa có địa chỉ"}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const address = event.centerFullAddress || event.centerAddress || "";
+                                  if (!address) return;
+                                  navigator.clipboard.writeText(address);
+                                  toast.success("Đã copy địa chỉ");
+                                }}
+                                className="inline-flex items-center gap-1 rounded border border-primary/20 bg-card px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/5"
+                              >
+                                <Copy className="h-3.5 w-3.5" /> Copy địa chỉ
+                              </button>
+                              {event.centerMapUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => window.open(event.centerMapUrl || "", "_blank", "noopener,noreferrer")}
+                                  className="inline-flex items-center gap-1 rounded border border-primary/20 bg-card px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/5"
+                                >
+                                  <MapPin className="h-3.5 w-3.5" /> Xem bản đồ
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {event.meetingUrl && (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() => window.open(event.meetingUrl || "", "_blank", "noopener,noreferrer")}
+                              className="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" /> Join Meeting
+                            </button>
+                          </div>
+                        )}
+                        {event.eventType === "teaching_review" && Boolean(event.allowRegistration) && canRegisterLectureReview && (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() => openLectureRegisterModal(event)}
+                              className="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Đăng ký duyệt giảng
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {canManageCalendar && (
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => handleViewParticipants(event)}
-                            className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                            className="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10"
                           >
                             <Users className="h-3.5 w-3.5" /> Xem tham gia
                           </button>
                           <button
                             onClick={() => openEditEvent(event)}
-                            className="rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                            className="rounded-md border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10"
                           >
                             Sửa
                           </button>
@@ -1738,7 +2248,11 @@ export default function ProfessionalEvaluationSchedulePage() {
           <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Danh sách xác nhận tham gia</h3>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {selectedParticipantEvent.eventType === 'teaching_review'
+                    ? 'Danh sách đăng ký duyệt giảng'
+                    : 'Danh sách xác nhận tham gia'}
+                </h3>
                 <p className="mt-0.5 text-xs text-gray-500">
                   {selectedParticipantEvent.title} • {formatEventTimeRange(selectedParticipantEvent.startAt, selectedParticipantEvent.endAt)}
                 </p>
@@ -1754,11 +2268,13 @@ export default function ProfessionalEvaluationSchedulePage() {
             <div className="max-h-[60vh] overflow-y-auto p-4">
               {participantsLoading ? (
                 <div className="rounded-lg border border-gray-200 p-6 text-center text-sm text-gray-500">
-                  Đang tải danh sách tham gia...
+                  Đang tải danh sách {selectedParticipantEvent.eventType === 'teaching_review' ? 'đăng ký duyệt giảng' : 'tham gia'}...
                 </div>
               ) : acceptedParticipants.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
-                  Chưa có mentor tham gia.
+                  {selectedParticipantEvent.eventType === 'teaching_review'
+                    ? 'Chưa có đăng ký duyệt giảng nào.'
+                    : 'Chưa có mentor tham gia.'}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1773,10 +2289,22 @@ export default function ProfessionalEvaluationSchedulePage() {
                           {participant.teacher_email && (
                             <p className="text-xs text-gray-600">Email: {participant.teacher_email}</p>
                           )}
+                          {'teacher_center' in participant && participant.teacher_center && (
+                            <p className="text-xs text-gray-600">Cơ sở: {participant.teacher_center}</p>
+                          )}
+                          {'status' in participant && (
+                            <p className="text-xs text-gray-600">Trạng thái: {participant.status}</p>
+                          )}
                         </div>
-                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
-                          Đã xác nhận
-                        </span>
+                        {'status' in participant ? (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                            {participant.status}
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                            Đã xác nhận
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1791,6 +2319,111 @@ export default function ProfessionalEvaluationSchedulePage() {
               >
                 Đóng
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLectureRegisterModal && selectedLectureEvent && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Đăng ký lịch duyệt giảng</h3>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {selectedLectureEvent.title} • {formatEventTimeRange(selectedLectureEvent.startAt, selectedLectureEvent.endAt)}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowLectureRegisterModal(false)}
+                className="rounded-md p-1 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="max-h-[65vh] overflow-y-auto p-4 space-y-4">
+              <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs text-violet-900">
+                <p>
+                  Reviewer: <span className="font-semibold">{selectedLectureEvent.lectureReviewer || 'Chưa gán reviewer'}</span>
+                </p>
+                {selectedLectureEvent.centerName && (
+                  <p className="mt-1">Cơ sở: <span className="font-semibold">{selectedLectureEvent.centerName}</span></p>
+                )}
+              </div>
+
+              <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                  <input
+                    type="text"
+                    value={teacherQuery}
+                    onChange={(event) => setTeacherQuery(event.target.value)}
+                    placeholder="Tìm theo tên giáo viên hoặc LMS code"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => loadTeachersForLectureReview(teacherQuery)}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold hover:bg-gray-50"
+                  >
+                    Tìm giáo viên
+                  </button>
+                </div>
+
+                <select
+                  value={selectedTeacherCode}
+                  onChange={(event) => setSelectedTeacherCode(event.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                >
+                  <option value="">-- Chọn giáo viên --</option>
+                  {teacherResults.map((teacher) => (
+                    <option key={teacher.teacher_code} value={teacher.teacher_code}>
+                      {teacher.teacher_name} ({teacher.lms_code}){teacher.center ? ` - ${teacher.center}` : ""}
+                    </option>
+                  ))}
+                </select>
+
+                {teachersLoading && (
+                  <p className="text-xs text-blue-700">Đang tải danh sách giáo viên...</p>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSubmitLectureRegistration}
+                    disabled={registeringLectureReview}
+                    className="inline-flex items-center gap-1 rounded-md bg-violet-700 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-60"
+                  >
+                    <Plus className="h-4 w-4" /> {registeringLectureReview ? "Đang đăng ký..." : "Xác nhận đăng ký"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 p-3">
+                <div className="mb-2 text-sm font-semibold text-gray-800">Danh sách đã đăng ký</div>
+                {lectureRegistrationsLoading ? (
+                  <p className="text-sm text-gray-500">Đang tải danh sách đăng ký...</p>
+                ) : lectureRegistrations.length === 0 ? (
+                  <p className="text-sm text-gray-500">Chưa có đăng ký nào.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {lectureRegistrations.map((registration, index) => (
+                      <div key={registration.id} className="rounded-md border border-gray-200 p-2 text-sm">
+                        <p className="font-semibold text-gray-900">
+                          {index + 1}. {registration.teacher_name || registration.teacher_code}
+                        </p>
+                        <p className="text-xs text-gray-600">LMS: {registration.teacher_code}</p>
+                        {registration.teacher_center && (
+                          <p className="text-xs text-gray-600">Cơ sở: {registration.teacher_center}</p>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                          Trạng thái: {registration.status}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
