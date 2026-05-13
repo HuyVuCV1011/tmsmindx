@@ -84,7 +84,7 @@ function LichCuaToiContent() {
       { id: 'lich', label: 'Lịch hoạt động' },
       {
         id: 'xin-nghi',
-        label: 'Xin nghỉ dạy',
+        label: 'Xin nghỉ 1 buổi',
         count: pendingLeave || undefined,
       },
       {
@@ -97,7 +97,7 @@ function LichCuaToiContent() {
   )
 
   const visibleTabs = useMemo(
-    () => tabs.filter((tab) => tab.id !== 'xin-nghi'),
+    () => tabs,
     [tabs],
   )
 

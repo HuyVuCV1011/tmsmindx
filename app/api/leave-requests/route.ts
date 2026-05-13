@@ -454,8 +454,6 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    client = await pool.connect();
-
     if (action === 'admin_review') {
       const gate = await requireBearerDbRoles(request, [
         'super_admin',
@@ -489,6 +487,8 @@ export async function PATCH(request: NextRequest) {
           { status: 400 }
         );
       }
+
+      client = await pool.connect();
 
       if (decision === 'rejected') {
         const rejectedQuery = `
@@ -577,6 +577,8 @@ export async function PATCH(request: NextRequest) {
         );
       }
 
+      client = await pool.connect();
+
       const assignQuery = `
         UPDATE leave_requests
         SET
@@ -610,6 +612,8 @@ export async function PATCH(request: NextRequest) {
       const denied = rejectIfEmailNotSelf(auth.sessionEmail, false, sub);
       if (denied) return denied;
 
+      client = await pool.connect();
+
       const confirmQuery = `
         UPDATE leave_requests
         SET
@@ -633,7 +637,37 @@ export async function PATCH(request: NextRequest) {
         );
       }
 
-      return NextResponse.json({ success: true, data: confirmResult.rows[0] });
+      const confirmedRow = confirmResult.rows[0];
+
+      try {
+        await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/emails`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'leave_approved_substitute_confirmed',
+            data: {
+              teacher_name: confirmedRow.teacher_name,
+              teacher_email: confirmedRow.email,
+              campus: confirmedRow.campus,
+              class_code: confirmedRow.class_code,
+              leave_date: confirmedRow.leave_date,
+              class_time: confirmedRow.class_time,
+              leave_session: confirmedRow.leave_session,
+              substitute_teacher: confirmedRow.substitute_teacher,
+              substitute_email: confirmedRow.substitute_email,
+              reason: confirmedRow.reason,
+              admin_note: confirmedRow.admin_note,
+              admin_name: confirmedRow.admin_name,
+              admin_email: confirmedRow.admin_email,
+              substitute_confirmed_at: confirmedRow.substitute_confirmed_at,
+            },
+          }),
+        });
+      } catch (mailError) {
+        console.error('leave-requests substitute_confirm email error:', mailError);
+      }
+
+      return NextResponse.json({ success: true, data: confirmedRow });
     }
 
     return NextResponse.json(

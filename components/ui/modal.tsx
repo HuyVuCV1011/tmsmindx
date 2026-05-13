@@ -291,7 +291,9 @@ export function Modal({
           <div
             className={cn(
               'px-4 py-5 sm:px-6 sm:py-6',
-              overflowContent === 'visible' ? 'overflow-visible' : 'flex-1 overflow-y-auto'
+              overflowContent === 'visible'
+                ? 'overflow-visible'
+                : 'min-h-0 flex-1 overflow-y-auto overscroll-contain'
             )}
           >
             {children}
@@ -299,7 +301,7 @@ export function Modal({
 
           {/* Footer */}
           {footer && (
-            <div className="rounded-b-xl border-t border-gray-200 bg-gray-50 px-4 py-4 sm:px-6">
+            <div className="shrink-0 rounded-b-xl border-t border-gray-200 bg-gray-50 px-4 py-4 sm:px-6">
               {footer}
             </div>
           )}

@@ -26,6 +26,7 @@
     "@ffmpeg/util": "^0.12.2",
     "@headlessui/react": "^2.2.9",
     "@heroicons/react": "^2.2.0",
+    "@ilamy/calendar": "^1.6.3",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-separator": "^1.1.8",
@@ -53,6 +54,7 @@
     "cloudinary": "^2.8.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "dayjs": "^1.11.20",
     "dotenv": "^17.2.3",
     "formidable": "^3.5.4",
     "formidable-serverless": "^1.1.1",
@@ -100,6 +102,7 @@
     "kill-port": "^2.0.1",
     "ngrok": "^5.0.0-beta.2",
     "tailwindcss": "^4",
+    "tailwindcss-animate": "^1.0.7",
     "typescript": "^5"
   }
 }

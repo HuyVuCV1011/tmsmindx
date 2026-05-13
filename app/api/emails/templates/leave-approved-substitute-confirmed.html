@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thông báo xác nhận dạy thay</title>
+</head>
+<body style="margin:0;padding:24px;background:#f6f7f9;font-family:Arial,sans-serif;color:#1f2937;">
+  <div style="max-width:700px;margin:0 auto;background:#ffffff;padding:24px 32px;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,0.08);border:1px solid #f0f0f0;">
+    <div style="text-align:center;margin-bottom:20px;">
+      <img src="https://static.ladipage.net/5cefbc1ed062e8345a24dfe8/logo-mau-20240513110258-jalnx.png" alt="MindX Logo" style="width:120px;height:64px;object-fit:contain;display:block;margin:0 auto 12px;" />
+      <div style="font-size:22px;font-weight:bold;color:#d0021b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">THÔNG BÁO XIN NGHỈ 1 BUỔI</div>
+      <div style="font-size:14px;color:#555;">Yêu cầu đã được TC duyệt và có giáo viên thay thế xác nhận</div>
+    </div>
+
+    <p style="font-size:15px;line-height:1.6;">Kính gửi TC và BU,</p>
+    <p style="font-size:15px;line-height:1.6;">Yêu cầu xin nghỉ đã được duyệt và giáo viên thay thế đã xác nhận nhận lớp. Thông tin chi tiết như sau:</p>
+
+    <div style="border-left:4px solid #d0021b;border-radius:12px;overflow:hidden;margin-top:14px;">
+      <table style="width:100%;border-collapse:collapse;font-size:15px;">
+        <tbody>
+          <tr>
+            <td style="padding:12px 16px;font-weight:bold;background:#f8f9fa;width:220px;">Giáo viên xin nghỉ</td>
+            <td style="padding:12px 16px;">{{teacher_name}}</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-weight:bold;background:#f8f9fa;">Email giáo viên xin nghỉ</td>
+            <td style="padding:12px 16px;">{{teacher_email}}</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-weight:bold;background:#f8f9fa;">Cơ sở</td>
+            <td style="padding:12px 16px;">{{campus}}</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-weight:bold;background:#f8f9fa;">Mã lớp</td>
+            <td style="padding:12px 16px;">{{class_code}}</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-weight:bold;background:#f8f9fa;">Ngày xin nghỉ</td>
+            <td style="padding:12px 16px;">{{leave_date}}</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-weight:bold;background:#f8f9fa;">Thời gian học</td>
+            <td style="padding:12px 16px;">{{class_time}}</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-weight:bold;background:#f8f9fa;">Buổi học</td>
+            <td style="padding:12px 16px;">{{leave_session}}</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-weight:bold;background:#f8f9fa;">Giáo viên thay thế</td>
+            <td style="padding:12px 16px;">{{substitute_teacher}}</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-weight:bold;background:#f8f9fa;">Email giáo viên thay thế</td>
+            <td style="padding:12px 16px;">{{substitute_email}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:16px;background:#fff2f2;padding:14px 18px;border-radius:10px;border:1px solid #ffcfcf;font-size:15px;line-height:1.6;">
+      <strong style="color:#d0021b;">Lý do xin nghỉ:</strong>
+      <div style="margin-top:8px;white-space:pre-wrap;">{{reason}}</div>
+    </div>
+
+    {{#if admin_note}}
+    <div style="margin-top:16px;background:#f9fafb;padding:14px 18px;border-radius:10px;border:1px solid #e5e7eb;font-size:15px;line-height:1.6;">
+      <strong>Ghi chú từ TC:</strong>
+      <div style="margin-top:8px;white-space:pre-wrap;">{{admin_note}}</div>
+    </div>
+    {{/if}}
+
+    <div style="margin-top:20px;background:#fafafa;padding:12px 18px;border-radius:10px;border-left:4px solid #d0021b;font-size:14px;line-height:1.6;">
+      <div><strong style="color:#d0021b;">TC duyệt:</strong> {{admin_name}} ({{admin_email}})</div>
+      <div><strong style="color:#d0021b;">Thời điểm xác nhận GV thay:</strong> {{substitute_confirmed_at}}</div>
+    </div>
+
+    <div style="border-top:1px solid #eee;padding-top:16px;font-size:14px;color:#444;margin-top:20px;">
+      <p style="margin:0 0 6px 0;"><strong>Teaching K12 - MindX</strong></p>
+      <p style="margin:0;">Be extraordinary</p>
+    </div>
+  </div>
+</body>
+</html>

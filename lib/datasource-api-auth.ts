@@ -1,4 +1,7 @@
-import { resolveAppUserAccessForEmail } from '@/lib/app-user-access'
+import {
+  resolveAppUserAccessForEmail,
+  type AppUserAccess,
+} from '@/lib/app-user-access'
 import { getAccessibleCenters } from '@/lib/center-access'
 import pool from '@/lib/db'
 import {
@@ -23,6 +26,8 @@ export type DatasourceBearerOk = {
   sessionEmail: string
   privileged: boolean
   accessibleCenters: AccessibleCenter[]
+  /** Kết quả resolve DB một lần — dùng lại cho gate role, tránh gọi DB trùng khi pool nhỏ. */
+  resolvedAccess: AppUserAccess
 }
 
 export type DatasourceBearerResult =
@@ -104,14 +109,12 @@ function teacherMatchesAccessibleCenters(
   return collectTeacherCenterTokens(row).some((token) => allowed.has(token))
 }
 
-async function safeGetAccessibleCenters(
-  email: string,
-): Promise<AccessibleCenter[]> {
-  try {
-    return await getAccessibleCenters(email)
-  } catch {
-    return []
-  }
+function accessibleCentersFromAccess(access: AppUserAccess): AccessibleCenter[] {
+  return access.assignedCenters.map((c) => ({
+    id: c.id,
+    full_name: c.full_name,
+    short_code: c.short_code,
+  }))
 }
 
 async function resolveDatasourceSession(
@@ -126,12 +129,12 @@ async function resolveDatasourceSession(
     const session = await verifyBearerGetSession(bearer)
     if (session?.email) {
       const access = await resolveAppUserAccessForEmail(session.email)
-      const accessibleCenters = await safeGetAccessibleCenters(session.email)
       return {
         ok: true,
         sessionEmail: session.email,
         privileged: access.role === 'super_admin',
-        accessibleCenters,
+        accessibleCenters: accessibleCentersFromAccess(access),
+        resolvedAccess: access,
       }
     }
   }
@@ -141,12 +144,12 @@ async function resolveDatasourceSession(
     const edge = await verifySessionCookieValue(raw)
     if (edge?.email) {
       const access = await resolveAppUserAccessForEmail(edge.email)
-      const accessibleCenters = await safeGetAccessibleCenters(edge.email)
       return {
         ok: true,
         sessionEmail: edge.email,
         privileged: access.role === 'super_admin',
-        accessibleCenters,
+        accessibleCenters: accessibleCentersFromAccess(access),
+        resolvedAccess: access,
       }
     }
   }

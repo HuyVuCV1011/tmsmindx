@@ -690,6 +690,53 @@ export default function AdminXinNghiMotBuoiPage() {
         onClose={() => setSelected(null)}
         title={selected ? `Yêu cầu #${selected.id}` : 'Chi tiết yêu cầu'}
         maxWidth="5xl"
+        footer={
+          selected ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+              {selected.status === 'pending_admin' && (
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={submitting}
+                    onClick={() => submitAdminReview('rejected')}
+                    className="w-full sm:w-auto"
+                  >
+                    Từ chối
+                  </Button>
+                  <Button
+                    disabled={submitting}
+                    onClick={() => submitAdminReview('approved')}
+                    className="w-full border-2 border-[#7d0018] bg-[#a1001f] text-white shadow-md hover:bg-[#8a001a] sm:w-auto"
+                  >
+                    Duyệt yêu cầu
+                  </Button>
+                </>
+              )}
+
+              {selected.status === 'approved_unassigned' && (
+                <Button
+                  disabled={submitting}
+                  onClick={submitAssignSubstitute}
+                  className="w-full bg-[#a1001f] text-white hover:bg-[#8a001a] sm:w-auto"
+                >
+                  Phân giáo viên thay thế
+                </Button>
+              )}
+
+              {(selected.status === 'approved_assigned' ||
+                selected.status === 'substitute_confirmed' ||
+                selected.status === 'rejected') && (
+                <Button
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() => setSelected(null)}
+                >
+                  Đóng
+                </Button>
+              )}
+            </div>
+          ) : null
+        }
       >
         {selected && (
           <div className="space-y-4">
@@ -835,40 +882,6 @@ export default function AdminXinNghiMotBuoiPage() {
                 </p>
               </div>
             )}
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              {selected.status === 'pending_admin' && (
-                <>
-                  <Button
-                    variant="outline"
-                    disabled={submitting}
-                    onClick={() => submitAdminReview('rejected')}
-                  >
-                    Từ chối
-                  </Button>
-                  <Button
-                    disabled={submitting}
-                    onClick={() => submitAdminReview('approved')}
-                  >
-                    Duyệt yêu cầu
-                  </Button>
-                </>
-              )}
-
-              {selected.status === 'approved_unassigned' && (
-                <Button disabled={submitting} onClick={submitAssignSubstitute}>
-                  Phân giáo viên thay thế
-                </Button>
-              )}
-
-              {(selected.status === 'approved_assigned' ||
-                selected.status === 'substitute_confirmed' ||
-                selected.status === 'rejected') && (
-                <Button variant="outline" onClick={() => setSelected(null)}>
-                  Đóng
-                </Button>
-              )}
-            </div>
           </div>
         )}
       </Modal>

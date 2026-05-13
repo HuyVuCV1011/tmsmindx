@@ -65,16 +65,6 @@ interface LeaveRequest {
 type StatusVariant = 'warning' | 'info' | 'success' | 'danger'
 
 const STORAGE_KEY = 'teacher_leave_request_auto_fill_data'
-const NORTH_CAMPUS_KEYWORDS = [
-  'ha noi',
-  'hanoi',
-  'bac',
-  'hai phong',
-  'quang ninh',
-  'thai nguyen',
-  'nam dinh',
-]
-
 const LEAVE_SESSION_OPTIONS = Array.from(
   { length: 14 },
   (_, index) => `Buổi ${index + 1}`,
@@ -97,6 +87,29 @@ type CampusOption = {
   label: string
   value: string
   shortCode?: string | null
+  email?: string | null
+  centerId?: number
+}
+
+type CenterContactRow = {
+  role_code: string
+  role_name: string | null
+  full_name: string
+  email: string
+}
+
+function normRoleCode(code: unknown): string {
+  return String(code ?? '')
+    .trim()
+    .toUpperCase()
+}
+
+function formatContactPreviewLine(c: CenterContactRow): string {
+  const em = (c.email || '').trim()
+  const name = (c.full_name || '').trim()
+  const label = (c.role_name || '').trim() || c.role_code
+  if (!em) return `${label}: ${name}`.trim()
+  return `${label}: ${name} — ${em}`
 }
 
 /** Chuẩn hoá "8:0:0" | "08:30" -> "08:30" */
@@ -193,7 +206,7 @@ interface XinNghiProps {
   onCreated?: () => void
 }
 
-export default function XinNghiMotBuoiPage({ initialLeaveDate, externalOpen, onCreated }: XinNghiProps) {
+export default function XinNghiContent({ initialLeaveDate, externalOpen, onCreated }: XinNghiProps) {
   const { user, token } = useAuth()
   const { teacherProfile } = useTeacher()
   const campusPickerRef = useRef<HTMLDivElement | null>(null)
@@ -256,6 +269,7 @@ export default function XinNghiMotBuoiPage({ initialLeaveDate, externalOpen, onC
     lms_code: '',
     email: user?.email || '',
     campus: '',
+    campus_email: '',
     leave_date: '',
     reason: '',
     class_code: '',
@@ -268,21 +282,82 @@ export default function XinNghiMotBuoiPage({ initialLeaveDate, externalOpen, onC
     class_status: '',
   })
 
+  const [leaveFormCampuses, setLeaveFormCampuses] = useState<
+    {
+      id?: number
+      full_name: string
+      short_code?: string | null
+      email?: string | null
+    }[]
+  >([])
+
+  const [centerContacts, setCenterContacts] = useState<{
+    buEmail: string | null
+    contacts: CenterContactRow[]
+  } | null>(null)
+  const [centerContactsLoading, setCenterContactsLoading] = useState(false)
+
+  useEffect(() => {
+    if (!user?.email) {
+      setLeaveFormCampuses([])
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const r = await fetch('/api/leave-requests/campuses', {
+          headers: authHeaders(token),
+          cache: 'no-store',
+        })
+        const d = await r.json()
+        if (cancelled || !r.ok || !d?.success) return
+        setLeaveFormCampuses(Array.isArray(d.data) ? d.data : [])
+      } catch {
+        if (!cancelled) setLeaveFormCampuses([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user?.email, token])
+
   const campusSelectionOptions = useMemo<CampusOption[]>(() => {
+    if (leaveFormCampuses.length > 0) {
+      const seen = new Set<string>()
+      const options: CampusOption[] = []
+      for (const row of leaveFormCampuses) {
+        const v = String(row.full_name ?? '').trim()
+        if (!v || seen.has(v)) continue
+        seen.add(v)
+        options.push({
+          label: v,
+          value: v,
+          shortCode: row.short_code ?? null,
+          email: row.email?.trim() || undefined,
+          centerId: typeof row.id === 'number' ? row.id : undefined,
+        })
+      }
+      return options
+    }
+
     const assignedCenters = user?.assignedCenters ?? []
-    const options =
-      assignedCenters.length > 0
-        ? assignedCenters.map((center) => ({
-            label: center.full_name,
-            value: center.full_name,
-            shortCode: center.short_code,
-          }))
-        : CAMPUS_LIST.map((label) => ({ label, value: label }))
+    let options: CampusOption[]
+    if (assignedCenters.length > 0) {
+      options = assignedCenters.map((center) => ({
+        label: center.full_name,
+        value: center.full_name,
+        shortCode: center.short_code,
+        email: center.email?.trim() || undefined,
+        centerId: center.id,
+      }))
+    } else {
+      options = CAMPUS_LIST.map((label) => ({ label, value: label }))
+    }
 
     return Array.from(
       new Map(options.map((option) => [option.value, option])).values(),
     ).sort((a, b) => normalizeText(a.label).localeCompare(normalizeText(b.label)))
-  }, [user?.assignedCenters])
+  }, [leaveFormCampuses, user?.assignedCenters])
 
   const filteredCampusSelectionOptions = useMemo(() => {
     const search = normalizeText(campusPickerSearchText)
@@ -303,6 +378,51 @@ export default function XinNghiMotBuoiPage({ initialLeaveDate, externalOpen, onC
       ),
     [campusSelectionOptions, formData.campus],
   )
+
+  useEffect(() => {
+    const campus = formData.campus?.trim()
+    const cid = selectedCampusOption?.centerId
+    if (!campus && cid == null) {
+      setCenterContacts(null)
+      setCenterContactsLoading(false)
+      return
+    }
+    let cancelled = false
+    setCenterContactsLoading(true)
+    const qs =
+      cid != null
+        ? `centerId=${encodeURIComponent(String(cid))}`
+        : `fullName=${encodeURIComponent(campus!)}`
+    void fetch(`/api/leave-requests/center-contacts?${qs}`, {
+      headers: authHeaders(token),
+      cache: 'no-store',
+    })
+      .then(async (r) => {
+        const d = (await r.json()) as {
+          success?: boolean
+          buEmail?: string | null
+          contacts?: CenterContactRow[]
+        }
+        if (cancelled) return
+        if (!r.ok || !d?.success) {
+          setCenterContacts(null)
+          return
+        }
+        setCenterContacts({
+          buEmail: d.buEmail ?? null,
+          contacts: Array.isArray(d.contacts) ? d.contacts : [],
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setCenterContacts(null)
+      })
+      .finally(() => {
+        if (!cancelled) setCenterContactsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [formData.campus, selectedCampusOption?.centerId, token])
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -381,6 +501,11 @@ export default function XinNghiMotBuoiPage({ initialLeaveDate, externalOpen, onC
         (option) => option.value === matchedCampus,
       )
 
+      const nextCampus = preservedCampus || (matchedCampusAllowed ? matchedCampus : '')
+      const selectedCenter = campusSelectionOptions.find(
+        (option) => option.value === nextCampus,
+      )
+
       const updated = {
         ...prev,
         teacher_name: teacherProfile.name || prev.teacher_name || '',
@@ -391,7 +516,8 @@ export default function XinNghiMotBuoiPage({ initialLeaveDate, externalOpen, onC
           prev.email ||
           user?.email ||
           '',
-        campus: preservedCampus || (matchedCampusAllowed ? matchedCampus : ''),
+        campus: nextCampus,
+        campus_email: selectedCenter?.email || '',
       }
 
       saveFormDraft(updated)
@@ -402,7 +528,8 @@ export default function XinNghiMotBuoiPage({ initialLeaveDate, externalOpen, onC
 
   const handleCampusSelect = (campus: string) => {
     setFormData((prev) => {
-      const next = { ...prev, campus }
+      const selectedCenter = campusSelectionOptions.find(c => c.value === campus)
+      const next = { ...prev, campus, campus_email: selectedCenter?.email || '' }
       saveFormDraft(next)
       return next
     })
@@ -474,22 +601,30 @@ export default function XinNghiMotBuoiPage({ initialLeaveDate, externalOpen, onC
     }
   }, [classTimeStart, classTimeEnd])
 
-  const inferredRegion = useMemo(() => {
-    const normalizedCampus = formData.campus.toLowerCase()
-    const isNorthernCampus = NORTH_CAMPUS_KEYWORDS.some((keyword) =>
-      normalizedCampus.includes(keyword),
-    )
-    return isNorthernCampus ? 'mien_bac' : 'mien_nam'
-  }, [formData.campus])
-
   const hasSubstitute =
     formData.has_substitute && formData.substitute_teacher.trim().length > 0
 
-  const toLine =
-    inferredRegion === 'mien_nam'
-      ? 'TC/TE, CS cơ sở xin nghỉ'
-      : 'TC/TE, TC, CS cơ sở xin nghỉ'
-  const ccLine = 'Leader, TEGL'
+  const buEmailDisplay = useMemo(
+    () =>
+      selectedCampusOption?.email?.trim() ||
+      formData.campus_email?.trim() ||
+      centerContacts?.buEmail?.trim() ||
+      '',
+    [
+      selectedCampusOption?.email,
+      formData.campus_email,
+      centerContacts?.buEmail,
+    ],
+  )
+
+  const tcContacts = useMemo(() => {
+    if (!centerContacts?.contacts?.length) return []
+    return centerContacts.contacts.filter(
+      (c) => normRoleCode(c.role_code) === 'TC',
+    )
+  }, [centerContacts])
+
+  const toRolesLabel = 'TC, CS cơ sở xin nghỉ'
 
   const subjectLine = `[MindX - ${formData.campus || 'Tên Cơ Sở'}] V/v xin nghỉ 1 buổi dạy`
 
@@ -658,6 +793,13 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
     setSubmitting(true)
 
     try {
+      const resolvedCampusEmail =
+        campusSelectionOptions.find((o) => o.value === formData.campus)
+          ?.email ||
+        formData.campus_email ||
+        centerContacts?.buEmail?.trim() ||
+        ''
+
       const response = await fetch('/api/leave-requests', {
         method: 'POST',
         headers: {
@@ -666,6 +808,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
         },
         body: JSON.stringify({
           ...formData,
+          campus_email: resolvedCampusEmail,
           email_subject: subjectLine,
           email_body: emailBody,
           substitute_teacher: formData.has_substitute
@@ -716,7 +859,7 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
     <PageLayout>
       <PageLayoutContent spacing="lg">
         <PageHeader
-          title="Xin Nghỉ Một Buổi Dạy"
+          title="Xin nghỉ 1 buổi"
           actions={
             <div className="flex gap-2">
               <Button
@@ -1124,17 +1267,25 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
                     setCampusPickerSearchText('')
                   }
                 }}
-                className={`${SELECT_BASE_CLASS} flex items-center justify-between text-left`}
+                className={`${SELECT_BASE_CLASS} flex items-center justify-between gap-2 py-2.5 text-left`}
                 aria-expanded={showCampusPicker}
                 aria-haspopup="listbox"
+                aria-label={
+                  formData.campus
+                    ? `Cơ sở đã chọn: ${formData.campus}`
+                    : 'Chọn cơ sở'
+                }
               >
-                <span className="min-w-0 truncate">
-                  {selectedCampusOption?.label || formData.campus || 'Chọn cơ sở'}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-gray-900">
+                    {selectedCampusOption?.label || formData.campus || 'Chọn cơ sở'}
+                  </span>
                 </span>
-                <ChevronDown className="ml-3 h-4 w-4 shrink-0 text-gray-400" />
+                <ChevronDown className="h-4 w-4 shrink-0 self-center text-gray-400" aria-hidden />
               </button>
               <p className="mt-1.5 text-xs text-gray-500">
-                Chỉ hiển thị các cơ sở bạn được phân công. Gõ để tìm nhanh.
+                Tất cả cơ sở đang hoạt động; các cơ sở được phân quản lý (manager)
+                hiển thị trước. Gõ để tìm nhanh.
               </p>
 
               {showCampusPicker && (
@@ -1380,11 +1531,43 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
                 Copy nội dung
               </Button>
             </div>
-            <p className="text-sm">
-              <span className="font-medium">To:</span> {toLine}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">CC:</span> {ccLine}
+            <p className="text-sm leading-snug">
+              <span className="font-medium">To:</span>{' '}
+              <span>{toRolesLabel}</span>
+              {centerContactsLoading && (
+                <span className="mt-1 block text-xs text-gray-500">
+                  Đang tải TC và email cơ sở…
+                </span>
+              )}
+              {buEmailDisplay ? (
+                <span className="mt-1 block break-all font-mono text-[13px] text-blue-900">
+                  CS (BU): {buEmailDisplay}
+                </span>
+              ) : (
+                !centerContactsLoading && (
+                  <span className="mt-1 block text-xs text-amber-800">
+                    (Chưa có email BU — chọn cơ sở để hiển thị địa chỉ CS trong hệ
+                    thống)
+                  </span>
+                )
+              )}
+              {tcContacts.length > 0 ? (
+                <span className="mt-1 block text-xs text-gray-800">
+                  {tcContacts.map((c, i) => (
+                    <span
+                      key={`${c.email}-${c.role_code}-${i}`}
+                      className="block font-mono text-[13px] text-gray-900"
+                    >
+                      {formatContactPreviewLine(c)}
+                    </span>
+                  ))}
+                </span>
+              ) : !centerContactsLoading && formData.campus.trim() ? (
+                <span className="mt-1 block text-xs text-gray-500">
+                  Không tìm thấy TC trong teaching_leaders (center / khu vực như
+                  màn Centers & Leaders).
+                </span>
+              ) : null}
             </p>
             <p className="text-sm">
               <span className="font-medium">Tiêu đề:</span> {subjectLine}
