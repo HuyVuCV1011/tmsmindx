@@ -670,7 +670,8 @@ export default function MonthlyActivitiesPage() {
   useEffect(() => {
     ;(async () => {
       try {
-        const response = await fetch('/api/event-schedules', {
+        const month = toMonthValue(focusDate)
+        const response = await fetch(`/api/event-schedules?month=${month}`, {
           headers: authHeaders(token),
         })
         const data = await response.json()
@@ -723,7 +724,7 @@ export default function MonthlyActivitiesPage() {
         setEvents([])
       }
     })()
-  }, [token])
+  }, [focusDate, token])
 
   useEffect(() => {
     if (!teacherCode) return

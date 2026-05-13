@@ -428,7 +428,9 @@ export default function ProfessionalEvaluationSchedulePage() {
   const fetchEvents = async () => {
     try {
       setIsLoadingEvents(true);
-      const response = await fetch('/api/event-schedules');
+      const now = new Date();
+      const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const response = await fetch(`/api/event-schedules?month=${month}`);
       const data = await response.json();
 
       if (!response.ok || !data?.success) {
@@ -747,7 +749,7 @@ export default function ProfessionalEvaluationSchedulePage() {
         room: event.room || "",
         lectureReviewer: event.lectureReviewer || "",
         allowRegistration: Boolean(event.allowRegistration),
-        slotLimit: event.slotLimit ?? "",
+        slotLimit: event.slotLimit != null ? String(event.slotLimit) : "",
       }));
     }
 
@@ -1591,9 +1593,6 @@ export default function ProfessionalEvaluationSchedulePage() {
                           }))
                         }
                         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
-                                              className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
-                                                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
-                                                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
                       >
                         <option value="official">{REGISTRATION_TEMPLATE_LABELS.official}</option>
                         <option value="supplement">{REGISTRATION_TEMPLATE_LABELS.supplement}</option>
