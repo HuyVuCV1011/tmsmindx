@@ -53,6 +53,20 @@ function formatDateInputValue(value:string){
 function parseFlexibleDateInput(value:string){
   return parseVietnameseDate(value) || (/^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(value) : null)
 }
+function toDateInputValue(value:string){
+  if(/^\d{2}\/\d{2}\/\d{4}$/.test(value)){
+    const [day,month,year]=value.split('/')
+    return `${year}-${month}-${day}`
+  }
+  if(/^\d{4}-\d{2}-\d{2}$/.test(value)){
+    return value
+  }
+  return ''
+}
+function toDateInputValueFromDate(date: Date | null){
+  if (!date) return ''
+  return formatDateKey(date)
+}
 function getWeekStartMonday(d:Date){const x=startOfDay(d);const day=x.getDay();const diff=x.getDate()-day+(day===0?-6:1);x.setDate(diff);return x}
 
 function buildMonthCells(f:Date){
@@ -104,6 +118,7 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
   const [lapLich,setLapLich]=useState(false)
   const [lapTu,setLapTu]=useState('')
   const [lapDen,setLapDen]=useState('')
+  const [lapSoTuan,setLapSoTuan]=useState('1')
   const [kieuLap,setKieuLap]=useState<'ngay'|'tuan'>('tuan')
   const [formError,setFormError]=useState('')
 
@@ -306,11 +321,11 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
 
   const openForm=(date:Date)=>{
     setSelectedDate(date);setBatDau('08:00');setKetThuc('12:00');setCoSoChon([]);setLinhHoat(false)
-    setLapLich(false);setLapTu(formatDate(date));setLapDen(formatDate(date));setKieuLap('tuan');setFormError('');setEditingSlotId(null)
+    setLapLich(false);setLapTu(formatDateKey(date));setLapDen(formatDateKey(date));setLapSoTuan('1');setKieuLap('tuan');setFormError('');setEditingSlotId(null)
   }
   const openEditForm=(slot:LichRanhSlot)=>{
     const d=parseDateKey(slot.date);setSelectedDate(d);setBatDau(slot.batDau);setKetThuc(slot.ketThuc)
-    setCoSoChon(slot.coSo);setLinhHoat(slot.linhHoat);setLapLich(false);setLapTu(formatDate(d));setLapDen(formatDate(d));setKieuLap('tuan');setFormError('');setEditingSlotId(slot.id)
+    setCoSoChon(slot.coSo);setLinhHoat(slot.linhHoat);setLapLich(false);setLapTu(formatDateKey(d));setLapDen(formatDateKey(d));setLapSoTuan('1');setKieuLap('tuan');setFormError('');setEditingSlotId(slot.id)
   }
   const toggleCoSo=(cs:string)=>setCoSoChon(p=>p.includes(cs)?p.filter(x=>x!==cs):[...p,cs])
   
@@ -358,7 +373,14 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
     if(!startDate||!endDate)return []
     const dates:string[]=[];const cur=new Date(startDate);const end=new Date(endDate)
     if(kieuLap==='ngay'){while(cur<=end){dates.push(formatDateKey(cur));cur.setDate(cur.getDate()+1)}}
-    else{const td=selectedDate.getDay();while(cur.getDay()!==td)cur.setDate(cur.getDate()+1);while(cur<=end){dates.push(formatDateKey(cur));cur.setDate(cur.getDate()+7)}}
+    else{
+      const totalWeeks = Math.max(1, Number.parseInt(lapSoTuan, 10) || 1)
+      for (let weekIndex = 0; weekIndex < totalWeeks; weekIndex += 1) {
+        const next = new Date(startDate)
+        next.setDate(next.getDate() + weekIndex * 7)
+        dates.push(formatDateKey(next))
+      }
+    }
     return dates
   }
 
@@ -367,17 +389,19 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
     if(batDau>=ketThuc){setFormError('Giờ kết thúc phải sau giờ bắt đầu.');return}
     if(coSoChon.length===0){setFormError('Vui lòng chọn ít nhất một cơ sở.');return}
     const lapTuDate=lapLich?parseFlexibleDateInput(lapTu):null
-    const lapDenDate=lapLich?parseFlexibleDateInput(lapDen):null
-    if(lapLich&&(!lapTu||!lapDen)){setFormError('Vui lòng chọn ngày bắt đầu và kết thúc.');return}
-    if(lapLich&&(!lapTuDate||!lapDenDate)){setFormError('Vui lòng nhập ngày theo định dạng dd/mm/yyyy.');return}
-    if(lapLich&&lapTuDate&&lapDenDate&&lapTuDate>lapDenDate){setFormError('Ngày kết thúc phải sau ngày bắt đầu.');return}
+    const lapDenDate=lapLich&&kieuLap==='ngay'?parseFlexibleDateInput(lapDen):null
+    if(lapLich&&kieuLap==='ngay'&&(!lapTu||!lapDen)){setFormError('Vui lòng chọn ngày bắt đầu và kết thúc.');return}
+    if(lapLich&&kieuLap==='ngay'&&(!lapTuDate||!lapDenDate)){setFormError('Vui lòng chọn ngày hợp lệ.');return}
+    if(lapLich&&kieuLap==='ngay'&&lapTuDate&&lapDenDate&&lapTuDate>lapDenDate){setFormError('Ngày kết thúc phải sau ngày bắt đầu.');return}
+    if(lapLich&&kieuLap==='tuan'&&(!lapTu||!lapTuDate)){setFormError('Vui lòng chọn ngày bắt đầu hợp lệ.');return}
+    if(lapLich&&kieuLap==='tuan'&&(!lapSoTuan||Number.isNaN(Number.parseInt(lapSoTuan, 10))||Number.parseInt(lapSoTuan, 10) < 1)){setFormError('Vui lòng nhập số tuần lặp hợp lệ.');return}
     if(!maGv){setFormError('Chưa xác định được mã giáo viên.');return}
     const dates=buildDates();if(dates.length===0){setFormError('Không có ngày hợp lệ.');return}
     setSaving(true)
     try{
       if(editingSlotId!==null)await fetch(`/api/dangky-lich-lam?id=${editingSlotId}`,{method:'DELETE'})
       for(const ngay of dates){
-        const r=await fetch('/api/dangky-lich-lam',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ma_gv:maGv,ngay,gio_bat_dau:batDau,gio_ket_thuc:ketThuc,co_so_uu_tien:coSoChon,linh_hoat:linhHoat,lap_lai_tu_ngay:lapLich?lapTu:null,lap_lai_den_ngay:lapLich?lapDen:null,kieu_lap:lapLich?kieuLap:null})})
+        const r=await fetch('/api/dangky-lich-lam',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ma_gv:maGv,ngay,gio_bat_dau:batDau,gio_ket_thuc:ketThuc,co_so_uu_tien:coSoChon,linh_hoat:linhHoat,lap_lai_tu_ngay:lapLich?lapTu:null,lap_lai_den_ngay:lapLich&&kieuLap==='ngay'?lapDen:null,so_tuan_lap:lapLich&&kieuLap==='tuan'?Number.parseInt(lapSoTuan,10):null,kieu_lap:lapLich?kieuLap:null})})
         const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Lỗi khi lưu')
       }
       await fetchLichRanh(focusDate);setSelectedDate(null);setEditingSlotId(null)
@@ -402,6 +426,13 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
   }, [activeDateKey, allEventsByDate])
   const lapTuDate=lapTu?parseFlexibleDateInput(lapTu):null
   const lapDenDate=lapDen?parseFlexibleDateInput(lapDen):null
+  const weeklyEndDate = useMemo(() => {
+    if (!lapTuDate || kieuLap !== 'tuan') return null
+    const weeks = Math.max(1, Number.parseInt(lapSoTuan, 10) || 1)
+    const end = new Date(lapTuDate)
+    end.setDate(end.getDate() + (weeks - 1) * 7)
+    return end
+  }, [lapSoTuan, lapTuDate, kieuLap])
 
   return (
     <>
@@ -913,8 +944,8 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={lapLich} onChange={e=>setLapLich(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-[#a1001f] focus:ring-[#a1001f]" /><span className="text-xs font-semibold text-gray-700">Lặp lịch theo khoảng ngày</span></label>
                 {lapLich&&(
                   <div className="mt-3 space-y-2">
-                    <div><label className="block text-xs text-gray-600 mb-1">Từ ngày</label><input type="text" inputMode="numeric" placeholder="dd/mm/yyyy" value={formatDateInputValue(lapTu)} onChange={e=>setLapTu(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 outline-none" /></div>
-                    <div><label className="block text-xs text-gray-600 mb-1">Đến ngày</label><input type="text" inputMode="numeric" placeholder="dd/mm/yyyy" value={formatDateInputValue(lapDen)} onChange={e=>setLapDen(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 outline-none" /></div>
+                    <div><label className="block text-xs text-gray-600 mb-1">Từ ngày</label><input type="date" value={toDateInputValue(lapTu)} onChange={e=>setLapTu(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 outline-none" /></div>
+                    <div><label className="block text-xs text-gray-600 mb-1">Đến ngày</label><input type="date" value={kieuLap==='tuan' ? toDateInputValueFromDate(weeklyEndDate) : toDateInputValue(lapDen)} onChange={e=>setLapDen(e.target.value)} readOnly={kieuLap==='tuan'} disabled={kieuLap==='tuan'} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 outline-none disabled:bg-gray-100 disabled:text-gray-500" /></div>
                     <div>
                       <label className="block text-xs text-gray-600 mb-2">Kiểu lặp</label>
                       <div className="flex gap-4">
@@ -922,12 +953,29 @@ export default function TabLichHoatDong({ onRefreshBadge, onOpenLeaveRequest }:P
                         <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="kieu_lap" value="tuan" checked={kieuLap==='tuan'} onChange={()=>setKieuLap('tuan')} className="h-4 w-4 text-[#a1001f] focus:ring-[#a1001f]" /><span className="text-sm text-gray-700">Theo tuần</span></label>
                       </div>
                     </div>
-                    {lapTuDate&&lapDenDate&&lapTuDate<=lapDenDate&&(()=>{
-                      const dates=buildDates();const dn=['CN','T2','T3','T4','T5','T6','T7']
-                      if(kieuLap==='ngay')return<p className="text-[11px] text-[#a1001f] font-medium">Sẽ set lịch cho {dates.length} ngày (từ {lapTu} đến {lapDen})</p>
-                      const td=selectedDate?.getDay()??1
-                      return dates.length>0?<p className="text-[11px] text-[#a1001f] font-medium">Sẽ set {dates.length} tuần ({dn[td]} hàng tuần từ {lapTu} đến {lapDen})</p>:<p className="text-[11px] text-orange-500 font-medium">Không có ngày phù hợp trong khoảng này.</p>
-                    })()}
+                    {kieuLap==='tuan' ? (
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Số tuần lặp</label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={lapSoTuan}
+                          onChange={e=>setLapSoTuan(e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#a1001f] focus:ring-2 focus:ring-[#a1001f]/20 outline-none"
+                        />
+                        {lapTuDate&&Number.parseInt(lapSoTuan,10)>=1&&(
+                          <p className="text-[11px] text-[#a1001f] font-medium mt-1">
+                            Sẽ set {Number.parseInt(lapSoTuan,10)} tuần lặp từ {lapTu} đến {toDateInputValueFromDate(weeklyEndDate)}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      lapTuDate&&lapDenDate&&lapTuDate<=lapDenDate&&(()=>{
+                        const dates=buildDates();
+                        return <p className="text-[11px] text-[#a1001f] font-medium">Sẽ set lịch cho {dates.length} ngày (từ {lapTu} đến {lapDen})</p>
+                      })()
+                    )}
                   </div>
                 )}
               </div>
