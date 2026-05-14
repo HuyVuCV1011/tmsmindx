@@ -1,3 +1,4 @@
+import { findMatchingCampus, normalizeText } from '@/lib/campus-data'
 import { requireBearerSession } from '@/lib/datasource-api-auth'
 import pool from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
@@ -9,6 +10,75 @@ type CenterRow = {
   display_name: string | null
   email: string | null
   region: string | null
+}
+
+async function findCenterRowByCampusLabel(
+  label: string,
+): Promise<CenterRow | undefined> {
+  const trimmed = label.trim()
+  if (!trimmed) return undefined
+
+  const direct = await pool.query<CenterRow>(
+    `SELECT id, full_name, short_code, display_name, email, region
+     FROM centers
+     WHERE status = 'Active'
+       AND (
+         LOWER(TRIM(full_name)) = LOWER(TRIM($1))
+         OR LOWER(TRIM(COALESCE(display_name, ''))) = LOWER(TRIM($1))
+         OR LOWER(TRIM(COALESCE(short_code, ''))) = LOWER(TRIM($1))
+       )
+     LIMIT 1`,
+    [trimmed],
+  )
+  if (direct.rows[0]) return direct.rows[0]
+
+  const nTarget = normalizeText(trimmed)
+
+  const all = await pool.query<CenterRow>(
+    `SELECT id, full_name, short_code, display_name, email, region
+     FROM centers
+     WHERE status = 'Active'`,
+  )
+
+  const pickByNorm = (n: string) =>
+    n
+      ? all.rows.find((row) => {
+          const nFull = normalizeText(row.full_name)
+          const nDisp = normalizeText(row.display_name || '')
+          const nShort = normalizeText(row.short_code || '')
+          return nFull === n || nDisp === n || nShort === n
+        })
+      : undefined
+
+  if (nTarget) {
+    const byNorm = pickByNorm(nTarget)
+    if (byNorm) return byNorm
+  }
+
+  const canon = findMatchingCampus(trimmed)
+  if (canon?.trim()) {
+    const cTrim = canon.trim()
+    if (cTrim.toLowerCase() !== trimmed.toLowerCase()) {
+      const directCanon = await pool.query<CenterRow>(
+        `SELECT id, full_name, short_code, display_name, email, region
+         FROM centers
+         WHERE status = 'Active'
+           AND (
+             LOWER(TRIM(full_name)) = LOWER(TRIM($1))
+             OR LOWER(TRIM(COALESCE(display_name, ''))) = LOWER(TRIM($1))
+             OR LOWER(TRIM(COALESCE(short_code, ''))) = LOWER(TRIM($1))
+           )
+         LIMIT 1`,
+        [cTrim],
+      )
+      if (directCanon.rows[0]) return directCanon.rows[0]
+      const nCanon = normalizeText(canon)
+      const byCanonNorm = pickByNorm(nCanon)
+      if (byCanonNorm) return byCanonNorm
+    }
+  }
+
+  return undefined
 }
 
 /**
@@ -42,15 +112,7 @@ export async function GET(request: NextRequest) {
       )
       center = r.rows[0]
     } else if (fullNameParam) {
-      const r = await pool.query<CenterRow>(
-        `SELECT id, full_name, short_code, display_name, email, region
-         FROM centers
-         WHERE status = 'Active'
-           AND LOWER(TRIM(full_name)) = LOWER(TRIM($1))
-         LIMIT 1`,
-        [fullNameParam],
-      )
-      center = r.rows[0]
+      center = await findCenterRowByCampusLabel(fullNameParam)
     }
 
     if (!center) {

@@ -1570,6 +1570,21 @@ const migrations: Migration[] = [
         CHECK (question_type IN ('multiple_choice', 'multiple_select', 'true_false', 'short_answer', 'essay'));
     `,
   },
+  {
+    name: 'V70_leave_requests_center_snapshot',
+    version: 70,
+    sql: `
+      DO $$
+      BEGIN
+        IF to_regclass('public.leave_requests') IS NOT NULL THEN
+          ALTER TABLE leave_requests
+            ADD COLUMN IF NOT EXISTS center_id INTEGER REFERENCES centers(id);
+          ALTER TABLE leave_requests
+            ADD COLUMN IF NOT EXISTS campus_bu_email VARCHAR(255);
+        END IF;
+      END $$;
+    `,
+  },
 ]
 
 // ========== HÀM CHẠY MIGRATIONS ==========

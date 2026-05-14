@@ -188,7 +188,8 @@ export function rejectIfEmailNotSelf(
   if (privileged) return null
   const t = targetEmail.trim().toLowerCase()
   if (!t) return null
-  if (t !== sessionEmail) {
+  const s = sessionEmail.trim().toLowerCase()
+  if (t !== s) {
     return NextResponse.json(
       { success: false, error: 'Không có quyền truy vấn dữ liệu cho email này' },
       { status: 403 },
@@ -221,7 +222,8 @@ export async function rejectIfDatasourceLookupForbidden(
   if (!row) return null
 
   const rowEmail = teacherRowWorkEmail(row as Record<string, unknown>)
-  if (rowEmail && rowEmail === sessionEmail) return null
+  const sessionNorm = sessionEmail.trim().toLowerCase()
+  if (rowEmail && rowEmail === sessionNorm) return null
 
   const accessibleCenters = await getAccessibleCenters(sessionEmail)
   if (teacherMatchesAccessibleCenters(row as Record<string, unknown>, accessibleCenters)) {
@@ -254,7 +256,7 @@ export async function rejectIfChuyenSauResultNotOwned(
   )
   if (r.rows.length === 0) return null
   const e = String(r.rows[0].e || '').toLowerCase()
-  if (e && e !== sessionEmail) {
+  if (e && e !== sessionEmail.trim().toLowerCase()) {
     return NextResponse.json(
       { success: false, error: 'Không có quyền xem kết quả này' },
       { status: 403 },
