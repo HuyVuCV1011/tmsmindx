@@ -1,4 +1,10 @@
 ﻿import { withApiProtection } from '@/lib/api-protection';
+import {
+  EVENT_SCHEDULE_WALL_IANA,
+  eventScheduleTsAsTimestamptz,
+  parseToVnWallStorage,
+  vnWallStorageSqlToInstantMs,
+} from '@/lib/event-schedule-time';
 import pool from '@/lib/db';
 import { isDegradedDatabaseQueryError } from '@/lib/db-unavailable';
 import { NextRequest, NextResponse } from 'next/server';
@@ -22,8 +28,6 @@ const EVENT_STATUSES = ['scheduled', 'completed', 'cancelled', 'rescheduled'] as
 type EventType = (typeof EVENT_TYPES)[number];
 type EventMode = (typeof EVENT_MODES)[number];
 type EventStatus = (typeof EVENT_STATUSES)[number];
-
-const VN_TZ = 'Asia/Ho_Chi_Minh';
 
 function isValidEventType(value: string): value is EventType {
   return EVENT_TYPES.includes(value as EventType);
@@ -148,8 +152,8 @@ function buildEventScheduleSelect(columns: Set<string>) {
         es.chuyen_nganh,
         es.loai_su_kien,
         es.mau_dang_ky,
-        es.bat_dau_luc,
-        es.ket_thuc_luc,
+        ${eventScheduleTsAsTimestamptz('es', 'bat_dau_luc')},
+        ${eventScheduleTsAsTimestamptz('es', 'ket_thuc_luc')},
         es.ghi_chu,
         es.tao_luc,
         ${hasColumn('mode') ? 'es.mode' : 'NULL::VARCHAR AS mode'},
@@ -180,6 +184,35 @@ function buildEventScheduleSelect(columns: Set<string>) {
     `;
 }
 
+async function fetchEventScheduleRowWithMeetingFallback(
+  id: string,
+): Promise<Record<string, any> | null> {
+  const columns = await getEventScheduleColumns();
+  const hasMeetingUrl = columns.has('meeting_url');
+  const hasLectureReviewer = columns.has('lecture_reviewer');
+
+  let query = buildEventScheduleSelect(columns);
+  query += ` AND es.id = $1`;
+  const result = await pool.query(query, [String(id)]);
+  if (!result.rows.length) return null;
+
+  const row = result.rows[0];
+  if (!hasMeetingUrl || !hasLectureReviewer) {
+    return row;
+  }
+  const reviewerMeetingMap = await loadReviewerMeetingMap(
+    row.lecture_reviewer ? [String(row.lecture_reviewer)] : [],
+  );
+  return {
+    ...row,
+    meeting_url:
+      row.meeting_url ||
+      (row.lecture_reviewer
+        ? reviewerMeetingMap.get(String(row.lecture_reviewer).trim().toLowerCase()) || null
+        : null),
+  };
+}
+
 function buildEventScheduleInsert(columns: Set<string>) {
   const available = (name: string) => columns.has(name);
   const insertColumns = ['id', 'ten', 'chuyen_nganh', 'loai_su_kien', 'mau_dang_ky', 'bat_dau_luc', 'ket_thuc_luc', 'ghi_chu'];
@@ -202,25 +235,13 @@ function buildEventScheduleInsert(columns: Set<string>) {
   };
 }
 
-// Convert any datetime string to VN wall-clock string (YYYY-MM-DD HH:MM:SS).
-function parseDateValue(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  const fmt = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: VN_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  });
-  return fmt.format(parsed);
-}
-
 // Read TIMESTAMP WITHOUT TIME ZONE from pg and return VN wall-clock string.
 function toTimestampString(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value as string);
   if (Number.isNaN(date.getTime())) return null;
   const fmt = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: VN_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: EVENT_SCHEDULE_WALL_IANA, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   });
   const vnWallClock = fmt.format(date); // "2026-05-14 21:00:00"
@@ -403,15 +424,15 @@ export const POST = withApiProtection(async (request: NextRequest) => {
       );
     }
 
-    const startAt = parseDateValue(bat_dau_luc);
-    const endAt = parseDateValue(ket_thuc_luc);
+    const startAt = parseToVnWallStorage(bat_dau_luc);
+    const endAt = parseToVnWallStorage(ket_thuc_luc);
     if (!startAt || !endAt) {
       return NextResponse.json(
         { success: false, error: 'bat_dau_luc hoáº·c ket_thuc_luc khĂ´ng há»£p lá»‡' },
         { status: 400 }
       );
     }
-    if (new Date(endAt) <= new Date(startAt)) {
+    if (vnWallStorageSqlToInstantMs(endAt) <= vnWallStorageSqlToInstantMs(startAt)) {
       return NextResponse.json(
         { success: false, error: 'ket_thuc_luc pháº£i sau bat_dau_luc' },
         { status: 400 }
@@ -462,12 +483,20 @@ export const POST = withApiProtection(async (request: NextRequest) => {
       ...insert.runtimeValues,
     ];
 
-    const result = await pool.query(query, values);
+    await pool.query(query, values);
+
+    const merged = await fetchEventScheduleRowWithMeetingFallback(String(id));
+    if (!merged) {
+      return NextResponse.json(
+        { success: false, error: 'Không tải lại được sự kiện sau khi tạo' },
+        { status: 500 },
+      );
+    }
 
     return NextResponse.json(
       {
         success: true,
-        data: serializeEventScheduleRow(result.rows[0]),
+        data: serializeEventScheduleRow(merged),
         message: 'Táº¡o sá»± kiá»‡n thĂ nh cĂ´ng',
       },
       { status: 201 }
@@ -495,7 +524,7 @@ export const PUT = withApiProtection(async (request: NextRequest) => {
     }
 
     const currentEventResult = await pool.query(
-      `SELECT * FROM event_schedules WHERE id = $1 LIMIT 1`,
+      `SELECT 1 FROM event_schedules WHERE id = $1 LIMIT 1`,
       [String(id)],
     );
 
@@ -561,7 +590,7 @@ export const PUT = withApiProtection(async (request: NextRequest) => {
     if (mau_dang_ky !== undefined) pushField('mau_dang_ky', mau_dang_ky ? String(mau_dang_ky) : null);
 
     if (bat_dau_luc !== undefined) {
-      const parsed = parseDateValue(bat_dau_luc);
+      const parsed = parseToVnWallStorage(bat_dau_luc);
       if (!parsed) {
         return NextResponse.json(
           { success: false, error: 'bat_dau_luc khĂ´ng há»£p lá»‡' },
@@ -572,7 +601,7 @@ export const PUT = withApiProtection(async (request: NextRequest) => {
     }
 
     if (ket_thuc_luc !== undefined) {
-      const parsed = parseDateValue(ket_thuc_luc);
+      const parsed = parseToVnWallStorage(ket_thuc_luc);
       if (!parsed) {
         return NextResponse.json(
           { success: false, error: 'ket_thuc_luc khĂ´ng há»£p lá»‡' },
@@ -620,9 +649,17 @@ export const PUT = withApiProtection(async (request: NextRequest) => {
       );
     }
 
+    const merged = await fetchEventScheduleRowWithMeetingFallback(String(id));
+    if (!merged) {
+      return NextResponse.json(
+        { success: false, error: 'Không tải lại được sự kiện sau khi cập nhật' },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      data: serializeEventScheduleRow(result.rows[0]),
+      data: serializeEventScheduleRow(merged),
       message: 'Cáº­p nháº­t sá»± kiá»‡n thĂ nh cĂ´ng',
     });
   } catch (error: any) {
