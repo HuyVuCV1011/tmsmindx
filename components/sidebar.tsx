@@ -244,6 +244,7 @@ export function Sidebar() {
       submenu: [
         { href: '/user/hoat-dong-hang-thang', label: 'Hoạt động hàng tháng' },
         { href: '/user/lich-cua-toi', label: 'Lịch cá nhân' },
+        { href: '/user/xin-nghi-mot-buoi', label: 'Tạo yêu cầu xin nghỉ' },
       ].filter((item) => !isTempHiddenUserRoute(item.href)),
     },
     {
