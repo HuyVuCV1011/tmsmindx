@@ -257,6 +257,9 @@ export function UpcomingEventsSidebar() {
         return birthdaysResponse?.data || []
     }, [birthdaysResponse])
 
+    // Only show birthdays for users who have not masked their info
+    const visibleBirthdays = useMemo(() => upcomingBirthdays.filter((p) => !p.masked), [upcomingBirthdays])
+
     const hasCurrentUserBirthday = useMemo(
         () => upcomingBirthdays.some((person) => person.isCurrentUser),
         [upcomingBirthdays]
@@ -457,7 +460,7 @@ export function UpcomingEventsSidebar() {
                                 </div>
                             ))}
                         </>
-                    ) : upcomingBirthdays.length > 0 ? upcomingBirthdays.map((person: Birthday) => (
+                    ) : visibleBirthdays.length > 0 ? visibleBirthdays.map((person: Birthday) => (
                         <div 
                             key={person.id} 
                             className={`flex items-center gap-3 text-white -mx-2 px-2.5 py-2.5 rounded-xl transition-all duration-200 border backdrop-blur-sm group ${

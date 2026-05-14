@@ -1,7 +1,10 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+import { useAuth } from '@/lib/auth-context'
 
 type CalendarView = "day" | "week" | "month";
 
@@ -89,28 +92,28 @@ function formatTimeRange(startAt: string, endAt: string) {
 function getEventChipClass(type: PersonalCalendarEvent["type"]) {
   switch (type) {
     case "meeting":
-      return "bg-blue-100 text-blue-900 border-blue-200";
+      return "border-primary/20 bg-primary/10 text-primary";
     case "training":
-      return "bg-violet-100 text-violet-900 border-violet-200";
+      return "border-primary/20 bg-primary/10 text-primary";
     case "personal":
-      return "bg-amber-100 text-amber-900 border-amber-200";
+      return "border-amber-200 bg-amber-50 text-amber-900";
     case "work":
     default:
-      return "bg-emerald-100 text-emerald-900 border-emerald-200";
+      return "border-primary/20 bg-primary/10 text-primary";
   }
 }
 
 function getEventDotClass(type: PersonalCalendarEvent["type"]) {
   switch (type) {
     case "meeting":
-      return "bg-blue-500";
+      return "bg-primary";
     case "training":
-      return "bg-violet-500";
+      return "bg-primary";
     case "personal":
       return "bg-amber-500";
     case "work":
     default:
-      return "bg-emerald-500";
+      return "bg-primary";
   }
 }
 
@@ -146,6 +149,9 @@ const CalendarMonth = () => {
   const [view, setView] = useState<CalendarView>("month");
   const [focusDate, setFocusDate] = useState(now);
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(now));
+  const { user } = useAuth()
+  const [teacherRegistrations, setTeacherRegistrations] = useState<any[]>([])
+  const [registrationsLoading, setRegistrationsLoading] = useState(false)
 
   const calendarCells = useMemo(
     () => buildCalendarCells(focusDate, view),
@@ -170,12 +176,51 @@ const CalendarMonth = () => {
       }
       map.get(dateKey)!.push(event);
     });
+
+    // Merge teacher lecture-review registrations as calendar events
+    teacherRegistrations.forEach((reg) => {
+      const startAt = reg.bat_dau_luc || reg.start_at || reg.bat_dau_luc
+      const endAt = reg.ket_thuc_luc || reg.end_at || reg.ket_thuc_luc
+      if (!startAt) return
+      const dateKey = formatDateKey(new Date(startAt))
+      const evt: PersonalCalendarEvent = {
+        id: `lrr-${reg.id}`,
+        title: `Duyệt giảng: ${reg.event_title || reg.ten || 'Duyệt giảng'}` + (reg.review_lesson ? ` · Slide: ${reg.review_lesson}` : ''),
+        startAt: startAt,
+        endAt: endAt || startAt,
+        type: 'training',
+      }
+      if (!map.has(dateKey)) map.set(dateKey, [])
+      map.get(dateKey)!.push(evt)
+    })
+
     return map;
-  }, []);
+  }, [teacherRegistrations]);
 
   const selectedDayEvents = useMemo(() => {
     return visibleEventsByDateKey.get(formatDateKey(selectedDate)) || [];
   }, [selectedDate, visibleEventsByDateKey]);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!user || user.role !== 'teacher' || !user.email) return
+      try {
+        setRegistrationsLoading(true)
+        const resp = await fetch(`/api/lecture-review-registrations?teacher_email=${encodeURIComponent(String(user.email))}`)
+        const data = await resp.json()
+        if (resp.ok && data?.success) {
+          setTeacherRegistrations(data.data || [])
+        } else {
+          setTeacherRegistrations([])
+        }
+      } catch (e) {
+        setTeacherRegistrations([])
+      } finally {
+        setRegistrationsLoading(false)
+      }
+    }
+    void load()
+  }, [user?.email, user?.role])
 
   const periodLabel = useMemo(() => {
     if (view === "day") {
@@ -265,88 +310,92 @@ const CalendarMonth = () => {
   }, [dayTimelineHours, visibleEventsByDateKey, weekDates]);
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-gray-200 bg-gradient-to-r from-slate-50 to-white px-4 py-3 sm:px-6 sm:py-4">
+    <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm" padding="none">
+      <div className="border-b border-border bg-gradient-to-r from-muted to-card px-4 py-3 sm:px-6 sm:py-4">
         <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
-          <div className="flex items-center gap-3 text-slate-700">
-            <CalendarDays className="h-5 w-5 text-slate-500" />
+          <div className="flex items-center gap-3 text-foreground">
+            <CalendarDays className="h-5 w-5 text-primary" />
             <div>
-              <p className="text-sm font-semibold text-slate-500">Tháng</p>
-              <p className="text-xl font-bold text-slate-900">{periodLabel}</p>
+              <p className="text-sm font-semibold text-muted-foreground">Tháng</p>
+              <p className="text-xl font-bold text-foreground">{periodLabel}</p>
             </div>
           </div>
 
           <div className="text-center">
-            <p className="text-2xl text-slate-900">
+            <p className="text-2xl font-semibold text-foreground">
               Lịch Cá Nhân
             </p>
           </div>
 
           <div className="flex justify-start lg:justify-end">
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 onClick={() => stepDate(-1)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm transition hover:border-gray-300 hover:bg-gray-50"
+                variant="outline"
+                size="icon"
                 aria-label="Thời gian trước"
+                className="focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary"
               >
                 <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setFocusDate(startOfDay(now))}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-gray-300 hover:bg-gray-50"
+                variant="outline"
+                size="default"
+                className="focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary"
               >
                 Hôm nay
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => stepDate(1)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm transition hover:border-gray-300 hover:bg-gray-50"
+                variant="outline"
+                size="icon"
                 aria-label="Thời gian sau"
+                className="focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary"
               >
                 <ChevronRight className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>
 
-        <div className="mt-4 flex justify-end">
-          <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+              <div className="mt-4 flex justify-end">
+          <div className="inline-flex rounded-xl border border-border bg-card p-1 shadow-sm">
             {([
               ["day", "Ngày"],
               ["week", "Tuần"],
               ["month", "Tháng"],
             ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                onClick={() => setView(value)}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                  view === value
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                {label}
-              </button>
+                <Button
+                  key={value}
+                  onClick={() => setView(value)}
+                  variant={view === value ? "default" : "ghost"}
+                  size="sm"
+                  className={`focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary ${view === value ? "shadow-sm" : "text-muted-foreground"}`}
+                >
+                  {label}
+                </Button>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="border-b border-gray-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 sm:px-6">
+      <div className="border-b border-border bg-muted px-4 py-2 text-sm font-semibold text-foreground sm:px-6">
         {periodLabel}
       </div>
 
       {view === "day" ? (
-        <div className="grid gap-0 border-t border-gray-200 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="bg-white">
+        <div className="grid gap-0 border-t border-border lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="bg-card">
             <div className="grid grid-cols-[64px_1fr]">
-              <div className="border-r border-gray-200 bg-gray-50/80">
+              <div className="border-r border-border bg-muted/60">
                 {dayTimelineHours.map((hour) => (
                   <div
                     key={`day-label-${hour}`}
                     className="relative"
                     style={{ height: `${DAY_TIMELINE_ROW_HEIGHT}px` }}
                   >
-                    <span className="absolute top-1 right-2 text-xs font-medium text-gray-500">
+                    <span className="absolute top-1 right-2 text-xs font-medium text-muted-foreground">
                       {String(hour).padStart(2, "0")}:00
                     </span>
                   </div>
@@ -364,26 +413,27 @@ const CalendarMonth = () => {
                   return (
                     <div
                       key={`day-slot-${hour}`}
-                      className="border-t border-gray-200 px-2 py-1.5"
+                      className="border-t border-border px-2 py-2"
                       style={{ minHeight: `${expandedHeight}px` }}
                     >
                       <div className="space-y-1.5">
-                        {hourEvents.length === 0 ? (
-                          <p className="text-xs text-gray-400">Không có lịch</p>
-                        ) : (
-                          hourEvents.map((event) => (
-                            <div
-                              key={event.id}
-                              className={`rounded-xl border-l-4 px-3 py-2 text-left shadow-sm ${getEventChipClass(event.type)}`}
-                            >
-                              <p className="text-[11px] font-semibold leading-4">
-                                {formatTimeRange(event.startAt, event.endAt)}
-                              </p>
-                              <p className="mt-0.5 text-sm font-bold leading-5">
-                                {event.title}
-                              </p>
-                            </div>
-                          ))
+                                  {hourEvents.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground">Không có lịch</p>
+                                  ) : (
+                                    hourEvents.map((event) => (
+                                      <button
+                                        key={event.id}
+                                        type="button"
+                                        tabIndex={0}
+                                        aria-label={`${event.title} ${formatTimeRange(event.startAt, event.endAt)}`}
+                                        className={`w-full text-left rounded-lg border px-2 py-2 text-xs font-semibold shadow-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary ${getEventChipClass(event.type)}`}
+                                      >
+                                        <p className="text-xs font-semibold opacity-80">
+                                          {formatTimeRange(event.startAt, event.endAt)}
+                                        </p>
+                                        <p className="mt-1 leading-4">{event.title}</p>
+                                      </button>
+                                    ))
                         )}
                       </div>
                     </div>
@@ -393,46 +443,51 @@ const CalendarMonth = () => {
             </div>
           </div>
 
-          <aside className="border-t border-gray-200 bg-slate-50 px-4 py-4 lg:border-l lg:border-t-0">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+          <aside className="border-t border-border bg-muted/40 px-4 py-4 lg:border-l lg:border-t-0">
+            <Card className="rounded-xl border-border bg-card p-4 shadow-sm" padding="none">
+              <CardContent>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                 Hôm nay
               </p>
-              <h4 className="mt-1 text-lg font-bold text-slate-900">
+              <h4 className="mt-1 text-lg font-bold text-foreground">
                 {formatDateLabel(view === "day" ? focusDate : selectedDate)}
               </h4>
               <div className="mt-4 space-y-3">
                 {selectedDayEvents.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                  <div className="rounded-xl border border-dashed border-border bg-muted p-4 text-sm text-muted-foreground">
                     Chưa có lịch cá nhân trong ngày này.
                   </div>
                 ) : (
                   selectedDayEvents.map((event) => (
-                    <div
+                    <button
                       key={event.id}
-                      className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
+                      type="button"
+                      tabIndex={0}
+                      aria-label={`${event.title} ${formatTimeRange(event.startAt, event.endAt)}`}
+                      className="w-full rounded-lg border border-border bg-card p-3 shadow-sm text-left focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary"
                     >
                       <div className="flex items-start gap-2">
                         <span className={`mt-1 h-2.5 w-2.5 rounded-full ${getEventDotClass(event.type)}`} />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-slate-900">
+                          <p className="text-sm font-semibold text-foreground">
                             {event.title}
                           </p>
-                          <p className="mt-1 text-xs text-slate-500">
+                          <p className="mt-1 text-xs text-muted-foreground">
                             {formatTimeRange(event.startAt, event.endAt)}
                           </p>
                         </div>
                       </div>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>
-            </div>
+              </CardContent>
+            </Card>
           </aside>
         </div>
       ) : view === "week" ? (
-        <div className="overflow-hidden border-t border-gray-200 bg-white">
-          <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
+        <div className="overflow-hidden border-t border-border bg-card">
+          <div className="grid grid-cols-7 border-b border-border bg-muted">
             {weekDates.map((date) => {
               const key = formatDateKey(date);
               const isToday = isSameDate(startOfDay(date), startOfDay(now));
@@ -443,13 +498,13 @@ const CalendarMonth = () => {
                   key={key}
                   type="button"
                   onClick={() => setSelectedDate(startOfDay(date))}
-                  className={`border-r border-gray-200 px-2 py-2 text-center transition-colors ${isSameDate(date, selectedDate) ? "bg-slate-100" : "bg-white hover:bg-gray-50"}`}
+                  className={`border-r border-border px-2 py-2 text-center transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary ${isSameDate(date, selectedDate) ? "bg-muted/80" : "bg-card hover:bg-muted/60"}`}
                 >
-                  <p className="text-[11px] font-semibold text-gray-500">
+                  <p className="text-xs font-semibold text-muted-foreground">
                     {WEEKDAY_LABELS[weekdayIndex]}
                   </p>
                   <p
-                    className={`mt-1 text-sm font-bold ${isToday ? "text-slate-900" : "text-gray-700"}`}
+                    className={`mt-1 text-sm font-bold ${isToday ? "text-foreground" : "text-muted-foreground"}`}
                   >
                     {String(date.getDate()).padStart(2, "0")}
                   </p>
@@ -464,23 +519,26 @@ const CalendarMonth = () => {
               const dayEvents = visibleEventsByDateKey.get(dateKey) || [];
 
               return (
-                <div key={dateKey} className="min-h-48 border-r border-gray-200 p-2">
+                <div key={dateKey} className="min-h-48 border-r border-border p-2">
                   <div className="space-y-2">
                     {dayEvents.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-3 text-xs text-gray-400">
+                      <div className="rounded-lg border border-dashed border-border bg-muted p-3 text-xs text-muted-foreground">
                         Trống
                       </div>
                     ) : (
                       dayEvents.map((event) => (
-                        <div
+                        <button
                           key={event.id}
-                          className={`rounded-lg border px-2 py-1.5 text-xs font-semibold shadow-sm ${getEventChipClass(event.type)}`}
+                          type="button"
+                          tabIndex={0}
+                          aria-label={`${event.title} ${formatTimeRange(event.startAt, event.endAt)}`}
+                          className={`w-full text-left rounded-lg border px-2 py-2 text-xs font-semibold shadow-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary ${getEventChipClass(event.type)}`}
                         >
-                          <p className="text-[11px] font-semibold opacity-80">
+                          <p className="text-xs font-semibold opacity-80">
                             {formatTimeRange(event.startAt, event.endAt)}
                           </p>
-                          <p className="mt-0.5 leading-4">{event.title}</p>
-                        </div>
+                          <p className="mt-1 leading-4">{event.title}</p>
+                        </button>
                       ))
                     )}
                   </div>
@@ -490,12 +548,12 @@ const CalendarMonth = () => {
           </div>
         </div>
       ) : (
-        <div className="border-t border-gray-200 bg-white">
-          <div className="grid grid-cols-7 border-l border-t border-gray-200">
+        <div className="border-t border-border bg-card">
+          <div className="grid grid-cols-7 border-l border-t border-border">
             {WEEKDAY_LABELS.map((label) => (
               <div
                 key={label}
-                className="h-10 border-r border-b border-gray-200 bg-gray-50 text-xs sm:text-sm font-semibold text-gray-600 flex items-center justify-center"
+                className="flex h-10 items-center justify-center border-b border-r border-border bg-muted text-xs font-semibold text-muted-foreground sm:text-sm"
               >
                 {label}
               </div>
@@ -510,17 +568,17 @@ const CalendarMonth = () => {
                 <button
                   key={dateKey}
                   type="button"
-                  className={`min-h-24 flex flex-col border-r border-b border-gray-200 p-1.5 text-left transition ${isToday ? "bg-slate-50" : inCurrentMonth ? "bg-white hover:bg-slate-50" : "bg-gray-50 text-gray-400"}`}
+                  className={`min-h-24 flex flex-col border-r border-b border-border p-2 text-left transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary ${isToday ? "bg-muted/70" : inCurrentMonth ? "bg-card hover:bg-muted/60" : "bg-muted/40 text-muted-foreground"}`}
                   onClick={() => setSelectedDate(startOfDay(date))}
                 >
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <span
-                      className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${isToday ? "bg-slate-900 text-white" : inCurrentMonth ? "text-slate-900" : "text-gray-400"}`}
+                      className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${isToday ? "bg-primary text-primary-foreground" : inCurrentMonth ? "text-foreground" : "text-muted-foreground"}`}
                     >
                       {date.getDate()}
                     </span>
                     {dayEvents.length > 0 && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                      <span className="rounded-full bg-muted px-2 py-1 text-xs font-semibold text-foreground">
                         {dayEvents.length}
                       </span>
                     )}
@@ -528,15 +586,18 @@ const CalendarMonth = () => {
 
                   <div className="space-y-1">
                     {dayEvents.slice(0, 3).map((event) => (
-                      <div
+                      <button
                         key={event.id}
-                        className={`rounded-md border px-1.5 py-1 text-[11px] font-semibold leading-4 ${getEventChipClass(event.type)}`}
+                        type="button"
+                        tabIndex={0}
+                        aria-label={event.title}
+                        className={`w-full text-left rounded-md border px-2 py-2 text-xs font-semibold leading-4 ${getEventChipClass(event.type)} focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary`}
                       >
                         <p className="line-clamp-2">{event.title}</p>
-                      </div>
+                      </button>
                     ))}
                     {dayEvents.length > 3 && (
-                      <p className="text-[11px] font-semibold text-gray-500">
+                      <p className="text-xs font-semibold text-muted-foreground">
                         +{dayEvents.length - 3} sự kiện khác
                       </p>
                     )}
@@ -547,7 +608,7 @@ const CalendarMonth = () => {
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 };
 

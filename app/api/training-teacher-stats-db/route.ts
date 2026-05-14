@@ -93,7 +93,9 @@ export const GET = withApiProtection(async (request: NextRequest) => {
     }
 
     if (block) {
-      conditions.push(`t.course_line = $${paramIdx}`);
+      // Filter should match the effective teaching block (prefer khoi_final, then course_line,
+      // then the stored ts.teaching_block). Use normalized equality to avoid case/whitespace mismatches.
+      conditions.push(`LOWER(TRIM(COALESCE(NULLIF(t.khoi_final, ''), NULLIF(t.course_line, ''), ts.teaching_block))) = LOWER(TRIM($${paramIdx}))`);
       params.push(block);
       paramIdx++;
     }
@@ -117,7 +119,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
         COALESCE(t.user_name, ts.username) as username,
         COALESCE(t.work_email, ts.work_email) as work_email,
         COALESCE(t.main_centre, ts.center) as center,
-        COALESCE(t.course_line, ts.teaching_block) as teaching_block,
+        COALESCE(NULLIF(t.khoi_final, ''), NULLIF(t.course_line, ''), ts.teaching_block) as teaching_block,
         COALESCE(t.status, ts.status) as teacher_status,
         ts.total_score,
         COUNT(DISTINCT tvs.video_id) FILTER (WHERE tvs.completion_status = 'completed') as videos_completed,
@@ -139,7 +141,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
           '[]'
         ) as video_scores
       FROM training_teacher_stats ts
-      LEFT JOIN teachers t ON ts.teacher_code = t.code
+      LEFT JOIN teachers t ON LOWER(TRIM(ts.teacher_code)) = LOWER(TRIM(t.code))
       LEFT JOIN training_teacher_video_scores tvs ON ts.teacher_code = tvs.teacher_code
       LEFT JOIN training_videos tv ON tvs.video_id = tv.id AND tv.status = 'active'
       LEFT JOIN training_assignment_submissions tas ON ts.teacher_code = tas.teacher_code
@@ -151,7 +153,7 @@ export const GET = withApiProtection(async (request: NextRequest) => {
         t.user_name, ts.username, 
         t.work_email, ts.work_email, 
         t.main_centre, ts.center, 
-        t.course_line, ts.teaching_block, 
+          t.khoi_final, t.course_line, ts.teaching_block, 
         t.status, ts.status, 
         ts.total_score
       ORDER BY ts.total_score DESC, COALESCE(t.full_name, ts.full_name) ASC
