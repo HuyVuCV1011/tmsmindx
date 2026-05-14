@@ -1,4 +1,5 @@
 import { requireBearerSession } from '@/lib/datasource-api-auth'
+import { eventScheduleTsAsTimestamptz, eventScheduleTsInstantExpr } from '@/lib/event-schedule-time'
 import pool from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -123,8 +124,8 @@ export async function GET(request: NextRequest) {
         lrr.created_at,
         lrr.updated_at,
         es.ten AS event_title,
-        es.bat_dau_luc,
-        es.ket_thuc_luc,
+        ${eventScheduleTsAsTimestamptz('es', 'bat_dau_luc')},
+        ${eventScheduleTsAsTimestamptz('es', 'ket_thuc_luc')},
         ${hasCenterId ? 'es.center_id' : 'NULL::INTEGER AS center_id'},
         ${hasRoom ? 'es.room' : 'NULL::VARCHAR AS room'},
         ${hasMode ? 'es.mode' : 'NULL::VARCHAR AS mode'},
@@ -213,7 +214,9 @@ export async function POST(request: NextRequest) {
     const teacherCenterExpr = buildTeacherCenterExpr(teacherColumns)
 
     const eventResult = await pool.query(
-      `SELECT *
+      `SELECT *,
+              ${eventScheduleTsInstantExpr('event_schedules', 'bat_dau_luc')} AS _es_bat_tz,
+              ${eventScheduleTsInstantExpr('event_schedules', 'ket_thuc_luc')} AS _es_ket_tz
        FROM event_schedules
        WHERE id = $1::uuid
        LIMIT 1`,
@@ -227,16 +230,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const event = eventResult.rows[0] as {
+    const rawEvent = eventResult.rows[0] as Record<string, unknown> & {
       id: string
       loai_su_kien: string
-      bat_dau_luc: string
-      ket_thuc_luc: string
+      bat_dau_luc: unknown
+      ket_thuc_luc: unknown
+      _es_bat_tz?: unknown
+      _es_ket_tz?: unknown
       center_id?: number | null
       allow_registration?: boolean
       slot_limit?: number | null
       trang_thai?: string
       lecture_reviewer?: string | null
+    }
+
+    const event = {
+      ...rawEvent,
+      bat_dau_luc: rawEvent._es_bat_tz ?? rawEvent.bat_dau_luc,
+      ket_thuc_luc: rawEvent._es_ket_tz ?? rawEvent.ket_thuc_luc,
     }
 
     if (String(event.loai_su_kien || '').toLowerCase() !== 'teaching_review') {
@@ -264,7 +275,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const endAt = new Date(event.ket_thuc_luc)
+    const endAt = new Date(event.ket_thuc_luc as string | number | Date)
     if (!Number.isNaN(endAt.getTime()) && endAt.getTime() <= Date.now()) {
       return NextResponse.json(
         { success: false, error: 'Sự kiện đã kết thúc, không thể đăng ký' },
@@ -322,7 +333,10 @@ export async function POST(request: NextRequest) {
          AND lrr.event_id <> $2::uuid
          AND LOWER(lrr.status) IN ('pending', 'approved')
          AND LOWER(COALESCE(es.trang_thai, 'scheduled')) <> 'cancelled'
-         AND NOT (es.ket_thuc_luc <= $3::timestamp OR es.bat_dau_luc >= $4::timestamp)
+         AND NOT (
+           ${eventScheduleTsInstantExpr('es', 'ket_thuc_luc')} <= $3::timestamptz
+           OR ${eventScheduleTsInstantExpr('es', 'bat_dau_luc')} >= $4::timestamptz
+         )
        LIMIT 1`,
       [teacherCode, eventId, event.bat_dau_luc, event.ket_thuc_luc],
     )
