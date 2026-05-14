@@ -34,16 +34,21 @@ function parseDateValue(value: string | null | undefined): string | null {
   return fmt.format(parsed);
 }
 
-// Read TIMESTAMP WITHOUT TIME ZONE from pg and return VN wall-clock string.
+// Read TIMESTAMP WITHOUT TIME ZONE from pg and return ISO 8601 string with +07:00 offset.
+// Trả về offset cố định +07:00 vì DB lưu VN wall-clock time (TIMESTAMP WITHOUT TZ).
+// Điều này đảm bảo new Date(start_at) parse đúng bất kể browser/server timezone.
 function toTimestampString(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value as string);
   if (Number.isNaN(date.getTime())) return null;
+  // Format sang VN wall-clock string trước
   const fmt = new Intl.DateTimeFormat('sv-SE', {
     timeZone: VN_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   });
-  return fmt.format(date);
+  const vnWallClock = fmt.format(date); // "2026-05-14 21:00:00"
+  // Trả về ISO 8601 với offset +07:00 cố định
+  return vnWallClock.replace(' ', 'T') + '+07:00'; // "2026-05-14T21:00:00+07:00"
 }
 
 // Serialize row — map DB column names to API response fields (both VN and EN aliases)
