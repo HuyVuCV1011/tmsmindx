@@ -1589,6 +1589,370 @@ const migrations: Migration[] = [
       WHERE completion_status = 'completed' AND (score IS NULL OR score < 7);
     `,
   },
+  {
+    name: 'V70_leave_requests_center_snapshot',
+    version: 70,
+    sql: `
+      DO $$
+      BEGIN
+        IF to_regclass('public.leave_requests') IS NOT NULL THEN
+          ALTER TABLE leave_requests
+            ADD COLUMN IF NOT EXISTS center_id INTEGER REFERENCES centers(id);
+          ALTER TABLE leave_requests
+            ADD COLUMN IF NOT EXISTS campus_bu_email VARCHAR(255);
+        END IF;
+      END $$;
+    `,
+  },
+  {
+    name: 'V70_centers_address_map_link',
+    version: 70,
+    sql: `
+      -- Thêm cột address và map_link vào centers table
+      ALTER TABLE centers
+        ADD COLUMN IF NOT EXISTS address VARCHAR(500);
+      ALTER TABLE centers
+        ADD COLUMN IF NOT EXISTS map_link VARCHAR(500);
+
+      -- Cập nhật dữ liệu centers với địa chỉ và Google Maps link từ Hà Nội
+      WITH ha_noi_data(full_name, display_name, address, map_link) AS (
+        VALUES
+          ('MindX Hoàng Đạo Thúy', 'Hoàng Đạo Thúy', 'Tầng 2, Tòa 29T1 Hoàng Đạo Thúy, Cầu Giấy, Hà Nội', 'https://www.google.com/maps/search/MindX+Hoàng+Đạo+Thúy'),
+          ('MindX Nguyễn Chí Thanh', 'Nguyễn Chí Thanh', 'Tầng 5, 71 Nguyễn Chí Thanh, Đống Đa, Hà Nội', 'https://www.google.com/maps/search/MindX+71+Nguyễn+Chí+Thanh'),
+          ('MindX Thành Công', 'Thành Công', 'Tầng 6, Toà C, 22 Thành Công, Ba Đình, Hà Nội', 'https://www.google.com/maps/search/MindX+22+Thành+Công'),
+          ('MindX Nguyễn Phong Sắc', 'Nguyễn Phong Sắc', 'Tầng 6, 107 Nguyễn Phong Sắc, Cầu Giấy, Hà Nội', 'https://www.google.com/maps/search/MindX+107+Nguyễn+Phong+Sắc'),
+          ('MindX Minh Khai', 'Minh Khai', 'Tầng 4, 505 Minh Khai, Hai Bà Trưng, Hà Nội', 'https://www.google.com/maps/search/MindX+505+Minh+Khai'),
+          ('MindX Hà Đông', 'Hà Đông', 'Tầng 7, tòa nhà Mac Plaza, Số 10 Trần Phú, Hà Đông, Hà Nội', 'https://www.google.com/maps/search/MindX+Mac+Plaza+Trần+Phú'),
+          ('MindX Nguyễn Hoàng', 'Nguyễn Hoàng', 'Tầng 3, Dolphin Plaza, 28 Trần Bình, Nam Từ Liêm, Hà Nội', 'https://www.google.com/maps/search/MindX+Dolphin+Plaza'),
+          ('MindX Nguyễn Tuân', 'Nguyễn Tuân', 'Tòa FS - GoldSeason, 47 Nguyễn Tuân, Thanh Xuân, Hà Nội', 'https://www.google.com/maps/search/MindX+47+Nguyễn+Tuân'),
+          ('MindX Ocean Park', 'Ocean Park', 'Lô HD03 - SP.BH90, Vinhomes Ocean Park 1, Gia Lâm, Hà Nội', 'https://www.google.com/maps/search/MindX+Ocean+Park'),
+          ('MindX Linh Đàm', 'Linh Đàm', 'Tầng 5, Hudland Tower, Nguyễn Hữu Thọ, Hoàng Mai, Hà Nội', 'https://www.google.com/maps/search/MindX+Hudland+Tower')
+      )
+      UPDATE centers c
+      SET address = d.address, map_link = d.map_link
+      FROM ha_noi_data d
+      WHERE c.full_name = d.full_name
+        OR c.display_name = d.display_name
+        OR LOWER(c.full_name) LIKE '%' || LOWER(d.display_name) || '%';
+
+      -- Cập nhật dữ liệu centers với địa chỉ và Google Maps link từ TP. Hồ Chí Minh
+      WITH hcm_data(full_name, display_name, address, map_link) AS (
+        VALUES
+          ('MindX Điện Biên Phủ', 'Điện Biên Phủ', 'Lầu 2, 253 Điện Biên Phủ, Quận 3, TP. Hồ Chí Minh', 'https://www.google.com/maps/search/MindX+253+Điện+Biên+Phủ'),
+          ('MindX Phan Văn Trị', 'Phan Văn Trị', '672A28 Phan Văn Trị, Gò Vấp, TP. Hồ Chí Minh', 'https://www.google.com/maps/search/MindX+Phan+Văn+Trị'),
+          ('MindX Hoàng Văn Thụ', 'Hoàng Văn Thụ', 'Lầu 2, 431A Hoàng Văn Thụ, Tân Bình, TP. Hồ Chí Minh', 'https://www.google.com/maps/search/MindX+431A+Hoàng+Văn+Thụ'),
+          ('MindX Thảo Điền', 'Thảo Điền', 'Lầu 2, 19 Đường 46, Thảo Điền, Quận 2, TP. Hồ Chí Minh', 'https://www.google.com/maps/search/MindX+Thảo+Điền'),
+          ('MindX Trung Sơn', 'Trung Sơn', 'Lầu 2, 195 Đường 9A, KDC Trung Sơn, Bình Chánh, TP. Hồ Chí Minh', 'https://www.google.com/maps/search/MindX+Trung+Sơn'),
+          ('MindX Phan Đăng Lưu', 'Phan Đăng Lưu', 'Tòa nhà Dali, 24C Phan Đăng Lưu, Bình Thạnh, TP. Hồ Chí Minh', 'https://www.google.com/maps/search/MindX+24C+Phan+Đăng+Lưu'),
+          ('MindX Tây Thạnh', 'Tây Thạnh', 'Tầng 4, 322 Tây Thạnh, Tân Phú, TP. Hồ Chí Minh', 'https://www.google.com/maps/search/MindX+322+Tây+Thạnh'),
+          ('MindX Thủ Đức', 'Thủ Đức', 'Lê Văn Việt, Quận 9, TP. Hồ Chí Minh', 'https://www.google.com/maps/search/MindX+Lê+Văn+Việt'),
+          ('MindX Phú Mỹ Hưng', 'Phú Mỹ Hưng', 'Quận 7, TP. Hồ Chí Minh', 'https://www.google.com/maps/search/MindX+Phú+Mỹ+Hưng')
+      )
+      UPDATE centers c
+      SET address = d.address, map_link = d.map_link
+      FROM hcm_data d
+      WHERE c.full_name = d.full_name
+        OR c.display_name = d.display_name
+        OR LOWER(c.full_name) LIKE '%' || LOWER(d.display_name) || '%';
+
+      -- Cập nhật dữ liệu centers tại các tỉnh khác
+      WITH other_provinces(display_name, region, address, map_link) AS (
+        VALUES
+          ('Đà Nẵng', 'Đà Nẵng', 'Quận Hải Châu, Đà Nẵng', 'https://www.google.com/maps/search/MindX+Đà+Nẵng'),
+          ('Hải Phòng', 'Hải Phòng', 'Quận Ngô Quyền, Hải Phòng', 'https://www.google.com/maps/search/MindX+Hải+Phòng'),
+          ('Bình Dương', 'Bình Dương', 'Thủ Dầu Một, Bình Dương', 'https://www.google.com/maps/search/MindX+Bình+Dương'),
+          ('Cần Thơ', 'Cần Thơ', 'Ninh Kiều, Cần Thơ', 'https://www.google.com/maps/search/MindX+Cần+Thơ'),
+          ('Vũng Tàu', 'Vũng Tàu', 'TP. Vũng Tàu', 'https://www.google.com/maps/search/MindX+Vũng+Tàu')
+      )
+      UPDATE centers c
+      SET address = d.address, map_link = d.map_link
+      FROM other_provinces d
+      WHERE LOWER(c.display_name) = LOWER(d.display_name)
+        OR LOWER(c.region) = LOWER(d.region)
+        OR LOWER(c.full_name) LIKE '%' || LOWER(d.display_name) || '%';
+    `,
+  },
+  {
+    name: 'V71_centers_complete_address_update',
+    version: 71,
+    sql: `
+      -- V71: Cập nhật địa chỉ chi tiết từ website chính thức mindx.edu.vn
+      -- Bao gồm 44 cơ sở tại Việt Nam
+
+      -- Hà Nội (8 cơ sở)
+      WITH hanoi_centers(display_name, address, map_link) AS (
+        VALUES
+          ('Hoàng Đạo Thúy', 'Tầng 2, Toà nhà 29T1 Hoàng Đạo Thuý, Phường Yên Hoà, Quận Cầu Giấy, Hà Nội', 'https://www.google.com/maps/search/29T1+Hoàng+Đạo+Thúy+Hà+Nội'),
+          ('Nguyễn Chí Thanh', 'Tầng 5, Số 71 Nguyễn Chí Thanh, Phường Giảng Võ, Quận Ba Đình, Hà Nội', 'https://www.google.com/maps/search/71+Nguyễn+Chí+Thanh+Hà+Nội'),
+          ('Thành Công', 'Tầng 2, Toà nhà Nhà Sách Nhân Văn, 1 Trường Chinh, Phường Bảy Hiền, Quận Tân Bình, Hà Nội', 'https://www.google.com/maps/search/Thành+Công+Hà+Nội'),
+          ('Nguyễn Phong Sắc', 'Tầng 6, Số 107 Nguyễn Phong Sắc, Phường Cầu Giấy, Quận Cầu Giấy, Hà Nội', 'https://www.google.com/maps/search/107+Nguyễn+Phong+Sắc+Cầu+Giấy+Hà+Nội'),
+          ('Minh Khai', 'Tầng 4, Số 505 Minh Khai, Phường Vĩnh Tuy, Quận Hai Bà Trưng, Hà Nội', 'https://www.google.com/maps/search/505+Minh+Khai+Hà+Nội'),
+          ('Hà Đông', 'Tầng 3, Toà nhà Cao cấp Westa, 102 Trần Phú, Phường Hà Đông, Quận Hà Đông, Hà Nội', 'https://www.google.com/maps/search/102+Trần+Phú+Hà+Đông+Hà+Nội'),
+          ('Ocean Park', 'Lô thương mại số HD03 - SP.BH90, Vinhome Ocean Park 1, xã Gia Lâm, Hà Nội', 'https://www.google.com/maps/search/Vinhome+Ocean+Park+1+Gia+Lâm+Hà+Nội'),
+          ('Linh Đàm', 'Tầng 5, Toà Hudland Tower, Lô A-CC7, Nguyễn Hữu Thọ, Phường Định Công, Hoàng Mai, Hà Nội', 'https://www.google.com/maps/search/Nguyễn+Hữu+Thọ+Định+Công+Hà+Nội')
+      )
+      UPDATE centers c
+      SET address = d.address, map_link = d.map_link
+      FROM hanoi_centers d
+      WHERE LOWER(c.display_name) = LOWER(d.display_name)
+        OR LOWER(c.full_name) LIKE '%' || LOWER(d.display_name) || '%';
+
+      -- TP. Hồ Chí Minh (19 cơ sở)
+      WITH hcm_centers(display_name, address, map_link) AS (
+        VALUES
+          ('Nguyễn Xí', 'Tầng trệt và Tầng 1, Số 223 Nguyễn Xí, Phường Bình Lợi Trung, Quận Bình Thạnh, TP HCM', 'https://www.google.com/maps/search/223+Nguyễn+Xí+TPHCM'),
+          ('Tên Lửa', 'Số 174-176, Đường số 1, Khu đô thị Tên Lửa, Phường An Lạc, Quận Bình Tân, TP HCM', 'https://www.google.com/maps/search/174+Tên+Lửa+TPHCM'),
+          ('Tây Thạnh', 'Tầng 4, Toà nhà số 322 Tây Thạnh, Phường Tây Thạnh, Quận Tân Phú, TP HCM', 'https://www.google.com/maps/search/322+Tây+Thạnh+TPHCM'),
+          ('Him Lam', 'Số 165-167 Nguyễn Thị Thập, Khu Đô Thị Mới Him Lam, Phường Tân Hưng, Quận 7, TP HCM', 'https://www.google.com/maps/search/165-167+Nguyễn+Thị+Thập+TPHCM'),
+          ('Song Hành', 'Tầng 2, số 02 Song Hành, Phường Bình Trưng, Quận 2, TP HCM', 'https://www.google.com/maps/search/02+Song+Hành+TPHCM'),
+          ('Hải Thượng Lãn Ông', 'Tầng trệt và lầu 1, Tòa nhà số 39 Hải Thượng Lãn Ông, Phường Chợ Lớn, Quận 5, TP HCM', 'https://www.google.com/maps/search/39+Hải+Thượng+Lãn+Ông+TPHCM'),
+          ('Quang Trung', 'Lầu 1, số 1 Quang Trung, phường 10, Quận Gò Vấp, TP HCM', 'https://www.google.com/maps/search/1+Quang+Trung+Gò+Vấp+TPHCM'),
+          ('Luỹ Bán Bích', 'Tầng 3-4, 414 Luỹ Bán Bích, Phường Tân Phú, Quận Tân Phú, TP HCM', 'https://www.google.com/maps/search/414+Lũy+Bán+Bích+TPHCM'),
+          ('Trường Chinh', 'Tầng 2, Toà nhà Nhà Sách Nhân Văn, 1 Trường Chinh, Phường Bảy Hiền, Quận Tân Bình, TP HCM', 'https://www.google.com/maps/search/1+Trường+Chinh+TPHCM'),
+          ('Phan Văn Trị', 'Tầng 1, 3 & 5, 672A28 Phan Văn Trị, Phường Gò Vấp, Quận Gò Vấp, TP HCM', 'https://www.google.com/maps/search/672A28+Phan+Văn+Trị+Gò+Vấp+TPHCM'),
+          ('Tô Ký', 'Tầng 4, Công Viên Phần Mềm Quang Trung, 1 Tô Ký, phường Trung Mỹ Tây, Quận 12, TP HCM', 'https://www.google.com/maps/search/1+Tô+Ký+Công+Viên+Phần+Mềm+Quang+Trung+TPHCM'),
+          ('Phú Mỹ Hưng', 'Số 490, Phường Tân Hưng, Quận 7, TP HCM', 'https://www.google.com/maps/search/490+Phạm+Thái+Bường+TPHCM'),
+          ('Phạm Ngũ Lão', 'Tầng 9, Tòa nhà International Plaza, 343 Phạm Ngũ Lão, Phường Bến Thành, Quận 1, TP HCM', 'https://www.google.com/maps/search/343+Phạm+Ngũ+Lão+TPHCM'),
+          ('Thủ Đức', 'Căn A23-A25, Khu A, dự án Saigon Villas Hill, 99 Lê Văn Việt, Phường Tăng Nhơn Phú, Thủ Đức, TP HCM', 'https://www.google.com/maps/search/99+Lê+Văn+Việt+TPHCM'),
+          ('Phạm Văn Đồng', 'Lầu 2, 120-122 Kha Vạn Cân, Phường Hiệp Bình, Thủ Đức, TP HCM', 'https://www.google.com/maps/search/120-122+Phạm+Văn+Đồng+TPHCM'),
+          ('Phan Xích Long', 'Tầng 8, Tòa nhà 261-263 Phan Xích Long, Phường Cầu Kiệu, Quận Phú Nhuận, TP HCM', 'https://www.google.com/maps/search/261-263+Phan+Xích+Long+TPHCM'),
+          ('Ba Tháng Hai', 'Tầng trệt và lầu 1, 614-616-618 đường Ba Tháng Hai, Phường Diên Hồng, Quận 10, TP HCM', 'https://www.google.com/maps/search/618+Đường+3/2+TPHCM'),
+          ('Nguyễn Duy Trinh', 'Tầng trệt và tầng lửng L.01, 383 Nguyễn Duy Trinh, Phường Bình Trưng, Quận 2, TP HCM', 'https://www.google.com/maps/search/383+Nguyễn+Duy+Trinh+Bình+Trưng+TPHCM'),
+          ('Hoàng Văn Thụ', 'Lầu 2, Tòa nhà Dali, 431A Hoàng Văn Thụ, Phường Tân Bình, Quận Tân Bình, TP HCM', 'https://www.google.com/maps/search/MindX+431A+Hoàng+Văn+Thụ')
+      )
+      UPDATE centers c
+      SET address = d.address, map_link = d.map_link
+      FROM hcm_centers d
+      WHERE LOWER(c.display_name) = LOWER(d.display_name)
+        OR LOWER(c.full_name) LIKE '%' || LOWER(d.display_name) || '%';
+
+      -- Các tỉnh khác (17 cơ sở)
+      WITH other_provinces_data(display_name, region, address, map_link) AS (
+        VALUES
+          ('Bắc Ninh', 'Bắc Ninh', 'Tầng 4, toà nhà Dương Tuấn, Đường Lê Thái Tổ, Phường Võ Cường, Bắc Ninh', 'https://www.google.com/maps/search/Lê+Thái+Tổ+Bắc+Ninh'),
+          ('Đà Nẵng', 'Đà Nẵng', 'Tầng 5, Khu A1, Tòa nhà Vĩnh Trung Plaza, 255-257 Hùng Vương, Phường Thanh Khê, Đà Nẵng', 'https://www.google.com/maps/search/255-257+Hùng+Vương+Đà+Nẵng'),
+          ('Hải Phòng', 'Hải Phòng', 'Tầng 2, toà nhà Bạch Đằng, 268 Trần Nguyên Hãn, Phường An Biên, Hải Phòng', 'https://www.google.com/maps/search/268+Trần+Nguyên+Hãn+Hải+Phòng'),
+          ('Cần Thơ', 'Cần Thơ', 'Tầng 01, 153Q Trần Hưng Đạo, Phường Ninh Kiều, Cần Thơ', 'https://www.google.com/maps/search/153Q+Trần+Hưng+Đạo+Ninh+Kiều+Cần+Thơ'),
+          ('Vũng Tàu', 'Vũng Tàu', 'Tầng 4, toà nhà Viettel Vũng Tàu, 205A Lê Hồng Phong, Phường Tam Thắng, Vũng Tàu', 'https://www.google.com/maps/search/205A+Lê+Hồng+Phong+Vũng+Tàu'),
+          ('Bình Dương', 'Bình Dương', 'Tầng 2, toà nhà Becamex Tower, 230 Đại Lộ Bình Dương, Phường Phú Lợi, Thủ Dầu Một, Bình Dương', 'https://www.google.com/maps/search/230+Đại+Lộ+Bình+Dương+Thủ+Dầu+Một'),
+          ('Đồng Nai', 'Đồng Nai', 'Tầng 2, Tòa nhà Nguyễn Kim, 253 Phạm Văn Thuận, Phường Tam Hiệp, Biên Hòa, Đồng Nai', 'https://www.google.com/maps/search/253+Phạm+Văn+Thuận+Biên+Hòa'),
+          ('Phú Thọ', 'Phú Thọ', 'Tầng 2, TTTM Happy Land, 1606A Hùng Vương, Việt Trì, Phú Thọ', 'https://www.google.com/maps/search/1606A+Hùng+Vương+Việt+Trì+Phú+Thọ'),
+          ('Vĩnh Phúc', 'Vĩnh Phúc', 'Tầng 2, Tòa nhà Viettel Vĩnh Phúc, Lô S1, Khu đô thị chùa Hà Tiên, Vĩnh Yên, Vĩnh Phúc', 'https://www.google.com/maps/search/Tòa+Viettel+Vĩnh+Phúc+Trần+Phú+Vĩnh+Yên'),
+          ('Thái Nguyên', 'Thái Nguyên', 'Tầng 3, Tòa nhà Viettel, Số 4 Hoàng Văn Thụ, Phường Phan Đình Phùng, Thái Nguyên', 'https://www.google.com/maps/search/4+Hoàng+Văn+Thụ+Thái+Nguyên'),
+          ('Thanh Hóa', 'Thanh Hóa', 'Tầng 3, Tòa nhà Viettel, Nam Đại Lộ Lê Lợi, Phường Hạc Thành, Thanh Hóa', 'https://www.google.com/maps/search/Đại+Lộ+Lê+Lợi+Thanh+Hóa'),
+          ('Nghệ An', 'Nghệ An', 'Tầng 2, toà nhà Viettel, Số 67 Đại Lộ Lê Nin, Phường Vinh Phú, Vinh, Nghệ An', 'https://www.google.com/maps/search/67+Đại+Lộ+Lê+Nin+Vinh+Nghệ+An'),
+          ('Quảng Ninh', 'Quảng Ninh', 'Tầng 2, số 70 Nguyễn Văn Cừ, Phường Hạ Long, Hạ Long, Quảng Ninh', 'https://www.google.com/maps/search/70+Nguyễn+Văn+Cừ+Hạ+Long+Quảng+Ninh'),
+          ('Dĩ An', 'Bình Dương', 'Tầng 3, 76 Nguyễn An Ninh, Phường Dĩ An, Dĩ An, Bình Dương', 'https://www.google.com/maps/search/76+Nguyễn+An+Ninh+Dĩ+An'),
+          ('Lái Thiêu', 'Bình Dương', 'Tầng 2, số 40 Lái Thiêu 1, phường Lái Thiêu, Thuận An, Bình Dương', 'https://www.google.com/maps/search/40+Lái+Thiêu+1+Thuận+An+Bình+Dương'),
+          ('Đình Bảng', 'Bắc Ninh', 'Số 1 Nguyễn Văn Trỗi, Đình Bảng, Từ Sơn, Bắc Ninh', 'https://www.google.com/maps/search/Số+1+Nguyễn+Văn+Trỗi+Đình+Bảng+Từ+Sơn')
+      )
+      UPDATE centers c
+      SET address = d.address, map_link = d.map_link
+      FROM other_provinces_data d
+      WHERE LOWER(c.display_name) = LOWER(d.display_name)
+        OR LOWER(c.full_name) LIKE '%' || LOWER(d.display_name) || '%'
+        OR LOWER(c.region) = LOWER(d.region);
+    `,
+  },
+  {
+    name: 'V72_centers_address_corrections',
+    version: 72,
+    sql: `
+      -- V72: Cập nhật địa chỉ chính xác hơn và Google Maps direct links từ user feedback
+
+      -- Hà Nội corrections (5 centers)
+      UPDATE centers
+      SET address = 'Tầng 1 và tầng 2, Tòa A3 Vinhomes Gardenia Hàm Nghi, Quận Nam Từ Liêm, Hà Nội',
+          map_link = 'https://maps.app.goo.gl/5BEAocQ5yEtwYnfA9'
+      WHERE LOWER(display_name) LIKE '%hàm nghi%' OR LOWER(full_name) LIKE '%hàm nghi%';
+
+      UPDATE centers
+      SET address = 'Tầng 5, Toà nhà Hudland, 06 Nguyễn Hữu Thọ, Phường Hoàng Liệt, Quận Hoàng Mai, Hà Nội',
+          map_link = 'https://maps.app.goo.gl/gMpTg8cjeeUtLo5W8'
+      WHERE LOWER(display_name) LIKE '%nguyễn hữu thọ%' OR LOWER(display_name) LIKE '%linh đàm%' OR LOWER(full_name) LIKE '%hữu thọ%';
+
+      UPDATE centers
+      SET address = 'Tầng 2, 98 Nguyễn Văn Cừ, Phường Bồ Đề, Quận Long Biên, Hà Nội',
+          map_link = 'https://maps.app.goo.gl/mnCmPmMfVihCrFic8'
+      WHERE LOWER(display_name) LIKE '%nguyễn văn cừ%' OR LOWER(full_name) LIKE '%cừ%';
+
+      UPDATE centers
+      SET address = 'Tầng 2, Tòa V1 Văn Phú Victoria, Khu đô thị Văn Phú, Phường Phú La, Quận Hà Đông, Hà Nội',
+          map_link = 'https://maps.app.goo.gl/EwXen2QSHzShwxG16'
+      WHERE LOWER(display_name) LIKE '%văn phú%' OR LOWER(full_name) LIKE '%văn phú%';
+
+      UPDATE centers
+      SET address = 'Tầng 7, Toà nhà MAC Plaza, 10 Trần Phú, Phường Mộ Lao, Quận Hà Đông, Hà Nội',
+          map_link = 'https://maps.app.goo.gl/U7MfFTByCc7Zu6x3A'
+      WHERE LOWER(display_name) LIKE '%trần phú%' OR LOWER(display_name) LIKE '%hà đông%' OR LOWER(full_name) LIKE '%trần phú%';
+
+      -- TP. Hồ Chí Minh corrections (2 centers)
+      UPDATE centers
+      SET address = 'Tầng 3&4, 414 Lũy Bán Bích, Phường Hòa Thạnh, Quận Tân Phú, TP HCM',
+          map_link = 'https://maps.app.goo.gl/7xsjJ6P46CGj3zt77'
+      WHERE LOWER(display_name) LIKE '%luỹ%' OR LOWER(display_name) LIKE '%lũy%' OR LOWER(full_name) LIKE '%bán bích%';
+
+      UPDATE centers
+      SET address = 'Tầng trệt và tầng 2, 618 đường 3/2, Phường 14, Quận 10, TP HCM',
+          map_link = 'https://maps.app.goo.gl/mwCvsHx1Kw67gGFz6'
+      WHERE LOWER(display_name) LIKE '%3/2%' OR LOWER(display_name) LIKE '%ba tháng hai%' OR LOWER(display_name) LIKE '%đường 3%' OR LOWER(full_name) LIKE '%ba tháng%';
+    `,
+  },
+  {
+    name: 'V73_centers_long_bien_hanoi',
+    version: 73,
+    sql: `
+      -- V73: Thêm/cập nhật Long Biên center - Vinhomes Riverside
+
+      UPDATE centers
+      SET address = 'Số 8, Shophouse, Nguyệt Quế 25, Khu đô thị Vinhomes Riverside, Phúc Lợi, Hà Nội, Việt Nam',
+          map_link = 'https://maps.app.goo.gl/aJ8wrf23PBT1ckR98'
+      WHERE LOWER(display_name) LIKE '%long biên%' OR LOWER(full_name) LIKE '%long biên%' OR LOWER(full_name) LIKE '%vinhomes riverside%';
+
+      -- Nếu center chưa tồn tại, có thể thêm mới (uncomment if needed)
+      -- INSERT INTO centers (region, short_code, full_name, display_name, address, map_link, status)
+      -- VALUES ('Hà Nội', 'longbien', 'MindX Long Biên', 'Long Biên', 'Số 8, Shophouse, Nguyệt Quế 25, Khu đô thị Vinhomes Riverside, Phúc Lợi, Hà Nội, Việt Nam', 'https://maps.app.goo.gl/aJ8wrf23PBT1ckR98', 'Active')
+      -- ON CONFLICT (short_code) DO UPDATE SET address = EXCLUDED.address, map_link = EXCLUDED.map_link;
+    `,
+  },
+  {
+    name: 'V74_event_schedule_upgrade_hybrid_teams',
+    version: 74,
+    sql: `
+      -- V74: Nâng cấp lịch sự kiện chung để hỗ trợ online/offline + hybrid Teams + duyệt giảng
+
+      -- 1) Chuẩn hóa dữ liệu centers cho use-case hiển thị địa chỉ + bản đồ
+      ALTER TABLE centers ADD COLUMN IF NOT EXISTS full_address TEXT;
+      ALTER TABLE centers ADD COLUMN IF NOT EXISTS map_url TEXT;
+      ALTER TABLE centers ADD COLUMN IF NOT EXISTS latitude DECIMAL(10, 7);
+      ALTER TABLE centers ADD COLUMN IF NOT EXISTS longitude DECIMAL(10, 7);
+      ALTER TABLE centers ADD COLUMN IF NOT EXISTS hotline VARCHAR(50);
+
+      UPDATE centers
+      SET
+        full_address = COALESCE(NULLIF(full_address, ''), address),
+        map_url = COALESCE(NULLIF(map_url, ''), map_link)
+      WHERE full_address IS NULL
+         OR map_url IS NULL;
+
+      -- 2) Mở rộng event_schedules cho online/offline/hybrid + teams + participants + status
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS mode VARCHAR(20) DEFAULT 'online';
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS center_id INTEGER REFERENCES centers(id) ON DELETE SET NULL;
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS room VARCHAR(255);
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS dia_chi_su_kien TEXT;
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS map_url TEXT;
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS meeting_url TEXT;
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS meeting_id VARCHAR(255);
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS participants JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS lecture_reviewer VARCHAR(255);
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS trang_thai VARCHAR(30) DEFAULT 'scheduled';
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS reminder_offsets INT[] DEFAULT ARRAY[5, 15, 30, 60];
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS reminder_channels TEXT[] DEFAULT ARRAY['in_app', 'email'];
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS allow_registration BOOLEAN DEFAULT false;
+      ALTER TABLE event_schedules ADD COLUMN IF NOT EXISTS slot_limit INTEGER;
+
+      -- Đồng bộ mode/address/map từ dữ liệu cũ nếu có
+      UPDATE event_schedules
+      SET mode = COALESCE(NULLIF(mode, ''), 'online')
+      WHERE mode IS NULL OR mode = '';
+
+      UPDATE event_schedules es
+      SET
+        dia_chi_su_kien = COALESCE(es.dia_chi_su_kien, c.full_address, c.address),
+        map_url = COALESCE(es.map_url, c.map_url, c.map_link)
+      FROM centers c
+      WHERE es.center_id = c.id
+        AND (es.dia_chi_su_kien IS NULL OR es.map_url IS NULL);
+
+      ALTER TABLE event_schedules DROP CONSTRAINT IF EXISTS event_schedules_mode_check;
+      ALTER TABLE event_schedules
+        ADD CONSTRAINT event_schedules_mode_check
+        CHECK (LOWER(mode) IN ('online', 'offline'));
+
+      ALTER TABLE event_schedules DROP CONSTRAINT IF EXISTS event_schedules_status_check;
+      ALTER TABLE event_schedules
+        ADD CONSTRAINT event_schedules_status_check
+        CHECK (LOWER(trang_thai) IN ('scheduled', 'completed', 'cancelled', 'rescheduled'));
+
+      CREATE INDEX IF NOT EXISTS idx_event_schedules_mode ON event_schedules(mode);
+      CREATE INDEX IF NOT EXISTS idx_event_schedules_center_id ON event_schedules(center_id);
+      CREATE INDEX IF NOT EXISTS idx_event_schedules_status ON event_schedules(trang_thai);
+      CREATE INDEX IF NOT EXISTS idx_event_schedules_start_end ON event_schedules(bat_dau_luc, ket_thuc_luc);
+
+      -- 3) Bảng đăng ký duyệt giảng
+      CREATE TABLE IF NOT EXISTS lecture_review_registrations (
+        id BIGSERIAL PRIMARY KEY,
+        event_id UUID NOT NULL REFERENCES event_schedules(id) ON DELETE CASCADE,
+        te_leader_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+        teacher_code VARCHAR(50) NOT NULL REFERENCES teachers(code) ON DELETE RESTRICT,
+        lecture_reviewer VARCHAR(255),
+        date_regist TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(30) NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_lecture_review_registrations_event_teacher UNIQUE (event_id, teacher_code),
+        CONSTRAINT lecture_review_registrations_status_check CHECK (LOWER(status) IN ('pending', 'approved', 'rejected', 'cancelled'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_lrr_event_id ON lecture_review_registrations(event_id);
+      CREATE INDEX IF NOT EXISTS idx_lrr_te_leader_id ON lecture_review_registrations(te_leader_id);
+      CREATE INDEX IF NOT EXISTS idx_lrr_teacher_code ON lecture_review_registrations(teacher_code);
+      CREATE INDEX IF NOT EXISTS idx_lrr_status ON lecture_review_registrations(status);
+
+      DROP TRIGGER IF EXISTS trg_lecture_review_registrations_updated_at ON lecture_review_registrations;
+      CREATE TRIGGER trg_lecture_review_registrations_updated_at
+        BEFORE UPDATE ON lecture_review_registrations
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
+  {
+    name: 'V75_lecture_reviewer_meetings',
+    version: 75,
+    sql: `
+      -- V75: Lưu meeting link riêng cho từng reviewer để không cần auto-create Teams meeting
+      CREATE TABLE IF NOT EXISTS lecture_reviewer_meetings (
+        id BIGSERIAL PRIMARY KEY,
+        reviewer_name VARCHAR(255) NOT NULL UNIQUE,
+        meeting_url TEXT,
+        status VARCHAR(30) NOT NULL DEFAULT 'active',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT lecture_reviewer_meetings_status_check CHECK (LOWER(status) IN ('active', 'inactive'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_lecture_reviewer_meetings_reviewer_name
+        ON lecture_reviewer_meetings(reviewer_name);
+
+      DROP TRIGGER IF EXISTS trg_lecture_reviewer_meetings_updated_at ON lecture_reviewer_meetings;
+      CREATE TRIGGER trg_lecture_reviewer_meetings_updated_at
+        BEFORE UPDATE ON lecture_reviewer_meetings
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+    `,
+  },
+  {
+    name: 'V76_add_review_lesson_to_lrr',
+    version: 76,
+    sql: `
+      -- V76: Add review_lesson column to lecture_review_registrations
+      ALTER TABLE lecture_review_registrations
+        ADD COLUMN IF NOT EXISTS review_lesson TEXT;
+
+      -- Ensure column exists if table already created in older environments
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'lecture_review_registrations' AND column_name = 'review_lesson'
+        ) THEN
+          ALTER TABLE lecture_review_registrations ADD COLUMN review_lesson TEXT;
+        END IF;
+      END
+      $$;
+    `,
+  },
 ]
 
 // ========== HÀM CHẠY MIGRATIONS ==========

@@ -62,15 +62,15 @@ export function Card({
   return (
     <div
       className={`
-        bg-white rounded-lg border border-gray-200 shadow-sm
-        ${hover ? "hover:shadow-md hover:border-gray-300" : ""}
+        bg-card text-card-foreground rounded-lg border border-border shadow-sm
+        ${hover ? "hover:shadow-md hover:border-primary/20" : ""}
         transition-shadow duration-200
         ${paddingClasses[padding]}
         ${className}
       `}
     >
       {title && (
-        <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-4 pb-3 border-b border-gray-100">
+        <h3 className="mb-4 border-b border-border pb-3 text-lg font-bold text-foreground lg:text-xl">
           {title}
         </h3>
       )}

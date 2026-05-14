@@ -757,17 +757,29 @@ export default function Page1() {
       return
     }
 
+    const requestEmail = (teacher?.emailMindx || '').trim().toLowerCase()
+    if (!requestEmail) {
+      toast.error('Không tìm thấy email giáo viên để gửi phản hồi')
+      return
+    }
+
     setFeedbackSubmitting(true)
     try {
+      const token = localStorage.getItem('token')
+      const content = `Đánh giá ${feedbackRating}/5 sao${feedbackComment.trim() ? `. ${feedbackComment.trim()}` : ''}`
       const response = await fetch('/api/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
-          rating: feedbackRating,
-          comment: feedbackComment.trim(),
-          feature: feedbackFeature.trim(),
-          timestamp: new Date().toISOString(),
+          requestEmail,
+          userName: teacher?.name || undefined,
           userCode: submitCode || 'anonymous',
+          screenPath: '/admin/page1',
+          content,
+          suggestion: feedbackFeature.trim(),
         }),
       })
 
@@ -783,7 +795,8 @@ export default function Page1() {
         localStorage.setItem('userHasFeedback', 'true')
         setHasFeedback(true)
       } else {
-        toast.error('Gửi feedback thất bại. Vui lòng thử lại.')
+        const data = await response.json().catch(() => null)
+        toast.error(data?.error || 'Gửi feedback thất bại. Vui lòng thử lại.')
       }
     } catch {
       toast.error('Lỗi kết nối. Vui lòng thử lại.')
@@ -2668,8 +2681,7 @@ export default function Page1() {
           <div
             className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
             onClick={(e) => {
-              // Prevent closing modal by clicking outside if it's first-time mandatory
-              if (!isFirstTimeFeedback && e.target === e.currentTarget) {
+              if (e.target === e.currentTarget) {
                 setFeedbackModalOpen(false)
                 setFeedbackRating(0)
                 setFeedbackComment('')
@@ -2678,37 +2690,37 @@ export default function Page1() {
             }}
           >
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-              <div className="bg-gray-900 text-white px-4 py-3 rounded-t-lg flex items-center justify-between">
+              <div className="bg-[#a1001f] text-white px-4 py-3 rounded-t-lg flex items-center justify-between">
                 <h3 className="font-semibold">
                   {isFirstTimeFeedback
                     ? 'Góp ý để cải thiện hệ thống'
                     : 'Gửi phản hồi'}
                 </h3>
-                {!isFirstTimeFeedback && (
-                  <button
-                    onClick={() => {
-                      setFeedbackModalOpen(false)
-                      setFeedbackRating(0)
-                      setFeedbackComment('')
-                      setFeedbackFeature('')
-                    }}
-                    className="hover:bg-white/20 rounded p-1"
+                <button
+                  onClick={() => {
+                    setFeedbackModalOpen(false)
+                    setFeedbackRating(0)
+                    setFeedbackComment('')
+                    setFeedbackFeature('')
+                  }}
+                  className="hover:bg-white/20 rounded p-1"
+                  title="Đánh giá sau"
+                  aria-label="Đóng"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                )}
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
               </div>
 
               <div className="p-5 space-y-5">

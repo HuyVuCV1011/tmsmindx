@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/primitives/icon'
 import { PageLayout, PageLayoutContent } from '@/components/ui/page-layout'
 import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
+import { SkeletonTable } from '@/components/skeletons/SkeletonTable'
 import { toast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
@@ -357,6 +358,98 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   star: <Star className="h-4 w-4" />,
   calendar: <Calendar className="h-4 w-4" />,
   users: <Users className="h-4 w-4" />,
+}
+
+function ScoreSummarySkeleton() {
+  return (
+    <div className="border border-gray-200 rounded-xl p-3 sm:p-4 animate-pulse bg-white">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 items-end">
+        <div className="space-y-2">
+          <div className="h-3 w-12 rounded bg-gray-200" />
+          <div className="h-10 rounded-lg bg-gray-100" />
+        </div>
+        <div className="space-y-2">
+          <div className="h-3 w-10 rounded bg-gray-200" />
+          <div className="h-10 rounded-lg bg-gray-100" />
+        </div>
+        <div className="space-y-2">
+          <div className="h-3 w-14 rounded bg-gray-200" />
+          <div className="h-12 rounded-lg bg-gray-100" />
+        </div>
+        <div className="space-y-2">
+          <div className="h-3 w-14 rounded bg-gray-200" />
+          <div className="h-12 rounded-lg bg-gray-100" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MonthlyMetricsSkeleton() {
+  return (
+    <div className="p-2 sm:p-4 overflow-x-auto -mx-2 sm:mx-0">
+      <SkeletonTable rows={3} columns={13} className="min-w-[960px]" />
+    </div>
+  )
+}
+
+function TrainingSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <div className="h-4 w-28 rounded bg-gray-200" />
+            <div className="mt-3 h-3 w-20 rounded bg-gray-200" />
+            <div className="mt-4 h-2.5 rounded-full bg-gray-200" />
+            <div className="mt-2 h-2.5 rounded-full bg-gray-200" />
+            <div className="mt-2 h-2.5 w-5/6 rounded-full bg-gray-200" />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="h-10 rounded-lg bg-gray-100" />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function AvailabilitySkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse bg-white p-3 sm:p-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            key={index}
+            className="rounded-lg border border-gray-200 bg-gray-50 p-2 sm:p-3 text-center"
+          >
+            <div className="mx-auto h-8 w-12 rounded bg-gray-200 sm:h-10 sm:w-16" />
+            <div className="mx-auto mt-2 h-3 w-20 rounded bg-gray-200" />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <div className="h-4 w-40 rounded bg-gray-200" />
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            {Array.from({ length: 9 }).map((_, index) => (
+              <div key={index} className="h-14 rounded-lg bg-gray-200" />
+            ))}
+          </div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <div className="h-4 w-32 rounded bg-gray-200" />
+          <div className="mt-4 space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-16 rounded-lg bg-gray-200" />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function Page1() {
@@ -1349,10 +1442,13 @@ export default function Page1() {
           </div>
         )}
 
-        {/* Score Summary - No nested skeleton, just show when loaded */}
+        {/* Score Summary */}
         {teacher &&
-          scoresLoaded &&
-          (expertiseData.length > 0 || experienceData.length > 0) && (
+          (isLoadingScores ? (
+            <ScoreSummarySkeleton />
+          ) :
+            scoresLoaded &&
+            (expertiseData.length > 0 || experienceData.length > 0) && (
             <div
               className="border border-gray-200 rounded-xl p-3 sm:p-4 animate-fadeIn bg-white"
               style={{ animationDelay: '0.2s' }}
@@ -1411,7 +1507,7 @@ export default function Page1() {
                 </div>
               </div>
             </div>
-          )}
+          ))}
 
         {/* Monthly Metrics */}
         {teacher && (
@@ -1441,7 +1537,9 @@ export default function Page1() {
               </div>
             </div>
             <div className="p-2 sm:p-4 overflow-x-auto -mx-2 sm:mx-0">
-              {expertiseData.length === 0 && experienceData.length === 0 ? (
+              {isLoadingScores ? (
+                <MonthlyMetricsSkeleton />
+              ) : expertiseData.length === 0 && experienceData.length === 0 ? (
                 /* No Data Message */
                 <div className="text-center py-8 text-gray-500">
                   <p className="text-sm">Chưa có dữ liệu điểm số</p>
@@ -1682,7 +1780,9 @@ export default function Page1() {
 
             {/* Content */}
             <div className="p-3 sm:p-4">
-              {!trainingData ? (
+              {isLoadingTraining ? (
+                <TrainingSkeleton />
+              ) : !trainingData ? (
                 /* No Data Message */
                 <div className="text-center py-8 text-gray-500">
                   <p className="text-sm">Chưa có dữ liệu đào tạo</p>
@@ -1863,7 +1963,9 @@ export default function Page1() {
             </div>
 
             <div className="p-3 sm:p-4 bg-white space-y-4">
-              {!availabilityStats || availabilityStats.totalSlots === 0 ? (
+              {isLoadingAvailabilityData ? (
+                <AvailabilitySkeleton />
+              ) : !availabilityStats || availabilityStats.totalSlots === 0 ? (
                 /* No Data Message */
                 <div className="text-center py-8 text-gray-500">
                   <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />

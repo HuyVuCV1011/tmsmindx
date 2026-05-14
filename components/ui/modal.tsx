@@ -136,7 +136,7 @@ export function Modal({
   maxWidth: maxWidthProp,
   title,
   subtitle,
-  headerColor = 'bg-[#a1001f]',
+  headerColor = 'bg-mindx-red',
   footer,
   overflowContent = 'auto',
 }: ModalProps) {
@@ -237,7 +237,7 @@ export function Modal({
         <div
           ref={modalRef}
           className={cn(
-            'relative my-0.5 flex h-[calc(100dvh-1rem)] w-full flex-col rounded-xl border border-gray-200 bg-white shadow-2xl sm:my-4 sm:h-auto sm:max-h-[95dvh]',
+            'relative my-0.5 flex h-[calc(100dvh-1rem)] w-full flex-col rounded-xl border border-border bg-card text-card-foreground shadow-2xl sm:my-4 sm:h-auto sm:max-h-[95dvh]',
             sizeClasses[size],
             'animate-in zoom-in-95 duration-200',
             overflowContent === 'visible' ? 'overflow-visible' : 'overflow-hidden',
@@ -291,7 +291,9 @@ export function Modal({
           <div
             className={cn(
               'px-4 py-5 sm:px-6 sm:py-6',
-              overflowContent === 'visible' ? 'overflow-visible' : 'flex-1 overflow-y-auto'
+              overflowContent === 'visible'
+                ? 'overflow-visible'
+                : 'min-h-0 flex-1 overflow-y-auto overscroll-contain'
             )}
           >
             {children}
@@ -299,7 +301,7 @@ export function Modal({
 
           {/* Footer */}
           {footer && (
-            <div className="rounded-b-xl border-t border-gray-200 bg-gray-50 px-4 py-4 sm:px-6">
+            <div className="shrink-0 rounded-b-xl border-t border-gray-200 bg-gray-50 px-4 py-4 sm:px-6">
               {footer}
             </div>
           )}
