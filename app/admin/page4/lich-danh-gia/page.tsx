@@ -935,8 +935,8 @@ export default function ProfessionalEvaluationSchedulePage() {
         return;
       }
 
-      const startAt = `${formData.registrationStartDate}T00:00`;
-      const endAt = `${formData.registrationEndDate}T23:59`;
+      const startAt = combineDateAndTime(formData.registrationStartDate, '00:00');
+      const endAt = combineDateAndTime(formData.registrationEndDate, '23:59');
       nextEvents = [{
         id: crypto.randomUUID(),
         eventType: "registration",
@@ -1039,8 +1039,8 @@ export default function ProfessionalEvaluationSchedulePage() {
           return;
         }
 
-        startAt = `${formData.holidayStartDate}T00:00`;
-        endAt = `${formData.holidayEndDate}T23:59`;
+        startAt = combineDateAndTime(formData.holidayStartDate, '00:00');
+        endAt = combineDateAndTime(formData.holidayEndDate, '23:59');
       } else {
         if (!formData.commonDate || !formData.commonStartTime || !formData.commonEndTime) {
           toast.error("Vui lòng nhập đầy đủ ngày và giờ sự kiện");

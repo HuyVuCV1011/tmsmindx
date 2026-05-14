@@ -10,6 +10,7 @@
  */
 
 import pool from '@/lib/db';
+import { eventScheduleTsInstantExpr } from '@/lib/event-schedule-time';
 import { insertExamRegistration } from '@/lib/exam-registration-insert';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -279,9 +280,9 @@ export async function GET(request: NextRequest) {
          COALESCE(mh.loai_ky_thi, 'expertise')                        AS exam_type,
          mh.thoi_gian_thi_phut                                         AS duration_minutes,
          es.ten                                                        AS schedule_name,
-         COALESCE(es.bat_dau_luc, r.lich_thi_dk)                       AS open_at,
-         es.ket_thuc_luc                                               AS close_at,
-         COALESCE(es.bat_dau_luc, r.lich_thi_dk, r.tao_luc)             AS scheduled_at,
+         COALESCE(${eventScheduleTsInstantExpr('es', 'bat_dau_luc')}, r.lich_thi_dk)                       AS open_at,
+         ${eventScheduleTsInstantExpr('es', 'ket_thuc_luc')}                                               AS close_at,
+         COALESCE(${eventScheduleTsInstantExpr('es', 'bat_dau_luc')}, r.lich_thi_dk, r.tao_luc)             AS scheduled_at,
          es.loai_su_kien,
          -- registration_type: map hinh_thuc → official/additional
          CASE
