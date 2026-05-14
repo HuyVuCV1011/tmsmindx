@@ -19,6 +19,7 @@ import { toast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
 import { CAMPUS_LIST, findMatchingCampus, normalizeText } from '@/lib/campus-data'
+import { resolveCenterBuEmail } from '@/lib/center-bu-email-fallback'
 import { useTeacher } from '@/lib/teacher-context'
 import {
     AlertCircle,
@@ -106,6 +107,21 @@ function normRoleCode(code: unknown): string {
   return String(code ?? '')
     .trim()
     .toUpperCase()
+}
+
+/** Email hiển thị trên dropdown cơ sở = DB + fallback (cùng nguồn với dòng 2 trong list). */
+function resolvedBuEmailForOption(row: {
+  email?: string | null
+  short_code?: string | null
+  full_name?: string
+}): string | undefined {
+  const r = resolveCenterBuEmail({
+    email: row.email,
+    short_code: row.short_code,
+    full_name: row.full_name ?? '',
+  })
+  const t = r?.trim()
+  return t || undefined
 }
 
 /** Khớp với lần gọi GET center-contacts (tránh dùng BU của cơ sở trước khi đổi campus). */
@@ -382,7 +398,11 @@ export default function XinNghiContent({ initialLeaveDate, externalOpen, onCreat
           label: v,
           value: v,
           shortCode: row.short_code ?? null,
-          email: row.email?.trim() || undefined,
+          email: resolvedBuEmailForOption({
+            email: row.email,
+            short_code: row.short_code,
+            full_name: v,
+          }),
           centerId: typeof row.id === 'number' ? row.id : undefined,
         })
       }
@@ -396,11 +416,19 @@ export default function XinNghiContent({ initialLeaveDate, externalOpen, onCreat
         label: center.full_name,
         value: center.full_name,
         shortCode: center.short_code,
-        email: center.email?.trim() || undefined,
+        email: resolvedBuEmailForOption({
+          email: center.email,
+          short_code: center.short_code,
+          full_name: center.full_name,
+        }),
         centerId: center.id,
       }))
     } else {
-      options = CAMPUS_LIST.map((label) => ({ label, value: label }))
+      options = CAMPUS_LIST.map((label) => ({
+        label,
+        value: label,
+        email: resolvedBuEmailForOption({ full_name: label }),
+      }))
     }
 
     return Array.from(
@@ -849,6 +877,27 @@ ${formData.teacher_name || '[Họ Và Tên]'}`
     centerContacts?.buEmail,
     selectedEditCampusOption?.email,
     editForm.campus_email,
+  ])
+
+  /** Modal xem chi tiết (không sửa): cùng nguồn email BU như form tạo / dropdown cơ sở. */
+  const detailReadOnlyBuSnapshot = useMemo(() => {
+    if (!selectedRequest) return null
+    const snap = selectedRequest.campus_bu_email?.trim()
+    if (snap) return snap
+    const opt = campusSelectionOptions.find(
+      (o) => o.value === (selectedRequest.campus || '').trim(),
+    )
+    const fromPicker = opt?.email?.trim()
+    if (fromPicker) return fromPicker
+    const fb = resolveCenterBuEmail({
+      full_name: selectedRequest.campus || '',
+    })?.trim()
+    return fb || null
+  }, [
+    selectedRequest?.id,
+    selectedRequest?.campus,
+    selectedRequest?.campus_bu_email,
+    campusSelectionOptions,
   ])
 
   const editDraftSubject = useMemo(
@@ -2097,25 +2146,6 @@ ${editForm.teacher_name || '[Họ Và Tên]'}`
                 <Stepper steps={getWorkflowSteps(selectedRequest.status)} />
               </div>
 
-              <LeaveBuNotice
-                campus={
-                  detailCanTeacherEdit && pendingEditOpen
-                    ? editForm.campus
-                    : selectedRequest.campus
-                }
-                centerId={
-                  detailCanTeacherEdit && pendingEditOpen
-                    ? selectedEditCampusOption?.centerId ??
-                      selectedRequest.center_id
-                    : selectedRequest.center_id
-                }
-                campusBuEmail={
-                  detailCanTeacherEdit && pendingEditOpen
-                    ? editBuEmailDisplay.trim() || null
-                    : selectedRequest.campus_bu_email
-                }
-              />
-
               {detailCanTeacherEdit && (
                 <div className="flex flex-wrap items-center gap-2">
                   {!pendingEditOpen ? (
@@ -2483,6 +2513,7 @@ ${editForm.teacher_name || '[Họ Và Tên]'}`
               )}
 
               {!(detailCanTeacherEdit && pendingEditOpen) && (
+              <>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-lg bg-gray-50 p-3">
                   <p className="text-xs text-gray-600">Giáo viên</p>
@@ -2500,6 +2531,12 @@ ${editForm.teacher_name || '[Họ Và Tên]'}`
                   <p className="text-xs text-gray-600">Email</p>
                   <p className="text-sm font-medium text-gray-900 break-all">
                     {selectedRequest.email}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-600">Cơ sở</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {(selectedRequest.campus || '').trim() || '-'}
                   </p>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">
@@ -2574,6 +2611,13 @@ ${editForm.teacher_name || '[Họ Và Tên]'}`
                   </div>
                 )}
               </div>
+              <LeaveBuNotice
+                key={`bu-${selectedRequest.id}`}
+                campus={selectedRequest.campus}
+                centerId={selectedRequest.center_id}
+                campusBuEmail={detailReadOnlyBuSnapshot}
+              />
+              </>
               )}
             </div>
           )}

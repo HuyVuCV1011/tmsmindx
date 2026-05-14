@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
+import { resolveCenterBuEmail } from '@/lib/center-bu-email-fallback'
 import { cn } from '@/lib/utils'
 import { useEffect, useState } from 'react'
 
@@ -18,6 +19,7 @@ type LeaveBuNoticeProps = {
 type CenterPayload = {
   full_name?: string
   display_name?: string | null
+  short_code?: string | null
 }
 
 function looksLikeEmail(s: string): boolean {
@@ -39,17 +41,28 @@ function parseCenterContactsPayload(
     (typeof center.display_name === 'string' && center.display_name.trim()) ||
     (typeof center.full_name === 'string' && center.full_name.trim()) ||
     (campusLabel ? campusLabel : null)
-  /** `buEmail` = `centers.email` từ API (luôn ưu tiên trên snapshot). */
+  /** API: `centers.email` hoặc đã suy ra trên server; nếu vẫn trống thì suy tiếp client (giống form xin nghỉ). */
   const fromCenters =
     typeof data.buEmail === 'string' && data.buEmail.trim()
       ? data.buEmail.trim()
       : null
-  const email = fromCenters || (snapshotEmail ? snapshotEmail.trim() : null)
+  const fromSnap = snapshotEmail ? snapshotEmail.trim() : ''
+  const resolved =
+    fromCenters ||
+    fromSnap ||
+    resolveCenterBuEmail({
+      email: null,
+      short_code:
+        typeof center.short_code === 'string' ? center.short_code : null,
+      full_name: name || campusLabel || '',
+    })?.trim() ||
+    ''
+  const email = resolved || null
   return { name, email }
 }
 
 /**
- * Email cơ sở: lấy từ bảng `centers` (API `center-contacts` theo `center_id` hoặc tên cơ sở).
+ * Email BU cơ sở: API `center-contacts` (DB + fallback map khi `centers.email` trống).
  */
 export function LeaveBuNotice({
   className,
@@ -125,13 +138,23 @@ export function LeaveBuNotice({
         if (!cancelled) {
           if (snap) {
             setFromDb({ name: c || null, email: snap })
+          } else if (c) {
+            const byLabel = resolveCenterBuEmail({ full_name: c })?.trim() || ''
+            setFromDb(byLabel ? { name: c, email: byLabel } : null)
           } else {
             setFromDb(null)
           }
         }
       } catch {
         if (!cancelled) {
-          setFromDb(snap ? { name: c || null, email: snap } : null)
+          if (snap) {
+            setFromDb({ name: c || null, email: snap })
+          } else if (c) {
+            const byLabel = resolveCenterBuEmail({ full_name: c })?.trim() || ''
+            setFromDb(byLabel ? { name: c, email: byLabel } : null)
+          } else {
+            setFromDb(null)
+          }
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -153,7 +176,7 @@ export function LeaveBuNotice({
   const displayEmail = loadingCampus
     ? '…'
     : rawEmail ||
-      'Chưa có email trong bảng centers — cập nhật cột email cho cơ sở trong quản trị.'
+      'Chưa có email BU — cập nhật cột email trong quản trị hoặc map short_code/tên cơ sở.'
 
   const matchedCenter = Boolean(fromDb && (fromDb.name || fromDb.email))
 
@@ -166,17 +189,17 @@ export function LeaveBuNotice({
         className,
       )}
       role="region"
-      aria-label="Email cơ sở từ bảng centers"
+      aria-label="Email BU cơ sở"
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-        Email cơ sở (bảng centers)
+        Email BU (cơ sở)
       </p>
       <p className="mt-2 text-xs text-slate-600">
         Tên cơ sở:{' '}
         <span className="text-sm font-medium text-slate-900">{displayName}</span>
       </p>
       <p className="mt-1 text-xs text-slate-600 break-all">
-        Email (centers.email):{' '}
+        Email BU:{' '}
         {loadingCampus ? (
           <span className="text-sm font-medium text-slate-500">{displayEmail}</span>
         ) : showMailto ? (

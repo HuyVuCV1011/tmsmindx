@@ -67,6 +67,17 @@ function uniqueRecipientEmails(
   return out;
 }
 
+/** CC: mentor gửi — loại trùng với To (vd. GV thay trùng email GV xin nghỉ). */
+function ccExcludingTo(
+  ccCandidates: Array<string | undefined | null>,
+  toList: string[],
+): string[] {
+  const toSet = new Set(toList.map((e) => e.trim().toLowerCase()).filter(Boolean));
+  return uniqueRecipientEmails(...ccCandidates).filter(
+    (e) => !toSet.has(e.toLowerCase()),
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -106,25 +117,25 @@ export async function POST(request: Request) {
         substitute_confirmed_at: formatDateTime(d.substitute_confirmed_at),
       });
 
-      const to = uniqueRecipientEmails(
-        d.admin_email,
-        d.campus_bu_email,
-        d.substitute_email,
-      );
+      /** To: người duyệt (TC/Leader), GV thay (không gửi BU). CC: GV xin nghỉ, trừ trùng To. */
+      const to = uniqueRecipientEmails(d.admin_email, d.substitute_email);
       if (to.length === 0) {
         return NextResponse.json(
           {
             success: false,
             error:
-              'Không có địa chỉ nhận: cần email TC/duyệt, email cơ sở trên phiếu hoặc email GV thay.',
+              'Không có địa chỉ nhận: cần email TC/duyệt hoặc email GV thay.',
           },
           { status: 400 },
         );
       }
 
+      const cc = ccExcludingTo([d.teacher_email], to);
+
       const sendResult = await sendMail({
         to,
-        subject: `[MindX | Xin nghỉ 1 buổi] Đã duyệt & GV thay đã xác nhận - ${d.teacher_name}`,
+        cc: cc.length > 0 ? cc : undefined,
+        subject: `[MindX | THÔNG BÁO XIN NGHỈ 1 BUỔI] Đã duyệt & GV thay đã xác nhận — ${d.teacher_name}`,
         html,
       });
 
@@ -132,7 +143,7 @@ export async function POST(request: Request) {
         success: true,
         sent: sendResult.sent,
         warning: sendResult.warning,
-        recipients: { to },
+        recipients: { to, cc },
       });
     }
 
@@ -164,7 +175,7 @@ export async function POST(request: Request) {
         admin_email: d.admin_email || '—',
       });
 
-      const cc = uniqueRecipientEmails(d.admin_email, d.campus_bu_email);
+      const cc = uniqueRecipientEmails(d.admin_email);
 
       const sendResult = await sendMail({
         to: [teacherTo],

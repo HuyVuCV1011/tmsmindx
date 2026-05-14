@@ -1,4 +1,5 @@
 import { findMatchingCampus, normalizeText } from '@/lib/campus-data'
+import { resolveCenterBuEmail } from '@/lib/center-bu-email-fallback'
 import { requireBearerSession } from '@/lib/datasource-api-auth'
 import pool from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
@@ -255,6 +256,13 @@ export async function GET(request: NextRequest) {
       return a.full_name.localeCompare(b.full_name, 'vi')
     })
 
+    const buEmail =
+      resolveCenterBuEmail({
+        email: center.email,
+        short_code: center.short_code,
+        full_name: center.full_name,
+      }) || null
+
     return NextResponse.json({
       success: true,
       center: {
@@ -264,7 +272,7 @@ export async function GET(request: NextRequest) {
         display_name: center.display_name,
         region: center.region?.trim() || null,
       },
-      buEmail: center.email?.trim() || null,
+      buEmail,
       contacts: merged,
     })
   } catch (error: unknown) {

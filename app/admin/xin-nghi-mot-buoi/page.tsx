@@ -14,6 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { CAMPUS_LIST, normalizeText } from '@/lib/campus-data'
+import { resolveCenterBuEmail } from '@/lib/center-bu-email-fallback'
 import { useAuth } from '@/lib/auth-context'
 import { authHeaders } from '@/lib/auth-headers'
 import { AlertCircle, RefreshCcw } from 'lucide-react'
@@ -135,6 +137,11 @@ export default function AdminXinNghiMotBuoiPage() {
   /** Khóa form mặc định; bấm Chỉnh sửa mới sửa, Gửi chỉnh sửa để lưu. */
   const [detailFormEditing, setDetailFormEditing] = useState(false)
 
+  /** Giống form tạo xin nghỉ: GET /api/leave-requests/campuses + resolveCenterBuEmail. */
+  const [campusBuByKey, setCampusBuByKey] = useState<Map<string, string>>(
+    () => new Map(),
+  )
+
   const fetchData = useCallback(async (showToast = false) => {
     try {
       setLoading(true)
@@ -166,6 +173,72 @@ export default function AdminXinNghiMotBuoiPage() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    if (!token?.trim()) {
+      setCampusBuByKey(new Map())
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const r = await fetch('/api/leave-requests/campuses', {
+          headers: authHeaders(token),
+          cache: 'no-store',
+        })
+        const d = await r.json()
+        if (cancelled || !r.ok || !d?.success) return
+        const list = Array.isArray(d.data) ? d.data : []
+        const m = new Map<string, string>()
+        for (const row of list) {
+          const fn = String(
+            (row as { full_name?: string }).full_name ?? '',
+          ).trim()
+          if (!fn) continue
+          const em =
+            resolveCenterBuEmail({
+              email: (row as { email?: string | null }).email,
+              short_code: (row as { short_code?: string | null }).short_code,
+              full_name: fn,
+            })?.trim() || ''
+          if (!em) continue
+          m.set(fn.toLowerCase(), em)
+          m.set(normalizeText(fn), em)
+        }
+        if (!cancelled) setCampusBuByKey(m)
+      } catch {
+        if (!cancelled) setCampusBuByKey(new Map())
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  const lookupBuEmailLikeTeacherForm = useCallback(
+    (campus: string | undefined | null) => {
+      const c = campus?.trim() ?? ''
+      if (!c) return ''
+      const fromCentersList =
+        campusBuByKey.get(c.toLowerCase()) ||
+        campusBuByKey.get(normalizeText(c))
+      if (fromCentersList) return fromCentersList
+      const canon = CAMPUS_LIST.find(
+        (label) =>
+          normalizeText(label) === normalizeText(c) ||
+          normalizeText(c).includes(normalizeText(label)) ||
+          normalizeText(label).includes(normalizeText(c)),
+      )
+      if (canon) {
+        const fromCanon =
+          campusBuByKey.get(canon.toLowerCase()) ||
+          campusBuByKey.get(normalizeText(canon))
+        if (fromCanon) return fromCanon
+      }
+      return resolveCenterBuEmail({ full_name: c })?.trim() || ''
+    },
+    [campusBuByKey],
+  )
 
   // Danh sách campus duy nhất
   const campusOptions = useMemo(() => {
@@ -898,7 +971,11 @@ export default function AdminXinNghiMotBuoiPage() {
               key={selected.id}
               campus={selected.campus}
               centerId={selected.center_id}
-              campusBuEmail={selected.campus_bu_email}
+              campusBuEmail={
+                selected.campus_bu_email?.trim() ||
+                lookupBuEmailLikeTeacherForm(selected.campus) ||
+                null
+              }
             />
 
             <div className="space-y-3 rounded-xl border border-gray-200 p-4">
