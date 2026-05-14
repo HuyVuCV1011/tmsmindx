@@ -138,6 +138,19 @@
 }
 
 @layer base {
+  :root {
+    --app-background: #f8fafc;
+    --app-foreground: #0f172a;
+    --app-card: #ffffff;
+    --app-card-foreground: #0f172a;
+    --app-muted: #eef2f7;
+    --app-muted-foreground: #64748b;
+    --app-border: #dbe3ec;
+    --app-ring: #a1001f;
+    --app-primary: #a1001f;
+    --app-primary-foreground: #ffffff;
+  }
+
   * {
     font-family:
       'Exo',
@@ -147,8 +160,16 @@
   }
 
   body {
-    background-color: white;
-    color: rgb(17 24 39);
+    background:
+      radial-gradient(circle at top, rgba(161, 0, 31, 0.08), transparent 32%),
+      linear-gradient(180deg, #f8fafc 0%, #ffffff 58%, #fef2f4 100%);
+    background-attachment: fixed;
+    color: var(--app-foreground);
+  }
+
+  ::selection {
+    background: rgba(161, 0, 31, 0.18);
+    color: var(--app-foreground);
   }
 
   h1,

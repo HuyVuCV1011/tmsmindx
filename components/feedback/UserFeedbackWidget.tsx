@@ -1,6 +1,7 @@
 'use client'
 import { toast } from '@/lib/app-toast'
 import { useAuth } from '@/lib/auth-context'
+import { authHeaders } from '@/lib/auth-headers'
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/body-scroll-lock'
 import { isTempHiddenUserRoute } from '@/lib/temp-hidden-user-routes'
 import {
@@ -433,7 +434,7 @@ function MascotWalker({ onFeedback, onTour }: { onFeedback: () => void; onTour: 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function UserFeedbackWidget() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
@@ -509,6 +510,7 @@ export default function UserFeedbackWidget() {
         formData.append('file', image)
         const response = await fetch('/api/feedback/upload-image', {
           method: 'POST',
+          headers: authHeaders(token),
           body: formData,
         })
         const data = await response.json()
@@ -528,7 +530,10 @@ export default function UserFeedbackWidget() {
       const imageUrls = await uploadImages()
       const response = await fetch('/api/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(token),
+        },
         body: JSON.stringify({
           requestEmail: user.email,
           userName: user.displayName,

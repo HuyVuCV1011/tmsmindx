@@ -52,14 +52,14 @@ import { Box } from './primitives/box'
 import { Stack } from './primitives/stack'
 
 const cardVariants = cva(
-    'rounded-xl border bg-card text-card-foreground',
+    'rounded-xl border border-border bg-card text-card-foreground',
     {
         variants: {
             variant: {
-                default: 'border-gray-200 shadow-sm',
-                outlined: 'border-2 border-gray-200',
-                elevated: 'shadow-lg border-gray-200',
-                interactive: 'hover:shadow-md transition-shadow cursor-pointer border-gray-200',
+                default: 'shadow-sm',
+                outlined: 'border-2 border-border',
+                elevated: 'shadow-lg',
+                interactive: 'hover:shadow-md transition-shadow cursor-pointer',
             },
             padding: {
                 none: '',
@@ -96,7 +96,7 @@ function Card({ variant, padding, className, title, hover, children, ...props }:
                 className={cn(cardVariants({ variant: effectiveVariant, padding }), className)}
                 {...props}
             >
-                <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-4 pb-3 border-b border-gray-100">
+                <h3 className="mb-4 border-b border-border pb-3 text-lg font-bold text-foreground lg:text-xl">
                     {title}
                 </h3>
                 {children}
