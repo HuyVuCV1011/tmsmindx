@@ -1,4 +1,7 @@
-import { resolveAppUserAccessForEmail } from '@/lib/app-user-access'
+import {
+  resolveAppUserAccessForEmail,
+  type AppUserAccess,
+} from '@/lib/app-user-access'
 import { getAccessibleCenters } from '@/lib/center-access'
 import pool from '@/lib/db'
 import {
@@ -23,6 +26,8 @@ export type DatasourceBearerOk = {
   sessionEmail: string
   privileged: boolean
   accessibleCenters: AccessibleCenter[]
+  /** Kết quả resolve DB một lần — dùng lại cho gate role, tránh gọi DB trùng khi pool nhỏ. */
+  resolvedAccess: AppUserAccess
 }
 
 export type DatasourceBearerResult =
@@ -104,14 +109,12 @@ function teacherMatchesAccessibleCenters(
   return collectTeacherCenterTokens(row).some((token) => allowed.has(token))
 }
 
-async function safeGetAccessibleCenters(
-  email: string,
-): Promise<AccessibleCenter[]> {
-  try {
-    return await getAccessibleCenters(email)
-  } catch {
-    return []
-  }
+function accessibleCentersFromAccess(access: AppUserAccess): AccessibleCenter[] {
+  return access.assignedCenters.map((c) => ({
+    id: c.id,
+    full_name: c.full_name,
+    short_code: c.short_code,
+  }))
 }
 
 async function resolveDatasourceSession(
@@ -126,12 +129,12 @@ async function resolveDatasourceSession(
     const session = await verifyBearerGetSession(bearer)
     if (session?.email) {
       const access = await resolveAppUserAccessForEmail(session.email)
-      const accessibleCenters = await safeGetAccessibleCenters(session.email)
       return {
         ok: true,
         sessionEmail: session.email,
         privileged: access.role === 'super_admin',
-        accessibleCenters,
+        accessibleCenters: accessibleCentersFromAccess(access),
+        resolvedAccess: access,
       }
     }
   }
@@ -141,12 +144,12 @@ async function resolveDatasourceSession(
     const edge = await verifySessionCookieValue(raw)
     if (edge?.email) {
       const access = await resolveAppUserAccessForEmail(edge.email)
-      const accessibleCenters = await safeGetAccessibleCenters(edge.email)
       return {
         ok: true,
         sessionEmail: edge.email,
         privileged: access.role === 'super_admin',
-        accessibleCenters,
+        accessibleCenters: accessibleCentersFromAccess(access),
+        resolvedAccess: access,
       }
     }
   }
@@ -185,7 +188,8 @@ export function rejectIfEmailNotSelf(
   if (privileged) return null
   const t = targetEmail.trim().toLowerCase()
   if (!t) return null
-  if (t !== sessionEmail) {
+  const s = sessionEmail.trim().toLowerCase()
+  if (t !== s) {
     return NextResponse.json(
       { success: false, error: 'Không có quyền truy vấn dữ liệu cho email này' },
       { status: 403 },
@@ -218,7 +222,8 @@ export async function rejectIfDatasourceLookupForbidden(
   if (!row) return null
 
   const rowEmail = teacherRowWorkEmail(row as Record<string, unknown>)
-  if (rowEmail && rowEmail === sessionEmail) return null
+  const sessionNorm = sessionEmail.trim().toLowerCase()
+  if (rowEmail && rowEmail === sessionNorm) return null
 
   const accessibleCenters = await getAccessibleCenters(sessionEmail)
   if (teacherMatchesAccessibleCenters(row as Record<string, unknown>, accessibleCenters)) {
@@ -251,7 +256,7 @@ export async function rejectIfChuyenSauResultNotOwned(
   )
   if (r.rows.length === 0) return null
   const e = String(r.rows[0].e || '').toLowerCase()
-  if (e && e !== sessionEmail) {
+  if (e && e !== sessionEmail.trim().toLowerCase()) {
     return NextResponse.json(
       { success: false, error: 'Không có quyền xem kết quả này' },
       { status: 403 },

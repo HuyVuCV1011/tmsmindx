@@ -1571,6 +1571,21 @@ const migrations: Migration[] = [
     `,
   },
   {
+    name: 'V70_leave_requests_center_snapshot',
+    version: 70,
+    sql: `
+      DO $$
+      BEGIN
+        IF to_regclass('public.leave_requests') IS NOT NULL THEN
+          ALTER TABLE leave_requests
+            ADD COLUMN IF NOT EXISTS center_id INTEGER REFERENCES centers(id);
+          ALTER TABLE leave_requests
+            ADD COLUMN IF NOT EXISTS campus_bu_email VARCHAR(255);
+        END IF;
+      END $$;
+    `,
+  },
+  {
     name: 'V70_centers_address_map_link',
     version: 70,
     sql: `

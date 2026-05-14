@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     
     if (adminCheck.rows.length > 0 && adminCheck.rows[0].role === 'super_admin') {
       const allCentersResult = await pool.query(
-        `SELECT id, region, short_code, full_name
+        `SELECT id, region, short_code, full_name, email
          FROM centers
          WHERE status = 'Active'
          ORDER BY region, full_name`
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
 
     // 4. Lấy tất cả cơ sở thuộc các region đó
     const centersResult = await pool.query(
-      `SELECT id, region, short_code, full_name
+      `SELECT id, region, short_code, full_name, email
        FROM centers
        WHERE region = ANY($1::text[])
          AND status = 'Active'
