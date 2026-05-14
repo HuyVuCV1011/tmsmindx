@@ -40,13 +40,11 @@ function toTimestampString(value: Date | string | null | undefined): string | nu
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value as string);
   if (Number.isNaN(date.getTime())) return null;
-  // Format sang VN wall-clock string trước
   const fmt = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: VN_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   });
   const vnWallClock = fmt.format(date); // "2026-05-14 21:00:00"
-  // Trả về ISO 8601 với offset +07:00 cố định
   return vnWallClock.replace(' ', 'T') + '+07:00'; // "2026-05-14T21:00:00+07:00"
 }
 
