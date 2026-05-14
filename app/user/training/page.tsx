@@ -60,6 +60,7 @@ interface TrainingAssignment {
   time_limit_minutes?: number
   question_count?: number
   recent_submission?: TrainingSubmission | null
+  video_completion_status?: string | null
 }
 
 interface TrainingData {
@@ -221,7 +222,7 @@ export default function TrainingPage() {
     if (isTeacherLoading) return
 
     if (teacherProfile?.code) {
-      setSubmitCode(teacherProfile.code)
+      setSubmitCode(teacherProfile.code.toLowerCase().trim())
       setIsResolvingCode(false)
       return
     }
@@ -236,7 +237,7 @@ export default function TrainingPage() {
           `/api/teachers/info?email=${encodeURIComponent(user.email)}`,
         )) as TeacherLookupResponse
         if (res?.teacher?.code) {
-          setSubmitCode(res.teacher.code)
+          setSubmitCode(res.teacher.code.toLowerCase().trim())
           setIsResolvingCode(false)
           return
         }
@@ -248,7 +249,7 @@ export default function TrainingPage() {
 
       const code = extractCodeFromEmail(user.email)
       if (code) {
-        setSubmitCode(code)
+        setSubmitCode(code.toLowerCase().trim())
       }
 
       setIsResolvingCode(false)
@@ -573,6 +574,9 @@ export default function TrainingPage() {
                     (lesson: TrainingLesson, idx: number) => {
                       const isCompleted =
                         lesson.completion_status === 'completed'
+                      const isWatched =
+                        lesson.completion_status === 'watched'
+                      const canTakeQuiz = isCompleted || isWatched
                       const notStarted = lesson.score === 0
                       const passed = lesson.score >= 7
                       const lessonNumber = lesson.lesson_number || idx + 1
@@ -583,7 +587,9 @@ export default function TrainingPage() {
                           className={`flex flex-col gap-3 p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer sm:flex-row sm:items-start sm:gap-4 ${
                             isCompleted
                               ? 'border-green-300 bg-green-50/30'
-                              : 'border-gray-200'
+                              : isWatched
+                                ? 'border-blue-300 bg-blue-50/30'
+                                : 'border-gray-200'
                           }`}
                           onMouseEnter={() =>
                             schedulePrewarmLessonManifest(lesson.id)
@@ -693,20 +699,24 @@ export default function TrainingPage() {
                                 className={`self-start px-3 py-1 rounded-full text-xs font-medium sm:self-auto sm:whitespace-nowrap ${
                                   isCompleted
                                     ? 'bg-green-100 text-green-800'
-                                    : notStarted
-                                      ? 'bg-gray-100 text-gray-800'
-                                      : passed
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-yellow-100 text-yellow-800'
+                                    : isWatched
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : notStarted
+                                        ? 'bg-gray-100 text-gray-800'
+                                        : passed
+                                          ? 'bg-green-100 text-green-800'
+                                          : 'bg-yellow-100 text-yellow-800'
                                 }`}
                               >
                                 {isCompleted
                                   ? '✓ Hoàn thành'
-                                  : notStarted
-                                    ? 'Chưa học'
-                                    : passed
-                                      ? '✓ Đã đạt'
-                                      : 'Điểm: ' + lesson.score.toFixed(1)}
+                                  : isWatched
+                                    ? '👁️ Đã xem'
+                                    : notStarted
+                                      ? 'Chưa học'
+                                      : passed
+                                        ? '✓ Đã đạt'
+                                        : 'Điểm: ' + lesson.score.toFixed(1)}
                               </span>
                             </div>
 
@@ -757,17 +767,22 @@ export default function TrainingPage() {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      if (isCompleted) {
+                                      if (canTakeQuiz) {
                                         router.push(
                                           `/user/dao-tao-nang-cao?start_assignment_id=${assignment.id}`,
                                         )
+                                      } else {
+                                        import('@/lib/app-toast').then(({ toast }) => {
+                                          toast.error(`Bạn cần hoàn thành xem video bài học trước khi làm bài tập này.`, {
+                                            icon: '📺'
+                                          });
+                                        });
                                       }
                                     }}
-                                    disabled={!isCompleted}
                                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-                                      isCompleted
-                                        ? 'bg-[#a1001f] text-white hover:bg-[#8a001a] shadow-md hover:scale-105 active:scale-95'
-                                        : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                                      canTakeQuiz
+                                        ? 'bg-[#a1001f] text-white hover:bg-[#8a001a] shadow-md hover:scale-105 active:scale-95 cursor-pointer'
+                                        : 'bg-gray-100 text-gray-500 border border-gray-200 cursor-not-allowed opacity-80'
                                     }`}
                                   >
                                     <svg
@@ -784,9 +799,9 @@ export default function TrainingPage() {
                                       />
                                     </svg>
                                     Làm bài kiểm tra
-                                    {!isCompleted && (
-                                      <span className="text-xs ml-1 opacity-70">
-                                        (Hoàn thành video để mở)
+                                    {!canTakeQuiz && (
+                                      <span className="text-[10px] ml-1 text-gray-500 font-normal">
+                                        (Cần xem hết video)
                                       </span>
                                     )}
                                   </button>
@@ -996,8 +1011,7 @@ export default function TrainingPage() {
                           (l) => l.id === assignment.video_id,
                         )
                         const isLocked =
-                          !linkedVideo ||
-                          linkedVideo.completion_status !== 'completed'
+                          assignment.video_completion_status !== 'completed'
                         const submission = assignment.recent_submission
 
                         // Điểm bài kiểm tra: ưu tiên recent_submission.score, fallback về 0
