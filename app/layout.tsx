@@ -42,7 +42,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className={`${exo.variable} font-exo bg-white text-gray-900`}>
+      <body className={`${exo.variable} font-exo bg-background text-foreground antialiased`}>
         <ErrorBoundary>
           <StoreProvider>
             <AuthProvider>

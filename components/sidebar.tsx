@@ -244,6 +244,7 @@ export function Sidebar() {
       submenu: [
         { href: '/user/hoat-dong-hang-thang', label: 'Hoạt động hàng tháng' },
         { href: '/user/lich-cua-toi', label: 'Lịch cá nhân' },
+        { href: '/user/xin-nghi-mot-buoi', label: 'Tạo yêu cầu xin nghỉ' },
       ].filter((item) => !isTempHiddenUserRoute(item.href)),
     },
     {
@@ -739,7 +740,21 @@ export function Sidebar() {
                                       label: 'Quản Lý Tài Liệu',
                                     })
                                   }
-                                  return current
+                                    // Hide "Quản Lý Tài Liệu" for te/leader/tc roles
+                                    const roleCodes = (user?.userRoles || []).map((code) =>
+                                      normalizeRoleToken(code),
+                                    )
+                                    const hasRestrictedRole = roleCodes.some(
+                                      (code) => code === 'te' || code === 'leader' || code === 'tc',
+                                    )
+                  
+                                    if (hasRestrictedRole) {
+                                      return current.filter(
+                                        (item: any) => item?.href !== '/admin/page2/manage'
+                                      )
+                                    }
+                  
+                                    return current
                                 })()
                                 : subItem.submenu
 
