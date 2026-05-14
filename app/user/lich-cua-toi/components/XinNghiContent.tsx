@@ -33,6 +33,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { LeaveBuNotice } from '@/components/leave-request/LeaveBuNotice'
+import { SubstituteWorkEmailSuggestInput } from '@/components/leave-request/SubstituteWorkEmailSuggestInput'
 
 interface LeaveRequest {
   id: number
@@ -1966,16 +1967,25 @@ ${editForm.teacher_name || '[Họ Và Tên]'}`
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor="substitute-work-email"
+                    className="mb-1.5 block text-sm font-medium text-gray-700"
+                  >
                     Email giáo viên thay thế *
                   </label>
-                  <input
-                    type="email"
+                  <SubstituteWorkEmailSuggestInput
+                    id="substitute-work-email"
                     value={formData.substitute_email}
-                    onChange={(e) =>
-                      handleChange('substitute_email', e.target.value)
-                    }
-                    className={INPUT_BASE_CLASS}
+                    onChange={(v) => handleChange('substitute_email', v)}
+                    onPickRow={({ fullName, workEmail }) => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        substitute_teacher: fullName,
+                        substitute_email: workEmail,
+                      }))
+                    }}
+                    token={token}
+                    inputClassName={INPUT_BASE_CLASS}
                   />
                 </div>
               </>
@@ -2379,16 +2389,25 @@ ${editForm.teacher_name || '[Họ Và Tên]'}`
                           />
                         </div>
                         <div>
-                          <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                          <label
+                            htmlFor="edit-substitute-work-email"
+                            className="mb-1.5 block text-sm font-medium text-gray-700"
+                          >
                             Email giáo viên thay thế *
                           </label>
-                          <input
-                            type="email"
+                          <SubstituteWorkEmailSuggestInput
+                            id="edit-substitute-work-email"
                             value={editForm.substitute_email}
-                            onChange={(e) =>
-                              editFormChange('substitute_email', e.target.value)
-                            }
-                            className={INPUT_BASE_CLASS}
+                            onChange={(v) => editFormChange('substitute_email', v)}
+                            onPickRow={({ fullName, workEmail }) => {
+                              setEditForm((prev) => ({
+                                ...prev,
+                                substitute_teacher: fullName,
+                                substitute_email: workEmail,
+                              }))
+                            }}
+                            token={token}
+                            inputClassName={INPUT_BASE_CLASS}
                           />
                         </div>
                       </>
