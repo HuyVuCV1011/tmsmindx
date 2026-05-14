@@ -94,12 +94,12 @@ export default function Slider({ posts }: SliderProps) {
                     </div>
 
                     {/* Double gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/5" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 sm:from-black/85 via-black/30 to-black/5" />
                     <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/10 to-transparent" />
 
                     {/* Content — bottom-left, không card */}
                     <div className={cn(
-                        "absolute bottom-0 left-0 right-0 p-5 sm:p-8 md:p-12 lg:p-14 transform transition-all duration-700 delay-200",
+                        "absolute bottom-0 left-0 right-0 p-3 sm:p-4 md:p-6 lg:p-8 transform transition-all duration-700 delay-200",
                         index === currentSlide ? 'translate-y-0 opacity-100' : 'translate-y-6 opacity-0'
                     )}>
                         {/* Tag */}
@@ -111,8 +111,11 @@ export default function Slider({ posts }: SliderProps) {
 
                         {/* Title */}
                         <h3
-                            className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black leading-tight tracking-tight text-white max-w-2xl"
-                            style={{ textShadow: '0 2px 12px rgba(0,0,0,0.7), 0 1px 3px rgba(0,0,0,0.9)' }}
+                            className="font-black leading-tight tracking-tight text-white max-w-2xl line-clamp-2"
+                            style={{ 
+                                fontSize: 'clamp(0.625rem, 5vw, 1.53rem)',
+                                textShadow: '0 2px 12px rgba(0,0,0,0.7), 0 1px 3px rgba(0,0,0,0.9)'
+                            }}
                         >
                             <Link href={`/user/truyenthong/${post.slug || post.id}`} className="hover:text-white/90 transition-colors">
                                 {post.title}
@@ -121,8 +124,9 @@ export default function Slider({ posts }: SliderProps) {
 
                         {/* Description */}
                         <p
-                            className="mt-2 text-sm sm:text-base text-white/80 line-clamp-2 max-w-xl leading-relaxed hidden sm:block"
+                            className="mt-2 text-xs sm:text-sm md:text-base text-white/80 line-clamp-1 sm:line-clamp-2 md:line-clamp-3 max-w-xl leading-relaxed"
                             style={{ textShadow: '0 1px 6px rgba(0,0,0,0.8)' }}
+                            aria-hidden={false}
                         >
                             {post.description}
                         </p>

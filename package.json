@@ -10,6 +10,7 @@
   },
   "scripts": {
     "predev": "node scripts/dev-prep.js",
+    "prebuild": "node scripts/prebuild-clean-next-dev.js",
     "dev": "next dev --port 3000 --turbopack",
     "dev:webpack": "next dev --port 3000 --webpack",
     "dev:turbo": "next dev --port 3000 --turbopack",
@@ -68,6 +69,7 @@
     "googleapis": "^169.0.0",
     "html2canvas": "^1.4.1",
     "isomorphic-dompurify": "^2.36.0",
+    "jsdom": "26.1.0",
     "jose": "^6.2.2",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.561.0",

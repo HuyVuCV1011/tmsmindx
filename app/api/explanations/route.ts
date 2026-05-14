@@ -35,6 +35,7 @@ import {
 } from '@/lib/datasource-api-auth'
 import { isResultEligibleForGiaiTrinhThisMonth } from '@/lib/giaitrinh-eligibility'
 import pool from '@/lib/db'
+import { eventScheduleTsInstantExpr } from '@/lib/event-schedule-time'
 import { NextRequest, NextResponse } from 'next/server'
 
 // â”€â”€â”€ GET â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -196,7 +197,7 @@ export async function POST(request: Request) {
     const resultRow = await client.query(
       `SELECT r.id, r.diem, r.xu_ly_diem, r.ma_giao_vien, r.dia_chi_email,
               r.thang_dk, r.nam_dk, r.lich_thi_dk,
-              es.bat_dau_luc AS schedule_open
+              ${eventScheduleTsInstantExpr('es', 'bat_dau_luc')} AS schedule_open
        FROM chuyen_sau_results r
        LEFT JOIN event_schedules es ON es.id::text = r.id_su_kien::text
        WHERE r.id = $1

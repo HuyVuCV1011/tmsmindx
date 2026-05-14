@@ -6,7 +6,7 @@ import { PageContainer } from '@/components/PageContainer';
 import { Tabs } from '@/components/Tabs';
 import { TableSkeleton } from '@/components/skeletons';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BarChart3, ChevronDown, Download, Eye, Search, X } from 'lucide-react';
+import { BarChart3, ChevronDown, Download, Eye, Search, X, Check, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -87,6 +87,24 @@ function calculateAverageScoreFromMatrix(entry: TeacherMatrixEntry, videoStats: 
 
   const total = scores.reduce((sum, s) => sum + s, 0);
   return total / scores.length;
+}
+
+// Map arbitrary block values into the three canonical blocks used in UI
+function mapToCanonicalBlock(block?: string | null): string {
+  if (!block) return '';
+  const s = block.toString().toLowerCase();
+  if (s.includes('code') || s.includes('coding') || s.includes('lập trình')) return 'Coding';
+  // Accept various spellings/variants and include Khối 4+ as Robotic
+  if (
+    s.includes('robot') ||
+    s.includes('robotic') ||
+    s.includes('robotics') ||
+    s.includes('khối 4+') ||
+    s.includes('khối 4') ||
+    /\b4\+\b/.test(s)
+  ) return 'Robotic';
+  if (s.includes('art') || s.includes('mỹ thuật') || s.includes('nghệ thuật')) return 'Art';
+  return '';
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -364,6 +382,22 @@ function FilterPanel({
           {centerDropdownOpen && (
             <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-lg p-2">
               <div className="max-h-52 overflow-y-auto space-y-1">
+                    {/* Select All / Clear */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allSelected = filters.selectedCenters.length === allCenters.length && allCenters.length > 0;
+                        onChange({ ...filters, selectedCenters: allSelected ? [] : allCenters });
+                      }}
+                      className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs transition-colors ${filters.selectedCenters.length === allCenters.length && allCenters.length > 0 ? 'bg-slate-50 text-slate-700' : 'hover:bg-slate-50 text-slate-700'}`}
+                    >
+                      <span className="text-left">Tất cả</span>
+                      <span className={`w-4 h-4 inline-flex items-center justify-center rounded-sm border ${filters.selectedCenters.length === allCenters.length && allCenters.length > 0 ? 'bg-slate-200 border-slate-300 text-slate-700' : 'bg-white border-slate-200 text-transparent'}`}>
+                        {filters.selectedCenters.length === allCenters.length && allCenters.length > 0 && (
+                          <Check className="w-3 h-3" />
+                        )}
+                      </span>
+                    </button>
                 {visibleCenters.map((center) => {
                   const checked = filters.selectedCenters.includes(center);
                   return (
@@ -371,14 +405,12 @@ function FilterPanel({
                       type="button"
                       key={center}
                       onClick={() => toggleCenter(center)}
-                      className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
-                        checked
-                          ? 'bg-[#a1001f]/10 text-[#a1001f]'
-                          : 'hover:bg-slate-50 text-slate-700'
-                      }`}
+                      className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs transition-colors ${checked ? 'bg-slate-50 text-slate-700' : 'hover:bg-slate-50 text-slate-700'}`}
                     >
                       <span className="text-left">{center}</span>
-                      {checked && <span className="text-[11px] font-semibold">Da chon</span>}
+                          <span className={`w-4 h-4 inline-flex items-center justify-center rounded-sm border ${checked ? 'bg-slate-200 border-slate-300 text-slate-700' : 'bg-white border-slate-200 text-transparent'}`}>
+                            {checked && <Check className="w-3 h-3" />}
+                          </span>
                     </button>
                   );
                 })}
@@ -389,19 +421,7 @@ function FilterPanel({
             </div>
           )}
 
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {filters.selectedCenters.map((center) => (
-              <button
-                key={center}
-                type="button"
-                onClick={() => toggleCenter(center)}
-                className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#a1001f] text-white"
-                title="Bấm để bỏ chọn"
-              >
-                {center}
-              </button>
-            ))}
-          </div>
+          {/* Selected centers pills intentionally removed: show only checkbox frames in dropdown */}
         </div>
       </div>
 
@@ -444,16 +464,7 @@ function FilterPanel({
       </div>
 
       {/* Clear all */}
-      {(filters.selectedCenters.length > 0 || filters.centerQuery || filters.teacherCodeQuery || filters.block) && (
-        <div className="flex items-end w-full lg:w-auto">
-          <button
-            onClick={() => onChange({ selectedCenters: [], centerQuery: '', teacherCodeQuery: '', block: '' })}
-            className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 underline w-full text-left lg:w-auto lg:text-center"
-          >
-            Xóa filter
-          </button>
-        </div>
-      )}
+      {/* Clear-filters button removed per user request */}
     </div>
   );
 }
@@ -486,24 +497,35 @@ export default function TrainingDashboardPage() {
 
   // Derived: all unique centers and blocks from teacher data
   const allCenters = useMemo(() => Array.from(new Set(teacherData.map(d => d.center).filter(Boolean))).sort(), [teacherData]);
-  const allBlocks = useMemo(() => Array.from(new Set(teacherData.map(d => d.teaching_block).filter(Boolean))).sort(), [teacherData]);
+  // Show only the three canonical blocks in the UI
+  const allBlocks = ['Coding', 'Robotic', 'Art'];
 
   // Filtered teacher rows
   const filteredTeachers = useMemo(() => {
     return teacherData.filter(t => {
       if (filters.selectedCenters.length > 0 && !filters.selectedCenters.includes(t.center)) return false;
       if (filters.teacherCodeQuery && !t.teacher_code.toLowerCase().includes(filters.teacherCodeQuery.toLowerCase())) return false;
-      if (filters.block && t.teaching_block !== filters.block) return false;
+      if (filters.block && mapToCanonicalBlock(t.teaching_block) !== filters.block) return false;
       return true;
     });
   }, [teacherData, filters]);
+
+  // Pagination for teacher list
+  const PAGE_SIZE = 20;
+  const [teacherPage, setTeacherPage] = useState(1);
+  useEffect(() => {
+    // Reset to first page whenever filters or data change
+    setTeacherPage(1);
+  }, [filters, teacherData]);
+  const teacherTotalPages = Math.max(1, Math.ceil(filteredTeachers.length / PAGE_SIZE));
+  const pagedTeachers = filteredTeachers.slice((teacherPage - 1) * PAGE_SIZE, teacherPage * PAGE_SIZE);
 
   // Filtered matrix rows
   const filteredMatrix = useMemo(() => {
     return teacherMatrix.filter(t => {
       if (filters.selectedCenters.length > 0 && !filters.selectedCenters.includes(t.center)) return false;
       if (filters.teacherCodeQuery && !t.teacher_code.toLowerCase().includes(filters.teacherCodeQuery.toLowerCase())) return false;
-      if (filters.block && t.teaching_block !== filters.block) return false;
+      if (filters.block && mapToCanonicalBlock(t.teaching_block) !== filters.block) return false;
       return true;
     });
   }, [teacherMatrix, filters]);
@@ -557,7 +579,7 @@ export default function TrainingDashboardPage() {
       t.full_name,
       t.teacher_code,
       t.center,
-      t.teaching_block,
+      mapToCanonicalBlock(t.teaching_block) || t.teaching_block || '',
       Number(calculateAverageScoreFromColumns(t, videoColumns).toFixed(2)),
       ...videoColumns.map(v => {
         const vs = t.video_scores.find(s => s.video_id === v.id);
@@ -621,7 +643,7 @@ export default function TrainingDashboardPage() {
         {tab === 'teacher_stats' && (
           <div>
             {loadingTeacher ? (
-              <TableSkeleton rows={10} columns={6 + videoColumns.length} />
+              <TableSkeleton rows={10} columns={5 + videoColumns.length} />
             ) : error ? (
               <div className="text-red-600 text-center py-8">{error}</div>
             ) : filteredTeachers.length === 0 ? (
@@ -638,7 +660,6 @@ export default function TrainingDashboardPage() {
                       <TableHead className="w-8">No</TableHead>
                       <TableHead>Họ tên</TableHead>
                       <TableHead>Mã GV</TableHead>
-                      <TableHead>Cơ sở</TableHead>
                       <TableHead>Khối</TableHead>
                       <TableHead className="text-center">Điểm TK</TableHead>
                       {/* Single column per active (group-representative) video */}
@@ -652,7 +673,7 @@ export default function TrainingDashboardPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTeachers.map((row, idx) => {
+                    {pagedTeachers.map((row, idx) => {
                       // Build a lookup map for this teacher's video scores
                       const scoreMap = new Map<number, VideoScore>();
                       (row.video_scores || []).forEach(vs => scoreMap.set(vs.video_id, vs));
@@ -660,11 +681,10 @@ export default function TrainingDashboardPage() {
 
                       return (
                         <TableRow key={row.teacher_code} className="group">
-                          <TableCell className="text-xs text-slate-400">{idx + 1}</TableCell>
+                          <TableCell className="text-xs text-slate-400">{(teacherPage - 1) * PAGE_SIZE + idx + 1}</TableCell>
                           <TableCell className="font-medium whitespace-nowrap">{row.full_name}</TableCell>
                           <TableCell className="font-mono text-xs">{row.teacher_code}</TableCell>
-                          <TableCell className="text-xs">{row.center || '—'}</TableCell>
-                          <TableCell className="text-xs">{row.teaching_block || '—'}</TableCell>
+                          <TableCell className="text-xs">{mapToCanonicalBlock(row.teaching_block) || '—'}</TableCell>
                           <TableCell className="text-center font-bold">
                             {summaryAverage.toFixed(2)}
                           </TableCell>
@@ -686,6 +706,17 @@ export default function TrainingDashboardPage() {
                     })}
                   </TableBody>
                 </Table>
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
+                  {Array.from({ length: teacherTotalPages }, (_, i) => i + 1).map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setTeacherPage(n)}
+                      className={`h-7 min-w-7 rounded-md px-2 text-xs font-medium transition-colors ${n === teacherPage ? 'bg-[#a1001f] text-white' : 'border border-slate-200 bg-white text-slate-700 hover:border-[#a1001f] hover:text-[#a1001f]'}`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -778,7 +809,6 @@ export default function TrainingDashboardPage() {
                                 <TableHead className="w-8">No</TableHead>
                                 <TableHead>Họ tên</TableHead>
                                 <TableHead>Mã GV</TableHead>
-                                <TableHead>Cơ sở</TableHead>
                                 <TableHead>Khối</TableHead>
                                 <TableHead className="text-center">Điểm TK</TableHead>
                                 {videoStats.map(v => (
@@ -796,8 +826,7 @@ export default function TrainingDashboardPage() {
                                   <TableCell className="text-xs text-slate-400">{idx + 1}</TableCell>
                                   <TableCell className="font-medium whitespace-nowrap">{t.full_name}</TableCell>
                                   <TableCell className="font-mono text-xs">{t.teacher_code}</TableCell>
-                                  <TableCell className="text-xs">{t.center || '—'}</TableCell>
-                                  <TableCell className="text-xs">{t.teaching_block || '—'}</TableCell>
+                                  <TableCell className="text-xs">{mapToCanonicalBlock(t.teaching_block) || '—'}</TableCell>
                                   <TableCell className="text-center font-bold">
                                     {calculateAverageScoreFromMatrix(t, videoStats).toFixed(2)}
                                   </TableCell>
