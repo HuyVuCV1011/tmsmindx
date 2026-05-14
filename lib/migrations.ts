@@ -1570,6 +1570,25 @@ const migrations: Migration[] = [
         CHECK (question_type IN ('multiple_choice', 'multiple_select', 'true_false', 'short_answer', 'essay'));
     `,
   },
+  {
+    name: 'V43_add_watched_status_to_training',
+    version: 43,
+    sql: `
+      -- 1. Cập nhật ràng buộc CHECK để hỗ trợ trạng thái 'watched'
+      ALTER TABLE training_teacher_video_scores 
+      DROP CONSTRAINT IF EXISTS training_teacher_video_scores_completion_status_check;
+      
+      ALTER TABLE training_teacher_video_scores 
+      ADD CONSTRAINT training_teacher_video_scores_completion_status_check 
+      CHECK (completion_status IN ('not_started', 'in_progress', 'watched', 'completed'));
+
+      -- 2. Chuyển các bản ghi đang là 'completed' nhưng chưa có điểm (score = 0) sang 'watched'
+      -- Điều này giúp sửa dữ liệu cũ bị sai lệch
+      UPDATE training_teacher_video_scores
+      SET completion_status = 'watched'
+      WHERE completion_status = 'completed' AND (score IS NULL OR score < 7);
+    `,
+  },
 ]
 
 // ========== HÀM CHẠY MIGRATIONS ==========

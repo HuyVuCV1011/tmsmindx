@@ -257,7 +257,7 @@ function MascotWalker({ onFeedback, onTour }: { onFeedback: () => void; onTour: 
         <div
           className="absolute flex flex-col items-stretch gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200 ease-out pointer-events-auto"
           style={{
-            bottom: '155px',
+            bottom: '115px',
             right: '0px',
             zIndex: 1001,
             width: '160px',
@@ -287,54 +287,54 @@ function MascotWalker({ onFeedback, onTour }: { onFeedback: () => void; onTour: 
           className="absolute flex flex-col items-center animate-in fade-in slide-in-from-bottom-2 zoom-in-95 duration-300 ease-out pointer-events-none"
           style={{
             zIndex: 1001,
-            bottom: '170px',
+            bottom: '120px',
             right: '-6px',
             transformOrigin: 'calc(100% - 66px) 100%',
           }}
         >
           {/* Main Cloud Bubble */}
-          <div className="relative w-[220px] h-[150px]">
+          <div className="relative w-[260px] h-[180px]">
             <svg
-              viewBox="0 0 220 150"
-              width="220"
-              height="150"
+              viewBox="0 0 260 180"
+              width="260"
+              height="180"
               xmlns="http://www.w3.org/2000/svg"
               className="drop-shadow-[0_8px_16px_rgba(0,0,0,0.12)] filter absolute inset-0 z-10"
             >
               <g stroke="#e5e7eb" strokeWidth="3" fill="#ffffff">
-                <ellipse cx="110" cy="75" rx="75" ry="40" />
-                <circle cx="110" cy="45" r="35" />
-                <circle cx="110" cy="110" r="30" />
-                <circle cx="50" cy="60" r="30" />
-                <circle cx="170" cy="60" r="30" />
-                <circle cx="65" cy="40" r="25" />
-                <circle cx="155" cy="40" r="25" />
-                <circle cx="65" cy="110" r="25" />
-                <circle cx="155" cy="105" r="25" />
-                <circle cx="35" cy="85" r="20" />
-                <circle cx="185" cy="80" r="20" />
+                <ellipse cx="130" cy="90" rx="85" ry="50" />
+                <circle cx="130" cy="55" r="40" />
+                <circle cx="130" cy="130" r="35" />
+                <circle cx="60" cy="75" r="35" />
+                <circle cx="200" cy="75" r="35" />
+                <circle cx="75" cy="50" r="30" />
+                <circle cx="185" cy="50" r="30" />
+                <circle cx="75" cy="130" r="30" />
+                <circle cx="185" cy="125" r="30" />
+                <circle cx="35" cy="100" r="25" />
+                <circle cx="225" cy="95" r="25" />
               </g>
               <g fill="#ffffff">
-                <ellipse cx="110" cy="75" rx="75" ry="40" />
-                <circle cx="110" cy="45" r="35" />
-                <circle cx="110" cy="110" r="30" />
-                <circle cx="50" cy="60" r="30" />
-                <circle cx="170" cy="60" r="30" />
-                <circle cx="65" cy="40" r="25" />
-                <circle cx="155" cy="40" r="25" />
-                <circle cx="65" cy="110" r="25" />
-                <circle cx="155" cy="105" r="25" />
-                <circle cx="35" cy="85" r="20" />
-                <circle cx="185" cy="80" r="20" />
+                <ellipse cx="130" cy="90" rx="85" ry="50" />
+                <circle cx="130" cy="55" r="40" />
+                <circle cx="130" cy="130" r="35" />
+                <circle cx="60" cy="75" r="35" />
+                <circle cx="200" cy="75" r="35" />
+                <circle cx="75" cy="50" r="30" />
+                <circle cx="185" cy="50" r="30" />
+                <circle cx="75" cy="130" r="30" />
+                <circle cx="185" cy="125" r="30" />
+                <circle cx="35" cy="100" r="25" />
+                <circle cx="225" cy="95" r="25" />
               </g>
             </svg>
 
             {/* Text Content */}
             <div
-              className="absolute inset-0 flex flex-col items-center justify-center px-4 text-[12.5px] text-gray-700 whitespace-nowrap text-center leading-[1.4] font-medium z-20 pointer-events-auto"
+              className="absolute inset-0 flex flex-col items-center justify-center px-4 text-[14px] text-gray-700 whitespace-nowrap text-center leading-[1.5] font-medium z-20 pointer-events-auto"
               style={{ top: '15px', bottom: '15px' }}
             >
-              <span className="font-semibold text-[#a1001f] text-[13px] mb-0.5">Xin chào! 👋</span>
+              <span className="font-semibold text-[#a1001f] text-[15px] mb-1">Xin chào! 👋</span>
               Bạn cần hướng dẫn<br />hay góp ý gì không?
             </div>
 
@@ -350,9 +350,9 @@ function MascotWalker({ onFeedback, onTour }: { onFeedback: () => void; onTour: 
           </div>
 
           {/* 3 chấm đuôi */}
-          <div className="absolute w-4 h-4 bg-white rounded-full border-[1.5px] border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '13px', right: '86px' }} />
-          <div className="absolute w-2.5 h-2.5 bg-white rounded-full border-[1.5px] border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '2px', right: '76px' }} />
-          <div className="absolute w-1.5 h-1.5 bg-white rounded-full border border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '-9px', right: '66px' }} />
+          <div className="absolute w-4 h-4 bg-white rounded-full border-[1.5px] border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '18px', right: '102px' }} />
+          <div className="absolute w-2.5 h-2.5 bg-white rounded-full border-[1.5px] border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '6px', right: '92px' }} />
+          <div className="absolute w-1.5 h-1.5 bg-white rounded-full border border-[#e5e7eb] shadow-sm z-0" style={{ bottom: '-6px', right: '82px' }} />
         </div>
       )}
 
